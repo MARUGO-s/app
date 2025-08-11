@@ -1,0 +1,243 @@
+/* Recipe Box — MAX Contrast greenish theme (Light/Dark) */
+/* 完全置換版 style.css */
+
+:root {
+  /* ===== Light (強コントラスト) ===== */
+  --bg: #eaf1ed;                 /* 背景はオフホワイトを1段落として面を浮かせる */
+  --panel: #ffffff;              /* 面は純白 */
+  --panel-2: #e5f3eb;            /* セクション床、はっきり別レイヤ */
+  --text: #07131a;               /* メイン文字は濃い群青グレー */
+  --muted: #2a3a46;              /* 補助文字も濃くして読ませる */
+  --brand: #0da34a;              /* アクセントの基調緑 */
+  --accent: #10b981;             /* フォーカスリング */
+  --danger: #dc2626;
+  --ok: #16a34a;
+
+  --border: #8bbfaa;             /* 通常境界 */
+  --border-strong: #5a9f86;      /* 強い境界（面やカードで使用） */
+  --shadow: 0 10px 24px rgba(0,0,0,0.10);
+  --header-bg: rgba(255,255,255,0.82);
+  --input-bg: #ffffff;
+
+  --card-hover-bg: rgba(16,185,129,0.14);
+  --active-card-bg: rgba(16,185,129,0.18);
+  --active-card-border: #3aa579;
+
+  --tag-bg: #dff7eb;
+  --tag-text: #064e3b;
+  --checkitem-bg: #f2f7f4;
+  --pill-bg: #c9f6dd;
+  --pill-text: #064e3b;
+
+  --fs: 1; /* font scale */
+
+  /* Tabs (Light, 強コントラスト) */
+  --tab-bg:        #b6d6c6;
+  --tab-hover-bg:  #a2ccb9;
+  --tab-active-bg: #085a2b;
+  --tab-text:      #0a161d;
+  --tab-active-text:#ffffff;
+  --tab-border:    #4e8e77;
+
+  /* 表の交互行 */
+  --row-alt: rgba(0,0,0,0.04);
+}
+
+:root[data-theme="dark"] {
+  /* ===== Dark (強コントラスト、真黒回避) ===== */
+  --bg: #0b1114;
+  --panel: #121a1f;              /* 背景との差を拡大 */
+  --panel-2: #172228;            /* セクション床をさらに明るく */
+  --text: #f1fbf6;               /* わずかに緑みの白で滲みを抑制 */
+  --muted: #b8c8c0;
+
+  --brand: #12cf7a;
+  --accent: #22c55e;
+  --danger: #ff6b6b;
+  --ok: #34c759;
+
+  --border: #2e4b41;
+  --border-strong: #3e6a59;
+  --shadow: 0 10px 24px rgba(0,0,0,0.38);
+  --header-bg: rgba(18,26,31,0.82);
+  --input-bg: #0f161b;
+
+  --card-hover-bg: rgba(34,197,94,0.20);
+  --active-card-bg: rgba(34,197,94,0.24);
+  --active-card-border: #1e7c57;
+
+  --tag-bg: #0e221a;
+  --tag-text: #c9f7de;
+  --checkitem-bg: #11191f;
+  --pill-bg: #0e1b14;
+  --pill-text: #a0f0c7;
+
+  /* Tabs (Dark, 強コントラスト) */
+  --tab-bg:        #0e211b;
+  --tab-hover-bg:  #152b22;
+  --tab-active-bg: #0c7042;
+  --tab-text:      #e4f6ee;
+  --tab-active-text:#ffffff;
+  --tab-border:    #2c5a49;
+
+  --row-alt: rgba(255,255,255,0.06);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
+  font-size: calc(17px * var(--fs));
+  line-height: 1.65;
+  color: var(--text);
+  background: var(--bg);
+}
+
+/* ===== Header / Tabs ===== */
+header {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 12px; justify-content: space-between;
+  padding: 14px 16px; background: var(--header-bg); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border-strong);
+}
+.title {
+  font-weight: 800; letter-spacing: 0.3px; font-size: 18px;
+  display: flex; align-items: center; gap: 10px;
+}
+.title .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 18px var(--brand); }
+
+/* ヘッダー1段目ボタンを“タブ”化（強コントラスト） */
+header .row:first-child .btn{
+  background: var(--tab-bg);
+  color: var(--tab-text);
+  border-color: var(--tab-border);
+  border-radius: 10px;
+  box-shadow: inset 0 -1px 0 rgba(0,0,0,.08);
+}
+header .row:first-child .btn:hover{ background: var(--tab-hover-bg); }
+header .row:first-child .btn:focus{
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(16,185,129,.30);
+}
+header .row:first-child .btn.active,
+header .row:first-child .btn[aria-current="page"]{
+  background: var(--tab-active-bg);
+  color: var(--tab-active-text);
+  border-color: var(--tab-active-bg);
+  font-weight: 800;
+  box-shadow:
+    inset 0 -2px 0 rgba(255,255,255,.22),
+    0 0 0 2px rgba(16,185,129,.24);
+}
+
+/* ===== Layout ===== */
+.container { display: grid; grid-template-columns: 360px 1fr; gap: 16px; padding: 16px; max-width: 1200px; margin: 0 auto; }
+@media (max-width: 900px) { .container { grid-template-columns: 1fr; } }
+
+/* ===== Panels ===== */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+.panel h3 {
+  margin: 0; padding: 14px 16px; font-size: 15px; color: var(--text);
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border-strong);
+  border-top-left-radius: 16px; border-top-right-radius: 16px;
+  font-weight: 800; letter-spacing: .2px;
+}
+
+.tools { padding: 12px; display: grid; gap: 10px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ===== Inputs / Buttons ===== */
+input[type="text"], textarea {
+  width: 100%; background: var(--input-bg); border: 1px solid var(--border-strong); color: var(--text);
+  border-radius: 12px; padding: 12px 14px; outline: none; transition: border 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+}
+input[type="text"]:focus, textarea:focus, .btn:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(34,197,94,.30);
+}
+textarea { min-height: 140px; resize: vertical; }
+
+.btn {
+  appearance: none; border: 1px solid var(--border-strong); background: var(--panel); color: var(--text);
+  padding: 10px 12px; border-radius: 12px; cursor: pointer; transition: transform 0.02s ease, border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+.btn:hover { border-color: var(--active-card-border); background: var(--panel-2); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--panel); border-color: var(--accent); color: var(--text); }
+.btn.brand { background: var(--panel); border-color: var(--brand); color: var(--text); }
+.btn.danger { border-color: var(--danger); background: var(--panel); color: var(--text); }
+.btn.ghost { background: transparent; }
+.btn.small { padding: 6px 8px; font-size: 0.9em; border-radius: 8px; }
+
+/* ===== Lists / Cards ===== */
+.list { max-height: calc(100vh - 220px); overflow: auto; padding: 6px 8px 10px; background: var(--panel-2); border-top: 1px solid var(--border-strong); }
+.card { padding: 12px 12px; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; transition: background 120ms ease, border-color 120ms ease; background: var(--panel); }
+.card:hover { background: var(--card-hover-bg); border-color: var(--border-strong); }
+.card.active { background: var(--active-card-bg); border-color: var(--active-card-border); }
+.card .t { font-weight: 700; }
+.card .meta { font-size: 12px; color: var(--muted); }
+
+/* ===== Tags / Chips ===== */
+.tag { display: inline-flex; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border-strong); margin-right: 6px; font-size: 12px; color: var(--tag-text); background: var(--tag-bg); }
+.chip { display: inline-flex; align-items:center; gap:6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--panel); cursor: pointer; font-size: 12px; }
+.chip .count { color: var(--muted); font-size: 11px; }
+.star { color: #c4c4c4; margin-left: 6px; cursor: pointer; }
+.star.fav { color: #f59e0b; }
+
+/* ===== Detail blocks ===== */
+.detail { padding: 12px; display: grid; gap: 12px; }
+.field { display: grid; gap: 6px; background: var(--panel-2); border: 1px solid var(--border-strong); border-radius: 12px; padding: 12px; }
+label { font-size: 12px; color: var(--muted); font-weight: 600; }
+
+.twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 900px) { .twocol { grid-template-columns: 1fr; } }
+
+.help { font-size: 13px; color: var(--muted); padding: 10px 12px; }
+.empty { padding: 18px; color: var(--muted); text-align: center; }
+.footer { font-size: 12px; color: var(--muted); padding: 8px 12px 14px; border-top: 1px solid var(--border-strong); background: var(--panel-2); border-bottom-left-radius: 16px; border-bottom-right-radius: 16px; }
+
+.kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; background: var(--checkitem-bg); border: 1px solid var(--border-strong); padding: 1px 6px; border-radius: 6px; }
+
+/* ===== Cook (読みやすい) mode ===== */
+.cook .rtitle { font-weight: 900; font-size: 1.6em; margin: 0 0 6px; }
+.cook .rtags { margin: 0 0 10px; }
+.cook .section-title { font-size: 0.95em; color: var(--muted); margin: 10px 0 6px; }
+.checklist { display: grid; gap: 8px; }
+.checkitem { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--checkitem-bg); }
+.checkitem input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; }
+.checkitem .txt { flex: 1; }
+.cook .steps .num { display: inline-block; width: 26px; height: 26px; border-radius: 50%; background: var(--pill-bg); color: var(--pill-text); text-align: center; line-height: 26px; margin-right: 8px; font-weight: 800; }
+
+/* ===== Images ===== */
+.imgwrap { position: relative; }
+.imgwrap img { max-width: 100%; border-radius: 12px; border: 1px solid var(--border-strong); }
+.imgtools { display:flex; gap:8px; margin-top:8px; }
+
+/* ===== Ingredients row ===== */
+.inglist { display: grid; gap: 8px; }
+.ingrow { display: grid; grid-template-columns: 1.3fr 1fr auto; gap: 8px; border: 1px solid var(--border-strong); border-radius: 10px; padding: 8px; background: var(--panel); }
+.ingrow input { width: 100%; }
+
+/* ===== Cost table (右寄せ + 等幅数字 + 交互行) ===== */
+#costResult table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+#costResult td, #costResult th { vertical-align: top; padding: 6px; border-bottom: 1px solid var(--border-strong); }
+#costResult thead th { background: var(--panel-2); }
+#costResult tbody tr:nth-child(odd){ background: var(--row-alt); }
+#costResult th:nth-child(2), #costResult td:nth-child(2),
+#costResult th:nth-child(3), #costResult td:nth-child(3),
+#costResult th:nth-child(4), #costResult td:nth-child(4){ text-align: right; }
+
+/* ===== Print ===== */
+@media print {
+  header, .tools, .footer, #btnToggleMode, #btnLarger, #btnSmaller { display: none !important; }
+  body { background: white; color: #111; }
+  .panel { box-shadow: none; background: white; }
+  .tag { border-color: #bbb; background: #eee; color: #333; }
+}
