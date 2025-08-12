@@ -2,55 +2,76 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Recipe Box (dev-open)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Recipe Box</title>
   <link rel="icon" href="favicon.ico" />
   <link rel="stylesheet" href="assets/css/style.css" />
 </head>
 <body>
-  <header class="wrap row">
+  <a class="skip" href="#main">本文へスキップ</a>
+
+  <header class="wrap header">
     <h1>● Recipe Box</h1>
-    <div class="menu">
+
+    <!-- モバイル：ハンバーガー -->
+    <button id="btnHamburger" class="icon-btn" aria-controls="navMain"
+            aria-expanded="false" aria-label="メニュー">
+      <span></span><span></span><span></span>
+    </button>
+
+    <!-- 共通ナビ（PC: 横並び / SP: ドロワー） -->
+    <nav id="navMain" class="menu drawer" role="navigation">
       <button id="btnNavHome"     class="btn active">概要</button>
       <button id="btnNavRecipes"  class="btn">レシピ</button>
       <button id="btnNavFav"      class="btn">お気に入り</button>
       <button id="btnNavSettings" class="btn">設定</button>
-    </div>
+    </nav>
   </header>
+  <div id="navScrim" class="scrim" hidden></div>
 
-  <main class="wrap">
-    <!-- Overview -->
-    <section id="view-home">
+  <main id="main" class="wrap">
+
+    <!-- 概要 -->
+    <section id="view-home" class="view">
       <div class="panel">
         <div class="panel-h">概要</div>
         <div class="panel-b">
-          合計レシピ: <span id="statTotal">0</span> 件 ／ お気に入り: <span id="statFav">0</span> 件 ／ タグ種類: <span id="statTags">0</span>
+          合計レシピ: <span id="statTotal">0</span> 件 ／
+          お気に入り: <span id="statFav">0</span> 件 ／
+          タグ種類: <span id="statTags">0</span>
         </div>
       </div>
+
       <div class="panel">
         <div class="panel-h">最近のレシピ</div>
-        <div class="panel-b"><div id="recentList" class="cardlist empty">まだレシピがありません</div></div>
+        <div class="panel-b">
+          <div id="recentList" class="cardlist empty">まだレシピがありません</div>
+        </div>
       </div>
+
       <div class="panel">
         <div class="panel-h">お気に入り</div>
-        <div class="panel-b"><div id="homeFavList" class="cardlist empty">なし</div></div>
+        <div class="panel-b">
+          <div id="homeFavList" class="cardlist empty">なし</div>
+        </div>
       </div>
     </section>
 
-    <!-- Recipes -->
-    <section id="view-recipes" style="display:none">
-      <div class="row gap">
-        <input id="search" class="w-lg" placeholder="検索（タイトル/タグ）" />
+    <!-- レシピ -->
+    <section id="view-recipes" class="view" style="display:none">
+      <div class="toolbar">
+        <input id="search" class="input w-lg" placeholder="検索（タイトル/タグ）" />
         <button id="btnNew" class="btn primary">＋ 新規レシピ</button>
       </div>
-      <div class="grid-2">
-        <div>
+
+      <div class="grid">
+        <div class="col">
           <div class="panel">
             <div class="panel-h">レシピ一覧</div>
             <div class="panel-b"><div id="list"></div></div>
           </div>
         </div>
-        <div>
+        <div class="col">
           <div class="panel">
             <div class="panel-h">詳細</div>
             <div class="panel-b"><div id="detail"></div></div>
@@ -59,23 +80,23 @@
       </div>
     </section>
 
-    <!-- Favorites -->
-    <section id="view-fav" style="display:none">
+    <!-- お気に入り -->
+    <section id="view-fav" class="view" style="display:none">
       <div class="panel">
         <div class="panel-h">お気に入り</div>
         <div class="panel-b"><div id="favList"></div></div>
       </div>
     </section>
 
-    <!-- Settings -->
-    <section id="view-settings" style="display:none">
+    <!-- 設定 -->
+    <section id="view-settings" class="view" style="display:none">
       <div class="panel">
         <div class="panel-h">設定・データ</div>
         <div class="panel-b">
-          <div class="row gap">
+          <div class="toolbar">
             <button id="btnExport" class="btn">エクスポート</button>
             <button id="btnImport" class="btn">インポート</button>
-            <input id="fileImport" type="file" accept="application/json" style="display:none" />
+            <input id="fileImport" type="file" accept="application/json" hidden />
             <button id="btnDummy20" class="btn">ダミー20件</button>
             <button id="btnSmaller" class="btn">小さく</button>
             <button id="btnLarger" class="btn">大きく</button>
@@ -84,11 +105,16 @@
         </div>
       </div>
     </section>
+
   </main>
 
-  <!-- Supabase + App (login-free build) -->
+  <!-- スクリプト -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/supabase.init.js"></script>
+  <!-- ↓ RLSなしの開発モードを使っている場合 -->
   <script src="assets/js/app.supabase.open.js"></script>
+  <!-- ↑ 本番RLSなら app.supabase.js に差し替え -->
+
+  <script src="assets/js/nav.mobile.js"></script>
 </body>
 </html>
