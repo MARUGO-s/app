@@ -247,6 +247,15 @@ select {
 /* --- 7. Responsive Adjustments
 -------------------------------------------------- */
 @media (max-width: 768px) {
+    /* ヘッダーのフォントサイズ調整 */
+    .brand {
+        font-size: 1.1rem; /* ブランド名のフォントを少し小さく */
+    }
+    .app-header .btn {
+        font-size: 0.8rem; /* ヘッダーのボタンのフォントを小さく */
+        padding: 0.5rem 0.8rem; /* パディングも調整 */
+    }
+
     /* index.html のタブ */
     .tabs {
         gap: 0;
@@ -256,9 +265,9 @@ select {
         flex-grow: 1;
         text-align: center;
         padding: 1rem 0.5rem;
+        font-size: 0.9rem; /* タブのフォントを少し小さく */
     }
 
-    /* ★★★ ここからが今回の修正箇所 ★★★ */
     /* recipe_edit.html の材料入力欄 */
     .ingredient-row {
         /* 2行レイアウトのためのグリッド定義 */
@@ -282,5 +291,4 @@ select {
         grid-column: 3 / 4;
         align-self: center; /* 中央揃えで見栄えを良くする */
     }
-    /* ★★★ ここまでが今回の修正箇所 ★★★ */
 }
