@@ -7,7 +7,7 @@
 -------------------------------------------------- */
 :root {
     /* Color Palette */
-    --bg-primary: #f8f9fa;       /* 全体の背景色 (ごく薄いグレー) */
+    --bg-primary: #e7ecea;       /* 全体の背景色 (ごく薄いグレー) */
     --bg-panel: #ffffff;         /* カードやフォームの背景色 (白) */
     --text-primary: #212529;     /* 基本テキスト (黒に近いグレー) */
     --text-secondary: #6c757d;   /* ラベルや補助テキスト (グレー) */
@@ -244,6 +244,16 @@ select {
     gap: 1.5rem;
 }
 
+/* ★★★ レシピカードのタイトルに関するスタイルを追加 ★★★ */
+.recipe-card .recipe-title {
+    display: block;
+    white-space: nowrap; /* テキストの折り返しを禁止 */
+    overflow: hidden; /* はみ出した部分を隠す */
+    text-overflow: ellipsis; /* はみ出した部分を「...」で表示 */
+    width: 100%;
+}
+
+
 /* --- 7. Responsive Adjustments
 -------------------------------------------------- */
 @media (max-width: 768px) {
@@ -264,8 +274,11 @@ select {
     .tab {
         flex-grow: 1;
         text-align: center;
-        padding: 1rem 0.5rem;
-        font-size: 0.9rem; /* タブのフォントを少し小さく */
+        padding: 1rem 0.25rem; /* 横のパディングを少し減らす */
+        font-size: 0.85rem; /* フォントサイズを少し小さく */
+        white-space: nowrap; /* ★★★ 文字の折り返しを禁止 ★★★ */
+        overflow: hidden; /* はみ出した部分を隠す */
+        text-overflow: ellipsis; /* はみ出した部分を...で表示 */
     }
 
     /* recipe_edit.html の材料入力欄 */
@@ -290,5 +303,21 @@ select {
         /* 削除ボタン（2行目）は3列目 */
         grid-column: 3 / 4;
         align-self: center; /* 中央揃えで見栄えを良くする */
+    }
+}
+
+/* ★★★ 新しいメディアクエリを追加して、特に小さい画面に対応 ★★★ */
+@media (max-width: 420px) {
+    .tab {
+        font-size: 0.75rem; /* さらにフォントを小さく */
+        padding: 0.8rem 0.1rem; /* さらにパディングを詰める */
+    }
+
+    .app-header .brand {
+        font-size: 1rem;
+    }
+    .app-header .btn {
+        font-size: 0.75rem;
+        padding: 0.4rem 0.6rem;
     }
 }
