@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="ja">
+<head><link rel="stylesheet" href="assets/css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Recipe Box — Compact</title>
+  <style>
+:root{
+  --bg:#f4f8f4;--panel:#fff;--ink:#203024;--muted:#5a6a5f;
+  --brand:#2a7d5f;--brand-weak:#bfe4d1;--tab-bg:#e0efe7;--tab-active:#1c5f4a;
+  --accent:#2f9e72;--border:#d5e4da;--shadow:0 8px 24px rgba(0,0,0,.07);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans JP,sans-serif}
+.app-header{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:16px;justify-content:space-between;background:linear-gradient(180deg,#eaf6f0,var(--bg));padding:12px 16px;border-bottom:1px solid var(--border)}
+.brand{font-weight:700;margin:0;font-size:20px;display:flex;align-items:center;gap:8px}
+.badge{background:var(--brand-weak);color:var(--brand);padding:2px 8px;border-radius:999px;font-size:12px}
+.header-actions{display:flex;gap:8px}.header-actions .btn{min-width:84px}.header-actions-dropdown{display:none}
+.btn{background:var(--brand);color:#fff;border:none;border-radius:12px;padding:8px 12px;box-shadow:var(--shadow);cursor:pointer}
+.btn:disabled{opacity:.5;cursor:not-allowed}.btn.ghost{background:transparent;color:var(--brand);border:1px solid var(--brand)}
+.container{max-width:1100px;margin:20px auto;padding:0 16px}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);padding:16px;margin-bottom:16px}
+.lead{font-size:1.05rem;line-height:1.6}
+.tabs{display:flex;gap:6px;background:var(--tab-bg);padding:8px;border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow);margin-bottom:16px}
+.tab{background:transparent;border:none;border-radius:10px;padding:10px 14px;color:var(--tab-active);font-weight:600;cursor:pointer}
+.tab.is-active{background:var(--tab-active);color:#fff}
+.grid.two-col{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);padding:12px;display:flex;flex-direction:column;gap:8px;cursor:pointer;transition:transform 0.2s}
+.card:hover{transform:translateY(-2px)}
+.card h3{margin:0 0 4px 0}.card .muted{font-size:12px}.card .actions{display:flex;gap:8px;flex-wrap:wrap}
+.tag{background:var(--brand-weak);color:var(--brand);padding:2px 6px;border-radius:6px;font-size:12px;margin-right:4px}
+.table{width:100%;border-collapse:separate;border-spacing:0}
+.table th,.table td{padding:10px;border-bottom:1px solid var(--border)}
+.table th{background:#f7fbf9;text-align:left}.table .num{text-align:right;font-variant-numeric:tabular-nums}
+.right{text-align:right}.muted{color:var(--muted)}
+.two-col-layout{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}
+.form .field{display:grid;gap:6px;margin-bottom:12px}
+.form input,.form textarea{border:1px solid var(--border);border-radius:12px;padding:10px;background:#fff}
+.cost-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.app-footer{padding:16px;text-align:center;color:var(--muted)}
+.empty{text-align:center;color:var(--muted);padding:40px 20px}
+@media (max-width:900px){.grid.two-col{grid-template-columns:1fr}.two-col-layout{grid-template-columns:1fr}.header-actions{display:none}.header-actions-dropdown{display:block}}
+/* Drawer/Hamburger */
+.drawer-toggle{display:none}
+.hamburger{position:fixed;left:12px;bottom:16px;z-index:30;width:52px;height:52px;background:var(--brand);border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);cursor:pointer}
+.hamburger span{display:block;width:24px;height:3px;background:#fff;margin:3px 0;border-radius:2px}
+.drawer{position:fixed;left:0;top:0;height:100vh;width:260px;background:#fff;border-right:1px solid var(--border);box-shadow:var(--shadow);transform:translateX(-100%);transition:transform .25s ease;z-index:25;display:flex;flex-direction:column}
+.drawer-header{padding:16px;font-weight:700;border-bottom:1px solid var(--border);background:#f7fbf9}
+.drawer-nav{display:flex;flex-direction:column;gap:4px;padding:8px}
+.drawer-link{display:block;text-align:left;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#fff;color:var(--ink);cursor:pointer;text-decoration:none}
+.drawer-link:hover{background:#f2faf6}
+.drawer-toggle:checked ~ .drawer{transform:none}
+  </style>
+
+  <link rel="stylesheet" href="assets/css/drawer.vertical.css" />
+  <script defer src="assets/js/recipebox.bundle-prod-0812.js"></script></head>
+<body>
+  <input id="drawer-toggle" type="checkbox" class="drawer-toggle" aria-label="メニューを開閉" />
+  <aside class="drawer">
+    <div class="drawer-header">メニュー</div>
+    <nav class="drawer-nav">
+      <a href="index.html" class="drawer-link">ホーム</a>
+      <button class="drawer-link js-new">新規レシピ</button>
+      <a href="#favorites" class="drawer-link js-jump-fav">お気に入り</a>
+    </nav>
+  </aside>
+  <label for="drawer-toggle" class="hamburger" aria-label="メニュー">
+    <span></span><span></span><span></span>
+  </label>
+
+  <header class="app-header">
+    <h1 class="brand">Recipe Box <span class="badge">Compact</span></h1>
+    <div class="header-actions" data-actions>
+      <button class="btn js-new">新規</button>
+    </div>
+    <div class="header-actions-dropdown">
+      <select id="headerActionSelect" aria-label="操作メニュー">
+        <option value="">操作を選択</option>
+        <option value="new">新規</option>
+      </select>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="favorites"></div>
+    <section class="tabs" role="tablist">
+      <button class="tab is-active" role="tab" data-tab="all" aria-selected="true">すべて</button>
+      <button class="tab" role="tab" data-tab="favorites">お気に入り</button>
+      <button class="tab" role="tab" data-tab="recent">最近追加</button>
+    </section>
+
+    <section class="grid two-col" id="cardList" aria-live="polite"></section>
+  </main>
+
+  <footer class="app-footer">
+    <div>© 2025 Recipe Box — Compact</div>
+  </footer>
+
+  <script>
+(function(){
+  // Supabase初期化
+  if (window.supabase && !window.sb) {
+    window.sb = window.supabase.createClient("https://ctxyawinblwcbkovfsyj.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q");
+  }
+
+  if(!window.sb){ 
+    document.getElementById('cardList').innerHTML = '<div class="empty">Supabaseが初期化されていません</div>';
+    return; 
+  }
+
+  const $ = (s, el=document) => el.querySelector(s);
+  const $$ = (s, el=document) => [...el.querySelectorAll(s)];
+  const escapeHtml = (s) => (s??"").toString().replace(/[&<>\"']/g,m=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
+  const fmtDate = (s) => new Date(s).toLocaleString('ja-JP', {hour12:false});
+
+  // identity設定（お気に入り機能用）
+  const identity = { uid: null, client_id: null };
+  (async () => {
+    try{
+      const { data: { user } } = await sb.auth.getUser();
+      identity.uid = user?.id || null;
+    }catch(e){}
+    identity.client_id = localStorage.getItem("client_id") || (crypto?.randomUUID?.() ? crypto.randomUUID() : String(Math.random()).slice(2));
+    localStorage.setItem("client_id", identity.client_id);
+  })();
+
+  // 状態管理
+  const state = {
+    currentTab: 'all',
+    allRecipes: [],
+    favoriteRecipes: []
+  };
+
+  // レシピ一覧を取得
+  async function fetchRecipes() {
+    try {
+      const { data, error } = await sb.from("recipes").select("id,title,tags,updated_at,intro").order("updated_at", {ascending:false}).limit(200);
+      if(error) throw error;
+      return data || [];
+    } catch(err) {
+      console.error('レシピ取得エラー:', err);
+      return [];
+    }
+  }
+
+  // お気に入りレシピを取得
+  async function fetchFavoriteRecipes() {
+    try {
+      let q = sb.from("favorites")
+        .select("recipe_id, created_at, recipes!inner(id,title,tags,updated_at,intro)")
+        .order("created_at", {ascending:false});
+      
+      q = identity.uid ? q.eq("user_id", identity.uid) : q.eq("client_id", identity.client_id);
+      
+      const { data, error } = await q;
+      if(error) throw error;
+      return (data || []).map(x => x.recipes);
+    } catch(err) {
+      console.error('お気に入り取得エラー:', err);
+      return [];
+    }
+  }
+
+  // レシピカードをレンダリング
+  function renderRecipes(recipes) {
+    const cardList = $('#cardList');
+    
+    if(!recipes.length) {
+      cardList.innerHTML = '<div class="empty">レシピがありません</div>';
+      return;
+    }
+
+    cardList.innerHTML = recipes.map(recipe => `
+      <div class="card" data-recipe-id="${recipe.id}">
+        <h3>${escapeHtml(recipe.title || '無題のレシピ')}</h3>
+        <div class="muted">
+          ${(recipe.tags || []).map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}
+        </div>
+        <div class="muted">
+          ${recipe.updated_at ? '更新: ' + fmtDate(recipe.updated_at) : ''}
+        </div>
+      </div>
+    `).join('');
+
+    // カードクリックイベント
+    $$('.card[data-recipe-id]').forEach(card => {
+      card.addEventListener('click', (e) => {
+        e.preventDefault();
+        const recipeId = card.dataset.recipeId;
+        if(recipeId) {
+          location.href = `recipe_view.html?id=${encodeURIComponent(recipeId)}`;
+        }
+      });
+    });
+  }
+
+  // タブ切り替え
+  function switchTab(tabName) {
+    state.currentTab = tabName;
+    
+    // タブの見た目を更新
+    $$('.tab').forEach(tab => {
+      const isActive = tab.dataset.tab === tabName;
+      tab.classList.toggle('is-active', isActive);
+      tab.setAttribute('aria-selected', isActive);
+    });
+
+    // コンテンツを更新
+    switch(tabName) {
+      case 'all':
+        renderRecipes(state.allRecipes);
+        break;
+      case 'favorites':
+        loadFavorites();
+        break;
+      case 'recent':
+        const recent = state.allRecipes.slice(0, 10); // 最新10件
+        renderRecipes(recent);
+        break;
+    }
+  }
+
+  // お気に入りを読み込み
+  async function loadFavorites() {
+    state.favoriteRecipes = await fetchFavoriteRecipes();
+    renderRecipes(state.favoriteRecipes);
+  }
+
+  // 新規レシピボタン
+  function handleNewRecipe() {
+    location.href = 'recipe_edit.html';
+  }
+
+  // イベントリスナー設定
+  function setupEventListeners() {
+    // タブクリック
+    $$('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        switchTab(tab.dataset.tab);
+      });
+    });
+
+    // 新規ボタン
+    $$('.js-new').forEach(btn => {
+      btn.addEventListener('click', handleNewRecipe);
+    });
+
+    // お気に入りジャンプ
+    $$('.js-jump-fav').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        switchTab('favorites');
+        // ドロワーを閉じる
+        const drawer = $('#drawer-toggle');
+        if(drawer && drawer.checked) drawer.checked = false;
+      });
+    });
+
+    // ハッシュ変更対応
+    window.addEventListener('hashchange', () => {
+      const hash = (location.hash || '').replace('#', '');
+      if(['all', 'favorites', 'recent'].includes(hash)) {
+        switchTab(hash);
+      }
+    });
+
+    // ドロップダウンメニュー（モバイル）
+    const dropdown = $('#headerActionSelect');
+    if(dropdown) {
+      dropdown.addEventListener('change', (e) => {
+        switch(e.target.value) {
+          case 'new':
+            handleNewRecipe();
+            break;
+        }
+        e.target.value = ''; // リセット
+      });
+    }
+  }
+
+  // 初期化
+  async function init() {
+    // レシピ一覧を読み込み
+    state.allRecipes = await fetchRecipes();
+    
+    // 初期表示
+    const hash = (location.hash || '').replace('#', '');
+    const initialTab = ['all', 'favorites', 'recent'].includes(hash) ? hash : 'all';
+    switchTab(initialTab);
+
+    // イベントリスナー設定
+    setupEventListeners();
+  }
+
+  // DOM読み込み完了後に初期化
+  if(document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+  </script>
+</body>
+</html>

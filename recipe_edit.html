@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ja">
+<head><link rel="stylesheet" href="assets/css/style.css" />
+  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>レシピ編集 — Recipe Box</title>
+  <style>/* app.css (inlined) */
+:root{
+  --bg:#f4f8f4;--panel:#fff;--ink:#203024;--muted:#5a6a5f;
+  --brand:#2a7d5f;--brand-weak:#bfe4d1;--tab-bg:#e0efe7;--tab-active:#1c5f4a;
+  --accent:#2f9e72;--border:#d5e4da;--shadow:0 8px 24px rgba(0,0,0,.07);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans JP,sans-serif}
+.app-header{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:16px;justify-content:space-between;background:linear-gradient(180deg,#eaf6f0,var(--bg));padding:12px 16px;border-bottom:1px solid var(--border)}
+.brand{font-weight:700;margin:0;font-size:20px;display:flex;align-items:center;gap:8px}
+.badge{background:var(--brand-weak);color:var(--brand);padding:2px 8px;border-radius:999px;font-size:12px}
+.header-actions{display:flex;gap:8px}.header-actions .btn{min-width:84px}.header-actions-dropdown{display:none}
+.btn{background:var(--brand);color:#fff;border:none;border-radius:12px;padding:8px 12px;box-shadow:var(--shadow);cursor:pointer}
+.btn:disabled{opacity:.5;cursor:not-allowed}.btn.ghost{background:transparent;color:var(--brand);border:1px solid var(--brand)}
+.btn.danger{background:#e74c3c}
+.btn.small{padding:4px 8px;font-size:12px}
+.container{max-width:1100px;margin:20px auto;padding:0 16px}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);padding:16px;margin-bottom:16px}
+.lead{font-size:1.05rem;line-height:1.6}
+.tabs{display:flex;gap:6px;background:var(--tab-bg);padding:8px;border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow);margin-bottom:16px}
+.tab{background:transparent;border:none;border-radius:10px;padding:10px 14px;color:var(--tab-active);font-weight:600;cursor:pointer}
+.tab.is-active{background:var(--tab-active);color:#fff}
+.form .field{display:grid;gap:6px;margin-bottom:12px}
+.form input,.form textarea{border:1px solid var(--border);border-radius:12px;padding:10px;background:#fff}
+.form label{font-weight:600;color:var(--ink)}
+.ingredient-row,.step-row{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
+.ingredient-row input,.step-row input{margin:0}
+.app-footer{padding:16px;text-align:center;color:var(--muted)}
+#status{margin:8px 0;color:var(--brand);font-weight:600}
+@media (max-width:900px){.header-actions{display:none}.header-actions-dropdown{display:block}.ingredient-row,.step-row{grid-template-columns:1fr auto}}
+/* Drawer/Hamburger */
+.drawer-toggle{display:none}
+.hamburger{position:fixed;left:12px;bottom:16px;z-index:30;width:52px;height:52px;background:var(--brand);border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);cursor:pointer}
+.hamburger span{display:block;width:24px;height:3px;background:#fff;margin:3px 0;border-radius:2px}
+.drawer{position:fixed;left:0;top:0;height:100vh;width:260px;background:#fff;border-right:1px solid var(--border);box-shadow:var(--shadow);transform:translateX(-100%);transition:transform .25s ease;z-index:25;display:flex;flex-direction:column}
+.drawer-header{padding:16px;font-weight:700;border-bottom:1px solid var(--border);background:#f7fbf9}
+.drawer-nav{display:flex;flex-direction:column;gap:4px;padding:8px}
+.drawer-link{display:block;text-align:left;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#fff;color:var(--ink);cursor:pointer;text-decoration:none}
+.drawer-link:hover{background:#f2faf6}
+.drawer-toggle:checked ~ .drawer{transform:none}
+</style>
+
+  <link rel="stylesheet" href="assets/css/drawer.vertical.css" />
+  <script defer src="assets/js/recipebox.bundle-prod-0812.js"></script></head>
+<body>
+  <input id="drawer-toggle" type="checkbox" class="drawer-toggle" aria-label="メニューを開閉" />
+  <aside class="drawer">
+    <div class="drawer-header">メニュー</div>
+    <nav class="drawer-nav">
+      <a href="index.html" class="drawer-link">ホーム</a>
+      <button class="drawer-link js-save">保存</button>
+      <button class="drawer-link js-cancel">キャンセル</button>
+    </nav>
+  </aside>
+  <label for="drawer-toggle" class="hamburger" aria-label="メニュー">
+    <span></span><span></span><span></span>
+  </label>
+
+  <header class="app-header">
+    <h1 class="brand">レシピ編集</h1>
+    <div class="header-actions" data-actions>
+      <button class="btn js-save">保存</button>
+      <button class="btn js-cancel">キャンセル</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <form id="editForm" class="form panel">
+      <div class="field">
+        <label for="title">タイトル *</label>
+        <input id="title" name="title" required />
+      </div>
+      
+      <div class="field">
+        <label for="intro">紹介文</label>
+        <textarea id="intro" name="intro" rows="3"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="tags">タグ（カンマ区切り）</label>
+        <input id="tags" name="tags" placeholder="和食, 簡単, 30分" />
+      </div>
+
+      <div class="field">
+        <label for="notes">メモ</label>
+        <textarea id="notes" name="notes" rows="3"></textarea>
+      </div>
+
+      <div class="field">
+        <label>材料</label>
+        <div id="ingredientsEditor"></div>
+        <button type="button" class="btn" id="addIng">材料を追加</button>
+      </div>
+
+      <div class="field">
+        <label>手順</label>
+        <div id="stepsEditor"></div>
+        <button type="button" class="btn" id="addStep">手順を追加</button>
+      </div>
+
+      <div id="status"></div>
+
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button type="button" class="btn js-save">保存</button>
+        <button type="button" class="btn ghost js-cancel">キャンセル</button>
+        <button type="button" class="btn ghost js-view" style="display:none;">表示</button>
+      </div>
+    </form>
+  </main>
+
+  <footer class="app-footer">
+    <div>編集内容は保存時にSupabaseに反映されます。</div>
+  </footer>
+
+  <script>
+(function(){
+  const params = new URLSearchParams(location.search);
+  let id = params.get('id');
+  const $ = (sel, el=document)=> el.querySelector(sel);
+
+  // Supabase初期化
+  if (window.supabase && !window.sb) {
+    window.sb = window.supabase.createClient("https://ctxyawinblwcbkovfsyj.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q");
+  }
+
+  if(!window.sb){ alert('Supabase not initialized'); return; }
+
+  // 要素の取得
+  const titleEl = $('#title');
+  const introEl = $('#intro');
+  const tagsEl  = $('#tags');
+  const notesEl = $('#notes');
+  const statusEl = $('#status');
+  const viewBtn = $('.js-view');
+  
+  const ingredientsEl = $('#ingredientsEditor');
+  const stepsEl = $('#stepsEditor');
+
+  // 編集中のデータ
+  let currentIngredients = [];
+  let currentSteps = [];
+
+  function esc(s){ 
+    return String(s ?? '').replace(/[&<>"']/g, m => ({ 
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' 
+    }[m])); 
+  }
+
+  // ボタンイベント
+  document.addEventListener('click', (e) => {
+    if(e.target.matches('.js-save')) {
+      e.preventDefault();
+      save();
+    }
+    if(e.target.matches('.js-cancel')) {
+      location.href = id ? `recipe_view.html?id=${encodeURIComponent(id)}` : 'index.html';
+    }
+    if(e.target.matches('.js-view')) {
+      if(!id){ alert('先に保存してください'); return; }
+      location.href = `recipe_view.html?id=${encodeURIComponent(id)}`;
+    }
+  });
+
+  // 材料行を追加
+  function addIngredientRow(data = {}) {
+    const div = document.createElement('div');
+    div.className = 'ingredient-row';
+    div.innerHTML = `
+      <input type="text" placeholder="材料名" value="${esc(data.item || '')}" data-field="item">
+      <input type="text" placeholder="分量" value="${data.quantity || ''}" data-field="quantity">
+      <input type="text" placeholder="単位" value="${esc(data.unit || '')}" data-field="unit">
+      <button type="button" class="btn danger small" onclick="
