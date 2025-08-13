@@ -60,6 +60,7 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:s
     <nav class="drawer-nav">
       <a href="index.html" class="drawer-link">ホーム</a>
       <button class="drawer-link js-edit">編集</button>
+      <button class="drawer-link js-delete" style="color: #c0392b;">削除</button>
       <button class="drawer-link js-back">戻る</button>
     </nav>
   </aside>
@@ -71,6 +72,7 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:s
     <h1 class="brand">レシピ表示</h1>
     <div class="header-actions" data-actions>
       <button class="btn js-edit">編集</button>
+      <button class="btn ghost js-delete" style="color: #c0392b; border-color: #c0392b;">削除</button>
       <button class="btn js-back">戻る</button>
     </div>
   </header>
@@ -128,6 +130,24 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:s
   const ingEl   = $('#ingredients');
   const stepsEl = $('#steps');
 
+  // 削除関数
+  async function deleteRecipe() {
+    if (!confirm('このレシピを完全に削除しますか？この操作は元に戻せません。')) {
+      return;
+    }
+    try {
+      const { error } = await sb.from('recipes').delete().eq('id', id);
+      if (error) {
+        throw error;
+      }
+      alert('レシピを削除しました。');
+      location.href = 'index.html';
+    } catch (err) {
+      console.error('削除エラー:', err);
+      alert('レシピの削除に失敗しました: ' + (err?.message || '不明なエラー'));
+    }
+  }
+
   // ボタンイベント
   document.addEventListener('click', (e) => {
     if(e.target.matches('.js-edit')) {
@@ -135,6 +155,9 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:s
     }
     if(e.target.matches('.js-back')) {
       location.href = 'index.html';
+    }
+    if(e.target.matches('.js-delete')) {
+      deleteRecipe();
     }
   });
 
