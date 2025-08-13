@@ -183,16 +183,18 @@ select {
 
 /* --- 5. Page Specific (from recipe_edit.html)
 -------------------------------------------------- */
-.ingredient-row, .step-row {
+.ingredient-row {
+    display: grid;
+    gap: 0.75rem;
+    margin-bottom: 1rem; /* 少し余白を増やす */
+    align-items: center;
+    grid-template-columns: 5fr 2fr 2fr auto;
+}
+.step-row {
     display: grid;
     gap: 0.75rem;
     margin-bottom: 0.75rem;
     align-items: center;
-}
-.ingredient-row {
-    grid-template-columns: 5fr 2fr 2fr auto;
-}
-.step-row {
     grid-template-columns: 1fr auto;
 }
 
@@ -242,15 +244,43 @@ select {
     gap: 1.5rem;
 }
 
-/* スマートフォン表示の調整 */
+/* --- 7. Responsive Adjustments
+-------------------------------------------------- */
 @media (max-width: 768px) {
+    /* index.html のタブ */
     .tabs {
-        gap: 0; /* スマートフォンではタブを詰めて配置 */
-        justify-content: space-around; /* タブを均等に配置 */
+        gap: 0;
+        justify-content: space-around;
     }
     .tab {
-        flex-grow: 1; /* タブが利用可能なスペースを均等に分け合う */
-        text-align: center; /* テキストを中央揃えに */
-        padding: 1rem 0.5rem; /* 上下のタップ領域をさらに広げる */
+        flex-grow: 1;
+        text-align: center;
+        padding: 1rem 0.5rem;
     }
+
+    /* ★★★ ここからが今回の修正箇所 ★★★ */
+    /* recipe_edit.html の材料入力欄 */
+    .ingredient-row {
+        /* 2行レイアウトのためのグリッド定義 */
+        grid-template-columns: 2fr 1.5fr auto; /* 2行目の「分量」「単位」「削除」の列比率 */
+        row-gap: 0.75rem;
+    }
+    .ingredient-row .ing-item {
+        /* 材料名（1行目）はすべての列を専有 */
+        grid-column: 1 / -1;
+    }
+    .ingredient-row .ing-qty {
+        /* 分量（2行目）は1列目 */
+        grid-column: 1 / 2;
+    }
+    .ingredient-row .ing-unit {
+        /* 単位（2行目）は2列目 */
+        grid-column: 2 / 3;
+    }
+    .ingredient-row .js-remove-row {
+        /* 削除ボタン（2行目）は3列目 */
+        grid-column: 3 / 4;
+        align-self: center; /* 中央揃えで見栄えを良くする */
+    }
+    /* ★★★ ここまでが今回の修正箇所 ★★★ */
 }
