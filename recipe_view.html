@@ -24,12 +24,14 @@
 
   <main class="container two-col-layout">
     <article class="panel">
+      <!-- ★★★ 修正点: お気に入りボタンをこちらに移動 ★★★ -->
+      <div class="fav-block" style="text-align: right; margin-bottom: 1rem;">
+        <button id="favBtn" class="btn small">♡ お気に入り</button>
+      </div>
+
       <h2 id="recipeTitle">タイトル</h2>
       <div class="muted" id="meta">作成日 — / 更新日 —</div>
       <div id="tags" style="margin:8px 0;"></div>
-      <div class="fav-block" style="margin-top:8px;">
-        <button id="favBtn" class="btn">♡ お気に入り</button>
-      </div>
       <p id="recipeIntro" class="lead"></p>
       <div id="notes" style="margin-top:16px;white-space:pre-wrap;"></div>
     </article>
@@ -101,8 +103,7 @@
   const aiUserInput = document.querySelector('#ai-user-input');
   const aiSendBtn = document.querySelector('#ai-send-btn');
   const aiSaveNewBtn = document.querySelector('#ai-save-new-btn');
-  const aiAdviceBtn = document.querySelector('.js-ai-advice');
-
+  
   // --- State ---
   let recipeData = {};
   let chatHistory = [];
@@ -187,16 +188,38 @@
     }
   }
 
+  async function fetchWithRetry(url, options, maxRetries = 3) {
+      let attempt = 0;
+      while (attempt < maxRetries) {
+          try {
+              const response = await fetch(url, options);
+              if (response.status >= 500 && response.status < 600) {
+                  throw new Error(`API Server Error: ${response.status}`);
+              }
+              return response;
+          } catch (error) {
+              attempt++;
+              if (attempt >= maxRetries) {
+                  throw error;
+              }
+              const delay = Math.pow(2, attempt) * 1000;
+              console.log(`Attempt ${attempt} failed. Retrying in ${delay}ms...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+          }
+      }
+  }
+
   async function callGeminiApi() {
     toggleAiLoading(true);
     try {
-        const apiKey = "AIzaSyBNgqPMcJiVSysDAaXKzCOv08IGUeuEAwg"; // ★★★ 修正点 ★★★
+        const apiKey = "AIzaSyBNgqPMcJiVSysDAaXKzCOv08IGUeuEAwg";
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-        const response = await fetch(apiUrl, {
+        const options = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: chatHistory })
-        });
+        };
+        const response = await fetchWithRetry(apiUrl, options);
 
         if (!response.ok) throw new Error(`API Error: ${response.status}`);
         const result = await response.json();
@@ -215,13 +238,14 @@
   }
 
   async function handleAiAdviceClick() {
+    if (!aiModal) return;
     aiModal.style.display = 'flex';
     aiChatContainer.innerHTML = '';
     
     const ingredientsText = recipeData.ingredients.map(i => `- ${i.item} ${i.quantity || ''} ${i.unit || ''}`).join('\n');
     const stepsText = recipeData.steps.map((s, i) => `${i + 1}. ${s.instruction}`).join('\n');
     
-    const initialPrompt = `あなたはプロの料理研究家です。以下のレシピについて、より美味しくするための具体的な改善案、プロならではのコツ、または面白いアレンジ方法を提案してください。回答は端的に要点をまとめたものでお願いします。
+    const initialPrompt = `あなたはプロの料理研究家です。以下のレシピについて、より美味しくするための具体的な改善案、プロならではのコツ、または面白いアレンジ方法を提案してください。回答はフレンドリーな会話形式で、要点をまとめて端的に伝えてください。
 
 # レシピ名: ${recipeData.title}
 
@@ -252,13 +276,16 @@ ${stepsText}`;
       toggleAiLoading(true);
 
       try {
-        const apiKey = "AIzaSyBNgqPMcJiVSysDAaXKzCOv08IGUeuEAwg"; // ★★★ 修正点 ★★★
+        const apiKey = "AIzaSyBNgqPMcJiVSysDAaXKzCOv08IGUeuEAwg";
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-        const response = await fetch(apiUrl, {
+        const options = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: chatHistory, generationConfig: { responseMimeType: "application/json" } })
-        });
+        };
+        
+        const response = await fetchWithRetry(apiUrl, options);
+
         if (!response.ok) throw new Error(`API Error: ${response.status}`);
         const result = await response.json();
         const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -279,24 +306,34 @@ ${stepsText}`;
 
   // --- Event Listeners ---
   document.addEventListener('click', (e) => {
-    if (e.target.matches('.js-edit')) location.href = `recipe_edit.html?id=${id}`;
-    if (e.target.matches('.js-back')) location.href = 'index.html';
-    if (e.target.matches('.js-delete')) deleteRecipe();
-  });
+    const target = e.target.closest('button');
+    if (!target) return;
 
-  aiAdviceBtn.addEventListener('click', handleAiAdviceClick);
-  aiModalCloseBtn.addEventListener('click', () => aiModal.style.display = 'none');
-  aiSendBtn.addEventListener('click', handleSendMessage);
-  aiUserInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
+    if (target.classList.contains('js-edit')) {
+        location.href = `recipe_edit.html?id=${id}`;
+    } else if (target.classList.contains('js-back')) {
+        location.href = 'index.html';
+    } else if (target.classList.contains('js-delete')) {
+        deleteRecipe();
+    } else if (target.classList.contains('js-ai-advice')) {
+        handleAiAdviceClick();
     }
   });
-  aiSaveNewBtn.addEventListener('click', handleSaveAsNew);
+
+  if (aiModal) {
+    aiModalCloseBtn.addEventListener('click', () => aiModal.style.display = 'none');
+    aiSendBtn.addEventListener('click', handleSendMessage);
+    aiSaveNewBtn.addEventListener('click', handleSaveAsNew);
+    aiUserInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSendMessage();
+      }
+    });
+  }
 
 
-  // --- Favorite Button Logic (unchanged) ---
+  // --- Favorite Button Logic ---
   async function setupFavoriteButton(recipe_id) {
     const clientId = getClientId();
     const { data, error } = await sb.from("favorites").select("id").eq("recipe_id", recipe_id).eq("client_id", clientId).limit(1);
