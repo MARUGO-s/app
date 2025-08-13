@@ -50,7 +50,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!ingredientsEditor) return;
         const div = document.createElement('div');
         div.className = 'ingredient-row';
-        // ★★★ 変更点: 分量と単位のdivラッパーをなくし、CSS Gridで直接制御できるようHTML構造をフラット化 ★★★
         div.innerHTML = `
           <input type="text" placeholder="材料名 *" value="${escapeHtml(data.item || '')}" data-field="item" class="ing-item">
           <input type="number" placeholder="分量" value="${data.quantity !== null && data.quantity !== undefined ? escapeHtml(data.quantity) : ''}" data-field="quantity" class="ing-qty">
@@ -97,7 +96,6 @@ document.addEventListener('DOMContentLoaded', () => {
             contents: [{ role: "user", parts: [{ text: prompt }] }],
             generationConfig: { responseMimeType: "application/json", responseSchema }
         };
-        // ★★★ 唯一の変更点：AIモデルを最新の安定版に更新 ★★★
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
         const response = await fetch(apiUrl, {
             method: 'POST',
@@ -111,7 +109,6 @@ document.addEventListener('DOMContentLoaded', () => {
             throw new Error(`API Error: ${response.status} ${response.statusText}`);
         }
         const result = await response.json();
-        console.log("Gemini API Response:", result);
         const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!jsonText) {
             const reason = result.candidates?.[0]?.finishReason;
@@ -150,6 +147,46 @@ document.addEventListener('DOMContentLoaded', () => {
             if(stepsEditor) stepsEditor.innerHTML = '';
             steps.forEach(addStepRow);
         }
+    };
+
+    // ★★★ 修正点: AIが生成したレシピを読み込む機能 ★★★
+    const loadAiGeneratedRecipe = () => {
+        const aiRecipeJson = localStorage.getItem('ai_generated_recipe');
+        if (aiRecipeJson) {
+            try {
+                const recipeData = JSON.parse(aiRecipeJson);
+
+                if(titleEl) titleEl.value = recipeData.title || '';
+                if(categoryEl && recipeData.category) categoryEl.value = recipeData.category;
+                if(tagsEl) tagsEl.value = (recipeData.tags || []).join(', ');
+                if(notesEl) notesEl.value = recipeData.notes || '';
+                
+                if(ingredientsEditor) ingredientsEditor.innerHTML = '';
+                if (recipeData.ingredients && recipeData.ingredients.length > 0) {
+                    recipeData.ingredients.forEach(addIngredientRow);
+                } else {
+                    addIngredientRow(); // 材料がない場合でも空の行を1つ追加
+                }
+
+                if(stepsEditor) stepsEditor.innerHTML = '';
+                if (recipeData.steps && recipeData.steps.length > 0) {
+                    // AIからのstepsは文字列の配列なので、instructionとして渡す
+                    recipeData.steps.forEach(stepText => addStepRow({ instruction: stepText }));
+                } else {
+                    addStepRow(); // 手順がない場合でも空の行を1つ追加
+                }
+
+                // 読み込み後は、不要になったデータを削除
+                localStorage.removeItem('ai_generated_recipe');
+                
+                return true; // AIデータの読み込みに成功したことを示す
+            } catch (e) {
+                console.error("AIが生成したレシピの解析に失敗しました:", e);
+                localStorage.removeItem('ai_generated_recipe'); // 不正なデータは削除
+                return false;
+            }
+        }
+        return false; // AIデータが見つからなかった
     };
 
     const saveRecipe = async () => {
@@ -326,5 +363,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- 初期読み込み ---
-    loadRecipe();
+    // ★★★ 修正点: ページ読み込み時に、まずAIが生成したデータがないか確認する ★★★
+    const aiDataLoaded = loadAiGeneratedRecipe();
+    if (!aiDataLoaded) {
+        // AIデータがなければ、通常通りレシピを読み込む
+        loadRecipe();
+    }
 });
