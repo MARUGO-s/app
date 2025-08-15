@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    const sb = supabase.createClient("https://ctxyawinblwcbkovfsyj.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q");
+    const sb = supabase.createClient("https://ctxyawinblwcbkovfsyj.supabase.co", "eyJhbGciOiJIUzINiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q");
     const params = new URLSearchParams(location.search);
     let id = params.get('id');
 
@@ -25,9 +25,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const viewButton = document.querySelector('.js-view');
     const deleteButton = document.querySelector('.js-delete');
     
+    // ★★★ URLインポート機能の要素 ★★★
+    const urlInput = document.getElementById('recipeUrl');
+    const importBtn = document.getElementById('importFromUrlBtn');
+    const importStatus = document.getElementById('importStatus');
+
     // --- AIモーダル要素 ---
     const aiWizardBtn = document.getElementById('ai-wizard-btn');
     const aiModal = document.getElementById('ai-modal');
+    // ... (残りのモーダル要素は変更なし)
     const modalCloseBtn = document.getElementById('modal-close-btn');
     const aiStep1 = document.getElementById('ai-step-1');
     const aiStep2 = document.getElementById('ai-step-2');
@@ -71,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- AIモーダル制御 ---
     const openModal = () => { if(aiModal) aiModal.style.display = 'flex'; };
+    // ... (残りのモーダル制御関数は変更なし)
     const closeModal = () => {
         if(aiModal) aiModal.style.display = 'none';
         resetModal();
@@ -141,8 +148,85 @@ document.addEventListener('DOMContentLoaded', () => {
         return JSON.parse(jsonText);
     }
 
+    // ★★★ ここからURLインポート機能 ★★★
+    const importRecipeFromUrl = async (url) => {
+        if (!url || !url.startsWith('http')) {
+            alert('有効なURLを入力してください。');
+            return;
+        }
+
+        importStatus.textContent = 'ウェブページを読み込んでいます...';
+        importBtn.disabled = true;
+
+        try {
+            // 注意: この方法はデモ用です。ブラウザのCORSポリシーにより、直接外部サイトのデータを取得することは通常できません。
+            // ここではCORSプロキシを経由してコンテンツを取得しています。
+            // 本番環境では、Supabase Edge FunctionなどのサーバーサイドでURLの内容を取得するのが推奨されます。
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+            const response = await fetch(proxyUrl);
+            if (!response.ok) {
+                throw new Error('ページの取得に失敗しました。');
+            }
+            const htmlContent = await response.text();
+            
+            importStatus.textContent = 'AIがレシピを解析中です...';
+            
+            const prompt = `以下のHTMLコンテンツからレシピ情報を抽出してください。
+- 料理名を特定し、titleとしてください。
+- 材料をリストアップし、ingredientsとしてください。各要素は {"item": "材料名", "quantity": "分量", "unit": "単位"} の形式で、分量や単位が不明な場合はnullとしてください。
+- 手順をリストアップし、stepsとしてください。手順は文字列の配列で返してください。
+- ウェブサイトのナビゲーションや広告、コメントなどは無視してください。純粋なレシピ情報のみを抽出してください。
+
+HTMLコンテンツ:
+${htmlContent.substring(0, 10000)}
+`;
+            const schema = {
+                type: "OBJECT",
+                properties: {
+                    "title": { "type": "STRING" },
+                    "ingredients": {
+                        "type": "ARRAY",
+                        "items": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "item": { "type": "STRING" },
+                                "quantity": { "type": ["NUMBER", "STRING"], "nullable": true },
+                                "unit": { "type": "STRING", "nullable": true }
+                            },
+                            required: ["item"]
+                        }
+                    },
+                    "steps": { "type": "ARRAY", "items": { "type": "STRING" } }
+                },
+                required: ["title", "ingredients", "steps"]
+            };
+
+            const recipeData = await callGemini(prompt, schema);
+            
+            // フォームに自動入力
+            titleEl.value = recipeData.title || '';
+            ingredientsEditor.innerHTML = '';
+            stepsEditor.innerHTML = '';
+            (recipeData.ingredients || []).forEach(addIngredientRow);
+            (recipeData.steps || []).forEach(step => addStepRow({ instruction: step }));
+
+            importStatus.textContent = '✅ 読み込みが完了しました。';
+
+        } catch (error) {
+            console.error("URL Import Error:", error);
+            importStatus.textContent = `❌ エラー: ${error.message}`;
+            alert(`レシピの読み込みに失敗しました。\n${error.message}`);
+        } finally {
+            importBtn.disabled = false;
+        }
+    };
+
+    // ★★★ ここまでURLインポート機能 ★★★
+
+
     // --- 読み込み・保存・削除 ---
     const loadRecipe = async () => {
+        // ... (変更なし)
         if (!id) {
             if(document.querySelector('.brand')) document.querySelector('.brand').textContent = '新規レシピ作成';
             addIngredientRow();
@@ -174,6 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const loadAiGeneratedRecipe = () => {
+        // ... (変更なし)
         const aiRecipeJson = localStorage.getItem('ai_generated_recipe');
         if (aiRecipeJson) {
             try {
@@ -212,6 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const saveRecipe = async () => {
+        // ... (変更なし)
         try {
             if (!titleEl || !categoryEl || !tagsEl || !notesEl) {
                 throw new Error("フォームの入力項目が見つかりません。HTMLの構造を確認してください。");
@@ -269,6 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     const deleteRecipe = async () => {
+        // ... (変更なし)
         if (!id || !confirm('このレシピを完全に削除しますか？')) return;
         if(statusEl) statusEl.textContent = '削除中...';
         const { error } = await sb.from('recipes').delete().eq('id', id);
@@ -282,6 +369,10 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- イベントリスナーの集中管理 ---
+    if (importBtn) {
+        importBtn.addEventListener('click', () => importRecipeFromUrl(urlInput.value));
+    }
+    // ... (残りのイベントリスナーは変更なし)
     if(addIngBtn) addIngBtn.addEventListener('click', () => addIngredientRow());
     if(addStepBtn) addStepBtn.addEventListener('click', () => addStepRow());
     if(form) {
@@ -359,7 +450,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if(aiLoading) aiLoading.style.display = 'block';
 
             const customRequest = aiCustomRequestEl.value.trim();
-            // ★★★ プロンプト(AIへの指示)を修正 ★★★
             let prompt = `あなたは調理科学の深い知見を持つ、ミシュランレストランの革新的なシェフです。同業者であるプロの料理人に向けて、科学的根拠に基づいた実践的なルセットを創作します。
 「${selectedMenu}」という料理の完全なレシピを考案してください。
 ベースとなる材料は以下ですが、料理を完成させるために必要な追加材料や具体的な分量も提案してください。`;
