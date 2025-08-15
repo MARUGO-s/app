@@ -185,6 +185,7 @@
     }
   }
 
+  // ★★★ 追加: API呼び出しの再試行機能 ★★★
   async function fetchWithRetry(url, options, maxRetries = 3) {
       let attempt = 0;
       while (attempt < maxRetries) {
@@ -216,9 +217,10 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: chatHistory })
         };
+        // ★★★ 変更: fetchをfetchWithRetryに変更 ★★★
         const response = await fetchWithRetry(apiUrl, options);
 
-        if (!response.ok) throw new Error(`API Error: ${response.status}`);
+        if (!response.ok) throw new Error(`API Error: ${response.status} ${response.statusText}`);
         const result = await response.json();
         
         const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -242,7 +244,6 @@
     const ingredientsText = recipeData.ingredients.map(i => `- ${i.item} ${i.quantity || ''} ${i.unit || ''}`).join('\n');
     const stepsText = recipeData.steps.map((s, i) => `${i + 1}. ${s.instruction}`).join('\n');
     
-    // ★★★ プロンプト(AIへの指示)を修正 ★★★
     const initialPrompt = `あなたは経験豊富なプロのシェフです。以下のルセットについて、同業者である料理人に向けて、より高みを目指すための改善点や新たなアプローチを専門的な視点から指摘してください。なぜその変更が有効なのか、科学的または経験則に基づいた理由を添えて、簡潔に記述してください。
 
 # ルセット名: ${recipeData.title}
