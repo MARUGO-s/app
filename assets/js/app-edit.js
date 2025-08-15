@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    const sb = supabase.createClient("https://ctxyawinblwcbkovfsyj.supabase.co", "eyJhbGciOiJIUzINiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q");
+    const sb = supabase.createClient("https://ctxyawinblwcbkovfsyj.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q");
     const params = new URLSearchParams(location.search);
     let id = params.get('id');
 
@@ -23,17 +23,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveButtons = document.querySelectorAll('.js-save');
     const cancelButtons = document.querySelectorAll('.js-cancel');
     const viewButton = document.querySelector('.js-view');
-    const deleteButton = document.querySelector('.js-delete');
-    
-    // ★★★ URLインポート機能の要素 ★★★
+    const deleteButton = document.getElementById('js-delete-btn'); // ★★★ IDセレクターに修正 ★★★
+
+    // --- URLインポート機能の要素 ---
     const urlInput = document.getElementById('recipeUrl');
     const importBtn = document.getElementById('importFromUrlBtn');
     const importStatus = document.getElementById('importStatus');
 
+    // ★★★ ここから定義を修正・復元 ★★★
     // --- AIモーダル要素 ---
     const aiWizardBtn = document.getElementById('ai-wizard-btn');
     const aiModal = document.getElementById('ai-modal');
-    // ... (残りのモーダル要素は変更なし)
     const modalCloseBtn = document.getElementById('modal-close-btn');
     const aiStep1 = document.getElementById('ai-step-1');
     const aiStep2 = document.getElementById('ai-step-2');
@@ -43,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const menuSuggestionsContainer = document.getElementById('menu-suggestions');
     const generateFullRecipeBtn = document.getElementById('generate-full-recipe-btn');
     const aiCustomRequestEl = document.getElementById('ai-custom-request');
+    // ★★★ ここまで修正 ★★★
 
     let selectedGenre = '';
     let selectedMenu = '';
@@ -77,7 +78,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- AIモーダル制御 ---
     const openModal = () => { if(aiModal) aiModal.style.display = 'flex'; };
-    // ... (残りのモーダル制御関数は変更なし)
     const closeModal = () => {
         if(aiModal) aiModal.style.display = 'none';
         resetModal();
@@ -148,7 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return JSON.parse(jsonText);
     }
 
-    // ★★★ ここからURLインポート機能 ★★★
+    // --- URLインポート機能 ---
     const importRecipeFromUrl = async (url) => {
         if (!url || !url.startsWith('http')) {
             alert('有効なURLを入力してください。');
@@ -221,12 +221,8 @@ ${htmlContent.substring(0, 10000)}
         }
     };
 
-    // ★★★ ここまでURLインポート機能 ★★★
-
-
     // --- 読み込み・保存・削除 ---
     const loadRecipe = async () => {
-        // ... (変更なし)
         if (!id) {
             if(document.querySelector('.brand')) document.querySelector('.brand').textContent = '新規レシピ作成';
             addIngredientRow();
@@ -258,7 +254,6 @@ ${htmlContent.substring(0, 10000)}
     };
 
     const loadAiGeneratedRecipe = () => {
-        // ... (変更なし)
         const aiRecipeJson = localStorage.getItem('ai_generated_recipe');
         if (aiRecipeJson) {
             try {
@@ -297,7 +292,6 @@ ${htmlContent.substring(0, 10000)}
     };
 
     const saveRecipe = async () => {
-        // ... (変更なし)
         try {
             if (!titleEl || !categoryEl || !tagsEl || !notesEl) {
                 throw new Error("フォームの入力項目が見つかりません。HTMLの構造を確認してください。");
@@ -355,7 +349,6 @@ ${htmlContent.substring(0, 10000)}
     };
     
     const deleteRecipe = async () => {
-        // ... (変更なし)
         if (!id || !confirm('このレシピを完全に削除しますか？')) return;
         if(statusEl) statusEl.textContent = '削除中...';
         const { error } = await sb.from('recipes').delete().eq('id', id);
@@ -372,7 +365,6 @@ ${htmlContent.substring(0, 10000)}
     if (importBtn) {
         importBtn.addEventListener('click', () => importRecipeFromUrl(urlInput.value));
     }
-    // ... (残りのイベントリスナーは変更なし)
     if(addIngBtn) addIngBtn.addEventListener('click', () => addIngredientRow());
     if(addStepBtn) addStepBtn.addEventListener('click', () => addStepRow());
     if(form) {
