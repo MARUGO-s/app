@@ -91,21 +91,51 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Gemini API 呼び出し ---
     const apiKey = "AIzaSyBNgqPMcJiVSysDAaXKzCOv08IGUeuEAwg";
 
+    // ★★★ 追加: API呼び出しの再試行機能 ★★★
+    async function fetchWithRetry(url, options, maxRetries = 3) {
+        let attempt = 0;
+        while (attempt < maxRetries) {
+            try {
+                const response = await fetch(url, options);
+                // サーバーエラー(5xx)の場合、エラーを投げて再試行させる
+                if (response.status >= 500 && response.status < 600) {
+                    throw new Error(`API Server Error: ${response.status}`);
+                }
+                // 成功またはクライアントエラー(4xx)の場合は、そのままレスポンスを返す
+                return response;
+            } catch (error) {
+                attempt++;
+                if (attempt >= maxRetries) {
+                    throw error; // 最大試行回数に達したらエラーを投げる
+                }
+                // 指数関数的バックオフ（待機時間を徐々に長くする）
+                const delay = Math.pow(2, attempt) * 1000;
+                console.log(`Attempt ${attempt} failed. Retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+
     async function callGemini(prompt, responseSchema) {
         const payload = {
             contents: [{ role: "user", parts: [{ text: prompt }] }],
             generationConfig: { responseMimeType: "application/json", responseSchema }
         };
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-        const response = await fetch(apiUrl, {
+        const options = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
-        });
+        };
+        
+        // ★★★ 変更: fetchをfetchWithRetryに変更 ★★★
+        const response = await fetchWithRetry(apiUrl, options);
+
         if (!response.ok) {
             if (response.status === 429) {
                 throw new Error(`リクエストが多すぎます。少し時間をおいてから、再度お試しください。(Code: 429)`);
             }
+            // fetchWithRetryで解決しなかったエラーを処理
             throw new Error(`API Error: ${response.status} ${response.statusText}`);
         }
         const result = await response.json();
@@ -149,7 +179,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // ★★★ 修正箇所 ★★★
     const loadAiGeneratedRecipe = () => {
         const aiRecipeJson = localStorage.getItem('ai_generated_recipe');
         if (aiRecipeJson) {
@@ -165,32 +194,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (recipeData.ingredients && recipeData.ingredients.length > 0) {
                     recipeData.ingredients.forEach(addIngredientRow);
                 } else {
-                    addIngredientRow(); // 材料がない場合でも空の行を1つ追加
+                    addIngredientRow();
                 }
 
                 if(stepsEditor) stepsEditor.innerHTML = '';
                 if (recipeData.steps && recipeData.steps.length > 0) {
-                    // AIからのstepsは文字列の配列なので、instructionとして渡す
                     recipeData.steps.forEach(stepText => {
-                        // ★★★ 手順の先頭に付いている番号を削除 ★★★
                         const instruction = stepText.replace(/^\d+\.\s*/, '');
                         addStepRow({ instruction: instruction });
                     });
                 } else {
-                    addStepRow(); // 手順がない場合でも空の行を1つ追加
+                    addStepRow();
                 }
-
-                // 読み込み後は、不要になったデータを削除
                 localStorage.removeItem('ai_generated_recipe');
-                
-                return true; // AIデータの読み込みに成功したことを示す
+                return true;
             } catch (e) {
                 console.error("AIが生成したレシピの解析に失敗しました:", e);
-                localStorage.removeItem('ai_generated_recipe'); // 不正なデータは削除
+                localStorage.removeItem('ai_generated_recipe');
                 return false;
             }
         }
-        return false; // AIデータが見つからなかった
+        return false;
     };
 
     const saveRecipe = async () => {
@@ -341,7 +365,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if(aiLoading) aiLoading.style.display = 'block';
 
             const customRequest = aiCustomRequestEl.value.trim();
-            // ★★★ プロンプト(AIへの指示)を修正 ★★★
             let prompt = `あなたはミシュランレストランを率いるシェフです。これから同業者であるプロの料理人に向けて、一つのルセットを創作します。専門用語を用い、無駄なく簡潔かつ的確な記述を心がけてください。
 「${selectedMenu}」という料理の完全なレシピを考案してください。
 ベースとなる材料は以下ですが、料理を完成させるために必要な追加材料や具体的な分量も提案してください。`;
@@ -376,7 +399,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- 初期読み込み ---
-    // AIデータがなければ、通常通りレシピを読み込む
     const aiDataLoaded = loadAiGeneratedRecipe();
     if (!aiDataLoaded) {
         loadRecipe();
