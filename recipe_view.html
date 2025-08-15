@@ -242,9 +242,10 @@
     const ingredientsText = recipeData.ingredients.map(i => `- ${i.item} ${i.quantity || ''} ${i.unit || ''}`).join('\n');
     const stepsText = recipeData.steps.map((s, i) => `${i + 1}. ${s.instruction}`).join('\n');
     
-    const initialPrompt = `あなたはプロの料理研究家です。以下のレシピについて、より美味しくするための具体的な改善案、プロならではのコツ、または面白いアレンジ方法を提案してください。回答はフレンドリーな会話形式で、要点をまとめて端的に伝えてください。
+    // ★★★ プロンプト(AIへの指示)を修正 ★★★
+    const initialPrompt = `あなたは経験豊富なプロのシェフです。以下のルセットについて、同業者である料理人に向けて、より高みを目指すための改善点や新たなアプローチを専門的な視点から指摘してください。なぜその変更が有効なのか、科学的または経験則に基づいた理由を添えて、簡潔に記述してください。
 
-# レシピ名: ${recipeData.title}
+# ルセット名: ${recipeData.title}
 
 ## 材料
 ${ingredientsText}
@@ -267,7 +268,7 @@ ${stepsText}`;
   }
 
   async function handleSaveAsNew() {
-      const savePrompt = `私たちのこれまでの会話に基づき、最終的なレシピをJSON形式で提供してください。備考や他のテキストは一切含めず、JSONオブジェクトのみを返してください。JSONのキーは "title", "category", "tags", "notes", "ingredients" (item, quantity, unit を含むオブジェクトの配列), "steps" (文字列の配列) としてください。`;
+      const savePrompt = `私たちのこれまでの会話に基づき、最終的なレシピをJSON形式で提供してください。備考や他のテキストは一切含めず、JSONオブジェクトのみを返してください。JSONのキーは "title", "category", "tags", "notes", "ingredients" (item, quantity, unit を含むオブジェクトの配列), "steps" (文字列の配列) としてください。 **単位は「g」や「ml」を基本とし、大さじ・小さじは使用しないでください。**`;
       
       chatHistory.push({ role: "user", parts: [{ text: savePrompt }] });
       toggleAiLoading(true);
