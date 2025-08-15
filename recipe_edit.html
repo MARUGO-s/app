@@ -69,12 +69,13 @@
     <form id="editForm" class="panel">
       <div class="field" style="background: #f8f9fa; padding: 1.5rem; border-radius: var(--radius-base); margin-bottom: 2rem;">
         <label for="recipeUrl" style="font-size: 1rem;">URLから自動入力</label>
-        <div style="display: flex; gap: 0.75rem; margin-top: 0.75rem;">
-          <input id="recipeUrl" class="input" placeholder="レシピページのURLを貼り付け">
-          <button type="button" class="btn primary" id="importFromUrlBtn">インポート</button>
+        <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 0.75rem;">
+          <input id="recipeUrl" class="input" placeholder="レシピページのURLを貼り付け" style="flex-grow: 1; min-width: 0;">
+          <button type="button" class="btn primary" id="importFromUrlBtn" style="white-space: nowrap;">インポート</button>
         </div>
         <div id="importStatus" style="margin-top: 0.75rem; font-size: 0.875rem;"></div>
       </div>
+      
       <div class="field">
         <label for="title">料理名</label>
         <input id="title" name="title" class="input" required />
