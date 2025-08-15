@@ -169,66 +169,161 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/app-edit.js"></script>
   <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    const FN_URL = 'https://ctxyawinblwcbkovfsyj.supabase.co/functions/v1/extract-recipe';
-    const ANON   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q';
+(function(){
+  const FN_URL = 'https://ctxyawinblwcbkovfsyj.supabase.co/functions/v1/extract-recipe';
+  const ANON   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q';
 
-    // ① ヘッダの右側にボタンを追加（この要素はファイル内にあります）
-    const actions = document.querySelector('.header-actions');
-    const btn = document.createElement('button');
-    btn.className = 'btn ghost';
-    btn.textContent = 'URLから取り込み';
-    actions?.insertBefore(btn, actions.firstChild);
+  // ヘッダーにボタン追加
+  const actions = document.querySelector('.header-actions');
+  const btn = document.createElement('button');
+  btn.className = 'btn ghost';
+  btn.textContent = 'URLから取り込み';
+  actions?.insertBefore(btn, actions.firstChild);
 
-    // ② 押したら Edge Function を叩いてフォームに流し込む
-    btn.addEventListener('click', async () => {
-      const url = prompt('レシピ掲載ページのURLを入力');
-      if (!url) return;
+  // ===== 量・単位・品目のパーサ（日本語対応） =====
+  function parseIngredientLine(line){
+    const original = String(line||'').trim();
+    if(!original) return { item:'', quantity:null, unit:'', note:'', original };
 
-      const res = await fetch(FN_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + ANON },
-        body: JSON.stringify({ url })
-      });
-      const body = await res.json().catch(()=> ({}));
-      if (!res.ok || body?.ok === false) {
-        alert((body?.code || `HTTP_${res.status}`) + ': ' + (body?.message || 'import failed'));
-        return;
+    // 全角→半角、記号正規化
+    const FW = '０１２３４５６７８９．，／－';
+    const HW = '0123456789.,/-';
+    let s = original.normalize('NFKC');
+    for(let i=0;i<FW.length;i++) s = s.replaceAll(FW[i], HW[i]);
+    s = s.replace(/[〜～–—−]/g,'-').replace(/　/g,' ').replace(/\s+/g,' ').trim();
+
+    // Unicode分数を ASCII に
+    const fracMap = { '½':'1/2','¼':'1/4','¾':'3/4','⅓':'1/3','⅔':'2/3' };
+    s = s.replace(/[½¼¾⅓⅔]/g, m=>fracMap[m]);
+
+    // 備考（括弧）を退避
+    let note='';
+    s = s.replace(/[（(]([^）)]+)[）)]/g, (_,a)=>{ note += (note? ' / ':'') + a.trim(); return ' '; });
+
+    // 単位辞書
+    const UNITS = [
+      { re: /(?:大さじ|大匙|tbsp|tablespoon)s?/i, unit:'大さじ', toMl:15 },
+      { re: /(?:小さじ|小匙|tsp|teaspoon)s?/i, unit:'小さじ', toMl:5 },
+      { re: /(?:カップ|cup)s?/i,              unit:'カップ', toMl:200 },
+      { re: /(?:ml|mL|cc)/i,                  unit:'ml',    toMl:1 },
+      { re: /(?:l|L|ℓ)/,                      unit:'L',     toMl:1000 },
+      { re: /(?:g|gr|gram|グラム)/i,          unit:'g' },
+      { re: /(?:kg|キロ)/i,                   unit:'kg' },
+      { re: /個|本|枚|片|玉|粒|合|切れ|かけ|房|杯/, unit:'count' },
+      { re: /少々|適量|ひとつまみ|少量/,         unit:'適量' },
+    ];
+
+    const num = (txt)=>{
+      txt = String(txt).trim();
+      // 1 と 1/2
+      const mMix = txt.match(/^(\d+)[\sと]+(\d+)\/(\d+)$/);
+      if(mMix) return Number((Number(mMix[1]) + Number(mMix[2])/Number(mMix[3])).toFixed(3));
+      // 1 1/2 or 1/2
+      const mFrac = txt.match(/^(\d+)?\s*(\d+)\/(\d+)$/);
+      if(mFrac) return Number(((mFrac[1]?Number(mFrac[1]):0) + Number(mFrac[2])/Number(mFrac[3])).toFixed(3));
+      // 1-2 / 1~2
+      const mRange = txt.match(/^(\d+(?:\.\d+)?)\s*[-~]\s*(\d+(?:\.\d+)?)$/);
+      if(mRange) return { min:Number(mRange[1]), max:Number(mRange[2]) };
+      const n = Number(txt.replace(/,/g,''));
+      return isNaN(n) ? null : n;
+    };
+
+    const UNIT_TOKENS = '(?:大さじ|大匙|小さじ|小匙|カップ|杯|ml|mL|cc|l|L|ℓ|g|kg|グラム|個|本|枚|片|玉|粒|合|切れ|かけ|房|少々|適量)';
+    const P = [
+      new RegExp(`^(.+?)\s+(\d+(?:[.,]\d+)?(?:\s*[\/\-~]\s*\d+(?:[.,]\d+)?)?)\s*(${UNIT_TOKENS})(.*)$`,'i'), // 砂糖 100 g
+      new RegExp(`^(.+?)\s*(${UNIT_TOKENS})\s*(\d+(?:[.,]\d+)?(?:\s*[\/\-~]\s*\d+(?:[.,]\d+)?)?)(.*)$`,'i'), // 牛乳 カップ 1/2
+      new RegExp(`^(\d+(?:[.,]\d+)?(?:\s*[\/\-~]\s*\d+(?:[.,]\d+)?)?)\s*(${UNIT_TOKENS})\s+(.+)$`,'i'), // 100 g 砂糖
+    ];
+
+    let item='', quantity=null, unit='';
+    let hit=false;
+    for(const pat of P){
+      const m = s.match(pat);
+      if(m){
+        if(pat===P[0]){ item=m[1]; quantity=m[2]; unit=m[3]; }
+        else if(pat===P[1]){ item=m[1]; unit=m[2]; quantity=m[3]; }
+        else { quantity=m[1]; unit=m[2]; item=m[3]; }
+        hit=true; break;
       }
-      const r = body.data || {};
-      const $ = s => document.querySelector(s);
+    }
+    if(!hit){
+      const m = s.match(/(.+?)\s+(\d+(?:\.\d+)?)(.*)$/);
+      if(m){ item=m[1]; quantity=m[2]; note = (note? note+' / ':'') + m[3].trim(); }
+      else { item=s; }
+    }
 
-      // タイトル／説明／タグ
-      $('#title').value = r.title || '';
-      $('#notes').value = r.description || '';
-      $('#tags').value  = (r.tags || []).join(', ');
+    // 単位の正規化
+    let unitCanon = '';
+    for(const u of UNITS){ if(u.re.test(unit||'')){ unitCanon = u.unit; break; } }
+    if(unitCanon==='count'){ unitCanon = (unit.match(/個|本|枚|片|玉|粒|合|切れ|かけ|房|杯/)||[''])[0]; }
+    if(unitCanon==='') unitCanon = unit || '';
 
-      // 材料（1行=1アイテムで安全に投入）
-      const ingRoot = document.querySelector('#ingredientsEditor');
-      const addIng  = document.querySelector('#addIng');
-      ingRoot.innerHTML = '';
-      (r.ingredientLines || []).forEach(line => {
-        addIng?.dispatchEvent(new Event('click'));  // 既存の行追加ロジックを利用
-        const rows = ingRoot.querySelectorAll('.ingredient-row');
-        const row  = rows[rows.length - 1];
-        const input = row?.querySelector('input');
-        if (input) input.value = line;
-      });
+    // 量を数値化
+    let q = quantity;
+    let qRange = null;
+    if(typeof q === 'string'){ const mR = q.match(/^(\d+(?:\.\d+)?)[\s\-~]+(\d+(?:\.\d+)?)$/); if(mR) qRange={min:Number(mR[1]),max:Number(mR[2])}; }
+    const qNum = typeof q === 'string' ? num(q) : (typeof q==='number'? q : null);
 
-      // 手順
-      const stepsRoot = document.querySelector('#stepsEditor');
-      const addStep   = document.querySelector('#addStep');
-      stepsRoot.innerHTML = '';
-      (r.steps || []).forEach(t => {
-        addStep?.dispatchEvent(new Event('click'));
-        const rows = stepsRoot.querySelectorAll('.step-row textarea, .step-row input, textarea');
-        const el = rows[rows.length - 1];
-        if (el) el.value = t;
-      });
+    // mL換算（可能な場合のみ）
+    let toMl = null;
+    if(qNum!=null){ const u = UNITS.find(u=>u.unit===unitCanon && u.toMl); if(u) toMl = qNum * u.toMl; }
 
-      alert('URLからレシピを取り込みました。分量や単位は必要に応じて調整してください。');
+    return {
+      item: (item||'').trim(),
+      quantity: (typeof qNum==='number'? Number(qNum) : null),
+      unit: unitCanon,
+      note: note || '',
+      range: qRange || undefined,
+      normalized: toMl!=null ? { ml: toMl } : undefined,
+      original
+    };
+  }
+
+  // 取り込み本体
+  async function importFromUrl(){
+    const url = prompt('レシピ掲載ページのURLを入力');
+    if(!url) return;
+    const res = await fetch(FN_URL, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': 'Bearer ' + ANON }, body: JSON.stringify({ url }) });
+    const body = await res.json().catch(()=>({}));
+    if(!res.ok || body?.ok === false){ alert((body?.code||`HTTP_${res.status}`)+': '+(body?.message||'import failed')); return; }
+    const r = body.data || {};
+
+    const $ = (s)=>document.querySelector(s);
+    $('#title').value = r.title || '';
+    $('#notes').value = r.description || '';
+    $('#tags').value  = (r.tags||[]).join(', ');
+
+    // 材料：自動分割して投入
+    const ingRoot = document.querySelector('#ingredientsEditor');
+    const addIng  = document.querySelector('#addIng');
+    ingRoot.innerHTML = '';
+    (r.ingredientLines||[]).forEach(line=>{
+      addIng?.dispatchEvent(new Event('click'));
+      const rows = ingRoot.querySelectorAll('.ingredient-row');
+      const row  = rows[rows.length-1];
+      const p = parseIngredientLine(line);
+      (row?.querySelector('.ing-item') )?.setAttribute('value','');
+      (row?.querySelector('.ing-qty')  )?.setAttribute('value','');
+      (row?.querySelector('.ing-unit') )?.setAttribute('value','');
+      const itemEl = row?.querySelector('.ing-item, input[name="item"], input[type="text"]');
+      const qtyEl  = row?.querySelector('.ing-qty,  input[name="qty"],  input[type="number"]');
+      const unitEl = row?.querySelector('.ing-unit, input[name="unit"], input[list], select');
+      if(itemEl) itemEl.value = p.item + (p.note? `（${p.note}）` : '');
+      if(qtyEl)  qtyEl.value  = (p.quantity ?? '').toString();
+      if(unitEl) unitEl.value = p.unit || '';
     });
-  });
-  </script>
+
+    // 手順
+    const stepsRoot = document.querySelector('#stepsEditor');
+    const addStep   = document.querySelector('#addStep');
+    stepsRoot.innerHTML='';
+    (r.steps||[]).forEach(t=>{ addStep?.dispatchEvent(new Event('click')); const rows=stepsRoot.querySelectorAll('.step-row textarea, .step-row input, textarea'); const el=rows[rows.length-1]; if(el) el.value=t; });
+
+    alert('URLからレシピを取り込みました（量と単位を自動分割済み）。');
+  }
+
+  btn.addEventListener('click', importFromUrl);
+})();
+</script>
 </body>
 </html>
