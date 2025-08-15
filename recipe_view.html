@@ -70,7 +70,6 @@
     </div>
   </div>
 
-
   <script>
 (function(){
   const params = new URLSearchParams(location.search);
@@ -83,7 +82,7 @@
   if(!window.sb){ alert('Supabase not initialized'); return; }
   if(!id){ alert('レシピIDがありません'); location.href='index.html'; return; }
 
-  // --- Page Elements ---
+  // --- Element Selection ---
   const titleEl = document.querySelector('#recipeTitle');
   const metaEl = document.querySelector('#meta');
   const tagsEl = document.querySelector('#tags');
@@ -92,8 +91,6 @@
   const notesEl = document.querySelector('#notes');
   const ingEl = document.querySelector('#ingredients');
   const stepsEl = document.querySelector('#steps');
-
-  // --- AI Modal Elements ---
   const aiModal = document.querySelector('#ai-view-modal');
   const aiModalCloseBtn = document.querySelector('#ai-view-modal-close');
   const aiChatContainer = document.querySelector('#ai-chat-container');
@@ -128,16 +125,17 @@
       location.href = 'index.html';
     }
   }
-
   async function loadRecipe() {
     try {
       const { data: r, error } = await sb.from('recipes').select('*').eq('id', id).single();
       if (error || !r) throw new Error('レシピの読み込みに失敗しました。');
       
-      recipeData.title = r.title || '無題のレシピ';
-      recipeData.intro = r.intro || '';
-      recipeData.notes = r.notes || r.meta?.note || '';
-      recipeData.tags = r.tags || [];
+      recipeData = {
+        title: r.title || '無題のレシピ',
+        intro: r.intro || '',
+        notes: r.notes || r.meta?.note || '',
+        tags: r.tags || [],
+      };
 
       titleEl.textContent = recipeData.title;
       metaEl.textContent = r.updated_at ? `更新: ${new Date(r.updated_at).toLocaleString('ja-JP')}` : '';
@@ -147,11 +145,11 @@
 
       const { data: ings } = await sb.from('recipe_ingredients').select('item,quantity,unit').eq('recipe_id', id).order('position');
       recipeData.ingredients = ings || [];
-      ingEl.innerHTML = recipeData.ingredients.length ? `<table class="table"><thead><tr><th>材料名</th><th class="num">分量</th><th>単位</th></tr></thead><tbody>${ings.map(i => `<tr><td>${esc(i.item)}</td><td class="num">${esc(i.quantity ?? '')}</td><td>${esc(i.unit ?? '')}</td></tr>`).join('')}</tbody></table>` : '<div class="muted">材料は登録されていません。</div>';
+      ingEl.innerHTML = ings?.length ? `<table class="table"><thead><tr><th>材料名</th><th class="num">分量</th><th>単位</th></tr></thead><tbody>${ings.map(i => `<tr><td>${esc(i.item)}</td><td class="num">${esc(i.quantity ?? '')}</td><td>${esc(i.unit ?? '')}</td></tr>`).join('')}</tbody></table>` : '<div class="muted">材料は登録されていません。</div>';
 
       const { data: steps } = await sb.from('recipe_steps').select('instruction').eq('recipe_id', id).order('position');
-      recipeData.steps = steps || [];
-      stepsEl.innerHTML = recipeData.steps.length > 0 ? steps.map(s => `<li>${esc(s.instruction)}</li>`).join('') : '<li class="muted">手順は登録されていません。</li>';
+      recipeData.steps = steps?.map(s => s.instruction) || [];
+      stepsEl.innerHTML = steps?.length > 0 ? steps.map(s => `<li>${esc(s.instruction)}</li>`).join('') : '<li class="muted">手順は登録されていません。</li>';
 
       setupFavoriteButton(id);
     } catch (err) {
@@ -168,7 +166,6 @@
     aiChatContainer.appendChild(messageEl);
     aiChatContainer.scrollTop = aiChatContainer.scrollHeight;
   }
-
   function toggleAiLoading(show) {
     isAiLoading = show;
     aiSendBtn.disabled = show;
@@ -184,79 +181,42 @@
       aiChatContainer.scrollTop = aiChatContainer.scrollHeight;
     }
   }
-
-  async function fetchWithRetry(url, options, maxRetries = 3) {
-      let attempt = 0;
-      while (attempt < maxRetries) {
-          try {
-              const response = await fetch(url, options);
-              if (response.status >= 500 && response.status < 600) {
-                  throw new Error(`API Server Error: ${response.status}`);
-              }
-              return response;
-          } catch (error) {
-              attempt++;
-              if (attempt >= maxRetries) {
-                  throw error;
-              }
-              const delay = Math.pow(2, attempt) * 1000;
-              console.log(`Attempt ${attempt} failed. Retrying in ${delay}ms...`);
-              await new Promise(resolve => setTimeout(resolve, delay));
-          }
-      }
-  }
-
-  async function callGeminiApi() {
+  async function callGeminiApi(prompt, responseSchema) {
     toggleAiLoading(true);
     try {
-        const apiKey = "AIzaSyBNgqPMcJiVSysDAaXKzCOv08IGUeuEAwg";
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-        const options = {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: chatHistory })
-        };
-        const response = await fetchWithRetry(apiUrl, options);
-
-        if (!response.ok) throw new Error(`API Error: ${response.status} ${response.statusText}`);
-        const result = await response.json();
-        
-        const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) throw new Error('AIからの応答が空でした。');
-
-        chatHistory.push({ role: "model", parts: [{ text }] });
-        renderChatMessage(text, 'assistant');
-    } catch (error) {
-        console.error("AI Error:", error);
-        renderChatMessage(`エラーが発生しました: ${error.message}`, 'assistant');
+        const { data, error } = await sb.functions.invoke('call-gemini', {
+            body: { prompt, responseSchema },
+        });
+        if (error) throw new Error(`Edge Function Error: ${error.message}`);
+        if (data.error) throw new Error(`API Error from Edge Function: ${data.error}`);
+        return data;
+    } catch(err) {
+        console.error("AI Error:", err);
+        renderChatMessage(`エラーが発生しました: ${err.message}`, 'assistant');
     } finally {
         toggleAiLoading(false);
     }
   }
-
   async function handleAiAdviceClick() {
     if (!aiModal) return;
     aiModal.style.display = 'flex';
     aiChatContainer.innerHTML = '';
     
     const ingredientsText = recipeData.ingredients.map(i => `- ${i.item} ${i.quantity || ''} ${i.unit || ''}`).join('\n');
-    const stepsText = recipeData.steps.map((s, i) => `${i + 1}. ${s.instruction}`).join('\n');
+    const stepsText = recipeData.steps.map((s, i) => `${i + 1}. ${s}`).join('\n');
     
-    // ★★★ プロンプト(AIへの指示)を修正 ★★★
-    const initialPrompt = `あなたは調理科学者であり、トップレストランのコンサルタントも務めるプロのシェフです。以下のルセットを分析し、同業者である料理人に向けて、より料理の質を向上させるための改善提案をしてください。提案は、メイラード反応、酵素の働き、タンパク質の変性、乳化、浸透圧といった調理科学の具体的な原理に基づいて行ってください。なぜその変更が有効なのか、科学的根拠を明確に示しながら、実践的なアドバイスとして記述してください。
-
-# ルセット名: ${recipeData.title}
-
-## 材料
-${ingredientsText}
-
-## 手順
-${stepsText}`;
+    const initialPrompt = `あなたは調理科学者です。以下のルセットを分析し、同業者向けに質を向上させる改善提案をしてください。提案はメイラード反応、酵素の働き、タンパク質の変性、乳化等の調理科学の原理に基づき、科学的根拠を明確に示しながら記述してください。\n\n# ルセット名: ${recipeData.title}\n\n## 材料\n${ingredientsText}\n\n## 手順\n${stepsText}`;
     
     chatHistory = [{ role: "user", parts: [{ text: initialPrompt }] }];
-    await callGeminiApi();
+    
+    const result = await callGeminiApi(initialPrompt);
+    if(result){
+        const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) { renderChatMessage('AIからの応答が空でした。', 'assistant'); return; }
+        chatHistory.push({ role: "model", parts: [{ text }] });
+        renderChatMessage(text, 'assistant');
+    }
   }
-  
   async function handleSendMessage() {
     const userInput = aiUserInput.value.trim();
     if (!userInput || isAiLoading) return;
@@ -264,104 +224,80 @@ ${stepsText}`;
     renderChatMessage(userInput, 'user');
     chatHistory.push({ role: "user", parts: [{ text: userInput }] });
     aiUserInput.value = '';
-    await callGeminiApi();
+    
+    const result = await callGeminiApi(userInput);
+    if(result){
+        const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) { renderChatMessage('AIからの応答が空でした。', 'assistant'); return; }
+        chatHistory.push({ role: "model", parts: [{ text }] });
+        renderChatMessage(text, 'assistant');
+    }
   }
-
   async function handleSaveAsNew() {
-      const savePrompt = `私たちのこれまでの会話に基づき、最終的なレシピをJSON形式で提供してください。備考や他のテキストは一切含めず、JSONオブジェクトのみを返してください。JSONのキーは "title", "category", "tags", "notes", "ingredients" (item, quantity, unit を含むオブジェクトの配列), "steps" (文字列の配列) としてください。 **単位は「g」や「ml」を基本とし、大さじ・小さじは使用しないでください。**`;
+      const savePrompt = `これまでの会話に基づき、最終的なレシピをJSONで提供してください。備考は含めずJSONオブジェクトのみを返してください。キーは "title", "category", "tags", "notes", "ingredients" (item, quantity, unit を含むオブジェクトの配列), "steps" (文字列の配列) としてください。単位はgやmlを基本とすること。`;
       
       chatHistory.push({ role: "user", parts: [{ text: savePrompt }] });
-      toggleAiLoading(true);
+      
+      const responseSchema = {
+          type: "OBJECT",
+          properties: { "title": { "type": "STRING" }, "category": { "type": "STRING" }, "tags": { "type": "ARRAY", items: { "type": "STRING" } }, "notes": { "type": "STRING" }, "ingredients": { "type": "ARRAY", items: { "type": "OBJECT", "properties": { "item": { "type": "STRING" }, "quantity": { "type": "STRING" }, "unit": { "type": "STRING" } }, required: ["item"] } }, "steps": { "type": "ARRAY", items: { "type": "STRING" } } },
+          required: ["title", "category", "tags", "notes", "ingredients", "steps"]
+      };
 
       try {
-        const apiKey = "AIzaSyBNgqPMcJiVSysDAaXKzCOv08IGUeuEAwg";
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-        const options = {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: chatHistory, generationConfig: { responseMimeType: "application/json" } })
-        };
-        
-        const response = await fetchWithRetry(apiUrl, options);
-
-        if (!response.ok) throw new Error(`API Error: ${response.status}`);
-        const result = await response.json();
-        const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+        const result = await callGeminiApi(savePrompt, responseSchema);
+        const jsonText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!jsonText) throw new Error('AIからのJSON応答がありませんでした。');
 
         localStorage.setItem('ai_generated_recipe', jsonText);
         alert('AIが提案したレシピを編集画面に読み込みます。');
         location.href = 'recipe_edit.html';
-
       } catch (error) {
         alert(`新規保存の準備に失敗しました: ${error.message}`);
-      } finally {
-        toggleAiLoading(false);
         chatHistory.pop(); 
       }
   }
 
-
-  // --- Event Listeners ---
+  // --- Event Listeners & Initial Load ---
   document.addEventListener('click', (e) => {
     const target = e.target.closest('button');
     if (!target) return;
-
-    if (target.classList.contains('js-edit')) {
-        location.href = `recipe_edit.html?id=${id}`;
-    } else if (target.classList.contains('js-back')) {
-        location.href = 'index.html';
-    } else if (target.classList.contains('js-delete')) {
-        deleteRecipe();
-    } else if (target.classList.contains('js-ai-advice')) {
-        handleAiAdviceClick();
-    }
+    if (target.classList.contains('js-edit')) location.href = `recipe_edit.html?id=${id}`;
+    else if (target.classList.contains('js-back')) location.href = 'index.html';
+    else if (target.classList.contains('js-delete')) deleteRecipe();
+    else if (target.classList.contains('js-ai-advice')) handleAiAdviceClick();
   });
-
   if (aiModal) {
     aiModalCloseBtn.addEventListener('click', () => aiModal.style.display = 'none');
     aiSendBtn.addEventListener('click', handleSendMessage);
     aiSaveNewBtn.addEventListener('click', handleSaveAsNew);
     aiUserInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleSendMessage();
-      }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
     });
   }
-
-
-  // --- Favorite Button Logic ---
   async function setupFavoriteButton(recipe_id) {
     const clientId = getClientId();
-    const { data, error } = await sb.from("favorites").select("id").eq("recipe_id", recipe_id).eq("client_id", clientId).limit(1);
+    const { data } = await sb.from("favorites").select("id").eq("recipe_id", recipe_id).eq("client_id", clientId).limit(1);
     let isFavorite = data && data.length > 0;
-
     const updateButton = () => {
         favBtn.innerHTML = isFavorite ? '♥ お気に入り' : '♡ お気に入り';
         favBtn.classList.toggle('danger', isFavorite);
-        favBtn.classList.toggle('ghost', !isFavorite);
     };
     updateButton();
-
     favBtn.addEventListener('click', async () => {
+        const originalState = isFavorite;
         isFavorite = !isFavorite;
         updateButton();
         try {
-            if (isFavorite) {
-                await sb.from("favorites").insert({ recipe_id, client_id: clientId });
-            } else {
-                await sb.from("favorites").delete().eq("recipe_id", recipe_id).eq("client_id", clientId);
-            }
+            if (isFavorite) await sb.from("favorites").insert({ recipe_id, client_id: clientId });
+            else await sb.from("favorites").delete().eq("recipe_id", recipe_id).eq("client_id", clientId);
         } catch (err) {
             alert("お気に入り状態の更新に失敗しました。");
-            isFavorite = !isFavorite; // Revert state
+            isFavorite = originalState;
             updateButton();
         }
     });
   }
-
-  // --- Initial Load ---
   loadRecipe();
 })();
   </script>
