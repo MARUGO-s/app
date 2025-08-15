@@ -168,5 +168,67 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/app-edit.js"></script>
+  <script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const FN_URL = 'https://ctxyawinblwcbkovfsyj.supabase.co/functions/v1/extract-recipe';
+    const ANON   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q';
+
+    // ① ヘッダの右側にボタンを追加（この要素はファイル内にあります）
+    const actions = document.querySelector('.header-actions');
+    const btn = document.createElement('button');
+    btn.className = 'btn ghost';
+    btn.textContent = 'URLから取り込み';
+    actions?.insertBefore(btn, actions.firstChild);
+
+    // ② 押したら Edge Function を叩いてフォームに流し込む
+    btn.addEventListener('click', async () => {
+      const url = prompt('レシピ掲載ページのURLを入力');
+      if (!url) return;
+
+      const res = await fetch(FN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + ANON },
+        body: JSON.stringify({ url })
+      });
+      const body = await res.json().catch(()=> ({}));
+      if (!res.ok || body?.ok === false) {
+        alert((body?.code || `HTTP_${res.status}`) + ': ' + (body?.message || 'import failed'));
+        return;
+      }
+      const r = body.data || {};
+      const $ = s => document.querySelector(s);
+
+      // タイトル／説明／タグ
+      $('#title').value = r.title || '';
+      $('#notes').value = r.description || '';
+      $('#tags').value  = (r.tags || []).join(', ');
+
+      // 材料（1行=1アイテムで安全に投入）
+      const ingRoot = document.querySelector('#ingredientsEditor');
+      const addIng  = document.querySelector('#addIng');
+      ingRoot.innerHTML = '';
+      (r.ingredientLines || []).forEach(line => {
+        addIng?.dispatchEvent(new Event('click'));  // 既存の行追加ロジックを利用
+        const rows = ingRoot.querySelectorAll('.ingredient-row');
+        const row  = rows[rows.length - 1];
+        const input = row?.querySelector('input');
+        if (input) input.value = line;
+      });
+
+      // 手順
+      const stepsRoot = document.querySelector('#stepsEditor');
+      const addStep   = document.querySelector('#addStep');
+      stepsRoot.innerHTML = '';
+      (r.steps || []).forEach(t => {
+        addStep?.dispatchEvent(new Event('click'));
+        const rows = stepsRoot.querySelectorAll('.step-row textarea, .step-row input, textarea');
+        const el = rows[rows.length - 1];
+        if (el) el.value = t;
+      });
+
+      alert('URLからレシピを取り込みました。分量や単位は必要に応じて調整してください。');
+    });
+  });
+  </script>
 </body>
 </html>
