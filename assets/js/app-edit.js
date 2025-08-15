@@ -100,13 +100,8 @@ document.addEventListener('DOMContentLoaded', () => {
             body: { prompt, responseSchema },
         });
 
-        if (error) {
-            throw new Error(`Edge Function Error: ${error.message}`);
-        }
-        
-        if (data.error) {
-            throw new Error(`API Error from Edge Function: ${data.error}`);
-        }
+        if (error) throw new Error(`Edge Function Error: ${error.message}`);
+        if (data.error) throw new Error(`API Error from Edge Function: ${data.error}`);
         
         const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!jsonText) {
@@ -127,10 +122,16 @@ document.addEventListener('DOMContentLoaded', () => {
         importBtn.disabled = true;
 
         try {
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-            const response = await fetch(proxyUrl);
-            if (!response.ok) throw new Error('ページの取得に失敗しました。');
-            const htmlContent = await response.text();
+            // ★★★ 修正: 外部プロキシの代わりに自前のEdge Functionを呼び出す ★★★
+            const { data: fetchData, error: fetchError } = await sb.functions.invoke('fetch-url', {
+                body: { url },
+            });
+
+            if (fetchError) throw fetchError;
+            if (fetchData.error) throw new Error(fetchData.error);
+            
+            const htmlContent = fetchData.html;
+            if (!htmlContent) throw new Error("URLからコンテンツを取得できませんでした。");
             
             importStatus.textContent = 'AIがレシピを解析中です...';
             
