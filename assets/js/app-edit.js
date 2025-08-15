@@ -48,16 +48,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- ヘルパー関数 ---
     const escapeHtml = (s) => (s ?? "").toString().replace(/[&<>\"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[m]));
-    const num = (s) => { const v = parseFloat(String(s || "").replace(/[, ]/g, '')); return isFinite(v) ? v : null; };
+    const num = (s) => { 
+        if (s === null || s === undefined || s === '') return null;
+        const v = parseFloat(String(s).replace(/[, ]/g, '')); 
+        return isFinite(v) ? v : null; 
+    };
 
     // --- 動的な行の追加・削除 ---
     const addIngredientRow = (data = {}) => {
         if (!ingredientsEditor) return;
         const div = document.createElement('div');
         div.className = 'ingredient-row';
+        // ★★★ 修正: quantityが文字列の場合も考慮して表示する ★★★
+        const quantityValue = data.quantity !== null && data.quantity !== undefined ? data.quantity : '';
         div.innerHTML = `
           <input type="text" placeholder="材料名 *" value="${escapeHtml(data.item || '')}" data-field="item" class="ing-item">
-          <input type="number" placeholder="分量" value="${data.quantity !== null && data.quantity !== undefined ? escapeHtml(data.quantity) : ''}" data-field="quantity" class="ing-qty">
+          <input type="text" placeholder="分量" value="${escapeHtml(quantityValue)}" data-field="quantity" class="ing-qty">
           <input type="text" placeholder="単位" value="${escapeHtml(data.unit || '')}" data-field="unit" class="ing-unit">
           <button type="button" class="btn danger small js-remove-row">削除</button>
         `;
@@ -166,16 +172,19 @@ document.addEventListener('DOMContentLoaded', () => {
             
             importStatus.textContent = 'AIがレシピを解析中です...';
             
+            // ★★★ プロンプト(指示)を修正 ★★★
             const prompt = `以下のHTMLコンテンツからレシピ情報を抽出してください。
 - 料理名を特定し、titleとしてください。
-- 材料をリストアップし、ingredientsとしてください。各要素は {"item": "材料名", "quantity": "分量", "unit": "単位"} の形式で、分量や単位が不明な場合はnullとしてください。
+- 材料をリストアップし、ingredientsとしてください。各要素は {"item": "材料名", "quantity": "分量", "unit": "単位"} の形式で抽出してください。
+- **分量(quantity)は数値だけでなく「少々」や「適量」のような文字列もそのまま抽出してください。**
+- 分量や単位が存在しない場合は、そのキーの値は空文字列("")としてください。
 - 手順をリストアップし、stepsとしてください。手順は文字列の配列で返してください。
-- ウェブサイトのナビゲーションや広告、コメントなどは無視してください。純粋なレシピ情報のみを抽出してください。
+- ウェブサイトのナビゲーションや広告、コメントなどは無視し、純粋なレシピ情報のみを抽出してください。
 
 HTMLコンテンツ:
-${htmlContent.substring(0, 10000)}
+${htmlContent.substring(0, 15000)}
 `;
-            // ★★★ ここからスキーマ定義を修正 ★★★
+            // ★★★ スキーマ(データ形式)を修正 ★★★
             const schema = {
                 type: "OBJECT",
                 properties: {
@@ -186,8 +195,8 @@ ${htmlContent.substring(0, 10000)}
                             "type": "OBJECT",
                             "properties": {
                                 "item": { "type": "STRING" },
-                                "quantity": { "type": ["NUMBER", "STRING", "null"] },
-                                "unit": { "type": ["STRING", "null"] }
+                                "quantity": { "type": "STRING" },
+                                "unit": { "type": "STRING" }
                             },
                             required: ["item"]
                         }
@@ -196,7 +205,6 @@ ${htmlContent.substring(0, 10000)}
                 },
                 required: ["title", "ingredients", "steps"]
             };
-            // ★★★ ここまで修正 ★★★
 
             const recipeData = await callGemini(prompt, schema);
             
