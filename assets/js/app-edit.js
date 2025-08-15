@@ -91,24 +91,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Gemini API 呼び出し ---
     const apiKey = "AIzaSyBNgqPMcJiVSysDAaXKzCOv08IGUeuEAwg";
 
-    // ★★★ 追加: API呼び出しの再試行機能 ★★★
     async function fetchWithRetry(url, options, maxRetries = 3) {
         let attempt = 0;
         while (attempt < maxRetries) {
             try {
                 const response = await fetch(url, options);
-                // サーバーエラー(5xx)の場合、エラーを投げて再試行させる
                 if (response.status >= 500 && response.status < 600) {
                     throw new Error(`API Server Error: ${response.status}`);
                 }
-                // 成功またはクライアントエラー(4xx)の場合は、そのままレスポンスを返す
                 return response;
             } catch (error) {
                 attempt++;
                 if (attempt >= maxRetries) {
-                    throw error; // 最大試行回数に達したらエラーを投げる
+                    throw error;
                 }
-                // 指数関数的バックオフ（待機時間を徐々に長くする）
                 const delay = Math.pow(2, attempt) * 1000;
                 console.log(`Attempt ${attempt} failed. Retrying in ${delay}ms...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
@@ -128,14 +124,12 @@ document.addEventListener('DOMContentLoaded', () => {
             body: JSON.stringify(payload)
         };
         
-        // ★★★ 変更: fetchをfetchWithRetryに変更 ★★★
         const response = await fetchWithRetry(apiUrl, options);
 
         if (!response.ok) {
             if (response.status === 429) {
                 throw new Error(`リクエストが多すぎます。少し時間をおいてから、再度お試しください。(Code: 429)`);
             }
-            // fetchWithRetryで解決しなかったエラーを処理
             throw new Error(`API Error: ${response.status} ${response.statusText}`);
         }
         const result = await response.json();
@@ -365,7 +359,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if(aiLoading) aiLoading.style.display = 'block';
 
             const customRequest = aiCustomRequestEl.value.trim();
-            let prompt = `あなたはミシュランレストランを率いるシェフです。これから同業者であるプロの料理人に向けて、一つのルセットを創作します。専門用語を用い、無駄なく簡潔かつ的確な記述を心がけてください。
+            // ★★★ プロンプト(AIへの指示)を修正 ★★★
+            let prompt = `あなたは調理科学の深い知見を持つ、ミシュランレストランの革新的なシェフです。同業者であるプロの料理人に向けて、科学的根拠に基づいた実践的なルセットを創作します。
 「${selectedMenu}」という料理の完全なレシピを考案してください。
 ベースとなる材料は以下ですが、料理を完成させるために必要な追加材料や具体的な分量も提案してください。`;
             if (customRequest) {
@@ -375,9 +370,9 @@ document.addEventListener('DOMContentLoaded', () => {
 - "title": 料理名
 - "category": 「アミューズ」「前菜」「温菜」「メイン」「デザート」「パン」「その他」のいずれか
 - "tags": タグの配列
-- "notes": 調理のコツやポイント (プロ向けに、なぜその工程が必要なのかという理由を簡潔に記述)
+- "notes": このルセットの鍵となる調理科学的なポイントや、なぜその工程が重要なのか（例：メイラード反応の最適化、乳化の安定化など）を解説してください。
 - "ingredients": 材料の配列 ({"item": "材料名", "quantity": 数値, "unit": "単位"}) の形式。**単位は「g」や「ml」を基本とし、大さじ・小さじは使用しないでください。**
-- "steps": 調理手順の配列`;
+- "steps": 各調理手順の配列。重要な工程には、その背後にある科学的な理由を（）書きで簡潔に補足してください。（例：「肉の表面の水分を完全に拭き取る（メイラード反応を促進するため）」）`;
             
             const schema = { type: "OBJECT", properties: { "title": { "type": "STRING" }, "category": { "type": "STRING" }, "tags": { "type": "ARRAY", items: { "type": "STRING" } }, "notes": { "type": "STRING" }, "ingredients": { "type": "ARRAY", items: { "type": "OBJECT", properties: { "item": { "type": "STRING" }, "quantity": { "type": "NUMBER" }, "unit": { "type": "STRING" } }, required: ["item", "quantity", "unit"] } }, "steps": { "type": "ARRAY", items: { "type": "STRING" } } }, required: ["title", "category", "tags", "notes", "ingredients", "steps"] };
             try {
