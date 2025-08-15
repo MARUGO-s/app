@@ -185,7 +185,6 @@
     }
   }
 
-  // ★★★ 追加: API呼び出しの再試行機能 ★★★
   async function fetchWithRetry(url, options, maxRetries = 3) {
       let attempt = 0;
       while (attempt < maxRetries) {
@@ -217,7 +216,6 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: chatHistory })
         };
-        // ★★★ 変更: fetchをfetchWithRetryに変更 ★★★
         const response = await fetchWithRetry(apiUrl, options);
 
         if (!response.ok) throw new Error(`API Error: ${response.status} ${response.statusText}`);
@@ -244,7 +242,8 @@
     const ingredientsText = recipeData.ingredients.map(i => `- ${i.item} ${i.quantity || ''} ${i.unit || ''}`).join('\n');
     const stepsText = recipeData.steps.map((s, i) => `${i + 1}. ${s.instruction}`).join('\n');
     
-    const initialPrompt = `あなたは経験豊富なプロのシェフです。以下のルセットについて、同業者である料理人に向けて、より高みを目指すための改善点や新たなアプローチを専門的な視点から指摘してください。なぜその変更が有効なのか、科学的または経験則に基づいた理由を添えて、簡潔に記述してください。
+    // ★★★ プロンプト(AIへの指示)を修正 ★★★
+    const initialPrompt = `あなたは調理科学者であり、トップレストランのコンサルタントも務めるプロのシェフです。以下のルセットを分析し、同業者である料理人に向けて、より料理の質を向上させるための改善提案をしてください。提案は、メイラード反応、酵素の働き、タンパク質の変性、乳化、浸透圧といった調理科学の具体的な原理に基づいて行ってください。なぜその変更が有効なのか、科学的根拠を明確に示しながら、実践的なアドバイスとして記述してください。
 
 # ルセット名: ${recipeData.title}
 
