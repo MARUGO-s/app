@@ -169,81 +169,96 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/app-edit.js"></script>
  <!-- === URLから取り込み（量と単位の自動分割：スプーン/カップ→mL統一版） === -->
+<!-- === URLインポート（Gemini専用・supabase-js版） === -->
 <script>
-(() => {
+document.addEventListener('DOMContentLoaded', () => {
   'use strict';
 
-  const FN_URL = 'https://ctxyawinblwcbkovfsyj.supabase.co/functions/v1/extract-recipe';
-  const ANON   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q';
+  // あなたのプロジェクト固有値（ASCIIのみ・改行なし）
+  const PROJECT_URL = 'https://ctxyawinblwcbkovfsyj.supabase.co';
+  const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q';
 
-  // ヘッダーに「URLから取り込み」ボタンを追加
-  const actions = document.querySelector('.header-actions') || document.body;
-  const btn = document.createElement('button');
-  btn.className = 'btn ghost';
-  btn.textContent = 'URLから取り込み';
-  actions.insertBefore(btn, actions.firstChild || null);
-
-  // ── 取り込み本体（Gemini 専用） ─────────────────────
-  async function importFromUrl(){
-    const url = prompt('レシピ掲載ページのURLを入力'); if(!url) return;
-
-    const res = await fetch(FN_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + ANON,   // 必須
-        // CORS で許可しているなら付けてもOK: 'apikey': ANON,
-      },
-      body: JSON.stringify({ url })
-    });
-
-    const body = await res.json().catch(()=>({}));
-    if (!res.ok || body?.ok === false) {
-      alert((body?.code || `HTTP_${res.status}`) + ': ' + (body?.message || 'import failed'));
-      console.error('detail:', body);
-      return;
-    }
-
-    const r = body.data || {};
-    const $ = (s)=>document.querySelector(s);
-
-    // タイトル/説明
-    const t = $('#title'); if (t) { t.value = r.title || ''; t.dispatchEvent(new Event('input',{bubbles:true})); }
-    const n = $('#notes'); if (n) { n.value = r.description || ''; n.dispatchEvent(new Event('input',{bubbles:true})); }
-
-    // 材料：まずは1行=1アイテムで投入（量/単位の分割を使う場合はここに組み込む）
-    const ingRoot = document.querySelector('#ingredientsEditor');
-    const addIng  = document.querySelector('#addIng');
-    if (ingRoot) ingRoot.innerHTML = '';
-    (r.ingredientLines || []).forEach(line => {
-      addIng?.dispatchEvent(new Event('click'));
-      const rows = ingRoot?.querySelectorAll('.ingredient-row');
-      const row  = rows?.[rows.length-1];
-      const itemInput = row?.querySelector('.ing-item, [name="item"], input[type="text"]');
-      if (itemInput) {
-        itemInput.value = line;
-        itemInput.dispatchEvent(new Event('input',{bubbles:true}));
-      }
-    });
-
-    // 手順
-    const stepsRoot = document.querySelector('#stepsEditor');
-    const addStep   = document.querySelector('#addStep');
-    if (stepsRoot) stepsRoot.innerHTML = '';
-    (r.steps || []).forEach(text => {
-      addStep?.dispatchEvent(new Event('click'));
-      const rows = stepsRoot?.querySelectorAll('.step-row textarea, .step-row input, textarea');
-      const el   = rows?.[rows.length-1];
-      if (el) { el.value = text; el.dispatchEvent(new Event('input',{bubbles:true})); }
-    });
-
-    console.log('engine:', r.engine, 'X-Extractor:', res.headers.get('x-extractor'));
-    alert('URLを Gemini で読み取りました。');
+  // 念のため：ANONに全角や不可視が混ざっていないかチェック
+  if ([...ANON].some(c => c.charCodeAt(0) > 255) || ANON.split('.').length !== 3) {
+    alert('ANONキーが不正です（全角/改行混入の可能性）'); return;
   }
 
-  btn.addEventListener('click', importFromUrl);
-})();
+  // supabase-js クライアント（ヘッダ付与はライブラリにお任せ）
+  const sb = window.supabase.createClient(PROJECT_URL, ANON);
+
+  const urlInput = document.getElementById('recipeUrl');
+  const importBtn = document.getElementById('importFromUrlBtn');
+  const statusEl = document.getElementById('importStatus');
+
+  // 既存ヘッダーに「URLから取り込み」ボタンも出す（任意）
+  const actions = document.querySelector('.header-actions') || document.body;
+  const headerBtn = document.createElement('button');
+  headerBtn.className = 'btn ghost';
+  headerBtn.textContent = 'URLから取り込み';
+  actions.insertBefore(headerBtn, actions.firstChild || null);
+
+  headerBtn.addEventListener('click', async () => {
+    const u = prompt('レシピ掲載ページのURL'); if (!u) return;
+    await runImport(u);
+  });
+  importBtn.addEventListener('click', async () => {
+    const u = (urlInput?.value || '').trim(); if (!u) { urlInput?.focus(); return; }
+    await runImport(u);
+  });
+
+  async function runImport(url) {
+    try {
+      setStatus('Geminiで読み取り中…');
+      const { data, error } = await sb.functions.invoke('extract-recipe', { body: { url } });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.message || 'import failed');
+
+      const r = data.data || {};
+      // タイトル/説明
+      const t = document.getElementById('title');
+      if (t) { t.value = r.title || ''; t.dispatchEvent(new Event('input',{bubbles:true})); }
+      const n = document.getElementById('notes');
+      if (n) { n.value = r.description || ''; n.dispatchEvent(new Event('input',{bubbles:true})); }
+
+      // 材料（1行=1アイテムで投入。量の自動分割を使うならここで処理を挟む）
+      const ingRoot = document.querySelector('#ingredientsEditor');
+      const addIng  = document.querySelector('#addIng');
+      if (ingRoot) ingRoot.innerHTML = '';
+      (r.ingredientLines || []).forEach(line => {
+        addIng?.dispatchEvent(new Event('click'));
+        const rows = ingRoot?.querySelectorAll('.ingredient-row');
+        const row  = rows?.[rows.length-1];
+        const itemInput = row?.querySelector('.ing-item, [name="item"], input[type="text"]');
+        if (itemInput) {
+          itemInput.value = line;
+          itemInput.dispatchEvent(new Event('input',{bubbles:true}));
+        }
+      });
+
+      // 手順
+      const stepsRoot = document.querySelector('#stepsEditor');
+      const addStep   = document.querySelector('#addStep');
+      if (stepsRoot) stepsRoot.innerHTML = '';
+      (r.steps || []).forEach(text => {
+        addStep?.dispatchEvent(new Event('click'));
+        const rows = stepsRoot?.querySelectorAll('.step-row textarea, .step-row input, textarea');
+        const el   = rows?.[rows.length-1];
+        if (el) { el.value = text; el.dispatchEvent(new Event('input',{bubbles:true})); }
+      });
+
+      setStatus('読み取り完了（エンジン: gemini）');
+    } catch (e) {
+      console.error(e);
+      setStatus('読み取り失敗: ' + (e.message || e));
+      alert('読み取りに失敗しました: ' + (e.message || e));
+    }
+  }
+
+  function setStatus(msg){ if (statusEl){ statusEl.textContent = msg; } }
+});
 </script>
+<!-- === /URLインポート === -->
+
 
 
 <!-- === /URLから取り込み 完成版 === -->
