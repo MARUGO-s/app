@@ -23,14 +23,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveButtons = document.querySelectorAll('.js-save');
     const cancelButtons = document.querySelectorAll('.js-cancel');
     const viewButton = document.querySelector('.js-view');
-    const deleteButton = document.getElementById('js-delete-btn'); // ★★★ IDセレクターに修正 ★★★
+    const deleteButton = document.getElementById('js-delete-btn');
 
     // --- URLインポート機能の要素 ---
     const urlInput = document.getElementById('recipeUrl');
     const importBtn = document.getElementById('importFromUrlBtn');
     const importStatus = document.getElementById('importStatus');
 
-    // ★★★ ここから定義を修正・復元 ★★★
     // --- AIモーダル要素 ---
     const aiWizardBtn = document.getElementById('ai-wizard-btn');
     const aiModal = document.getElementById('ai-modal');
@@ -43,7 +42,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const menuSuggestionsContainer = document.getElementById('menu-suggestions');
     const generateFullRecipeBtn = document.getElementById('generate-full-recipe-btn');
     const aiCustomRequestEl = document.getElementById('ai-custom-request');
-    // ★★★ ここまで修正 ★★★
 
     let selectedGenre = '';
     let selectedMenu = '';
@@ -159,9 +157,6 @@ document.addEventListener('DOMContentLoaded', () => {
         importBtn.disabled = true;
 
         try {
-            // 注意: この方法はデモ用です。ブラウザのCORSポリシーにより、直接外部サイトのデータを取得することは通常できません。
-            // ここではCORSプロキシを経由してコンテンツを取得しています。
-            // 本番環境では、Supabase Edge FunctionなどのサーバーサイドでURLの内容を取得するのが推奨されます。
             const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
             const response = await fetch(proxyUrl);
             if (!response.ok) {
@@ -180,6 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
 HTMLコンテンツ:
 ${htmlContent.substring(0, 10000)}
 `;
+            // ★★★ ここからスキーマ定義を修正 ★★★
             const schema = {
                 type: "OBJECT",
                 properties: {
@@ -190,8 +186,8 @@ ${htmlContent.substring(0, 10000)}
                             "type": "OBJECT",
                             "properties": {
                                 "item": { "type": "STRING" },
-                                "quantity": { "type": ["NUMBER", "STRING"], "nullable": true },
-                                "unit": { "type": "STRING", "nullable": true }
+                                "quantity": { "type": ["NUMBER", "STRING", "null"] },
+                                "unit": { "type": ["STRING", "null"] }
                             },
                             required: ["item"]
                         }
@@ -200,6 +196,7 @@ ${htmlContent.substring(0, 10000)}
                 },
                 required: ["title", "ingredients", "steps"]
             };
+            // ★★★ ここまで修正 ★★★
 
             const recipeData = await callGemini(prompt, schema);
             
@@ -253,7 +250,7 @@ ${htmlContent.substring(0, 10000)}
         }
     };
 
-    const loadAiGeneratedRecipe = () => {
+    const loadAiGeneratedRecipe = async () => {
         const aiRecipeJson = localStorage.getItem('ai_generated_recipe');
         if (aiRecipeJson) {
             try {
