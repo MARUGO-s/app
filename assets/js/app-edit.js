@@ -341,11 +341,20 @@ document.addEventListener('DOMContentLoaded', () => {
             if(aiLoading) aiLoading.style.display = 'block';
 
             const customRequest = aiCustomRequestEl.value.trim();
-            let prompt = `あなたはプロの${selectedGenre}シェフです。「${selectedMenu}」という料理の完全なレシピを考案してください。ベースとなる材料は以下ですが、料理を完成させるために必要な追加材料や具体的な分量も提案してください。`;
+            // ★★★ プロンプト(AIへの指示)を修正 ★★★
+            let prompt = `あなたはミシュランレストランを率いるシェフです。これから同業者であるプロの料理人に向けて、一つのルセットを創作します。専門用語を用い、無駄なく簡潔かつ的確な記述を心がけてください。
+「${selectedMenu}」という料理の完全なレシピを考案してください。
+ベースとなる材料は以下ですが、料理を完成させるために必要な追加材料や具体的な分量も提案してください。`;
             if (customRequest) {
                 prompt += `\n\n# 追加の希望\n${customRequest}`;
             }
-            prompt += `\n\n# ベース材料\n- ${ingredients.join('\n- ')}\n\n# 出力形式\n回答の**全ての項目は、必ず日本語で生成してください。** 回送は必ず以下のキーを含む日本語のJSON形式で返してください。\n- "title": 料理名\n- "category": 「アミューズ」「前菜」「温菜」「メイン」「デザート」「パン」「その他」のいずれか\n- "tags": タグの配列\n- "notes": 調理のコツやポイント\n- "ingredients": 材料の配列 ({"item": "材料名", "quantity": 数値, "unit": "単位"}) の形式\n- "steps": 調理手順の配列`;
+            prompt += `\n\n# ベース材料\n- ${ingredients.join('\n- ')}\n\n# 出力形式\n回答の**全ての項目は、必ず日本語で生成してください。** 回答は必ず以下のキーを含む日本語のJSON形式で返してください。
+- "title": 料理名
+- "category": 「アミューズ」「前菜」「温菜」「メイン」「デザート」「パン」「その他」のいずれか
+- "tags": タグの配列
+- "notes": 調理のコツやポイント (プロ向けに、なぜその工程が必要なのかという理由を簡潔に記述)
+- "ingredients": 材料の配列 ({"item": "材料名", "quantity": 数値, "unit": "単位"}) の形式。**単位は「g」や「ml」を基本とし、大さじ・小さじは使用しないでください。**
+- "steps": 調理手順の配列`;
             
             const schema = { type: "OBJECT", properties: { "title": { "type": "STRING" }, "category": { "type": "STRING" }, "tags": { "type": "ARRAY", items: { "type": "STRING" } }, "notes": { "type": "STRING" }, "ingredients": { "type": "ARRAY", items: { "type": "OBJECT", properties: { "item": { "type": "STRING" }, "quantity": { "type": "NUMBER" }, "unit": { "type": "STRING" } }, required: ["item", "quantity", "unit"] } }, "steps": { "type": "ARRAY", items: { "type": "STRING" } } }, required: ["title", "category", "tags", "notes", "ingredients", "steps"] };
             try {
