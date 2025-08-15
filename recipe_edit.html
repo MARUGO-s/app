@@ -171,33 +171,28 @@
  <!-- === URLから取り込み（量と単位の自動分割：スプーン/カップ→mL統一版） === -->
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  // ---- 1) 設定 ----
+  // ---- あなたのプロジェクト用の値 ----
   const FN_URL = 'https://ctxyawinblwcbkovfsyj.supabase.co/functions/v1/extract-recipe';
   const ANON   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q';
 
-  // ---- 2) ボタン追加 ----
+  // ---- ボタン追加 ----
   const actions = document.querySelector('.header-actions') || document.body;
   const btn = document.createElement('button');
   btn.className = 'btn ghost';
   btn.textContent = 'URLから取り込み';
   actions.insertBefore(btn, actions.firstChild || null);
 
-  // ---- 3) 量・単位・品目のパーサ（スプーン/カップを mL に統一、括弧内単位にも対応）----
+  // ---- 量・単位・品目のパーサ（スプーン/カップ→mL統一、括弧内単位対応）----
   function parseIngredientLine(line){
     const original = String(line||'').trim();
     if(!original) return { item:'', quantity:null, unit:'', note:'', original };
-
-    // 全角→半角・記号正規化
     const FW='０１２３４５６７８９．，／－', HW='0123456789.,/-';
     let s = original.normalize('NFKC');
     for(let i=0;i<FW.length;i++) s = s.replaceAll(FW[i], HW[i]);
     s = s.replace(/[〜～–—−]/g,'-').replace(/　/g,' ').replace(/\s+/g,' ').trim();
-
-    // Unicode 分数
     const fracMap = { '½':'1/2','¼':'1/4','¾':'3/4','⅓':'1/3','⅔':'2/3' };
     s = s.replace(/[½¼¾⅓⅔]/g, m=>fracMap[m]);
 
-    // 単位辞書（判定用。出力ではスプーン/カップは使わない）
     const UNITS = [
       { re: /(?:大さじ|大匙|tbsp|tablespoon)s?/i, unit:'大さじ', toMl:15 },
       { re: /(?:小さじ|小匙|tsp|teaspoon)s?/i,    unit:'小さじ', toMl:5 },
@@ -211,80 +206,51 @@ document.addEventListener('DOMContentLoaded', () => {
     ];
     const UNIT_TOKENS = '(?:大さじ|大匙|小さじ|小匙|カップ|杯|ml|mL|cc|l|L|ℓ|g|kg|グラム|個|本|枚|片|玉|粒|合|切れ|かけ|房|少々|適量)';
 
-    // 括弧内 → 単位ヒント/備考
     let note = '', unitHint = '';
-    s = s.replace(/[（(]([^）)]+)[）)]/g, (_,a)=>{
-      const t = String(a).trim();
-      if (new RegExp(`^${UNIT_TOKENS}$`,'i').test(t)) { unitHint = t; return ' '; }
-      if (/個分|コ分/.test(t)) { unitHint = '個'; return ' '; }
-      note += (note? ' / ':'') + t; return ' ';
-    });
+    s = s.replace(/[（(]([^）)]+)[）)]/g, (_,a)=>{ const t=String(a).trim();
+      if (new RegExp(`^${UNIT_TOKENS}$`,'i').test(t)) { unitHint=t; return ' '; }
+      if (/個分|コ分/.test(t)) { unitHint='個'; return ' '; }
+      note += (note? ' / ':'') + t; return ' '; });
 
-    // 数値解釈
-    const num = (txt)=>{
-      txt = String(txt).trim();
-      const mMix = txt.match(/^(\d+)[\sと]+(\d+)\/(\d+)$/); if(mMix) return Number((+mMix[1] + (+mMix[2]/+mMix[3])).toFixed(3));
-      const mFrac= txt.match(/^(\d+)?\s*(\d+)\/(\d+)$/);     if(mFrac) return Number(((mFrac[1]?+mFrac[1]:0)+(+mFrac[2]/+mFrac[3])).toFixed(3));
-      const mRng = txt.match(/^(\d+(?:\.\d+)?)\s*[-~]\s*(\d+(?:\.\d+)?)$/); if(mRng) return {min:+mRng[1],max:+mRng[2]};
-      const n = Number(txt.replace(/,/g,'')); return isNaN(n)? null : n;
-    };
+    const num = (txt)=>{ txt=String(txt).trim();
+      const mMix=txt.match(/^(\d+)[\sと]+(\d+)\/(\d+)$/); if(mMix) return Number((+mMix[1]+(+mMix[2]/+mMix[3])).toFixed(3));
+      const mFrac=txt.match(/^(\d+)?\s*(\d+)\/(\d+)$/);     if(mFrac) return Number(((mFrac[1]?+mFrac[1]:0)+(+mFrac[2]/+mFrac[3])).toFixed(3));
+      const mRng=txt.match(/^(\d+(?:\.\d+)?)\s*[-~]\s*(\d+(?:\.\d+)?)$/); if(mRng) return {min:+mRng[1],max:+mRng[2]};
+      const n=Number(txt.replace(/,/g,'')); return isNaN(n)? null : n; };
 
-    // 並びパターン（＋括弧単位）
-    const P = [
-      new RegExp(`^(.+?)\\s+(\\d+(?:[.,]\\d+)?(?:\\s*[\\/\\-~]\\s*\\d+(?:[.,]\\d+)?)?)\\s*(${UNIT_TOKENS})(.*)$`,'i'), // 砂糖 100 g
-      new RegExp(`^(.+?)\\s*(${UNIT_TOKENS})\\s*(\\d+(?:[.,]\\d+)?(?:\\s*[\\/\\-~]\\s*\\d+(?:[.,]\\d+)?)?)(.*)$`,'i'), // 牛乳 カップ 1/2
-      new RegExp(`^(\\d+(?:[.,]\\d+)?(?:\\s*[\\/\\-~]\\s*\\d+(?:[.,]\\d+)?)?)\\s*(${UNIT_TOKENS})\\s+(.+)$`,'i'),       // 100 g 砂糖
-      new RegExp(`^(.+?)\\s*[（(]\\s*(${UNIT_TOKENS})\\s*[）)]\\s*(\\d+(?:[.,]\\d+)?(?:\\s*[\\/\\-~]\\s*\\d+(?:[.,]\\d+)?)?)$`,'i'), // 強力粉（g）200
+    const P=[
+      new RegExp(`^(.+?)\\s+(\\d+(?:[.,]\\d+)?(?:\\s*[\\/\\-~]\\s*\\d+(?:[.,]\\d+)?)?)\\s*(${UNIT_TOKENS})(.*)$`,'i'),
+      new RegExp(`^(.+?)\\s*(${UNIT_TOKENS})\\s*(\\d+(?:[.,]\\d+)?(?:\\s*[\\/\\-~]\\s*\\d+(?:[.,]\\d+)?)?)(.*)$`,'i'),
+      new RegExp(`^(\\d+(?:[.,]\\d+)?(?:\\s*[\\/\\-~]\\s*\\d+(?:[.,]\\d+)?)?)\\s*(${UNIT_TOKENS})\\s+(.+)$`,'i'),
+      new RegExp(`^(.+?)\\s*[（(]\\s*(${UNIT_TOKENS})\\s*[）)]\\s*(\\d+(?:[.,]\\d+)?(?:\\s*[\\/\\-~]\\s*\\d+(?:[.,]\\d+)?)?)$`,'i'),
     ];
 
     let item='', quantity=null, unit='', hit=false;
-    for (const pat of P) {
-      const m = s.match(pat); if(!m) continue;
-      if (pat===P[0])      { item=m[1]; quantity=m[2]; unit=m[3]; }
-      else if (pat===P[1]) { item=m[1]; unit=m[2];     quantity=m[3]; }
-      else if (pat===P[2]) { quantity=m[1]; unit=m[2]; item=m[3]; }
-      else                 { item=m[1]; unit=m[2];     quantity=m[3]; }
-      hit = true; break;
-    }
-    if (!hit) {
-      const m = s.match(/(.+?)\s+(\d+(?:\.\d+)?)(.*)$/);
-      if (m) { item=m[1]; quantity=m[2]; note = (note? note+' / ':'') + m[3].trim(); }
-      else { item=s; }
-    }
+    for(const pat of P){ const m=s.match(pat); if(!m) continue;
+      if(pat===P[0]){ item=m[1]; quantity=m[2]; unit=m[3]; }
+      else if(pat===P[1]){ item=m[1]; unit=m[2]; quantity=m[3]; }
+      else if(pat===P[2]){ quantity=m[1]; unit=m[2]; item=m[3]; }
+      else { item=m[1]; unit=m[2]; quantity=m[3]; }
+      hit=true; break; }
+    if(!hit){ const m=s.match(/(.+?)\s+(\d+(?:\.\d+)?)(.*)$/); if(m){ item=m[1]; quantity=m[2]; note=(note? note+' / ':'')+m[3].trim(); } else { item=s; } }
 
-    // 単位の正規化（unitHint も考慮）
-    let unitRaw = (unit || unitHint || '').trim();
-    let unitCanon = '';
-    for (const u of UNITS) { if (u.re.test(unitRaw)) { unitCanon = u.unit; break; } }
-    if (unitCanon==='count') { unitCanon = (unitRaw.match(/個|本|枚|片|玉|粒|合|切れ|かけ|房|杯/)||[''])[0]; }
-    if (!unitCanon) unitCanon = unitRaw;
+    let unitRaw=(unit||unitHint||'').trim(); let unitCanon='';
+    for(const u of UNITS){ if(u.re.test(unitRaw)){ unitCanon=u.unit; break; } }
+    if(unitCanon==='count'){ unitCanon=(unitRaw.match(/個|本|枚|片|玉|粒|合|切れ|かけ|房|杯/)||[''])[0]; }
+    if(!unitCanon) unitCanon=unitRaw;
 
-    // 量の数値化
-    let qRange=null;
-    if (typeof quantity==='string') {
-      const mR = quantity.match(/^(\d+(?:\.\d+)?)[\s\-~]+(\d+(?:\.\d+)?)$/);
-      if (mR) qRange={min:+mR[1],max:+mR[2]};
-    }
-    const qNum = typeof quantity==='string' ? num(quantity) : (typeof quantity==='number' ? quantity : null);
+    let qRange=null; if(typeof quantity==='string'){ const mR=quantity.match(/^(\d+(?:\.\d+)?)[\s\-~]+(\d+(?:\.\d+)?)$/); if(mR) qRange={min:+mR[1],max:+mR[2]}; }
+    const qNum= typeof quantity==='string'? num(quantity) : (typeof quantity==='number'? quantity : null);
 
-    // ★ スプーン/カップ → mL に統一、L も mL に
-    const SPOON_TO_ML = { '小さじ':5, '大さじ':15, 'カップ':200 };
-    let outQty = qNum, outUnit = unitCanon;
-    if (qNum != null && SPOON_TO_ML[unitCanon]) { outQty = +(qNum * SPOON_TO_ML[unitCanon]).toFixed(1); outUnit = 'ml'; }
-    if (qNum != null && unitCanon === 'L')      { outQty = +(qNum * 1000).toFixed(1);                outUnit = 'ml'; }
+    const SPOON_TO_ML={ '小さじ':5, '大さじ':15, 'カップ':200 };
+    let outQty=qNum, outUnit=unitCanon;
+    if(qNum!=null && SPOON_TO_ML[unitCanon]){ outQty=+(qNum*SPOON_TO_ML[unitCanon]).toFixed(1); outUnit='ml'; }
+    if(qNum!=null && unitCanon==='L'){ outQty=+(qNum*1000).toFixed(1); outUnit='ml'; }
 
-    return {
-      item: item.trim(),
-      quantity: (typeof outQty==='number'? Number(outQty) : null),
-      unit: outUnit || '',
-      note: note || '',
-      range: qRange || undefined,
-      normalized: (outUnit==='ml' && typeof outQty==='number') ? { ml: outQty } : undefined,
-      original
-    };
+    return { item:item.trim(), quantity:(typeof outQty==='number'? Number(outQty):null), unit:outUnit||'', note:note||'', range:qRange||undefined, original };
   }
 
-  // ---- 4) 本体：取り込み → フォーム反映 ----
+  // ---- 取り込み本体 ----
   async function importFromUrl(){
     const url = prompt('レシピ掲載ページのURLを入力');
     if(!url) return;
@@ -292,22 +258,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const res = await fetch(FN_URL, {
       method:'POST',
       headers:{ 'Content-Type':'application/json', 'Authorization': 'Bearer ' + ANON },
-      body: JSON.stringify({ url })
+      body: JSON.stringify({ url, useGemini: true }) // ← 常にGeminiルート（不要なら外す）
     });
     const body = await res.json().catch(()=>({}));
     if(!res.ok || body?.ok === false){
-      alert((body?.code||`HTTP_${res.status}`) + ': ' + (body?.message||'import failed'));
+      alert((body?.code||`HTTP_${res.status}`)+': '+(body?.message||'import failed'));
       return;
     }
     const r = body.data || {};
     const $ = (s)=>document.querySelector(s);
 
     // タイトル/説明/タグ
-    const titleEl = $('#title');   if (titleEl)   { titleEl.value = r.title || ''; }
-    const notesEl = $('#notes');   if (notesEl)   { notesEl.value = r.description || ''; }
-    const tagsEl  = $('#tags');    if (tagsEl)    { tagsEl.value  = (r.tags||[]).join(', '); }
+    const titleEl = $('#title');   if (titleEl)   { titleEl.value = r.title || ''; titleEl.dispatchEvent(new Event('input',{bubbles:true})); }
+    const notesEl = $('#notes');   if (notesEl)   { notesEl.value = r.description || ''; notesEl.dispatchEvent(new Event('input',{bubbles:true})); }
+    const tagsEl  = $('#tags');    if (tagsEl)    { tagsEl.value  = (r.tags||[]).join(', '); tagsEl.dispatchEvent(new Event('input',{bubbles:true})); }
 
-    // 材料：行をクリアして1行ずつ投入（qty/unit/item へ）
+    // 材料
     const ingRoot = document.querySelector('#ingredientsEditor');
     const addIng  = document.querySelector('#addIng');
     if (ingRoot) ingRoot.innerHTML = '';
@@ -315,13 +281,10 @@ document.addEventListener('DOMContentLoaded', () => {
       addIng?.dispatchEvent(new Event('click'));
       const rows = ingRoot?.querySelectorAll('.ingredient-row');
       const row  = rows?.[rows.length-1];
-
       const p = parseIngredientLine(line);
-
       const itemEl = row?.querySelector('.ing-item, [name="item"], input[type="text"]');
       const qtyEl  = row?.querySelector('.ing-qty,  [name="qty"],  input[type="number"]');
       const unitEl = row?.querySelector('.ing-unit, [name="unit"], input[list], select');
-
       if (itemEl) { itemEl.value = p.item + (p.note ? `（${p.note}）` : ''); itemEl.dispatchEvent(new Event('input',{bubbles:true})); }
       if (qtyEl)  { qtyEl.value  = (p.quantity ?? '').toString();         qtyEl.dispatchEvent(new Event('input',{bubbles:true})); }
       if (unitEl) { unitEl.value = p.unit || '';                           unitEl.dispatchEvent(new Event('change',{bubbles:true})); }
@@ -338,7 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (el) { el.value = t; el.dispatchEvent(new Event('input',{bubbles:true})); }
     });
 
-    alert('URLからレシピを取り込みました（量と単位は mL/g/個 などに統一）。');
+    alert('URLからレシピを取り込みました（単位は mL/g/個 などに統一）。');
   }
 
   btn.addEventListener('click', importFromUrl);
