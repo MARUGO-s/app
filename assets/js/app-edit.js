@@ -130,9 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
         aiStep1.style.display = 'none';
         aiLoading.style.display = 'block';
         const customRequest = aiCustomRequestEl.value.trim();
-
-        // ▼▼▼ MODIFIED PROMPT ▼▼▼
-        let prompt = `あなたは超一流の${selectedGenre}シェフ兼料理研究家です。以下の材料を活かした創造的で食欲をそそる日本語のメニュー名を**必ず5つ**提案してください。それぞれのメニュー名には、料理のイメージが伝わる簡潔な説明文を必ず添えてください。${customRequest ? `\n\n# 追加の希望\n${customRequest}` : ''}\n\n回答は [{"name": "料理名", "description": "説明文"}] という形式のJSON配列で厳密に返してください。\n\n# 材料\n- ${ingredients.join('\n- ')}`;
+        let prompt = `あなたは、料理のコンセプトやストーリーを大切にするプロの${selectedGenre}シェフです。以下の材料を活かした創造的なメニュー名を必ず5つ提案してください。それぞれのメニュー名には、他のプロの料理人に語るように、その料理のコンセプトや調理法の特徴、インスピレーションを簡潔に説明した文章を必ず添えてください。${customRequest ? `\n\n# 追加の希望\n${customRequest}` : ''}\n\n回答は [{"name": "料理名", "description": "プロ向けの説明文"}] という形式のJSON配列で厳密に返してください。\n\n# 材料\n- ${ingredients.join('\n- ')}`;
         const schema = {
             type: "ARRAY",
             items: {
@@ -141,7 +139,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 required: ["name", "description"]
             }
         };
-        // ▲▲▲ MODIFIED PROMPT ▲▲▲
 
         try {
             const response = await callGemini(prompt, schema);
@@ -174,7 +171,11 @@ document.addEventListener('DOMContentLoaded', () => {
         aiLoading.style.display = 'block';
         const customRequest = aiCustomRequestEl.value.trim();
         const ingredients = [...ingredientsEditor.querySelectorAll('[data-field="item"]')].map(input => input.value.trim()).filter(Boolean);
-        let prompt = `あなたはプロのシェフです。「${selectedMenu}」のレシピを創作してください。以下のJSON形式で返してください。材料の分量はテキストで、手順は配列で返してください。\n\n#追加の希望\n${customRequest}\n#ベース材料\n- ${ingredients.join('\n- ')}`;
+        
+        // ▼▼▼ MODIFIED PROMPT ▼▼▼
+        let prompt = `あなたはプロの${selectedGenre}シェフ兼、一流の料理研究家です。「${selectedMenu}」のレシピを創作してください。以下のJSON形式で返してください。材料の分量はテキストで、手順は配列で返してください。\n\n#追加の希望\n${customRequest}\n#ベース材料\n- ${ingredients.join('\n- ')}`;
+        // ▲▲▲ MODIFIED PROMPT ▲▲▲
+        
         const schema = { type: "OBJECT", properties: { "title": { "type": "STRING" }, "category": { "type": "STRING" }, "tags": { "type": "ARRAY", items: { "type": "STRING" } }, "notes": { "type": "STRING" }, "ingredients": { "type": "ARRAY", items: { "type": "OBJECT", properties: { "item": { "type": "STRING" }, "quantity": { "type": "STRING" }, "unit": { "type": "STRING" } }, required: ["item", "quantity"] } }, "steps": { "type": "ARRAY", items: { "type": "STRING" } } }, required: ["title", "category", "ingredients", "steps", "notes"] };
         
         try {
