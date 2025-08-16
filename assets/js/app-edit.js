@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function callGemini(prompt, responseSchema) {
         const { data, error } = await sb.functions.invoke('call-gemini', { body: { prompt, responseSchema } });
         if (error) throw new Error(`Edge Function Error: ${error.message}`);
-        if (data.error) throw new Error(`API Error: ${data.error}`);
+        if (data.error) throw new Error(`API Error from Edge Function: ${data.error}`);
         const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!jsonText) throw new Error('AIからの応答が空でした。');
         return JSON.parse(jsonText);
@@ -111,11 +111,11 @@ document.addEventListener('DOMContentLoaded', () => {
         aiStep1.style.display = 'none';
         aiLoading.style.display = 'block';
         const customRequest = aiCustomRequestEl.value.trim();
-        let prompt = `あなたは、料理のコンセプトを重視するプロの${selectedGenre}シェフです。以下の材料を活した創造的なメニュー名を必ず5つ提案してください。各メニューには、他のプロに語るように、料理のコンセプトや特徴を簡潔に説明した文章を添えてください。${customRequest ? `\n\n#希望\n${customRequest}` : ''}\n\n回答は [{"name": "料理名", "description": "説明文"}] というJSON配列で返してください。\n\n#材料\n- ${ingredients.join('\n- ')}`;
-        const schema = { type: "ARRAY", items: { type: "OBJECT", properties: { "name": { "type": "STRING" }, "description": { "type": "STRING" } }, required: ["name", "description"] } };
+        let prompt = `あなたはプロの${selectedGenre}シェフです。以下の材料を活かした創造的で食欲をそそる日本語のメニュー名を必ず5つ提案してください。${customRequest ? `\n\n# 追加の希望\n${customRequest}` : ''}\n\n回答はメニュー名のみのJSON配列で返してください。\n\n# 材料\n- ${ingredients.join('\n- ')}`;
+        const schema = { type: "ARRAY", items: { type: "STRING" } };
         try {
             const response = await callGemini(prompt, schema);
-            menuSuggestionsContainer.innerHTML = response.map(s => `<div class="menu-suggestions-item" data-menu="${escapeHtml(s.name)}"><div style="font-weight: 600;">${escapeHtml(s.name)}</div><div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">${escapeHtml(s.description)}</div></div>`).join('');
+            menuSuggestionsContainer.innerHTML = response.map((menu) => `<div class="menu-suggestions-item" data-menu="${escapeHtml(menu)}">${escapeHtml(menu)}</div>`).join('');
             aiLoading.style.display = 'none';
             aiStep2.style.display = 'block';
         } catch (error) {
