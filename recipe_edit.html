@@ -27,6 +27,25 @@
     }
     .modal-title { margin: 0; font-size: 1.25rem; font-weight: 600; }
     .modal-close { background: none; border: none; font-size: 1.75rem; cursor: pointer; color: var(--text-secondary); line-height: 1; }
+    .modal-body .step-title { font-weight: 600; margin-bottom: 1rem; color: var(--text-primary); }
+    .genre-selection { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.5rem; }
+    .genre-btn {
+        padding: 0.5rem 1rem; border: 1px solid var(--line-primary);
+        border-radius: 99px; /* Pill shape */
+        background: var(--bg-panel); cursor: pointer; font-size: 0.9rem;
+        color: var(--text-secondary);
+        transition: all 0.2s;
+    }
+    .genre-btn:hover { background: var(--bg-primary); }
+    .genre-btn.selected { background: var(--accent); color: white; border-color: var(--accent); }
+    .menu-suggestions-item {
+        display: block; padding: 0.75rem 1rem; cursor: pointer;
+        border-radius: 0.375rem;
+        transition: background-color 0.2s;
+    }
+    .menu-suggestions-item:hover { background-color: var(--bg-primary); }
+    .menu-suggestions-item.selected { background-color: #eaf3ed; color: var(--accent-hover); font-weight: 600; }
+    .modal-footer { margin-top: 2rem; text-align: right; }
     .loading-spinner {
         border: 4px solid var(--line-soft); border-top-color: var(--accent);
         border-radius: 50%; width: 36px; height: 36px;
@@ -87,7 +106,7 @@
         <div id="ingredientsEditor"></div>
         <div style="margin-top: 1rem; display: flex; gap: 0.75rem;">
             <button type="button" class="btn ghost small" id="addIng">＋ 材料を追加</button>
-            <button type="button" class="btn primary small" id="ai-wizard-btn">✨ AIと対話して創作</button>
+            <button type="button" class="btn primary small" id="ai-wizard-btn">✨ AIで創作</button>
         </div>
       </div>
 
@@ -115,10 +134,9 @@
         <button id="modal-close-btn" class="modal-close">&times;</button>
       </div>
       <div id="modal-body" class="modal-body">
-        
-        <div id="ai-step-genre">
-          <p style="font-weight: 600; margin-bottom: 1rem; color: var(--text-primary);">1. 創作する料理のジャンルを選択</p>
-          <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.5rem;">
+        <div id="ai-step-1">
+          <p class="step-title">1. 料理のジャンルを選択</p>
+          <div class="genre-selection">
             <button class="genre-btn" data-genre="フレンチ">フレンチ</button>
             <button class="genre-btn" data-genre="イタリアン">イタリアン</button>
             <button class="genre-btn" data-genre="和食">和食</button>
@@ -127,30 +145,29 @@
             <button class="genre-btn" data-genre="デザート">デザート</button>
             <button class="genre-btn" data-genre="パン">パン</button>
           </div>
-        </div>
-      
-        <div id="ai-chat-view" style="display: none;">
-          <p style="font-weight: 600; margin-bottom: 1rem; color: var(--text-primary);">2. AIと対話してレシピを完成</p>
-          <div id="ai-chat-history" style="height: 40vh; overflow-y: auto; margin-bottom: 1rem; border: 1px solid var(--line-soft); padding: 1rem; border-radius: var(--radius-base); background: var(--bg-primary);">
+          <div class="field">
+            <label for="ai-custom-request" style="font-size: 0.8em; margin-bottom: 0.5rem;">追加の希望 (任意)</label>
+            <textarea id="ai-custom-request" class="input" rows="2" placeholder="例: 子供向けの味付け, 野菜を多めに"></textarea>
           </div>
-          <div id="ai-chat-form" style="display: flex; gap: 0.75rem;">
-            <input id="ai-chat-input" class="input" placeholder="メッセージを入力 (例: もっとスパイシーにして)" style="flex-grow: 1;">
-            <button id="ai-chat-send" class="btn primary">送信</button>
-          </div>
-          <div class="modal-footer" style="margin-top: 1.5rem; text-align: right;">
-              <button id="apply-recipe-btn" class="btn primary" style="display: none;">このレシピをフォームに反映</button>
+          <div class="modal-footer">
+            <button id="get-suggestions-btn" class="btn primary" disabled>メニュー案を創作</button>
           </div>
         </div>
-      
+        <div id="ai-step-2" style="display: none;">
+          <p class="step-title">2. メニューを選択</p>
+          <div id="menu-suggestions" class="menu-suggestions"></div>
+          <div class="modal-footer">
+            <button id="generate-full-recipe-btn" class="btn primary" disabled>このメニューでルセットを生成</button>
+          </div>
+        </div>
         <div id="ai-loading" style="display: none;">
           <div class="loading-spinner"></div>
         </div>
-
       </div>
     </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/app-edit.js"></script>
-</body>
+  </body>
 </html>
