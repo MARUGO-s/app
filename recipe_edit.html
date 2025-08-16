@@ -18,6 +18,15 @@
 
   <main class="container">
     <form id="editForm" class="panel">
+      
+      <div class="field" style="background: #f8f9fa; padding: 1.5rem; border-radius: var(--radius-base); margin-bottom: 2rem;">
+        <label for="recipeUrl" style="font-size: 1rem;">URLから自動入力</label>
+        <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 0.75rem;">
+          <input id="recipeUrl" class="input" placeholder="レシピページのURLを貼り付け" style="flex-grow: 1; min-width: 0;">
+          <button type="button" class="btn primary" id="importFromUrlBtn" style="white-space: nowrap;">インポート</button>
+        </div>
+        <div id="importStatus" style="margin-top: 0.75rem; font-size: 0.875rem;"></div>
+      </div>
       <div class="field">
         <label for="title">料理名</label>
         <input id="title" name="title" class="input" required />
@@ -105,5 +114,73 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/app-edit.js"></script>
-</body>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      'use strict';
+      // Supabaseクライアントはapp-edit.jsで読み込み済みのものを利用
+      if (typeof supabase === 'undefined') return;
+      const sb = supabase.createClient("https://ctxyawinblwcbkovfsyj.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q");
+
+      const urlInput = document.getElementById('recipeUrl');
+      const importBtn = document.getElementById('importFromUrlBtn');
+      const statusEl = document.getElementById('importStatus');
+      const titleEl = document.getElementById('title');
+      const notesEl = document.getElementById('notes');
+      const ingredientsEditor = document.getElementById('ingredientsEditor');
+      const stepsEditor = document.getElementById('stepsEditor');
+      const addIngBtn = document.getElementById('addIng');
+      const addStepBtn = document.getElementById('addStep');
+
+      const escapeHtml = (s) => (s ?? "").toString().replace(/[&<>\"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
+      const addIngredientRow = (data = {}) => {
+        const div = document.createElement('div');
+        div.className = 'ingredient-row';
+        div.innerHTML = `<input type="text" placeholder="材料名 *" value="${escapeHtml(data.item||'')}" data-field="item" class="ing-item"><input type="text" placeholder="分量" value="${escapeHtml(data.quantity||'')}" data-field="quantity" class="ing-qty"><input type="text" placeholder="単位" value="${escapeHtml(data.unit||'')}" data-field="unit" class="ing-unit"><button type="button" class="btn danger small js-remove-row">削除</button>`;
+        ingredientsEditor.appendChild(div);
+      };
+      const addStepRow = (data = {}) => {
+          const div = document.createElement('div');
+          div.className = 'step-row';
+          div.innerHTML = `<input type="text" placeholder="手順 *" value="${escapeHtml(data.instruction||'')}" data-field="instruction"><button type="button" class="btn danger small js-remove-row">削除</button>`;
+          stepsEditor.appendChild(div);
+      };
+
+      importBtn.addEventListener('click', async () => {
+        const u = (urlInput?.value || '').trim(); if (!u) { urlInput?.focus(); return; }
+        await runImport(u);
+      });
+
+      async function runImport(url) {
+        try {
+          setStatus('レシピを読み取り中…');
+          const { data, error } = await sb.functions.invoke('extract-recipe', { body: { url } });
+          if (error) throw error;
+          if (!data?.ok) throw new Error(data?.message || 'import failed');
+
+          const r = data.data || {};
+          if (titleEl) titleEl.value = r.title || '';
+          if (notesEl) notesEl.value = r.description || '';
+          
+          if (ingredientsEditor) ingredientsEditor.innerHTML = '';
+          (r.ingredientLines || []).forEach(line => {
+             addIngredientRow({ item: line });
+          });
+
+          if (stepsEditor) stepsEditor.innerHTML = '';
+          (r.steps || []).forEach(text => {
+            addStepRow({ instruction: text });
+          });
+
+          setStatus('読み取り完了しました。');
+        } catch (e) {
+          console.error(e);
+          setStatus('読み取り失敗: ' + (e.message || e));
+          alert('読み取りに失敗しました: ' + (e.message || e));
+        }
+      }
+      function setStatus(msg){ if (statusEl){ statusEl.textContent = msg; } }
+    });
+  </script>
+  </body>
 </html>
