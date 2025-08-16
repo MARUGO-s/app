@@ -4,67 +4,39 @@
 
 /* --- 1. Variables & Base --- */
 :root {
-    --bg-primary: #e7ecea;
-    --bg-panel: #ffffff;
-    --text-primary: #212529;
-    --text-secondary: #6c757d;
-    --line-primary: #dee2e6;
-    --line-soft: #e9ecef;
-    --accent: #2e8b57;
-    --accent-hover: #256f45;
-    --danger: #dc3545;
-    --danger-hover: #c82333;
+    --bg-primary: #e7ecea; --bg-panel: #ffffff; --text-primary: #212529;
+    --text-secondary: #6c757d; --line-primary: #dee2e6; --line-soft: #e9ecef;
+    --accent: #2e8b57; --accent-hover: #256f45; --danger: #dc3545; --danger-hover: #c82333;
     --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-    --font-size-base: 16px;
-    --line-height-base: 1.7;
-    --radius-base: 0.5rem;
+    --font-size-base: 16px; --line-height-base: 1.7; --radius-base: 0.5rem;
     --shadow-base: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
 }
 
 /* --- 2. Global Styles --- */
 *, *::before, *::after { box-sizing: border-box; }
 body {
-    font-family: var(--font-family-base);
-    font-size: var(--font-size-base);
-    line-height: var(--line-height-base);
-    color: var(--text-primary);
-    background-color: var(--bg-primary);
-    margin: 0;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    font-family: var(--font-family-base); font-size: var(--font-size-base);
+    line-height: var(--line-height-base); color: var(--text-primary);
+    background-color: var(--bg-primary); margin: 0;
 }
 
 /* --- 3. Layout --- */
 .container { max-width: 800px; margin: 2.5rem auto; padding: 0 1rem; }
 .app-header {
-    background-color: var(--bg-panel);
-    border-bottom: 1px solid var(--line-primary);
-    padding: 0 1.5rem;
-    height: 64px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    background-color: var(--bg-panel); border-bottom: 1px solid var(--line-primary);
+    padding: 0 1.5rem; height: 64px; display: flex; align-items: center; justify-content: space-between;
 }
 .brand { font-size: 1.25rem; font-weight: 600; }
 
 /* --- 4. Components --- */
 .panel { background: var(--bg-panel); padding: 2rem 2.5rem; border-radius: var(--radius-base); box-shadow: var(--shadow-base); }
 .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.9rem;
-    font-weight: 600;
-    padding: 0.6rem 1.25rem;
-    border: 1px solid transparent;
-    border-radius: var(--radius-base);
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.2s ease-in-out;
-    user-select: none;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 0.9rem; font-weight: 600;
+    padding: 0.6rem 1.25rem; border: 1px solid transparent; border-radius: var(--radius-base);
+    cursor: pointer; text-align: center; transition: all 0.2s ease-in-out; user-select: none;
 }
 .btn.primary { background-color: var(--accent); color: white; }
-.btn.primary:hover { background-color: var(--accent-hover); transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+.btn.primary:hover { background-color: var(--accent-hover); }
 .btn.ghost { background-color: transparent; color: var(--text-secondary); border-color: var(--line-primary); }
 .btn.ghost:hover { background-color: var(--bg-primary); color: var(--text-primary); }
 .btn.danger { background-color: transparent; color: var(--danger); border-color: var(--danger); }
@@ -73,54 +45,36 @@ body {
 .field { margin-bottom: 1.5rem; }
 .field label { display: block; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.875rem; }
 .input, input[type="text"], select, textarea {
-    width: 100%;
-    padding: 0.75rem 1rem;
-    border: 1px solid var(--line-primary);
-    border-radius: var(--radius-base);
-    font-size: 1rem;
-    background-color: var(--bg-panel);
+    width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--line-primary);
+    border-radius: var(--radius-base); font-size: 1rem; background-color: var(--bg-panel);
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 .input:focus, input[type="text"]:focus, select:focus, textarea:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(46, 139, 87, 0.15);
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(46, 139, 87, 0.15);
 }
 
 /* --- 5. Page Specific --- */
 .ingredient-row {
-    display: grid;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-    align-items: center;
-    grid-template-columns: 5fr 2fr 2fr auto;
+    display: grid; gap: 0.75rem; margin-bottom: 1rem;
+    align-items: center; grid-template-columns: 5fr 2fr 2fr auto;
 }
 .step-row {
-    display: grid;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
-    align-items: center;
-    grid-template-columns: 1fr auto;
+    display: grid; gap: 0.75rem; margin-bottom: 0.75rem;
+    align-items: center; grid-template-columns: 1fr auto;
 }
 
 /* --- 6. AI Modal --- */
 .modal-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(33, 37, 41, 0.5);
-    display: none; justify-content: center; align-items: center;
-    z-index: 1000;
+    background: rgba(33, 37, 41, 0.5); display: none; justify-content: center; align-items: center; z-index: 1000;
 }
 .modal-content {
-    background: var(--bg-panel);
-    padding: 2rem;
-    border-radius: var(--radius-base);
-    width: 90%; max-width: 500px;
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    background: var(--bg-panel); padding: 2rem; border-radius: var(--radius-base);
+    width: 90%; max-width: 500px; box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
 }
 .modal-header {
     display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 1.5rem; padding-bottom: 1rem;
-    border-bottom: 1px solid var(--line-soft);
+    margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--line-soft);
 }
 .modal-title { margin: 0; font-size: 1.25rem; font-weight: 600; }
 .modal-close { background: none; border: none; font-size: 1.75rem; cursor: pointer; color: var(--text-secondary); line-height: 1; }
@@ -128,17 +82,14 @@ body {
 .genre-selection { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.5rem; }
 .genre-btn {
     padding: 0.5rem 1rem; border: 1px solid var(--line-primary);
-    border-radius: 99px; /* Pill shape */
-    background: var(--bg-panel); cursor: pointer; font-size: 0.9rem;
-    color: var(--text-secondary);
-    transition: all 0.2s;
+    border-radius: 99px; background: var(--bg-panel); cursor: pointer; font-size: 0.9rem;
+    color: var(--text-secondary); transition: all 0.2s;
 }
 .genre-btn:hover { background: var(--bg-primary); }
 .genre-btn.selected { background: var(--accent); color: white; border-color: var(--accent); }
 .menu-suggestions-item {
     display: block; padding: 0.75rem 1rem; cursor: pointer;
-    border-radius: 0.375rem;
-    transition: background-color 0.2s;
+    border-radius: 0.375rem; transition: background-color 0.2s;
 }
 .menu-suggestions-item:hover { background-color: var(--bg-primary); }
 .menu-suggestions-item.selected { background-color: #eaf3ed; color: var(--accent-hover); font-weight: 600; }
@@ -153,11 +104,7 @@ body {
 /* --- 7. Responsive --- */
 @media (max-width: 768px) {
     .ingredient-row {
-        grid-template-columns: 2fr 1.5fr auto;
+        grid-template-columns: 1fr;
         row-gap: 0.75rem;
     }
-    .ingredient-row .ing-item { grid-column: 1 / -1; }
-    .ingredient-row .ing-qty { grid-column: 1 / 2; }
-    .ingredient-row .ing-unit { grid-column: 2 / 3; }
-    .ingredient-row .js-remove-row { grid-column: 3 / 4; align-self: center; }
 }
