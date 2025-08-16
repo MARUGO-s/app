@@ -134,14 +134,11 @@
             const { data, error } = await sb.functions.invoke('extract-recipe', { body: { url } });
             if (error) throw error;
             if (!data?.ok) throw new Error(data?.message || 'import failed');
-
             const r = data.data || {};
-            
             const titleEl = document.getElementById('title');
             if (titleEl) titleEl.value = r.title || '';
             const notesEl = document.getElementById('notes');
             if (notesEl) notesEl.value = r.description || '';
-
             const ingredientsEditor = document.getElementById('ingredientsEditor');
             const addIngBtn = document.getElementById('addIng');
             if (ingredientsEditor) ingredientsEditor.innerHTML = '';
@@ -152,7 +149,6 @@
                 const itemInput = row?.querySelector('.ing-item');
                 if (itemInput) itemInput.value = line;
             });
-
             const stepsEditor = document.getElementById('stepsEditor');
             const addStepBtn = document.getElementById('addStep');
             if (stepsEditor) stepsEditor.innerHTML = '';
@@ -162,7 +158,6 @@
                 const el = rows?.[rows.length-1];
                 if (el) el.value = text;
             });
-
             alert('読み取りが完了しました。');
         } catch (e) {
             console.error(e);
@@ -171,6 +166,5 @@
     }
   });
   </script>
-
 </body>
 </html>
