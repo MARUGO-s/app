@@ -140,7 +140,33 @@ document.addEventListener('DOMContentLoaded', () => {
         const customRequest = aiCustomRequestEl.value.trim();
         const ingredients = [...ingredientsEditor.querySelectorAll('[data-field="item"]')].map(input => input.value.trim()).filter(Boolean);
         let prompt = `あなたはプロの${selectedGenre}シェフです。「${selectedMenu}」のレシピを創作してください。以下のJSON形式で返してください。\n\n#追加の希望\n${customRequest}\n#ベース材料\n- ${ingredients.join('\n- ')}`;
-        const schema = { type: "OBJECT", properties: { "title":{}, "category":{}, "tags":{}, "notes":{}, "ingredients":{ type:"ARRAY", items:{type:"OBJECT",properties:{"item":{},"quantity":{},"unit":{}},required:["item","quantity"]}}, "steps":{}}, required:["title","category","ingredients","steps","notes"]};
+        
+        // ▼▼▼ THIS SCHEMA WAS INCORRECT AND HAS BEEN FIXED ▼▼▼
+        const schema = {
+            type: "OBJECT",
+            properties: {
+                "title": { "type": "STRING" },
+                "category": { "type": "STRING" },
+                "tags": { "type": "ARRAY", "items": { "type": "STRING" } },
+                "notes": { "type": "STRING" },
+                "ingredients": {
+                    "type": "ARRAY",
+                    "items": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "item": { "type": "STRING" },
+                            "quantity": { "type": "STRING" },
+                            "unit": { "type": "STRING" }
+                        },
+                        "required": ["item", "quantity"]
+                    }
+                },
+                "steps": { "type": "ARRAY", "items": { "type": "STRING" } }
+            },
+            "required": ["title", "category", "ingredients", "steps", "notes"]
+        };
+        // ▲▲▲ THIS SCHEMA WAS INCORRECT AND HAS BEEN FIXED ▲▲▲
+
         try {
             const recipeData = await callGemini(prompt, schema);
             finalRecipeData = recipeData;
