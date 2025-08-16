@@ -106,30 +106,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if(document.querySelector('.brand')) document.querySelector('.brand').textContent = 'レシピ編集';
         if(viewButton) viewButton.style.display = 'inline-block';
         if(deleteButton) deleteButton.style.display = 'inline-block';
-
         const { data: r, error } = await sb.from('recipes').select('*').eq('id', id).single();
         if (error) { alert('レシピの読み込みに失敗'); return; }
-        
         titleEl.value = r.title || '';
         if(r.category) categoryEl.value = r.category;
         tagsEl.value = (r.tags || []).join(', ');
         notesEl.value = r.notes || '';
-        
         const { data: ings } = await sb.from('recipe_ingredients').select('*').eq('recipe_id', id).order('position');
-        if (ings) {
-            ingredientsEditor.innerHTML = '';
-            ings.forEach(addIngredientRow);
-        }
+        if (ings) { ingredientsEditor.innerHTML = ''; ings.forEach(addIngredientRow); }
         const { data: steps } = await sb.from('recipe_steps').select('*').eq('recipe_id', id).order('position');
-        if (steps) {
-            stepsEditor.innerHTML = '';
-            steps.forEach(addStepRow);
-        }
+        if (steps) { stepsEditor.innerHTML = ''; steps.forEach(addStepRow); }
     };
 
     const saveRecipe = async () => {
         if (savingOverlay) savingOverlay.style.display = 'flex';
-
         try {
             const payload = {
                 title: titleEl.value.trim(),
@@ -142,7 +132,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (savingOverlay) savingOverlay.style.display = 'none';
                 return;
             }
-            
             let recipe_id = id;
             if (id) {
                 const { error } = await sb.from('recipes').update(payload).eq('id', id);
@@ -150,10 +139,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 const { data, error } = await sb.from('recipes').insert(payload).select('id').single();
                 if (error) throw error;
-                id = data.id;
-                recipe_id = id;
+                id = data.id; recipe_id = id;
             }
-
             await sb.from('recipe_ingredients').delete().eq('recipe_id', recipe_id);
             const ingData = [...ingredientsEditor.querySelectorAll('.ingredient-row')].map((row, i) => ({
                 recipe_id, position: i + 1,
@@ -162,7 +149,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 unit: row.querySelector('[data-field="unit"]').value.trim() || null,
             })).filter(d => d.item);
             if (ingData.length > 0) await sb.from('recipe_ingredients').insert(ingData);
-
             await sb.from('recipe_steps').delete().eq('recipe_id', recipe_id);
             const stepData = [...stepsEditor.querySelectorAll('.step-row')].map((row, i) => ({
                 recipe_id, position: i + 1,
@@ -171,10 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (stepData.length > 0) await sb.from('recipe_steps').insert(stepData);
 
             if (statusEl) statusEl.textContent = '保存しました！';
-            setTimeout(() => {
-                location.href = `recipe_view.html?id=${recipe_id}`;
-            }, 800);
-
+            setTimeout(() => { location.href = `recipe_view.html?id=${recipe_id}`; }, 800);
         } catch (error) {
             if (savingOverlay) savingOverlay.style.display = 'none';
             console.error('Save failed:', error);
@@ -182,7 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alert(`保存に失敗しました:\n${error.message}`);
         }
     };
-
+    
     // --- Event Listeners ---
     if (addIngBtn) addIngBtn.addEventListener('click', () => addIngredientRow());
     if (addStepBtn) addStepBtn.addEventListener('click', () => addStepRow());
@@ -191,7 +174,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (saveButtons) saveButtons.forEach(btn => btn.addEventListener('click', saveRecipe));
     if (cancelButtons) cancelButtons.forEach(btn => btn.addEventListener('click', () => location.href = id ? `recipe_view.html?id=${id}` : 'index.html'));
-    
     if (aiWizardBtn) aiWizardBtn.addEventListener('click', openModal);
     if (modalCloseBtn) modalCloseBtn.addEventListener('click', closeModal);
     
@@ -203,16 +185,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }));
 
     if (getSuggestionsBtn) getSuggestionsBtn.addEventListener('click', async () => {
+        getSuggestionsBtn.disabled = true;
         const ingredients = [...ingredientsEditor.querySelectorAll('[data-field="item"]')].map(input => input.value.trim()).filter(Boolean);
-        if (ingredients.length === 0) { return alert('先に材料を1つ以上入力してください。'); }
+        if (ingredients.length === 0) { getSuggestionsBtn.disabled = false; return alert('先に材料を1つ以上入力してください。'); }
         aiStep1.style.display = 'none';
         aiLoading.style.display = 'block';
         const customRequest = aiCustomRequestEl.value.trim();
-        let prompt = `あなたはプロの${selectedGenre}シェフです。以下の材料を活かした創造的で食欲をそそる日本語のメニュー名を必ず5つ提案してください。${customRequest ? `\n\n# 追加の希望\n${customRequest}` : ''}\n\n回答はメニュー名のみのJSON配列で返してください。\n\n# 材料\n- ${ingredients.join('\n- ')}`;
-        const schema = { type: "ARRAY", items: { type: "STRING" } };
+        let prompt = `あなたは、料理のコンセプトやストーリーを大切にするプロの${selectedGenre}シェフです。以下の材料を活した創造的なメニュー名を必ず5つ提案してください。それぞれのメニュー名には、他のプロの料理人に語るように、その料理のコンセプトや調理法の特徴、インスピレーションを簡潔に説明した文章を必ず添えてください。${customRequest ? `\n\n# 追加の希望\n${customRequest}` : ''}\n\n回答は [{"name": "料理名", "description": "プロ向けの説明文"}] という形式のJSON配列で厳密に返してください。\n\n# 材料\n- ${ingredients.join('\n- ')}`;
+        const schema = { type: "ARRAY", items: { type: "OBJECT", properties: { "name": { "type": "STRING" }, "description": { "type": "STRING" } }, required: ["name", "description"] } };
         try {
             const response = await callGemini(prompt, schema);
-            menuSuggestionsContainer.innerHTML = response.map((menu) => `<div class="menu-suggestions-item" data-menu="${escapeHtml(menu)}">${escapeHtml(menu)}</div>`).join('');
+            menuSuggestionsContainer.innerHTML = response.map(s => `<div class="menu-suggestions-item" data-menu="${escapeHtml(s.name)}"><div style="font-weight: 600;">${escapeHtml(s.name)}</div><div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">${escapeHtml(s.description)}</div></div>`).join('');
             aiLoading.style.display = 'none';
             aiStep2.style.display = 'block';
         } catch (error) {
@@ -232,24 +215,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (generateFullRecipeBtn) generateFullRecipeBtn.addEventListener('click', async () => {
+        generateFullRecipeBtn.disabled = true;
         aiStep2.style.display = 'none';
         aiLoading.style.display = 'block';
         const customRequest = aiCustomRequestEl.value.trim();
         const ingredients = [...ingredientsEditor.querySelectorAll('[data-field="item"]')].map(input => input.value.trim()).filter(Boolean);
         let prompt = `あなたはプロの${selectedGenre}シェフです。「${selectedMenu}」のレシピを創作してください。以下のJSON形式で返してください。\n\n#追加の希望\n${customRequest}\n#ベース材料\n- ${ingredients.join('\n- ')}`;
-        
-        // This is the corrected schema
-        const schema = {
-            type: "OBJECT",
-            properties: {
-                "title": { "type": "STRING" }, "category": { "type": "STRING" },
-                "tags": { "type": "ARRAY", "items": { "type": "STRING" } }, "notes": { "type": "STRING" },
-                "ingredients": { "type": "ARRAY", "items": { "type": "OBJECT", "properties": { "item": { "type": "STRING" }, "quantity": { "type": "STRING" }, "unit": { "type": "STRING" } }, "required": ["item", "quantity"] }},
-                "steps": { "type": "ARRAY", "items": { "type": "STRING" } }
-            },
-            "required": ["title", "category", "ingredients", "steps", "notes"]
-        };
-
+        const schema = { type: "OBJECT", properties: { "title": { "type": "STRING" }, "category": { "type": "STRING" }, "tags": { "type": "ARRAY", "items": { "type": "STRING" } }, "notes": { "type": "STRING" }, "ingredients": { "type": "ARRAY", "items": { "type": "OBJECT", "properties": { "item": { "type": "STRING" }, "quantity": { "type": "STRING" }, "unit": { "type": "STRING" } }, "required": ["item", "quantity"] }}, "steps": { "type": "ARRAY", "items": { "type": "STRING" } } }, "required": ["title", "category", "ingredients", "steps", "notes"] };
         try {
             const recipeData = await callGemini(prompt, schema);
             finalRecipeData = recipeData;
