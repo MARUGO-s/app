@@ -116,7 +116,6 @@
     if (typeof supabase === 'undefined') return;
     const sb = supabase.createClient(PROJECT_URL, ANON);
 
-    // 既存ヘッダーに「URLから取り込み」ボタンを出す
     const actions = document.querySelector('.header-actions');
     if (actions) {
         const headerBtn = document.createElement('button');
@@ -131,7 +130,6 @@
 
     async function runImport(url) {
         try {
-            // フォーム内にはステータス表示欄がないため、アラートで代替
             alert('Geminiで読み取り中…');
             const { data, error } = await sb.functions.invoke('extract-recipe', { body: { url } });
             if (error) throw error;
@@ -139,7 +137,6 @@
 
             const r = data.data || {};
             
-            // app-edit.js内の関数を呼び出してフォームを更新
             const titleEl = document.getElementById('title');
             if (titleEl) titleEl.value = r.title || '';
             const notesEl = document.getElementById('notes');
