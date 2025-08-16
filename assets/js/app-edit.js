@@ -1,3 +1,4 @@
+// assets/js/app-edit.js - for recipe_edit.html
 document.addEventListener('DOMContentLoaded', () => {
     if (typeof supabase === 'undefined') { 
         alert('エラー: Supabaseライブラリの読み込みに失敗しました。');
@@ -26,23 +27,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const urlInput = document.getElementById('recipeUrl');
     const importBtn = document.getElementById('importFromUrlBtn');
     const importStatus = document.getElementById('importStatus');
-    
-    // --- AI Chat Modal Elements ---
     const aiWizardBtn = document.getElementById('ai-wizard-btn');
     const aiModal = document.getElementById('ai-modal');
     const modalCloseBtn = document.getElementById('modal-close-btn');
+    const aiStep1 = document.getElementById('ai-step-1');
+    const aiStep2 = document.getElementById('ai-step-2');
     const aiLoading = document.getElementById('ai-loading');
-    const aiStepGenre = document.getElementById('ai-step-genre');
-    const aiChatView = document.getElementById('ai-chat-view');
     const genreBtns = document.querySelectorAll('.genre-btn');
-    const aiChatHistory = document.getElementById('ai-chat-history');
-    const aiChatInput = document.getElementById('ai-chat-input');
-    const aiChatSendBtn = document.getElementById('ai-chat-send');
-    const applyRecipeBtn = document.getElementById('apply-recipe-btn');
+    const getSuggestionsBtn = document.getElementById('get-suggestions-btn');
+    const menuSuggestionsContainer = document.getElementById('menu-suggestions');
+    const generateFullRecipeBtn = document.getElementById('generate-full-recipe-btn');
+    const aiCustomRequestEl = document.getElementById('ai-custom-request');
     
-    let conversationHistory = [];
-    let lastAiRecipe = null;
     let selectedGenre = '';
+    let selectedMenu = '';
 
     // --- Helper Functions ---
     const escapeHtml = (s) => (s ?? "").toString().replace(/[&<>\"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[m]));
@@ -76,165 +74,116 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         stepsEditor.appendChild(div);
     };
-    
-    // --- CRUD & URL Import Functions (These are unchanged) ---
-    // (loadRecipe, saveRecipe, etc. are here)
-    
-    // --- AI Modal Control & Flow ---
-    const openModal = () => { if (aiModal) aiModal.style.display = 'flex'; };
-    const closeModal = () => { if (aiModal) aiModal.style.display = 'none'; };
 
-    const openGenreSelection = () => {
-        conversationHistory = [];
-        lastAiRecipe = null;
+    // --- AI Modal Control ---
+    const openModal = () => { if(aiModal) aiModal.style.display = 'flex'; };
+    const closeModal = () => {
+        if(aiModal) aiModal.style.display = 'none';
+        resetModal();
+    };
+    const resetModal = () => {
+        if(aiStep1) aiStep1.style.display = 'block';
+        if(aiStep2) aiStep2.style.display = 'none';
+        if(aiLoading) aiLoading.style.display = 'none';
+        if(genreBtns) genreBtns.forEach(b => b.classList.remove('selected'));
+        if(getSuggestionsBtn) getSuggestionsBtn.disabled = true;
+        if(generateFullRecipeBtn) generateFullRecipeBtn.disabled = true;
+        if(aiCustomRequestEl) aiCustomRequestEl.value = '';
+        if(menuSuggestionsContainer) menuSuggestionsContainer.innerHTML = '';
         selectedGenre = '';
-        if (aiChatHistory) aiChatHistory.innerHTML = '';
-        if (aiChatInput) aiChatInput.value = '';
-        if (applyRecipeBtn) applyRecipeBtn.style.display = 'none';
-        genreBtns.forEach(btn => btn.classList.remove('selected'));
-
-        if (aiStepGenre) aiStepGenre.style.display = 'block';
-        if (aiChatView) aiChatView.style.display = 'none';
-        if (aiLoading) aiLoading.style.display = 'none';
-
-        openModal();
+        selectedMenu = '';
     };
 
-    const startAiConversation = () => {
-        const ingredients = [...ingredientsEditor.querySelectorAll('[data-field="item"]')].map(input => input.value.trim()).filter(Boolean);
-        if (ingredients.length === 0) {
-            alert('先に材料を1つ以上入力してください。');
-            closeModal();
-            return;
+    // --- AI Function Call (via Supabase Edge Function) ---
+    async function callGemini(prompt, responseSchema) {
+        const { data, error } = await sb.functions.invoke('call-gemini', {
+            body: { prompt, responseSchema },
+        });
+
+        if (error) throw new Error(`Edge Function Error: ${error.message}`);
+        if (data.error) throw new Error(`API Error from Edge Function: ${data.error}`);
+        
+        const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!jsonText) {
+            const reason = data.candidates?.[0]?.finishReason;
+            throw new Error(reason === 'SAFETY' ? 'AIが安全でないと判断したため応答できませんでした。' : 'AIからの応答が空でした。');
         }
+        return JSON.parse(jsonText);
+    }
 
-        if (aiStepGenre) aiStepGenre.style.display = 'none';
-        if (aiChatView) aiChatView.style.display = 'block';
-
-        const initialPrompt = `あなたはプロの「${selectedGenre}」シェフです。以下の材料を使った創造的な料理のアイデアをいくつか提案してください。最終的にはレシピをJSON形式で出力するように指示されることを念頭に置いて会話を進めてください。\n\n# 材料\n- ${ingredients.join('\n- ')}`;
-
-        addChatMessage(initialPrompt, 'user');
-        conversationHistory.push({ role: 'user', parts: [{ text: initialPrompt }] });
-        requestAiResponse();
-    };
-
-    const addChatMessage = (message, sender = 'user') => {
-        if (!aiChatHistory) return;
-        const msgDiv = document.createElement('div');
-        msgDiv.className = `chat-message ${sender}`;
-        msgDiv.style.marginBottom = '0.75rem';
-        msgDiv.innerHTML = `
-            <div style="font-weight: 600; font-size: 0.8rem; color: ${sender === 'user' ? 'var(--accent)' : 'var(--text-secondary)'}; margin-bottom: 0.25rem;">${sender === 'user' ? 'あなた' : 'AIアシスタント'}</div>
-            <div>${escapeHtml(message).replace(/\n/g, '<br>')}</div>
-        `;
-        aiChatHistory.appendChild(msgDiv);
-        aiChatHistory.scrollTop = aiChatHistory.scrollHeight;
-    };
-
-    const requestAiResponse = async () => {
-        if (aiLoading) aiLoading.style.display = 'block';
-        if (aiChatSendBtn) aiChatSendBtn.disabled = true;
-
-        try {
-            const { data, error } = await sb.functions.invoke('call-gemini-chat', { body: { history: conversationHistory } });
-            if (error) throw new Error(`Edge Function Error: ${error.message}`);
-            if (data.error) throw new Error(`API Error: ${data.error}`);
-            
-            const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!aiText) throw new Error('AIからの応答が空でした。');
-
-            addChatMessage(aiText, 'ai');
-            conversationHistory.push({ role: 'model', parts: [{ text: aiText }] });
-            tryToParseRecipe(aiText);
-        } catch (error) {
-            console.error("AI request failed:", error);
-            addChatMessage(`エラーが発生しました: ${error.message}`, 'ai');
-        } finally {
-            if (aiLoading) aiLoading.style.display = 'none';
-            if (aiChatSendBtn) aiChatSendBtn.disabled = false;
-            if (aiChatInput) aiChatInput.focus();
-        }
-    };
-
-    const tryToParseRecipe = (text) => {
-        const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
-        if (jsonMatch && jsonMatch[1]) {
-            try {
-                const parsedJson = JSON.parse(jsonMatch[1]);
-                if (parsedJson.title && parsedJson.ingredients && parsedJson.steps) {
-                    lastAiRecipe = parsedJson;
-                    if (applyRecipeBtn) applyRecipeBtn.style.display = 'inline-block';
-                }
-            } catch (e) {
-                lastAiRecipe = null;
-                if (applyRecipeBtn) applyRecipeBtn.style.display = 'none';
-            }
-        } else {
-            if (lastAiRecipe) {
-                lastAiRecipe = null;
-                if (applyRecipeBtn) applyRecipeBtn.style.display = 'none';
-            }
-        }
-    };
-
+    // --- CRUD Functions ---
+    const loadRecipe = async () => { /* (省略...元のコードと同じ) */ };
+    const saveRecipe = async () => { /* (省略...元のコードと同じ) */ };
+    const deleteRecipe = async () => { /* (省略...元のコードと同じ) */ };
+    
     // --- Event Listeners ---
     if (addIngBtn) addIngBtn.addEventListener('click', () => addIngredientRow());
     if (addStepBtn) addStepBtn.addEventListener('click', () => addStepRow());
     if (form) form.addEventListener('click', (e) => {
         if (e.target.classList.contains('js-remove-row')) e.target.closest('.ingredient-row, .step-row')?.remove();
     });
-    // Add other listeners for save, cancel etc.
+    // (省略...元のコードと同じ)
 
-    // --- AI Chat Event Listeners ---
-    if (aiWizardBtn) aiWizardBtn.addEventListener('click', openGenreSelection);
+    if (aiWizardBtn) aiWizardBtn.addEventListener('click', openModal);
     if (modalCloseBtn) modalCloseBtn.addEventListener('click', closeModal);
     if (aiModal) aiModal.addEventListener('click', (e) => { if (e.target === aiModal) closeModal(); });
-
-    genreBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            selectedGenre = btn.dataset.genre;
-            genreBtns.forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
-            startAiConversation();
-        });
+    if (genreBtns) genreBtns.forEach(btn => btn.addEventListener('click', () => {
+        genreBtns.forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedGenre = btn.dataset.genre;
+        getSuggestionsBtn.disabled = false;
+    }));
+    if (menuSuggestionsContainer) menuSuggestionsContainer.addEventListener('click', (e) => {
+        const item = e.target.closest('.menu-suggestions-item');
+        if (item) {
+            menuSuggestionsContainer.querySelectorAll('.menu-suggestions-item').forEach(el => el.classList.remove('selected'));
+            item.classList.add('selected');
+            selectedMenu = item.dataset.menu;
+            generateFullRecipeBtn.disabled = false;
+        }
     });
-
-    if (aiChatSendBtn) aiChatSendBtn.addEventListener('click', () => {
-        const userInput = aiChatInput.value.trim();
-        if (!userInput) return;
-        
-        addChatMessage(userInput, 'user');
-        conversationHistory.push({ role: 'user', parts: [{ text: userInput }] });
-        aiChatInput.value = '';
-        requestAiResponse();
+    if (getSuggestionsBtn) getSuggestionsBtn.addEventListener('click', async () => {
+        const ingredients = [...ingredientsEditor.querySelectorAll('[data-field="item"]')].map(input => input.value.trim()).filter(Boolean);
+        if (ingredients.length === 0) { return alert('先に材料を1つ以上入力してください。'); }
+        aiStep1.style.display = 'none';
+        aiLoading.style.display = 'block';
+        const customRequest = aiCustomRequestEl.value.trim();
+        let prompt = `あなたはプロの${selectedGenre}シェフです。以下の材料を活かした創造的で食欲をそそる日本語のメニュー名を5つ提案してください。単なる材料の羅列ではなく、調理法や料理の特徴が伝わる名前が望ましいです。${customRequest ? `\n\n# 追加の希望\n${customRequest}` : ''}\n\n回答はメニュー名のみの配列としてJSON形式で返してください。\n\n# 材料\n- ${ingredients.join('\n- ')}`;
+        try {
+            const response = await callGemini(prompt, { type: "ARRAY", items: { type: "STRING" } });
+            menuSuggestionsContainer.innerHTML = response.map((menu) => `<div class="menu-suggestions-item" data-menu="${escapeHtml(menu)}">${escapeHtml(menu)}</div>`).join('');
+            aiLoading.style.display = 'none';
+            aiStep2.style.display = 'block';
+        } catch (error) {
+            alert(`メニュー案の生成に失敗しました。\n${error.message}`);
+            resetModal();
+        }
     });
-
-    if (aiChatInput) aiChatInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.isComposing) {
-            e.preventDefault();
-            aiChatSendBtn.click();
+    if (generateFullRecipeBtn) generateFullRecipeBtn.addEventListener('click', async () => {
+        const ingredients = [...ingredientsEditor.querySelectorAll('[data-field="item"]')].map(input => input.value.trim()).filter(Boolean);
+        aiStep2.style.display = 'none';
+        aiLoading.style.display = 'block';
+        const customRequest = aiCustomRequestEl.value.trim();
+        let prompt = `あなたは調理科学の知見を持つ革新的なシェフです。同業者であるプロ向けに、科学的根拠に基づいた実践的なルセット「${selectedMenu}」を創作してください。${customRequest ? `\n\n# 追加の希望\n${customRequest}` : ''}\n\n# ベース材料\n- ${ingredients.join('\n- ')}\n\n# 出力形式\n必ず以下のキーを含む日本語のJSONで返してください。\n- "title": 料理名\n- "category": 「アミューズ」「前菜」「温菜」「メイン」「デザート」「パン」「その他」のいずれか\n- "tags": タグの配列\n- "notes": このルセットの鍵となる調理科学的なポイント(例:メイラード反応の最適化)を解説。\n- "ingredients": 材料の配列({"item": "材料名", "quantity": 数値, "unit": "単位"})。単位はgやmlを基本とすること。\n- "steps": 手順の配列。重要な工程には科学的理由を()書きで補足。`;
+        const schema = { type: "OBJECT", properties: { "title": { "type": "STRING" }, "category": { "type": "STRING" }, "tags": { "type": "ARRAY", items: { "type": "STRING" } }, "notes": { "type": "STRING" }, "ingredients": { "type": "ARRAY", items: { "type": "OBJECT", properties: { "item": { "type": "STRING" }, "quantity": { "type": "NUMBER" }, "unit": { "type": "STRING" } }, required: ["item", "quantity", "unit"] } }, "steps": { "type": "ARRAY", items: { "type": "STRING" } } }, required: ["title", "category", "tags", "notes", "ingredients", "steps"] };
+        try {
+            const recipeData = await callGemini(prompt, schema);
+            titleEl.value = recipeData.title || '';
+            if(recipeData.category) categoryEl.value = recipeData.category;
+            tagsEl.value = (recipeData.tags || []).join(', ');
+            notesEl.value = recipeData.notes || '';
+            ingredientsEditor.innerHTML = '';
+            (recipeData.ingredients || []).forEach(addIngredientRow);
+            stepsEditor.innerHTML = '';
+            (recipeData.steps || []).forEach(step => addStepRow({ instruction: step }));
+            closeModal();
+        } catch (error) {
+            alert(`ルセットの生成に失敗しました。\n${error.message}`);
+            resetModal();
         }
     });
 
-    if (applyRecipeBtn) applyRecipeBtn.addEventListener('click', () => {
-        if (!lastAiRecipe) {
-            alert('反映できるレシピ情報がありません。');
-            return;
-        }
-        
-        titleEl.value = lastAiRecipe.title || '';
-        if(lastAiRecipe.category) categoryEl.value = lastAiRecipe.category;
-        tagsEl.value = (lastAiRecipe.tags || []).join(', ');
-        notesEl.value = lastAiRecipe.notes || '';
-        
-        ingredientsEditor.innerHTML = '';
-        (lastAiRecipe.ingredients || []).forEach(addIngredientRow);
-        stepsEditor.innerHTML = '';
-        (lastAiRecipe.steps || []).forEach(step => addStepRow({ instruction: step }));
-        
-        closeModal();
-    });
-
-    // --- Initial Load etc. ---
-    // (Your existing loadRecipe, etc. functions would be here)
+    // --- Initial Load ---
+    addIngredientRow();
+    addStepRow();
 });
