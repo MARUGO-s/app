@@ -41,11 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Helper Functions ---
     const escapeHtml = (s) => (s ?? "").toString().replace(/[&<>\"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[m]));
-    const num = (s) => { 
-        if (s === null || s === undefined || s === '') return null;
-        const v = parseFloat(String(s).replace(/[, ]/g, '')); 
-        return isFinite(v) ? v : null; 
-    };
 
     // --- Dynamic Row Functions ---
     const addIngredientRow = (data = {}) => {
@@ -85,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
         generateFullRecipeBtn.disabled = true;
         aiCustomRequestEl.value = '';
         menuSuggestionsContainer.innerHTML = '';
-        recipePreview.innerHTML = '';
+        if(recipePreview) recipePreview.innerHTML = '';
         selectedGenre = '';
         selectedMenu = '';
         finalRecipeData = null;
@@ -93,9 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- AI Function Call ---
     async function callGemini(prompt, responseSchema) {
-        const { data, error } = await sb.functions.invoke('call-gemini', {
-            body: { prompt, responseSchema },
-        });
+        const { data, error } = await sb.functions.invoke('call-gemini', { body: { prompt, responseSchema } });
         if (error) throw new Error(`Edge Function Error: ${error.message}`);
         if (data.error) throw new Error(`API Error from Edge Function: ${data.error}`);
         const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -130,14 +123,10 @@ document.addEventListener('DOMContentLoaded', () => {
         aiStep1.style.display = 'none';
         aiLoading.style.display = 'block';
         const customRequest = aiCustomRequestEl.value.trim();
-        let prompt = `あなたは、料理のコンセプトやストーリーを大切にするプロの${selectedGenre}シェフです。以下の材料を活かした創造的なメニュー名を必ず5つ提案してください。それぞれのメニュー名には、他のプロの料理人に語るように、その料理のコンセプトや調理法の特徴、インスピレーションを簡潔に説明した文章を必ず添えてください。${customRequest ? `\n\n# 追加の希望\n${customRequest}` : ''}\n\n回答は [{"name": "料理名", "description": "プロ向けの説明文"}] という形式のJSON配列で厳密に返してください。\n\n# 材料\n- ${ingredients.join('\n- ')}`;
+        let prompt = `あなたは、料理のコンセプトやストーリーを大切にするプロの${selectedGenre}シェフです。以下の材料を活した創造的なメニュー名を必ず5つ提案してください。それぞれのメニュー名には、他のプロの料理人に語るように、その料理のコンセプトや調理法の特徴、インスピレーションを簡潔に説明した文章を必ず添えてください。${customRequest ? `\n\n# 追加の希望\n${customRequest}` : ''}\n\n回答は [{"name": "料理名", "description": "プロ向けの説明文"}] という形式のJSON配列で厳密に返してください。\n\n# 材料\n- ${ingredients.join('\n- ')}`;
         const schema = {
             type: "ARRAY",
-            items: {
-                type: "OBJECT",
-                properties: { "name": { "type": "STRING" }, "description": { "type": "STRING" } },
-                required: ["name", "description"]
-            }
+            items: { type: "OBJECT", properties: { "name": { "type": "STRING" }, "description": { "type": "STRING" } }, required: ["name", "description"] }
         };
 
         try {
@@ -171,20 +160,13 @@ document.addEventListener('DOMContentLoaded', () => {
         aiLoading.style.display = 'block';
         const customRequest = aiCustomRequestEl.value.trim();
         const ingredients = [...ingredientsEditor.querySelectorAll('[data-field="item"]')].map(input => input.value.trim()).filter(Boolean);
-        
-        // ▼▼▼ MODIFIED PROMPT ▼▼▼
-        let prompt = `あなたはプロの${selectedGenre}シェフ兼、一流の料理研究家です。「${selectedMenu}」のレシピを創作してください。以下のJSON形式で返してください。材料の分量はテキストで、手順は配列で返してください。\n\n#追加の希望\n${customRequest}\n#ベース材料\n- ${ingredients.join('\n- ')}`;
-        // ▲▲▲ MODIFIED PROMPT ▲▲▲
-        
+        let prompt = `あなたはプロの${selectedGenre}シェフ兼、有名な一流の料理研究家です。「${selectedMenu}」のレシピを創作してください。以下のJSON形式で返してください。材料の分量はテキストで、手順は配列で返してください。\n\n#追加の希望\n${customRequest}\n#ベース材料\n- ${ingredients.join('\n- ')}`;
         const schema = { type: "OBJECT", properties: { "title": { "type": "STRING" }, "category": { "type": "STRING" }, "tags": { "type": "ARRAY", items: { "type": "STRING" } }, "notes": { "type": "STRING" }, "ingredients": { "type": "ARRAY", items: { "type": "OBJECT", properties: { "item": { "type": "STRING" }, "quantity": { "type": "STRING" }, "unit": { "type": "STRING" } }, required: ["item", "quantity"] } }, "steps": { "type": "ARRAY", items: { "type": "STRING" } } }, required: ["title", "category", "ingredients", "steps", "notes"] };
         
         try {
             const recipeData = await callGemini(prompt, schema);
             finalRecipeData = recipeData;
-
-            let previewText = `■ 料理名\n${recipeData.title}\n\n`;
-            previewText += `■ カテゴリー\n${recipeData.category}\n\n`;
-            previewText += `■ 材料\n`;
+            let previewText = `■ 料理名\n${recipeData.title}\n\n■ カテゴリー\n${recipeData.category}\n\n■ 材料\n`;
             recipeData.ingredients.forEach(ing => {
                 previewText += `- ${ing.item} ... ${ing.quantity || ''} ${ing.unit || ''}\n`;
             });
@@ -193,11 +175,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 previewText += `${index + 1}. ${step}\n`;
             });
             previewText += `\n■ メモ・コツ\n${recipeData.notes}`;
-
             recipePreview.innerText = previewText;
             aiLoading.style.display = 'none';
             aiStep3.style.display = 'block';
-
         } catch (error) {
             alert(`ルセットの生成に失敗しました。\n${error.message}`);
             resetModal();
@@ -213,13 +193,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (finalRecipeData.category) categoryEl.value = finalRecipeData.category;
         tagsEl.value = (finalRecipeData.tags || []).join(', ');
         notesEl.value = finalRecipeData.notes || '';
-        
         ingredientsEditor.innerHTML = '';
         (finalRecipeData.ingredients || []).forEach(addIngredientRow);
-        
         stepsEditor.innerHTML = '';
         (finalRecipeData.steps || []).forEach(step => addStepRow({ instruction: step }));
-        
         closeModal();
     });
 
