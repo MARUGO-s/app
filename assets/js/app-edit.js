@@ -33,7 +33,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const generateFullRecipeBtn = document.getElementById('generate-full-recipe-btn');
     const aiCustomRequestEl = document.getElementById('ai-custom-request');
     const recipePreview = document.getElementById('recipe-preview');
-
     const applyRecipeBtn = document.getElementById('apply-recipe-btn');
     
     let selectedGenre = '';
@@ -97,10 +96,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const { data, error } = await sb.functions.invoke('call-gemini', {
             body: { prompt, responseSchema },
         });
-
         if (error) throw new Error(`Edge Function Error: ${error.message}`);
         if (data.error) throw new Error(`API Error from Edge Function: ${data.error}`);
-        
         const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!jsonText) {
             const reason = data.candidates?.[0]?.finishReason;
@@ -134,33 +131,26 @@ document.addEventListener('DOMContentLoaded', () => {
         aiLoading.style.display = 'block';
         const customRequest = aiCustomRequestEl.value.trim();
 
-        // ▼▼▼ MODIFIED PROMPT AND SCHEMA ▼▼▼
-        let prompt = `あなたはプロの${selectedGenre}シェフです。以下の材料を活かした創造的で食欲をそそる日本語のメニュー名を、その料理の簡潔な特徴(20字以内)と共に**必ず5つ**提案してください。${customRequest ? `\n\n# 追加の希望\n${customRequest}` : ''}\n\n回答は [{"name": "料理名", "description": "特徴"}] という形式のJSON配列で返してください。\n\n# 材料\n- ${ingredients.join('\n- ')}`;
+        // ▼▼▼ MODIFIED PROMPT ▼▼▼
+        let prompt = `あなたは超一流の${selectedGenre}シェフ兼料理研究家です。以下の材料を活かした創造的で食欲をそそる日本語のメニュー名を**必ず5つ**提案してください。それぞれのメニュー名には、料理のイメージが伝わる簡潔な説明文を必ず添えてください。${customRequest ? `\n\n# 追加の希望\n${customRequest}` : ''}\n\n回答は [{"name": "料理名", "description": "説明文"}] という形式のJSON配列で厳密に返してください。\n\n# 材料\n- ${ingredients.join('\n- ')}`;
         const schema = {
             type: "ARRAY",
             items: {
                 type: "OBJECT",
-                properties: {
-                    "name": { "type": "STRING" },
-                    "description": { "type": "STRING" }
-                },
+                properties: { "name": { "type": "STRING" }, "description": { "type": "STRING" } },
                 required: ["name", "description"]
             }
         };
-        // ▲▲▲ MODIFIED PROMPT AND SCHEMA ▲▲▲
+        // ▲▲▲ MODIFIED PROMPT ▲▲▲
 
         try {
             const response = await callGemini(prompt, schema);
-            
-            // ▼▼▼ MODIFIED RENDERING LOGIC ▼▼▼
             menuSuggestionsContainer.innerHTML = response.map((suggestion) => `
                 <div class="menu-suggestions-item" data-menu="${escapeHtml(suggestion.name)}">
                     <div style="font-weight: 600;">${escapeHtml(suggestion.name)}</div>
                     <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">${escapeHtml(suggestion.description)}</div>
                 </div>
             `).join('');
-            // ▲▲▲ MODIFIED RENDERING LOGIC ▲▲▲
-
             aiLoading.style.display = 'none';
             aiStep2.style.display = 'block';
         } catch (error) {
