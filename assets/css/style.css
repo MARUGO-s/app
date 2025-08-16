@@ -448,3 +448,23 @@ select {
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* --- 9. AI Edit Modal (recipe_edit.html) --- */
+.genre-btn {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--line-primary);
+    border-radius: 99px; /* Pill shape */
+    background: var(--bg-panel);
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+}
+.genre-btn:hover {
+    background: var(--bg-primary);
+}
+.genre-btn.selected {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
