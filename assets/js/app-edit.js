@@ -160,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
         aiLoading.style.display = 'block';
         const customRequest = aiCustomRequestEl.value.trim();
         const ingredients = [...ingredientsEditor.querySelectorAll('[data-field="item"]')].map(input => input.value.trim()).filter(Boolean);
-        let prompt = `あなたはプロの${selectedGenre}シェフ権、超有名料理研究家です。「${selectedMenu}」のレシピを創作してください。以下のJSON形式で返してください。材料の分量はテキストで、手順は配列で返してください。\n\n#追加の希望\n${customRequest}\n#ベース材料\n- ${ingredients.join('\n- ')}`;
+        let prompt = `あなたはプロの${selectedGenre}シェフです。「${selectedMenu}」のレシピを創作してください。以下のJSON形式で返してください。材料の分量はテキストで、手順は配列で返してください。\n\n#追加の希望\n${customRequest}\n#ベース材料\n- ${ingredients.join('\n- ')}`;
         const schema = { type: "OBJECT", properties: { "title": { "type": "STRING" }, "category": { "type": "STRING" }, "tags": { "type": "ARRAY", items: { "type": "STRING" } }, "notes": { "type": "STRING" }, "ingredients": { "type": "ARRAY", items: { "type": "OBJECT", properties: { "item": { "type": "STRING" }, "quantity": { "type": "STRING" }, "unit": { "type": "STRING" } }, required: ["item", "quantity"] } }, "steps": { "type": "ARRAY", items: { "type": "STRING" } } }, required: ["title", "category", "ingredients", "steps", "notes"] };
         
         try {
