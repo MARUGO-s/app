@@ -237,6 +237,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const customRequest = aiCustomRequestEl.value.trim();
         const ingredients = [...ingredientsEditor.querySelectorAll('[data-field="item"]')].map(input => input.value.trim()).filter(Boolean);
         let prompt = `あなたはプロの${selectedGenre}シェフです。「${selectedMenu}」のレシピを創作してください。以下のJSON形式で返してください。\n\n#追加の希望\n${customRequest}\n#ベース材料\n- ${ingredients.join('\n- ')}`;
+        
+        // This is the corrected schema
         const schema = {
             type: "OBJECT",
             properties: {
@@ -247,6 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             "required": ["title", "category", "ingredients", "steps", "notes"]
         };
+
         try {
             const recipeData = await callGemini(prompt, schema);
             finalRecipeData = recipeData;
