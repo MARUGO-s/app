@@ -302,4 +302,34 @@
 })();
   </script>
 </body>
+<section class="card">
+  <h3>材料 <span id="servingsLabel"></span></h3>
+  <ul id="ingredientsList"></ul>
+</section>
+
+<section class="card">
+  <h3>手順</h3>
+  <ol id="stepsList"></ol>
+</section>
+
+<section class="card">
+  <h3>科学メモ（ベーカーズ％）</h3>
+  <div id="analysisBox">
+    <div>粉合計: <span id="flour_g">–</span> g (100%)</div>
+    <div>加水率: <span id="hydration_bp">–</span>% （水分 <span id="water_g">–</span> g）</div>
+    <div>油脂: <span id="fat_bp">–</span>% （<span id="fat_g">–</span> g）</div>
+    <div>糖: <span id="sugar_bp">–</span>% （<span id="sugar_g">–</span> g）</div>
+    <div>塩: <span id="salt_bp">–</span>% （<span id="salt_g">–</span> g）</div>
+    <div>酵母: <span id="yeast_bp">–</span>% （<span id="yeast_g">–</span> g）</div>
+    <p id="analysisNotes" class="note"></p>
+  </div>
+</section>
+
+<section class="card">
+  <label>人数:
+    <input id="servingsInput" type="number" min="1" step="1" value="2">
+  </label>
+  <button id="btnScale" type="button">分量を再計算</button>
+</section>
+
 </html>
