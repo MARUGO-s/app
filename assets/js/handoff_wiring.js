@@ -1,9 +1,8 @@
 /*
-  handoff_wiring.js — index → recipe_view 受け渡し + Supabase フェッチ対応版
-  使い方：index.html と recipe_view.html の末尾でこのファイルを読み込むだけ。
-  要件：
-    - CDN で supabase-js@2 を読み込んでいること
-    - 下の URL / ANON_KEY をあなたのプロジェクトの値に合わせること
+  handoff_wiring.js (no-slug & 400 fix)
+  症状: Supabase 400 "column recipes.slug does not exist" → 一覧の SELECT に slug が含まれていたため。
+  対策: 一覧取得は最小列だけ（id,title,updated_at）。slug 不要に変更し、受け渡しは id ベースに一本化。
+  使い方: index.html と recipe_view.html の末尾で読み込む。
 */
 (function(){
   const $ = (s, r=document)=> r.querySelector(s);
@@ -11,38 +10,37 @@
   const escapeHtml = (s)=> String(s??'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[m]));
 
   // ====== Supabase 初期化 ======
-  const SUPABASE_URL = "https://ctxyawinblwcbkovfsyj.supabase.co"; // ←あなたのURL
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q"; // ←あなたのANON KEY
+  const SUPABASE_URL = "https://ctxyawinblwcbkovfsyj.supabase.co"; // あなたのURL
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q"; // あなたのANON KEY
   if (window.supabase && !window.sb) {
     try{ window.sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); }
-    catch(e){ console.warn('Supabase init failed:', e.message); }
+    catch(e){ console.warn('[SB] init failed:', e.message); }
   }
 
-  // ====== index 側：カード描画 & クリックで受け渡し ======
+  // ====== index 側：一覧取得（slug を参照しない） ======
   async function fetchRecipeList(){
-    if (!window.sb) return [];
+    if (!window.sb){ console.warn('[SB] not initialized'); return []; }
     try{
       const { data, error } = await sb
         .from('recipes')
-        .select('id, title, slug, tags, updated_at, ingredients, steps')
+        .select('id,title,updated_at') // ← slug を外す
         .order('updated_at', { ascending:false })
         .limit(200);
-      if (error) throw error;
-      return data || [];
-    }catch(e){ console.warn('fetchRecipeList:', e.message); return []; }
+      if (error){ console.error('[SB] list error:', error.message||error.code, error); return []; }
+      if (!data?.length){ console.warn('[SB] list empty (RLS?)'); }
+      return data||[];
+    }catch(e){ console.error('[SB] list exception:', e); return []; }
   }
 
   function buildCard(r){
     const a = document.createElement('a');
     a.className = 'recipe-link card';
     a.setAttribute('data-recipe-id', r.id || '');
-    if (r.slug) a.setAttribute('data-recipe-slug', r.slug);
     try{ a.setAttribute('data-recipe-json', JSON.stringify(r)); }catch{}
     a.innerHTML = `
       <div class="card-body">
         <div class="card-title">${escapeHtml(r.title||'無題')}</div>
         <div class="card-meta">更新 ${fmtDate(r.updated_at)}</div>
-        <div class="card-tags">${(r.tags||[]).map(t=>`<span class="badge">${escapeHtml(t)}</span>`).join('')}</div>
       </div>`;
     return a;
   }
@@ -50,13 +48,10 @@
   function wireRecipeLinks(root){
     $$('a.recipe-link', root).forEach(el=>{
       if (el._wired) return; el._wired = true;
-      // href 補完
+      // href 補完（id ベースのみ）
       if (!el.getAttribute('href')){
         const id = el.getAttribute('data-recipe-id');
-        const slug = el.getAttribute('data-recipe-slug');
-        if (id) el.setAttribute('href', `recipe_view.html?id=${encodeURIComponent(id)}`);
-        else if (slug) el.setAttribute('href', `recipe_view.html?slug=${encodeURIComponent(slug)}`);
-        else el.setAttribute('href', 'recipe_view.html');
+        el.setAttribute('href', id ? `recipe_view.html?id=${encodeURIComponent(id)}` : 'recipe_view.html');
       }
       // クリックで JSON を保存（新規タブ等は素通し）
       el.addEventListener('click', (e)=>{
@@ -71,10 +66,10 @@
     const list = $('#cardList');
     if (!list) return; // index ではない
 
-    // 既に静的カードがある場合でもリンクを配線
+    // 静的カードがあれば先に配線
     wireRecipeLinks(list);
 
-    // Supabase から一覧をロード（失敗しても致命的ではない）
+    // Supabase から一覧をロード
     const rows = await fetchRecipeList();
     if (rows.length){
       const frag = document.createDocumentFragment();
@@ -84,7 +79,6 @@
       const empty = $('#empty-message'); if (empty) empty.style.display = 'none';
       wireRecipeLinks(list);
     } else {
-      // 何も取れない場合は空表示
       const empty = $('#empty-message'); if (empty) empty.style.display = '';
     }
 
@@ -93,20 +87,14 @@
     mo.observe(list, { childList:true, subtree:true });
   }
 
-  // ====== recipe_view 側：受け取り & 描画 ======
+  // ====== recipe_view 側：受け取り（id ベース） ======
   async function fetchById(id){
     if (!window.sb) return null;
     try{
       const { data, error } = await sb.from('recipes').select('*').eq('id', id).single();
-      if (error) throw error; return data;
-    }catch(e){ console.warn('fetchById:', e.message); return null; }
-  }
-  async function fetchBySlug(slug){
-    if (!window.sb) return null;
-    try{
-      const { data, error } = await sb.from('recipes').select('*').eq('slug', slug).maybeSingle();
-      if (error) throw error; return data || null;
-    }catch(e){ console.warn('fetchBySlug:', e.message); return null; }
+      if (error){ console.error('[SB] view error:', error); return null; }
+      return data;
+    }catch(e){ console.error('[SB] view exception:', e); return null; }
   }
   function parseLocal(){ try{ const s=localStorage.getItem('selected_recipe'); return s? JSON.parse(s): null; }catch{ return null; } }
 
@@ -120,11 +108,9 @@
     if (!$('#recipeTitle') || !$('#steps')) return; // view でなければスキップ
     const params = new URLSearchParams(location.search);
     const id = params.get('id');
-    const slug = params.get('slug');
 
     let recipe = null;
     if (id) recipe = await fetchById(id);
-    if (!recipe && slug) recipe = await fetchBySlug(slug);
     if (!recipe) recipe = parseLocal();
 
     if (!recipe){
@@ -138,8 +124,5 @@
   function fmtDate(d){ if(!d) return '-'; const x=new Date(d); return isNaN(x)?'-': x.toLocaleDateString(); }
 
   // ====== 起動 ======
-  document.addEventListener('DOMContentLoaded', ()=>{
-    setupIndex();
-    setupView();
-  });
+  document.addEventListener('DOMContentLoaded', ()=>{ setupIndex(); setupView(); });
 })();
