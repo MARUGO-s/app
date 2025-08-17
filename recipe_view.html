@@ -300,36 +300,220 @@
   }
   loadRecipe();
 })();
-  </script>
-</body>
-<section class="card">
-  <h3>材料 <span id="servingsLabel"></span></h3>
-  <ul id="ingredientsList"></ul>
-</section>
+   </script>
 
-<section class="card">
-  <h3>手順</h3>
-  <ol id="stepsList"></ol>
-</section>
-
-<section class="card">
-  <h3>科学メモ（ベーカーズ％）</h3>
-  <div id="analysisBox">
-    <div>粉合計: <span id="flour_g">–</span> g (100%)</div>
-    <div>加水率: <span id="hydration_bp">–</span>% （水分 <span id="water_g">–</span> g）</div>
-    <div>油脂: <span id="fat_bp">–</span>% （<span id="fat_g">–</span> g）</div>
-    <div>糖: <span id="sugar_bp">–</span>% （<span id="sugar_g">–</span> g）</div>
-    <div>塩: <span id="salt_bp">–</span>% （<span id="salt_g">–</span> g）</div>
-    <div>酵母: <span id="yeast_bp">–</span>% （<span id="yeast_g">–</span> g）</div>
+  <section class="card" id="analysisSection" style="display:none;">
+    <h3>科学メモ（ベーカーズ％）</h3>
+    <div class="grid">
+      <div>粉合計</div><div><span id="flour_g">–</span> g (100%)</div>
+      <div>加水率</div><div><span id="hydration_bp">–</span>%（水分 <span id="water_g">–</span> g）</div>
+      <div>油脂</div><div><span id="fat_bp">–</span>%（<span id="fat_g">–</span> g）</div>
+      <div>糖</div><div><span id="sugar_bp">–</span>%（<span id="sugar_g">–</span> g）</div>
+      <div>塩</div><div><span id="salt_bp">–</span>%（<span id="salt_g">–</span> g）</div>
+      <div>酵母</div><div><span id="yeast_bp">–</span>%（<span id="yeast_g">–</span> g）</div>
+    </div>
     <p id="analysisNotes" class="note"></p>
-  </div>
-</section>
+  </section>
 
-<section class="card">
-  <label>人数:
-    <input id="servingsInput" type="number" min="1" step="1" value="2">
-  </label>
-  <button id="btnScale" type="button">分量を再計算</button>
-</section>
+  <section class="card">
+    <label>人数:
+      <input id="servingsInput" type="number" min="1" step="1" value="2" style="width:6em;">
+    </label>
+    <button id="btnScale" type="button">分量を再計算</button>
 
+/* ===========================
+   解析（ベーカーズ％）＋人数スケール 完成版
+   貼り付け場所：この <script> の末尾（</script>の直前）
+   既存の loadRecipe を自動でフックするので、他の箇所の変更は不要です。
+=========================== */
+
+// ---- 単位変換と分類 --------------------------------
+const __DENSITY = { water: 1.0, oil: 0.92 }; // g/ml 近似
+
+function __toGrams(qty, unit, role = 'other') {
+  const n = Number(qty);
+  if (!Number.isFinite(n)) return 0;
+  if (!unit) return n;                // 単位不明 → g とみなす
+  const u = String(unit).toLowerCase();
+  if (u === 'g')  return n;
+  if (u === 'ml') {
+    if (role === 'water') return n * __DENSITY.water;
+    if (role === 'fat')   return n * __DENSITY.oil;
+    return n; // その他は 1g/ml 近似
+  }
+  return n; // “個”など → そのまま数値
+}
+
+function __classify(name) {
+  const s = String(name || '').toLowerCase();
+  // 粉
+  if (s.includes('強力粉') || s.includes('薄力粉') || s.includes('中力粉') ||
+      s.includes('bread flour') || s.includes('all-purpose') || s.includes('flour')) return 'flour';
+  // 水
+  if (s.includes('水') || s.includes('water')) return 'water';
+  // 油脂
+  if (s.includes('油') || s.includes('オイル') || s.includes('オリーブ') || s.includes('バター') ||
+      s.includes('shortening') || s.includes('butter') || s.includes('oil')) return 'fat';
+  // 砂糖
+  if (s.includes('砂糖') || s.includes('グラニュー') || s.includes('sugar')) return 'sugar';
+  // 塩
+  if (s.includes('塩') || s.includes('salt')) return 'salt';
+  // 酵母
+  if (s.includes('イースト') || s.includes('酵母') || s.includes('yeast')) return 'yeast';
+  return 'other';
+}
+
+// ---- 解析本体 --------------------------------------
+function __analyze(ingredients) {
+  const sum = { flour_g: 0, water_g: 0, fat_g: 0, sugar_g: 0, salt_g: 0, yeast_g: 0 };
+
+  (ingredients || []).forEach(it => {
+    const role = __classify(it.item);
+    const g = __toGrams(it.quantity, it.unit, role);
+    if (role === 'flour') sum.flour_g += g;
+    if (role === 'water') sum.water_g += g;
+    if (role === 'fat')   sum.fat_g   += g;
+    if (role === 'sugar') sum.sugar_g += g;
+    if (role === 'salt')  sum.salt_g  += g;
+    if (role === 'yeast') sum.yeast_g += g;
+  });
+
+  const flour = Math.max(sum.flour_g, 0.0001); // 0割防止
+  const r1 = v => Math.round(v * 10) / 10;
+
+  return {
+    ...sum,
+    hydration_bp: r1((sum.water_g / flour) * 100),
+    fat_bp:       r1((sum.fat_g   / flour) * 100),
+    sugar_bp:     r1((sum.sugar_g / flour) * 100),
+    salt_bp:      r1((sum.salt_g  / flour) * 100),
+    yeast_bp:     r1((sum.yeast_g / flour) * 100),
+  };
+}
+
+// ---- 解析の描画 ------------------------------------
+function __renderAnalysis(a) {
+  const sec = document.getElementById('analysisSection');
+  if (!sec || !a) return;
+  sec.style.display = ''; // 表示
+
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+
+  set('flour_g', Math.round(a.flour_g));
+  set('water_g', Math.round(a.water_g));
+  set('fat_g',   Math.round(a.fat_g));
+  set('sugar_g', Math.round(a.sugar_g));
+  set('salt_g',  Math.round(a.salt_g));
+  if (document.getElementById('yeast_g')) set('yeast_g', Math.round(a.yeast_g));
+
+  set('hydration_bp', a.hydration_bp);
+  set('fat_bp',       a.fat_bp);
+  set('sugar_bp',     a.sugar_bp);
+  set('salt_bp',      a.salt_bp);
+  if (document.getElementById('yeast_bp')) set('yeast_bp', a.yeast_bp);
+
+  // 科学メモの簡易ヒント
+  const tips = [];
+  if (a.hydration_bp < 58) tips.push('加水低め → +2〜5%でしっとり');
+  if (a.hydration_bp > 75) tips.push('加水高め → ベタつきやすい。折り/オートリーズ推奨');
+  if (a.salt_bp < 1.4)     tips.push('塩薄め → 1.8–2.2%が定番');
+  if (a.salt_bp > 2.2)     tips.push('塩強め → 発酵抑制・塩味強');
+  if (a.sugar_bp > 12)     tips.push('糖多め → 高糖生地。耐糖性酵母検討');
+  if (a.fat_bp > 8)        tips.push('油脂多め → グルテン弱化。ミキシング強め');
+
+  const note = document.getElementById('analysisNotes');
+  if (note) note.textContent = tips.join(' / ') || '配合は目安レンジ内です。';
+}
+
+// ---- 材料テーブルの再描画（スケール後に使用） ----
+function __renderIngredientsTable(ingredients) {
+  const el = document.getElementById('ingredients');
+  if (!el) return;
+  if (!ingredients || ingredients.length === 0) {
+    el.innerHTML = '<div class="muted">材料は登録されていません。</div>';
+    return;
+  }
+  el.innerHTML =
+    `<table class="table">
+      <thead><tr><th>材料名</th><th class="num">分量</th><th>単位</th></tr></thead>
+      <tbody>
+        ${ingredients.map(i => `
+          <tr>
+            <td>${i.item ?? ''}</td>
+            <td class="num">${i.quantity ?? ''}</td>
+            <td>${i.unit ?? ''}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+// ---- 人数スケール ---------------------------------
+let __currentServings = null;
+
+function __scaleIngredients(ingredients, k) {
+  return (ingredients || []).map(i => {
+    const q = Number(i.quantity);
+    if (Number.isFinite(q)) return { ...i, quantity: Math.round(q * k) };
+    return { ...i }; // 数値でない場合はそのまま
+  });
+}
+
+function __wireScaling(getRecipe, setRecipe) {
+  const btn = document.getElementById('btnScale');
+  const input = document.getElementById('servingsInput');
+  if (!btn || !input) return;
+
+  btn.addEventListener('click', () => {
+    const recipe = getRecipe();
+    const ns = Number(input.value || 1);
+    if (!recipe || !Number.isFinite(ns) || ns <= 0) return;
+
+    const old = __currentServings || ns;  // 初期値不明ならそのまま
+    const k = ns / old;
+
+    const next = { ...recipe, ingredients: __scaleIngredients(recipe.ingredients, k) };
+    __currentServings = ns;
+
+    setRecipe(next);
+    __renderIngredientsTable(next.ingredients);
+    const a = __analyze(next.ingredients);
+    __renderAnalysis(a);
+  });
+}
+
+// ---- 初期化：既存 loadRecipe 完了後に自動実行 --------
+// 既存の loadRecipe をラップして、読み込み完了後に解析＆配線を実行します。
+if (typeof loadRecipe === 'function') {
+  const __origLoadRecipe = loadRecipe;
+  loadRecipe = async function (...args) {
+    const r = await __origLoadRecipe.apply(this, args);
+
+    try {
+      // 既存スクリプトの recipeData を利用（同じ IIFE 内なので参照可能）
+      if (typeof recipeData === 'object' && Array.isArray(recipeData.ingredients)) {
+        // 初期人数
+        __currentServings = Number(document.getElementById('servingsInput')?.value || 2);
+
+        // 初回描画（材料は既に表示済みだが、以後のスケール用に関数を用意）
+        const a = __analyze(recipeData.ingredients);
+        __renderAnalysis(a);
+
+        // 人数スケールの配線
+        __wireScaling(
+          () => ({ ...recipeData }),
+          (next) => { recipeData = next; }
+        );
+      }
+    } catch (e) {
+      console.warn('Analysis/Scaling init failed:', e);
+    }
+
+    return r;
+  };
+}
+
+
+  </section>
+
+</body>
 </html>
