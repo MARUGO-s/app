@@ -4,11 +4,28 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>レシピ表示 — Recipe Box</title>
-  
+
+  <!-- Supabase / Marked -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.0.2/marked.min.js"></script>
-  
+
   <link rel="stylesheet" href="assets/css/style.css">
+  <style>
+    /* 追加: モーダル時の体験を改善 */
+    .ai-view-modal-overlay{ background: rgba(0,0,0,.45); z-index:1000; }
+    .ai-view-modal-content{ z-index:1001; }
+    body.modal-open{ overflow:hidden; }
+    body.modal-open #analysisSection,
+    body.modal-open #scaleSection{ filter: blur(1px); pointer-events:none; }
+    /* 解析グリッドの軽い整形 */
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr auto;
+      gap:.25rem .75rem;
+      align-items: baseline;
+    }
+    .card .num{text-align:right;}
+  </style>
 </head>
 <body>
 
@@ -17,14 +34,15 @@
     <div class="header-actions" data-actions>
       <button class="btn primary small js-ai-advice">✨ AIアドバイス</button>
       <button class="btn js-edit">編集</button>
-      <button class="btn ghost js-delete" style="color: #c0392b; border-color: #c0392b;">削除</button>
+      <button class="btn ghost js-delete" style="color:#c0392b;border-color:#c0392b;">削除</button>
       <button class="btn js-back">戻る</button>
     </div>
   </header>
 
   <main class="container two-col-layout">
+    <!-- 左カラム：本文 -->
     <article class="panel">
-      <div class="fav-block" style="text-align: right; margin-bottom: 1rem;">
+      <div class="fav-block" style="text-align:right;margin-bottom:1rem;">
         <button id="favBtn" class="btn small">♡ お気に入り</button>
       </div>
 
@@ -35,16 +53,35 @@
       <div id="notes" style="margin-top:16px;white-space:pre-wrap;"></div>
     </article>
 
+    <!-- 右カラム：材料・手順・解析・スケール -->
     <aside class="panel">
       <h3>材料</h3>
-      <div id="ingredients">
-        <div class="muted">未登録</div>
-      </div>
+      <div id="ingredients"><div class="muted">未登録</div></div>
 
       <h3 style="margin-top:24px;">手順</h3>
-      <ol id="steps">
-        <li class="muted">未登録</li>
-      </ol>
+      <ol id="steps"><li class="muted">未登録</li></ol>
+
+      <!-- ▼ 科学メモ（ベーカーズ％） -->
+      <section class="card" id="analysisSection" style="display:none;">
+        <h3>科学メモ（ベーカーズ％）</h3>
+        <div class="grid">
+          <div>粉合計</div><div><span id="flour_g">–</span> g (100%)</div>
+          <div>加水率</div><div><span id="hydration_bp">–</span>%（水分 <span id="water_g">–</span> g）</div>
+          <div>油脂</div><div><span id="fat_bp">–</span>%（<span id="fat_g">–</span> g）</div>
+          <div>糖</div><div><span id="sugar_bp">–</span>%（<span id="sugar_g">–</span> g）</div>
+          <div>塩</div><div><span id="salt_bp">–</span>%（<span id="salt_g">–</span> g）</div>
+          <div>酵母</div><div><span id="yeast_bp">–</span>%（<span id="yeast_g">–</span> g）</div>
+        </div>
+        <p id="analysisNotes" class="note"></p>
+      </section>
+
+      <!-- ▼ 人数スケール -->
+      <section class="card" id="scaleSection">
+        <label>人数:
+          <input id="servingsInput" type="number" min="1" step="1" value="2" style="width:6em;">
+        </label>
+        <button id="btnScale" type="button">分量を再計算</button>
+      </section>
     </aside>
   </main>
 
@@ -52,14 +89,14 @@
     <div><a href="index.html">一覧へ</a></div>
   </footer>
 
-  <div id="ai-view-modal" class="ai-view-modal-overlay">
+  <!-- AI モーダル -->
+  <div id="ai-view-modal" class="ai-view-modal-overlay" style="display:none;">
     <div class="ai-view-modal-content">
       <header class="ai-view-modal-header">
         <h3 class="ai-view-modal-title">✨ AI レシピ アシスタント</h3>
         <button id="ai-view-modal-close" class="ai-view-modal-close">&times;</button>
       </header>
-      <div id="ai-chat-container" class="ai-chat-container">
-        </div>
+      <div id="ai-chat-container" class="ai-chat-container"></div>
       <div class="ai-input-container">
         <textarea id="ai-user-input" class="input" placeholder="質問や要望を入力..." rows="1"></textarea>
         <button id="ai-send-btn" class="btn primary">送信</button>
@@ -71,436 +108,379 @@
   </div>
 
   <script>
-(function(){
-  const params = new URLSearchParams(location.search);
-  const id = params.get('id');
+  (function(){
+    const params = new URLSearchParams(location.search);
+    const id = params.get('id');
 
-  // --- Supabase Client ---
-  if (window.supabase && !window.sb) {
-    window.sb = window.supabase.createClient("https://ctxyawinblwcbkovfsyj.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q");
-  }
-  if(!window.sb){ alert('Supabase not initialized'); return; }
-  if(!id){ alert('レシピIDがありません'); location.href='index.html'; return; }
-
-  // --- Element Selection ---
-  const titleEl = document.querySelector('#recipeTitle');
-  const metaEl = document.querySelector('#meta');
-  const tagsEl = document.querySelector('#tags');
-  const favBtn = document.querySelector('#favBtn');
-  const introEl = document.querySelector('#recipeIntro');
-  const notesEl = document.querySelector('#notes');
-  const ingEl = document.querySelector('#ingredients');
-  const stepsEl = document.querySelector('#steps');
-  const aiModal = document.querySelector('#ai-view-modal');
-  const aiModalCloseBtn = document.querySelector('#ai-view-modal-close');
-  const aiChatContainer = document.querySelector('#ai-chat-container');
-  const aiUserInput = document.querySelector('#ai-user-input');
-  const aiSendBtn = document.querySelector('#ai-send-btn');
-  const aiSaveNewBtn = document.querySelector('#ai-save-new-btn');
-  
-  // --- State ---
-  let recipeData = {};
-  let chatHistory = [];
-  let isAiLoading = false;
-
-  // --- Helper Functions ---
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-  const getClientId = () => {
-    let clientId = localStorage.getItem("client_id");
-    if (!clientId) {
-        clientId = crypto?.randomUUID?.() || String(Math.random()).slice(2);
-        localStorage.setItem("client_id", clientId);
+    // --- Supabase Client ---
+    if (window.supabase && !window.sb) {
+      window.sb = window.supabase.createClient(
+        "https://ctxyawinblwcbkovfsyj.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q"
+      );
     }
-    return clientId;
-  };
+    if(!window.sb){ alert('Supabase not initialized'); return; }
+    if(!id){ alert('レシピIDがありません'); location.href='index.html'; return; }
 
-  // --- Main Logic ---
-  async function deleteRecipe() {
-    if (!confirm('このレシピを完全に削除しますか？')) return;
-    const { error } = await sb.from('recipes').delete().eq('id', id);
-    if (error) {
-      alert('レシピの削除に失敗しました: ' + error.message);
-    } else {
-      alert('レシピを削除しました。');
-      location.href = 'index.html';
+    // --- Elements ---
+    const titleEl = document.querySelector('#recipeTitle');
+    const metaEl = document.querySelector('#meta');
+    const tagsEl = document.querySelector('#tags');
+    const favBtn = document.querySelector('#favBtn');
+    const introEl = document.querySelector('#recipeIntro');
+    const notesEl = document.querySelector('#notes');
+    const ingEl = document.querySelector('#ingredients');
+    const stepsEl = document.querySelector('#steps');
+
+    const aiModal = document.querySelector('#ai-view-modal');
+    const aiModalCloseBtn = document.querySelector('#ai-view-modal-close');
+    const aiChatContainer = document.querySelector('#ai-chat-container');
+    const aiUserInput = document.querySelector('#ai-user-input');
+    const aiSendBtn = document.querySelector('#ai-send-btn');
+    const aiSaveNewBtn = document.querySelector('#ai-save-new-btn');
+
+    // --- State ---
+    let recipeData = {};
+    let chatHistory = [];
+    let isAiLoading = false;
+
+    // --- Helpers ---
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    const getClientId = () => {
+      let clientId = localStorage.getItem("client_id");
+      if (!clientId) { clientId = crypto?.randomUUID?.() || String(Math.random()).slice(2); localStorage.setItem("client_id", clientId); }
+      return clientId;
+    };
+
+    // =========================
+    //  データ読み込み
+    // =========================
+    async function deleteRecipe() {
+      if (!confirm('このレシピを完全に削除しますか？')) return;
+      const { error } = await sb.from('recipes').delete().eq('id', id);
+      if (error) alert('レシピの削除に失敗しました: ' + error.message);
+      else { alert('レシピを削除しました。'); location.href = 'index.html'; }
     }
-  }
-  async function loadRecipe() {
-    try {
-      const { data: r, error } = await sb.from('recipes').select('*').eq('id', id).single();
-      if (error || !r) throw new Error('レシピの読み込みに失敗しました。');
-      
-      recipeData = {
-        title: r.title || '無題のレシピ',
-        intro: r.intro || '',
-        notes: r.notes || r.meta?.note || '',
-        tags: r.tags || [],
-      };
 
-      titleEl.textContent = recipeData.title;
-      metaEl.textContent = r.updated_at ? `更新: ${new Date(r.updated_at).toLocaleString('ja-JP')}` : '';
-      tagsEl.innerHTML = recipeData.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('');
-      introEl.textContent = recipeData.intro;
-      notesEl.textContent = recipeData.notes;
+    async function loadRecipe() {
+      try {
+        const { data: r, error } = await sb.from('recipes').select('*').eq('id', id).single();
+        if (error || !r) throw new Error('レシピの読み込みに失敗しました。');
 
-      const { data: ings } = await sb.from('recipe_ingredients').select('item,quantity,unit').eq('recipe_id', id).order('position');
-      recipeData.ingredients = ings || [];
-      ingEl.innerHTML = ings?.length ? `<table class="table"><thead><tr><th>材料名</th><th class="num">分量</th><th>単位</th></tr></thead><tbody>${ings.map(i => `<tr><td>${esc(i.item)}</td><td class="num">${esc(i.quantity ?? '')}</td><td>${esc(i.unit ?? '')}</td></tr>`).join('')}</tbody></table>` : '<div class="muted">材料は登録されていません。</div>';
+        recipeData = {
+          title: r.title || '無題のレシピ',
+          intro: r.intro || '',
+          notes: r.notes || r.meta?.note || '',
+          tags: r.tags || [],
+        };
 
-      const { data: steps } = await sb.from('recipe_steps').select('instruction').eq('recipe_id', id).order('position');
-      recipeData.steps = steps?.map(s => s.instruction) || [];
-      stepsEl.innerHTML = steps?.length > 0 ? steps.map(s => `<li>${esc(s.instruction)}</li>`).join('') : '<li class="muted">手順は登録されていません。</li>';
+        titleEl.textContent = recipeData.title;
+        metaEl.textContent = r.updated_at ? `更新: ${new Date(r.updated_at).toLocaleString('ja-JP')}` : '';
+        tagsEl.innerHTML = recipeData.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('');
+        introEl.textContent = recipeData.intro;
+        notesEl.textContent = recipeData.notes;
 
-      setupFavoriteButton(id);
-    } catch (err) {
-      alert(err.message);
-      location.href = 'index.html';
+        // 材料
+        const { data: ings } = await sb.from('recipe_ingredients')
+          .select('item,quantity,unit').eq('recipe_id', id).order('position');
+        recipeData.ingredients = ings || [];
+        if (ings?.length) {
+          ingEl.innerHTML =
+            `<table class="table">
+              <thead><tr><th>材料名</th><th class="num">分量</th><th>単位</th></tr></thead>
+              <tbody>${ings.map(i=>`<tr><td>${esc(i.item)}</td><td class="num">${esc(i.quantity ?? '')}</td><td>${esc(i.unit ?? '')}</td></tr>`).join('')}</tbody>
+            </table>`;
+        } else {
+          ingEl.innerHTML = '<div class="muted">材料は登録されていません。</div>';
+        }
+
+        // 手順
+        const { data: steps } = await sb.from('recipe_steps')
+          .select('instruction').eq('recipe_id', id).order('position');
+        recipeData.steps = steps?.map(s => s.instruction) || [];
+        stepsEl.innerHTML = steps?.length ? steps.map(s=>`<li>${esc(s.instruction)}</li>`).join('') : '<li class="muted">手順は登録されていません。</li>';
+
+        setupFavoriteButton(id);
+
+        // 解析＆初期スケール
+        currentServings = Number(document.getElementById('servingsInput')?.value || 2);
+        const a = analyzeRecipeFromIngredients(recipeData.ingredients);
+        renderAnalysis(a);
+        wireScalingUI(() => ({ ...recipeData }), (next) => { recipeData = next; });
+
+      } catch (err) {
+        alert(err.message);
+        location.href = 'index.html';
+      }
     }
-  }
 
-  // --- AI Logic ---
-  function renderChatMessage(message, role) {
-    const messageEl = document.createElement('div');
-    messageEl.className = `ai-chat-message ${role}`;
-    messageEl.innerHTML = role === 'assistant' ? marked.parse(message) : esc(message);
-    aiChatContainer.appendChild(messageEl);
-    aiChatContainer.scrollTop = aiChatContainer.scrollHeight;
-  }
-  function toggleAiLoading(show) {
-    isAiLoading = show;
-    aiSendBtn.disabled = show;
-    aiUserInput.disabled = show;
-    
-    const existingSpinner = aiChatContainer.querySelector('.loading-spinner-small');
-    if (existingSpinner) existingSpinner.remove();
-
-    if (show) {
-      const spinner = document.createElement('div');
-      spinner.className = 'loading-spinner-small';
-      aiChatContainer.appendChild(spinner);
+    // =========================
+    //  AI チャット（モーダル）
+    // =========================
+    function renderChatMessage(message, role) {
+      const messageEl = document.createElement('div');
+      messageEl.className = `ai-chat-message ${role}`;
+      messageEl.innerHTML = role === 'assistant' ? marked.parse(message) : esc(message);
+      aiChatContainer.appendChild(messageEl);
       aiChatContainer.scrollTop = aiChatContainer.scrollHeight;
     }
-  }
-  async function callGeminiApi(prompt, responseSchema) {
-    toggleAiLoading(true);
-    try {
-        const { data, error } = await sb.functions.invoke('call-gemini', {
-            body: { prompt, responseSchema },
-        });
+    function toggleAiLoading(show) {
+      isAiLoading = show;
+      aiSendBtn.disabled = show;
+      aiUserInput.disabled = show;
+      const existing = aiChatContainer.querySelector('.loading-spinner-small');
+      if (existing) existing.remove();
+      if (show) {
+        const sp = document.createElement('div'); sp.className = 'loading-spinner-small';
+        aiChatContainer.appendChild(sp);
+        aiChatContainer.scrollTop = aiChatContainer.scrollHeight;
+      }
+    }
+    async function callGeminiApi(prompt, responseSchema) {
+      toggleAiLoading(true);
+      try {
+        const { data, error } = await sb.functions.invoke('call-gemini', { body: { prompt, responseSchema } });
         if (error) throw new Error(`Edge Function Error: ${error.message}`);
-        if (data.error) throw new Error(`API Error from Edge Function: ${data.error}`);
+        if (data.error) throw new Error(`API Error: ${data.error}`);
         return data;
-    } catch(err) {
+      } catch(err) {
         console.error("AI Error:", err);
         renderChatMessage(`エラーが発生しました: ${err.message}`, 'assistant');
-    } finally {
-        toggleAiLoading(false);
+      } finally { toggleAiLoading(false); }
     }
-  }
-  async function handleAiAdviceClick() {
-    if (!aiModal) return;
-    aiModal.style.display = 'flex';
-    aiChatContainer.innerHTML = '';
-    
-    const ingredientsText = recipeData.ingredients.map(i => `- ${i.item} ${i.quantity || ''} ${i.unit || ''}`).join('\n');
-    const stepsText = recipeData.steps.map((s, i) => `${i + 1}. ${s}`).join('\n');
-    
-    const initialPrompt = `あなたは調理科学者です。以下のルセットを分析し、同業者向けに質を向上させる改善提案をしてください。提案はメイラード反応、酵素の働き、タンパク質の変性、乳化等の調理科学の原理に基づき、科学的根拠を明確に示しながら記述してください。\n\n# ルセット名: ${recipeData.title}\n\n## 材料\n${ingredientsText}\n\n## 手順\n${stepsText}`;
-    
-    chatHistory = [{ role: "user", parts: [{ text: initialPrompt }] }];
-    
-    const result = await callGeminiApi(initialPrompt);
-    if(result){
-        const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) { renderChatMessage('AIからの応答が空でした。', 'assistant'); return; }
-        chatHistory.push({ role: "model", parts: [{ text }] });
-        renderChatMessage(text, 'assistant');
-    }
-  }
-  async function handleSendMessage() {
-    const userInput = aiUserInput.value.trim();
-    if (!userInput || isAiLoading) return;
 
-    renderChatMessage(userInput, 'user');
-    chatHistory.push({ role: "user", parts: [{ text: userInput }] });
-    aiUserInput.value = '';
-    
-    const result = await callGeminiApi(userInput);
-    if(result){
+    function openAiModal(){ aiModal.style.display='flex'; document.body.classList.add('modal-open'); }
+    function closeAiModal(){ aiModal.style.display='none'; document.body.classList.remove('modal-open'); }
+
+    async function handleAiAdviceClick() {
+      openAiModal();
+      aiChatContainer.innerHTML = '';
+
+      const ingredientsText = (recipeData.ingredients||[])
+        .map(i => `- ${i.item} ${i.quantity || ''} ${i.unit || ''}`).join('\n');
+      const stepsText = (recipeData.steps||[]).map((s,i)=>`${i+1}. ${s}`).join('\n');
+
+      const initialPrompt =
+        `あなたは調理科学者です。以下のルセットを分析し、同業者向けに質を向上させる改善提案をしてください。
+科学的根拠（メイラード反応・酵素・タンパク質変性・乳化など）を根拠として示してください。
+# ルセット名: ${recipeData.title}
+
+## 材料
+${ingredientsText}
+
+## 手順
+${stepsText}`;
+
+      chatHistory = [{ role:"user", parts:[{ text: initialPrompt }]}];
+
+      const result = await callGeminiApi(initialPrompt);
+      if(result){
         const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) { renderChatMessage('AIからの応答が空でした。', 'assistant'); return; }
-        chatHistory.push({ role: "model", parts: [{ text }] });
-        renderChatMessage(text, 'assistant');
+        renderChatMessage(text || 'AIからの応答が空でした。', 'assistant');
+      }
     }
-  }
-  async function handleSaveAsNew() {
-      const savePrompt = `これまでの会話に基づき、最終的なレシピをJSONで提供してください。備考は含めずJSONオブジェクトのみを返してください。キーは "title", "category", "tags", "notes", "ingredients" (item, quantity, unit を含むオブジェクトの配列), "steps" (文字列の配列) としてください。単位はgやmlを基本とすること。`;
-      
-      chatHistory.push({ role: "user", parts: [{ text: savePrompt }] });
-      
+
+    async function handleSendMessage() {
+      const userInput = aiUserInput.value.trim();
+      if (!userInput || isAiLoading) return;
+      renderChatMessage(userInput, 'user');
+      chatHistory.push({ role:"user", parts:[{ text:userInput }] });
+      aiUserInput.value = '';
+      const result = await callGeminiApi(userInput);
+      if(result){
+        const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+        renderChatMessage(text || 'AIからの応答が空でした。', 'assistant');
+      }
+    }
+
+    async function handleSaveAsNew() {
+      const savePrompt =
+        `これまでの会話に基づき、最終的なレシピをJSONで提供してください。
+備考は含めずJSONオブジェクトのみを返してください。
+キー: "title","category","tags","notes","ingredients(item,quantity,unit)","steps"。
+単位はg/mlを基本。`;
       const responseSchema = {
-          type: "OBJECT",
-          properties: { "title": { "type": "STRING" }, "category": { "type": "STRING" }, "tags": { "type": "ARRAY", items: { "type": "STRING" } }, "notes": { "type": "STRING" }, "ingredients": { "type": "ARRAY", items: { "type": "OBJECT", "properties": { "item": { "type": "STRING" }, "quantity": { "type": "STRING" }, "unit": { "type": "STRING" } }, required: ["item"] } }, "steps": { "type": "ARRAY", items: { "type": "STRING" } } },
-          required: ["title", "category", "tags", "notes", "ingredients", "steps"]
+        type:"OBJECT",
+        properties:{
+          title:{type:"STRING"},
+          category:{type:"STRING"},
+          tags:{type:"ARRAY",items:{type:"STRING"}},
+          notes:{type:"STRING"},
+          ingredients:{type:"ARRAY",items:{type:"OBJECT",properties:{
+            item:{type:"STRING"}, quantity:{type:"STRING"}, unit:{type:"STRING"}
+          },required:["item"]}},
+          steps:{type:"ARRAY",items:{type:"STRING"}}
+        },
+        required:["title","category","tags","notes","ingredients","steps"]
       };
-
       try {
         const result = await callGeminiApi(savePrompt, responseSchema);
         const jsonText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!jsonText) throw new Error('AIからのJSON応答がありませんでした。');
-
         localStorage.setItem('ai_generated_recipe', jsonText);
         alert('AIが提案したレシピを編集画面に読み込みます。');
         location.href = 'recipe_edit.html';
-      } catch (error) {
-        alert(`新規保存の準備に失敗しました: ${error.message}`);
-        chatHistory.pop(); 
+      } catch (e) {
+        alert(`新規保存の準備に失敗しました: ${e.message}`);
       }
-  }
+    }
 
-  // --- Event Listeners & Initial Load ---
-  document.addEventListener('click', (e) => {
-    const target = e.target.closest('button');
-    if (!target) return;
-    if (target.classList.contains('js-edit')) location.href = `recipe_edit.html?id=${id}`;
-    else if (target.classList.contains('js-back')) location.href = 'index.html';
-    else if (target.classList.contains('js-delete')) deleteRecipe();
-    else if (target.classList.contains('js-ai-advice')) handleAiAdviceClick();
-  });
-  if (aiModal) {
-    aiModalCloseBtn.addEventListener('click', () => aiModal.style.display = 'none');
-    aiSendBtn.addEventListener('click', handleSendMessage);
-    aiSaveNewBtn.addEventListener('click', handleSaveAsNew);
-    aiUserInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
+    // イベント
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('button'); if(!btn) return;
+      if (btn.classList.contains('js-edit'))  location.href = `recipe_edit.html?id=${id}`;
+      else if (btn.classList.contains('js-back')) location.href = 'index.html';
+      else if (btn.classList.contains('js-delete')) deleteRecipe();
+      else if (btn.classList.contains('js-ai-advice')) handleAiAdviceClick();
     });
-  }
-  async function setupFavoriteButton(recipe_id) {
-    const clientId = getClientId();
-    const { data } = await sb.from("favorites").select("id").eq("recipe_id", recipe_id).eq("client_id", clientId).limit(1);
-    let isFavorite = data && data.length > 0;
-    const updateButton = () => {
+    aiModalCloseBtn?.addEventListener('click', closeAiModal);
+    aiSendBtn?.addEventListener('click', handleSendMessage);
+    aiSaveNewBtn?.addEventListener('click', handleSaveAsNew);
+    aiUserInput?.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleSendMessage(); }});
+
+    // お気に入り
+    async function setupFavoriteButton(recipe_id) {
+      const clientId = getClientId();
+      const { data } = await sb.from("favorites").select("id").eq("recipe_id", recipe_id).eq("client_id", clientId).limit(1);
+      let isFavorite = !!(data && data.length);
+      const updateButton = () => {
         favBtn.innerHTML = isFavorite ? '♥ お気に入り' : '♡ お気に入り';
         favBtn.classList.toggle('danger', isFavorite);
-    };
-    updateButton();
-    favBtn.addEventListener('click', async () => {
-        const originalState = isFavorite;
-        isFavorite = !isFavorite;
-        updateButton();
+      };
+      updateButton();
+      favBtn.addEventListener('click', async () => {
+        const original = isFavorite;
+        isFavorite = !isFavorite; updateButton();
         try {
-            if (isFavorite) await sb.from("favorites").insert({ recipe_id, client_id: clientId });
-            else await sb.from("favorites").delete().eq("recipe_id", recipe_id).eq("client_id", clientId);
-        } catch (err) {
-            alert("お気に入り状態の更新に失敗しました。");
-            isFavorite = originalState;
-            updateButton();
+          if (isFavorite) await sb.from("favorites").insert({ recipe_id, client_id: clientId });
+          else await sb.from("favorites").delete().eq("recipe_id", recipe_id).eq("client_id", clientId);
+        } catch {
+          alert("お気に入り状態の更新に失敗しました。");
+          isFavorite = original; updateButton();
         }
-    });
-  }
-  loadRecipe();
-})();
-   </script>
-
-  <section class="card" id="analysisSection" style="display:none;">
-    <h3>科学メモ（ベーカーズ％）</h3>
-    <div class="grid">
-      <div>粉合計</div><div><span id="flour_g">–</span> g (100%)</div>
-      <div>加水率</div><div><span id="hydration_bp">–</span>%（水分 <span id="water_g">–</span> g）</div>
-      <div>油脂</div><div><span id="fat_bp">–</span>%（<span id="fat_g">–</span> g）</div>
-      <div>糖</div><div><span id="sugar_bp">–</span>%（<span id="sugar_g">–</span> g）</div>
-      <div>塩</div><div><span id="salt_bp">–</span>%（<span id="salt_g">–</span> g）</div>
-      <div>酵母</div><div><span id="yeast_bp">–</span>%（<span id="yeast_g">–</span> g）</div>
-    </div>
-    <p id="analysisNotes" class="note"></p>
-  </section>
-
-  <section class="card">
-    <label>人数:
-      <input id="servingsInput" type="number" min="1" step="1" value="2" style="width:6em;">
-    </label>
-    <button id="btnScale" type="button">分量を再計算</button>
-
-<section class="card" id="analysisSection" style="display:none;">
-  <!-- …（解析表示のHTML）… -->
-</section>
-
-<section class="card">
-  <!-- …（人数入力とボタンのHTML）… -->
-</section>
-
-<script>
-/* ===========================
-   解析（ベーカーズ％）＋人数スケール 完成版
-   既存の loadRecipe を自動でフックします
-=========================== */
-
-// ---- 単位変換と分類 --------------------------------
-const __DENSITY = { water: 1.0, oil: 0.92 }; // g/ml 近似
-
-function __toGrams(qty, unit, role = 'other') {
-  const n = Number(qty);
-  if (!Number.isFinite(n)) return 0;
-  if (!unit) return n;                // 単位不明 → g とみなす
-  const u = String(unit).toLowerCase();
-  if (u === 'g')  return n;
-  if (u === 'ml') {
-    if (role === 'water') return n * __DENSITY.water;
-    if (role === 'fat')   return n * __DENSITY.oil;
-    return n; // その他は 1g/ml 近似
-  }
-  return n; // “個”など → そのまま数値
-}
-
-function __classify(name) {
-  const s = String(name || '').toLowerCase();
-  if (s.includes('強力粉') || s.includes('薄力粉') || s.includes('中力粉') ||
-      s.includes('bread flour') || s.includes('all-purpose') || s.includes('flour')) return 'flour';
-  if (s.includes('水') || s.includes('water')) return 'water';
-  if (s.includes('油') || s.includes('オイル') || s.includes('オリーブ') || s.includes('バター') ||
-      s.includes('shortening') || s.includes('butter') || s.includes('oil')) return 'fat';
-  if (s.includes('砂糖') || s.includes('グラニュー') || s.includes('sugar')) return 'sugar';
-  if (s.includes('塩') || s.includes('salt')) return 'salt';
-  if (s.includes('イースト') || s.includes('酵母') || s.includes('yeast')) return 'yeast';
-  return 'other';
-}
-
-// ---- 解析本体 --------------------------------------
-function __analyze(ingredients) {
-  const sum = { flour_g: 0, water_g: 0, fat_g: 0, sugar_g: 0, salt_g: 0, yeast_g: 0 };
-
-  (ingredients || []).forEach(it => {
-    const role = __classify(it.item);
-    const g = __toGrams(it.quantity, it.unit, role);
-    if (role === 'flour') sum.flour_g += g;
-    if (role === 'water') sum.water_g += g;
-    if (role === 'fat')   sum.fat_g   += g;
-    if (role === 'sugar') sum.sugar_g += g;
-    if (role === 'salt')  sum.salt_g  += g;
-    if (role === 'yeast') sum.yeast_g += g;
-  });
-
-  const flour = Math.max(sum.flour_g, 0.0001); // 0割防止
-  const r1 = v => Math.round(v * 10) / 10;
-
-  return {
-    ...sum,
-    hydration_bp: r1((sum.water_g / flour) * 100),
-    fat_bp:       r1((sum.fat_g   / flour) * 100),
-    sugar_bp:     r1((sum.sugar_g / flour) * 100),
-    salt_bp:      r1((sum.salt_g  / flour) * 100),
-    yeast_bp:     r1((sum.yeast_g / flour) * 100),
-  };
-}
-
-// ---- 解析の描画 ------------------------------------
-function __renderAnalysis(a) {
-  const sec = document.getElementById('analysisSection');
-  if (!sec || !a) return;
-  sec.style.display = ''; // 表示
-
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-
-  set('flour_g', Math.round(a.flour_g));
-  set('water_g', Math.round(a.water_g));
-  set('fat_g',   Math.round(a.fat_g));
-  set('sugar_g', Math.round(a.sugar_g));
-  set('salt_g',  Math.round(a.salt_g));
-  if (document.getElementById('yeast_g')) set('yeast_g', Math.round(a.yeast_g));
-
-  set('hydration_bp', a.hydration_bp);
-  set('fat_bp',       a.fat_bp);
-  set('sugar_bp',     a.sugar_bp);
-  set('salt_bp',      a.salt_bp);
-  if (document.getElementById('yeast_bp')) set('yeast_bp', a.yeast_bp);
-
-  const tips = [];
-  if (a.hydration_bp < 58) tips.push('加水低め → +2〜5%でしっとり');
-  if (a.hydration_bp > 75) tips.push('加水高め → ベタつきやすい。折り/オートリーズ推奨');
-  if (a.salt_bp < 1.4)     tips.push('塩薄め → 1.8–2.2%が定番');
-  if (a.salt_bp > 2.2)     tips.push('塩強め → 発酵抑制・塩味強');
-  if (a.sugar_bp > 12)     tips.push('糖多め → 高糖生地。耐糖性酵母検討');
-  if (a.fat_bp > 8)        tips.push('油脂多め → グルテン弱化。ミキシング強め');
-
-  const note = document.getElementById('analysisNotes');
-  if (note) note.textContent = tips.join(' / ') || '配合は目安レンジ内です。';
-}
-
-// ---- 材料テーブルの再描画（スケール後に使用） ----
-function __renderIngredientsTable(ingredients) {
-  const el = document.getElementById('ingredients');
-  if (!el) return;
-  if (!ingredients || ingredients.length === 0) {
-    el.innerHTML = '<div class="muted">材料は登録されていません。</div>';
-    return;
-  }
-  el.innerHTML =
-    `<table class="table">
-      <thead><tr><th>材料名</th><th class="num">分量</th><th>単位</th></tr></thead>
-      <tbody>
-        ${ingredients.map(i => `
-          <tr>
-            <td>${i.item ?? ''}</td>
-            <td class="num">${i.quantity ?? ''}</td>
-            <td>${i.unit ?? ''}</td>
-          </tr>`).join('')}
-      </tbody>
-    </table>`;
-}
-
-// ---- 人数スケール ---------------------------------
-let __currentServings = null;
-
-function __scaleIngredients(ingredients, k) {
-  return (ingredients || []).map(i => {
-    const q = Number(i.quantity);
-    if (Number.isFinite(q)) return { ...i, quantity: Math.round(q * k) };
-    return { ...i }; // 数値でない場合はそのまま
-  });
-}
-
-function __wireScaling(getRecipe, setRecipe) {
-  const btn = document.getElementById('btnScale');
-  const input = document.getElementById('servingsInput');
-  if (!btn || !input) return;
-
-  btn.addEventListener('click', () => {
-    const recipe = getRecipe();
-    const ns = Number(input.value || 1);
-    if (!recipe || !Number.isFinite(ns) || ns <= 0) return;
-
-    const old = __currentServings || ns;  // 初期値不明ならそのまま
-    const k = ns / old;
-
-    const next = { ...recipe, ingredients: __scaleIngredients(recipe.ingredients, k) };
-    __currentServings = ns;
-
-    setRecipe(next);
-    __renderIngredientsTable(next.ingredients);
-    const a = __analyze(next.ingredients);
-    __renderAnalysis(a);
-  });
-}
-
-// ---- 初期化：既存 loadRecipe 完了後に自動実行 --------
-if (typeof loadRecipe === 'function') {
-  const __origLoadRecipe = loadRecipe;
-  loadRecipe = async function (...args) {
-    const r = await __origLoadRecipe.apply(this, args);
-    try {
-      if (typeof recipeData === 'object' && Array.isArray(recipeData.ingredients)) {
-        __currentServings = Number(document.getElementById('servingsInput')?.value || 2);
-        const a = __analyze(recipeData.ingredients);
-        __renderAnalysis(a);
-        __wireScaling(() => ({ ...recipeData }), (next) => { recipeData = next; });
-      }
-    } catch (e) {
-      console.warn('Analysis/Scaling init failed:', e);
+      });
     }
-    return r;
-  };
-}
-</script>
 
+    // =========================
+    //  解析（ベーカーズ％）＋人数スケール
+    // =========================
+    const DENSITY = { water: 1.0, oil: 0.92 }; // g/ml 近似
+
+    function toGrams(qty, unit, role='other'){
+      const n = Number(qty); if(!Number.isFinite(n)) return 0;
+      if(!unit) return n;
+      const u = String(unit).toLowerCase();
+      if (u === 'g') return n;
+      if (u === 'ml'){
+        if (role === 'water') return n * DENSITY.water;
+        if (role === 'fat')   return n * DENSITY.oil;
+        return n; // 不明はそのまま
+      }
+      return n;
+    }
+    function classifyIngredientName(name){
+      const s = String(name||'').toLowerCase();
+      if (s.includes('強力粉') || s.includes('薄力粉') || s.includes('中力粉') || s.includes('bread') || s.includes('flour')) return 'flour';
+      if (s.includes('水') || s.includes('water')) return 'water';
+      if (s.includes('油') || s.includes('バター') || s.includes('オリーブ') || s.includes('shortening') || s.includes('butter') || s.includes('oil')) return 'fat';
+      if (s.includes('砂糖') || s.includes('sugar')) return 'sugar';
+      if (s.includes('塩') || s.includes('salt')) return 'salt';
+      if (s.includes('イースト') || s.includes('酵母') || s.includes('yeast')) return 'yeast';
+      return 'other';
+    }
+    function analyzeRecipeFromIngredients(ingredients){
+      const sum = { flour_g:0, water_g:0, fat_g:0, sugar_g:0, salt_g:0, yeast_g:0 };
+      (ingredients||[]).forEach(it=>{
+        const role = classifyIngredientName(it.item);
+        const g = toGrams(it.quantity, it.unit, role);
+        if (role==='flour') sum.flour_g += g;
+        if (role==='water') sum.water_g += g;
+        if (role==='fat')   sum.fat_g   += g;
+        if (role==='sugar') sum.sugar_g += g;
+        if (role==='salt')  sum.salt_g  += g;
+        if (role==='yeast') sum.yeast_g += g;
+      });
+      const flour = Math.max(sum.flour_g, 0.0001);
+      const r1 = v => Math.round(v*10)/10;
+      return {
+        ...sum,
+        hydration_bp: r1((sum.water_g / flour) * 100),
+        fat_bp:       r1((sum.fat_g   / flour) * 100),
+        sugar_bp:     r1((sum.sugar_g / flour) * 100),
+        salt_bp:      r1((sum.salt_g  / flour) * 100),
+        yeast_bp:     r1((sum.yeast_g / flour) * 100),
+      };
+    }
+    function renderAnalysis(a){
+      const sec = document.getElementById('analysisSection');
+      if(!sec || !a) return;
+      sec.style.display = '';
+
+      const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
+      set('flour_g', Math.round(a.flour_g));
+      set('water_g', Math.round(a.water_g));
+      set('fat_g',   Math.round(a.fat_g));
+      set('sugar_g', Math.round(a.sugar_g));
+      set('salt_g',  Math.round(a.salt_g));
+      if (document.getElementById('yeast_g')) set('yeast_g', Math.round(a.yeast_g));
+
+      set('hydration_bp', a.hydration_bp);
+      set('fat_bp', a.fat_bp);
+      set('sugar_bp', a.sugar_bp);
+      set('salt_bp', a.salt_bp);
+      if (document.getElementById('yeast_bp')) set('yeast_bp', a.yeast_bp);
+
+      const tips=[];
+      if (a.hydration_bp < 58) tips.push('加水低め → 乾きやすい／しっとり感弱');
+      if (a.hydration_bp > 75) tips.push('加水高め → ベタつきやすい、折り/オートリース推奨');
+      if (a.salt_bp < 1.4) tips.push('塩薄め → 標準は 1.8–2.2% 付近');
+      if (a.salt_bp > 2.2) tips.push('塩強め → 発酵抑制・塩味強め');
+      if (a.sugar_bp > 12) tips.push('糖多め → 高糖生地、耐糖性酵母推奨');
+      if (a.fat_bp > 8) tips.push('油脂多め → グルテン弱化・ミキシング調整');
+
+      const note = document.getElementById('analysisNotes');
+      if (note) note.textContent = tips.join(' / ') || '配合は目安レンジ内です。';
+    }
+
+    // スケール
+    let currentServings = null;
+    function scaleIngredients(ingredients, k){
+      return (ingredients||[]).map(i=>{
+        const q = Number(i.quantity);
+        if (Number.isFinite(q)) return { ...i, quantity: Math.round(q*k) };
+        return { ...i };
+      });
+    }
+    function wireScalingUI(getRecipe, setRecipe){
+      const btn = document.getElementById('btnScale');
+      const input = document.getElementById('servingsInput');
+      if(!btn || !input) return;
+      btn.addEventListener('click', ()=>{
+        const recipe = getRecipe();
+        const ns = Number(input.value || 1);
+        if(!recipe || !Number.isFinite(ns) || ns <= 0) return;
+        const old = currentServings || ns;
+        const k = ns / old;
+        const next = { ...recipe, ingredients: scaleIngredients(recipe.ingredients, k) };
+        currentServings = ns;
+        setRecipe(next);
+        const a = analyzeRecipeFromIngredients(next.ingredients);
+        renderAnalysis(a);
+        // 表の再描画（シンプルに差し替え）
+        const el = document.getElementById('ingredients');
+        if (el) {
+          el.innerHTML =
+            `<table class="table">
+              <thead><tr><th>材料名</th><th class="num">分量</th><th>単位</th></tr></thead>
+              <tbody>${next.ingredients.map(i=>`<tr><td>${esc(i.item)}</td><td class="num">${esc(i.quantity ?? '')}</td><td>${esc(i.unit ?? '')}</td></tr>`).join('')}</tbody>
+            </table>`;
+        }
+      });
+    }
+
+    // 起動
+    document.addEventListener('DOMContentLoaded', loadRecipe);
+  })();
+  </script>
 </body>
 </html>
