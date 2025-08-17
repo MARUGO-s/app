@@ -1,189 +1,122 @@
-document.addEventListener('DOMContentLoaded', () => {
-    if (typeof supabase === 'undefined') {
-        alert('エラー: Supabaseライブラリの読み込みに失敗しました。');
-        return;
-    }
+/* app-index.js (wired)
+   目的: トップページの一覧から recipe_view.html へ “確実に” レシピ情報を渡す。
+   - クリック時に localStorage.selected_recipe を保存
+   - URL は ?id=<uuid>（idが無い場合は slug を使用、どちらも無ければクエリ無しで遷移）
+   - 既存DOMにも後付けで適用できるよう、委譲/明示バインドの両対応
+*/
 
-    const sb = supabase.createClient("https://ctxyawinblwcbkovfsyj.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q");
+(function(){
+  const $ = (s, r=document)=> r.querySelector(s);
+  const $$ = (s, r=document)=> Array.from(r.querySelectorAll(s));
 
-    const cardListEl = document.getElementById('cardList');
-    const tabsContainer = document.querySelector('.tabs');
-    const newButtons = document.querySelectorAll('.js-new');
+  // ===== Supabase 初期化（存在すれば使う。無ければ localStorage のみで動作） =====
+  if (window.supabase && !window.sb) {
+    window.sb = window.supabase.createClient(
+      "https://ctxyawinblwcbkovfsyj.supabase.co",
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q"
+    );
+  }
 
-    if (!cardListEl || !tabsContainer) {
-        console.error("Element with id 'cardList' or class 'tabs' not found.");
-        return;
-    }
+  // ===== 遷移ヘルパ =====
+  function navigateToRecipe(recipe){
+    try { localStorage.setItem('selected_recipe', JSON.stringify(recipe||{})); } catch {}
+    const id = recipe?.id || recipe?.recipe_id || '';
+    const slug = recipe?.slug || '';
+    const qs = id ? `?id=${encodeURIComponent(id)}` : (slug ? `?slug=${encodeURIComponent(slug)}` : '');
+    location.href = `recipe_view.html${qs}`;
+  }
 
-    let allRecipes = [];
-    let favoriteRecipes = [];
-    let currentCategoryFilter = 'all'; // 現在選択中のカテゴリーフィルター
-
-    const escapeHtml = (s) => (s ?? "").toString().replace(/[&<>\"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[m]));
-    
-    const getClientId = () => {
-        let clientId = localStorage.getItem("client_id");
-        if (!clientId) {
-            clientId = crypto?.randomUUID?.() || String(Math.random()).slice(2);
-            localStorage.setItem("client_id", clientId);
-        }
-        return clientId;
-    };
-
-    const fetchAllRecipes = async () => {
-        const { data, error } = await sb.from("recipes").select("id,title,category,created_at").order("created_at", { ascending: false });
-        if (error) {
-            console.error('Failed to fetch recipes:', error);
-            return [];
-        }
-        return data;
-    };
-
-    const fetchFavoriteRecipes = async () => {
-        const { data, error } = await sb.from("favorites").select("recipes!inner(id,title,category,created_at)").eq("client_id", getClientId()).order("created_at", { ascending: false });
-        if (error) {
-            console.error('Failed to fetch favorites:', error);
-            return [];
-        }
-        return (data || []).map(x => x.recipes);
-    };
-    
-    const renderCards = (recipes) => {
-        cardListEl.innerHTML = '';
-        if (!recipes || recipes.length === 0) {
-            cardListEl.innerHTML = '<div class="empty">該当するレシピがありません。</div>';
-            return;
-        }
-
-        // カテゴリーでグループ化
-        const groupedRecipes = recipes.reduce((acc, recipe) => {
-            const category = recipe.category || 'その他';
-            if (!acc[category]) {
-                acc[category] = [];
-            }
-            acc[category].push(recipe);
-            return acc;
-        }, {});
-
-        // カテゴリーの表示順を定義
-        const categoryOrder = ['アミューズ', '前菜', 'スープ', 'パスタ', '魚料理', '肉料理', 'メイン', 'デザート', 'パン', 'その他'];
-        const sortedCategories = Object.keys(groupedRecipes).sort((a, b) => {
-            const indexA = categoryOrder.indexOf(a);
-            const indexB = categoryOrder.indexOf(b);
-            if (indexA > -1 && indexB > -1) return indexA - indexB;
-            if (indexA > -1) return -1;
-            if (indexB > -1) return 1;
-            return a.localeCompare(b);
-        });
-
-        // フィルターがかかっていない（＝すべて表示）の場合のみカテゴリーヘッダーを表示
-        const shouldShowHeaders = currentCategoryFilter === 'all';
-
-        if (shouldShowHeaders) {
-            sortedCategories.forEach(category => {
-                const categorySection = document.createElement('section');
-                categorySection.className = 'category-section';
-                const header = document.createElement('h2');
-                header.className = 'category-header';
-                header.textContent = category;
-                categorySection.appendChild(header);
-
-                const recipeGroup = document.createElement('div');
-                recipeGroup.className = 'recipe-group';
-                groupedRecipes[category].forEach(r => {
-                    recipeGroup.appendChild(createRecipeCard(r));
-                });
-                categorySection.appendChild(recipeGroup);
-                cardListEl.appendChild(categorySection);
-            });
-        } else {
-            // カテゴリーでフィルターされている場合は、ヘッダーなしでカードを直接グリッド表示
-            cardListEl.className = 'recipe-group'; // コンテナ自体をグリッドにする
-            recipes.forEach(r => {
-                cardListEl.appendChild(createRecipeCard(r));
-            });
-        }
-    };
-
-    // レシピカードを作成するヘルパー関数
-    const createRecipeCard = (recipe) => {
-        const card = document.createElement('div');
-        card.className = 'recipe-card';
-        card.dataset.id = recipe.id;
-        card.setAttribute('role', 'button');
-        card.setAttribute('tabindex', '0');
-        card.innerHTML = `<span class="recipe-title">${escapeHtml(recipe.title)}</span>`;
-        return card;
-    };
-
-    const updateView = () => {
-        cardListEl.className = ''; // グリッドクラスをリセット
-        let recipesToRender = currentCategoryFilter === 'favorites' ? favoriteRecipes : allRecipes;
-
-        if (currentCategoryFilter !== 'all' && currentCategoryFilter !== 'favorites') {
-            recipesToRender = allRecipes.filter(r => (r.category || 'その他') === currentCategoryFilter);
-        }
-        
-        renderCards(recipesToRender);
-    };
-
-    const setupTabs = () => {
-        tabsContainer.innerHTML = ''; // タブをクリア
-
-        const tabCategories = ['all', 'favorites', ...new Set(allRecipes.map(r => r.category).filter(Boolean))].sort((a,b) => {
-            if (a === 'all' || a === 'favorites') return -1;
-            if (b === 'all' || b === 'favorites') return 1;
-            return a.localeCompare(b);
-        });
-        
-        const tabNames = {'all': 'すべて', 'favorites': 'お気に入り'};
-
-        tabCategories.forEach(category => {
-            const tab = document.createElement('button');
-            tab.className = 'tab';
-            tab.dataset.category = category;
-            tab.textContent = tabNames[category] || category;
-            tabsContainer.appendChild(tab);
-        });
-
-        tabsContainer.addEventListener('click', (event) => {
-            const tab = event.target.closest('.tab');
-            if (tab) {
-                currentCategoryFilter = tab.dataset.category;
-                updateActiveTab();
-                updateView();
-            }
-        });
-        updateActiveTab();
-    };
-
-    const updateActiveTab = () => {
-        tabsContainer.querySelectorAll('.tab').forEach(t => {
-            t.classList.toggle('is-active', t.dataset.category === currentCategoryFilter);
-        });
-    };
-
-    if (newButtons) {
-        newButtons.forEach(btn => btn.addEventListener('click', () => location.href = 'recipe_edit.html'));
-    }
-
-    cardListEl.addEventListener('click', (e) => {
-        const card = e.target.closest('.recipe-card');
-        if (card) {
-            location.href = `recipe_view.html?id=${encodeURIComponent(card.dataset.id)}`;
-        }
+  // ===== クリック配線（既存マークアップに後付け可能） =====
+  function wireRecipeLinks(root=document){
+    // data-recipe もしくは data-recipe-id を持つ要素を対象
+    $$('[data-recipe], [data-recipe-id]', root).forEach(el=>{
+      // aタグ以外でもOK
+      if (!el.dataset.wired) {
+        el.addEventListener('click', (e)=>{
+          // 修飾キー時はブラウザ標準の挙動を尊重
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          e.preventDefault();
+          let payload = null;
+          if (el.hasAttribute('data-recipe')) {
+            try { payload = JSON.parse(el.getAttribute('data-recipe')); } catch {}
+          }
+          if (!payload) payload = { id: el.getAttribute('data-recipe-id') || '', slug: el.getAttribute('data-recipe-slug') || '' };
+          navigateToRecipe(payload);
+        }, { capture:true });
+        el.dataset.wired = '1';
+      }
+      // href を補完
+      const id = el.getAttribute('data-recipe-id');
+      const slug = el.getAttribute('data-recipe-slug');
+      if (el.tagName === 'A' && !el.getAttribute('href')) {
+        if (id) el.setAttribute('href', `recipe_view.html?id=${encodeURIComponent(id)}`);
+        else if (slug) el.setAttribute('href', `recipe_view.html?slug=${encodeURIComponent(slug)}`);
+        else el.setAttribute('href', 'recipe_view.html');
+      }
     });
+  }
 
-    const init = async () => {
-        cardListEl.innerHTML = '<div class="empty">読み込み中...</div>';
-        const [allResult, favResult] = await Promise.allSettled([fetchAllRecipes(), fetchFavoriteRecipes()]);
-        
-        allRecipes = allResult.status === 'fulfilled' ? allResult.value : [];
-        favoriteRecipes = favResult.status === 'fulfilled' ? favResult.value : [];
-        
-        setupTabs();
-        updateView();
-    };
+  // ===== 一覧取得と描画（必要な場合のみ。既にサーバ描画済みならスキップ可） =====
+  async function fetchAndRenderList(){
+    const listRoot = $('#recipe-list');
+    if (!listRoot) return; // サーバサイドで描画済みのケース
 
-    init();
-});
+    // Supabase から取れるなら取る
+    let rows = [];
+    if (window.sb) {
+      try {
+        const { data, error } = await sb
+          .from('recipes')
+          .select('id, title, category, tags, ingredients, steps, slug, updated_at')
+          .order('updated_at', { ascending:false })
+          .limit(200);
+        if (error) throw error; rows = data||[];
+      } catch (e) { console.warn('fetch list failed:', e.message); }
+    }
+
+    // 何も取れなければ localStorage の最後のレシピだけでも出す
+    if (!rows.length) {
+      try{
+        const last = localStorage.getItem('last_opened_recipe');
+        if (last) rows = [JSON.parse(last)];
+      }catch{}
+    }
+
+    // それでも無ければ UI だけ安全に
+    if (!rows.length) {
+      listRoot.innerHTML = '<div class="muted">レシピがありません</div>';
+      return;
+    }
+
+    // シンプルなカード描画
+    const frag = document.createDocumentFragment();
+    rows.forEach(r=>{
+      const a = document.createElement('a');
+      a.className = 'card recipe-card';
+      a.setAttribute('data-recipe-id', r.id || '');
+      a.setAttribute('data-recipe-slug', r.slug || '');
+      try { a.setAttribute('data-recipe', JSON.stringify(r)); } catch {}
+      a.innerHTML = `
+        <div class="card-body">
+          <div class="card-title">${escapeHtml(r.title||'無題')}</div>
+          <div class="card-meta">${escapeHtml(r.category||'')}・更新 ${fmtDate(r.updated_at)}</div>
+          <div class="card-tags">${(r.tags||[]).map(t=>`<span class="badge">${escapeHtml(t)}</span>`).join('')}</div>
+        </div>`;
+      frag.appendChild(a);
+    });
+    listRoot.innerHTML = '';
+    listRoot.appendChild(frag);
+    wireRecipeLinks(listRoot);
+  }
+
+  function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[m])); }
+  function fmtDate(d){ if(!d) return '-'; const x=new Date(d); return isNaN(x)?'-': x.toLocaleDateString(); }
+
+  // ===== 起動 =====
+  document.addEventListener('DOMContentLoaded', ()=>{
+    // 既存マークアップに data- 属性があるだけで動く
+    wireRecipeLinks(document);
+    // コンテナがあるときだけ一覧を自前描画
+    fetchAndRenderList();
+  });
+})();
