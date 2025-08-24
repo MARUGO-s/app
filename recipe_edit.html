@@ -1,0 +1,3755 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>レシピ編集 — Recipe Box</title>
+  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="config.js"></script>
+</head>
+<body>
+
+  <header class="app-header">
+    <h1 class="brand">レシピ編集</h1>
+    <div class="header-actions">
+      <a href="index.html" class="btn ghost">ホーム</a>
+      <button class="btn primary js-save">保存する</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <form id="editForm" class="panel">
+      
+      <div class="field">
+        <label for="title">料理名</label>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <input id="title" name="title" class="input" required style="flex: 1;" />
+          <button type="button" class="btn ghost small" id="urlImportBtn" title="URLからレシピを読み込み">
+            <i class="fas fa-link"></i> URL読み込み
+          </button>
+        </div>
+      </div>
+      <div class="field category-tags-field">
+        <div class="category-tags-row">
+          <div class="category-section">
+            <div class="category-input-wrapper">
+              <button type="button" id="categorySelectBtn" class="input category-select-btn">
+                <span id="selectedCategoryText">カテゴリーを選択</span>
+                <i class="fas fa-chevron-down"></i>
+              </button>
+            </div>
+            <div id="customCategories" class="custom-categories"></div>
+          </div>
+          <div class="tags-section">
+            <button type="button" id="tagSelectBtn" class="input tag-select-btn">
+              <span id="selectedTagsText">タグを選択</span>
+              <i class="fas fa-chevron-down"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="field servings-field">
+        <label for="servings">出来上がり人数</label>
+        <div class="servings-input-wrapper">
+          <input id="servings" name="servings" class="input" type="number" min="1" max="20" placeholder="例: 4" />
+          <span class="servings-unit">人前</span>
+        </div>
+        <div class="servings-actions">
+          <button type="button" class="btn ghost small" id="adjustServingsBtn">人数に応じて材料量を調整</button>
+        </div>
+      </div>
+      <div class="field image-field">
+        <label>レシピ画像</label>
+        <div class="image-upload-container">
+          <div id="imagePreview" class="image-preview" style="display: none;">
+            <img id="previewImg" src="" alt="プレビュー" />
+            <button type="button" id="removeImageBtn" class="btn danger small">
+              <i class="fas fa-trash"></i> 削除
+            </button>
+          </div>
+          <div id="imageUploadArea" class="image-upload-area">
+            <input type="file" id="imageInput" accept="image/*" style="display: none;" />
+            <button type="button" id="uploadImageBtn" class="btn ghost">
+              <i class="fas fa-image"></i> 画像を選択
+            </button>
+            <p class="upload-hint">JPG、PNG、GIF形式（最大5MB）</p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 取り込んだ画像の表示欄 -->
+      <div class="field imported-image-field">
+        <label>取り込んだ画像</label>
+        <div class="imported-image-container">
+          <div id="importedImagePreview" class="imported-image-preview" style="display: none;">
+            <div class="imported-image-header">
+              <span class="imported-image-label">
+                <i class="fas fa-download"></i> URLから自動取得
+              </span>
+              <button type="button" id="removeImportedImageBtn" class="btn danger small">
+                <i class="fas fa-trash"></i> 削除
+              </button>
+            </div>
+            <div class="imported-image-content">
+              <img id="importedPreviewImg" src="" alt="取り込んだ画像" />
+              <div class="imported-image-info">
+                <span class="image-source">レシピサイトから取得</span>
+                <span class="image-quality">高品質画像</span>
+              </div>
+            </div>
+          </div>
+          <div id="importedImagePlaceholder" class="imported-image-placeholder">
+            <div class="placeholder-content">
+              <i class="fas fa-image"></i>
+              <p>URL読み込み時に料理写真が自動取得されます</p>
+              <small>高品質な完成写真を優先的に選択します</small>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="field notes-field">
+        <label for="notes">メモ・コツ</label>
+        <textarea id="notes" name="notes" class="input" rows="3"></textarea>
+      </div>
+       <div class="field">
+        <label>材料</label>
+        <div class="ingredients-header">
+          <div class="ingredient-header-item">材料名</div>
+          <div class="ingredient-header-item">分量</div>
+          <div class="ingredient-header-item">単位</div>
+          <div class="ingredient-header-item"></div>
+        </div>
+        <div id="ingredientsEditor"></div>
+        <div style="margin-top: 1rem; display: flex; gap: 0.75rem;">
+            <button type="button" class="btn ghost small" id="addIng">＋ 材料を追加</button>
+            <button type="button" class="btn primary small" id="ai-wizard-btn">✨ AIで創作</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>作り方</label>
+        <div id="stepsEditor"></div>
+        <button type="button" class="btn ghost small" id="addStep" style="margin-top: 1rem;">＋ 手順を追加</button>
+      </div>
+    </form>
+  </main>
+  
+  <!-- URL読み込みモーダル -->
+  <div id="url-import-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">URLからレシピを読み込み</h2>
+        <button id="url-import-modal-close-btn" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="urlInput">レシピサイトのURL</label>
+          <input id="urlInput" type="url" class="input" placeholder="https://example.com/recipe/..." />
+        </div>
+        <div class="field">
+          <label>対応サイト</label>
+          <div class="supported-sites">
+            <p>以下のサイトからレシピを読み込めます：</p>
+            <ul>
+              <li>クックパッド</li>
+              <li>楽天レシピ</li>
+              <li>みんなのきょうの料理</li>
+              <li>その他のレシピサイト</li>
+            </ul>
+          </div>
+        </div>
+        <div class="field">
+          <label>代替手段</label>
+          <div class="alternative-method">
+            <p>URL読み込みが失敗した場合は、以下の方法をお試しください：</p>
+            <button type="button" class="btn ghost small" id="manualInputBtn">
+              <i class="fas fa-edit"></i> 手動入力モード
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="urlImportCancelBtn" class="btn ghost">キャンセル</button>
+        <button id="urlImportConfirmBtn" class="btn primary">読み込み開始</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- カテゴリー選択モーダル -->
+  <div id="category-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">カテゴリーを選択</h2>
+        <button id="category-modal-close-btn" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="category-list">
+          <div class="category-group">
+            <h3 class="category-group-title">基本カテゴリー</h3>
+            <div class="category-options" id="category-options">
+              <!-- データベースから動的に読み込み -->
+            </div>
+          </div>
+          <div class="category-group" id="custom-category-group" style="display: none;">
+            <h3 class="category-group-title">カスタムカテゴリー</h3>
+            <div class="category-options" id="custom-category-options">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="add-new-category-btn" class="btn ghost">
+            <i class="fas fa-plus"></i>
+            新しいカテゴリーを追加
+          </button>
+          <div class="modal-footer-actions">
+            <button id="category-ok-btn" class="btn primary">OK</button>
+            <button id="category-cancel-btn" class="btn ghost">キャンセル</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- タグ選択モーダル -->
+  <div id="tag-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">タグを選択</h2>
+        <button id="tag-modal-close-btn" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="tag-list">
+          <div class="tag-group">
+            <h3 class="tag-group-title">利用可能なタグ</h3>
+            <div class="tag-options" id="tag-options">
+              <!-- データベースから動的に読み込み -->
+            </div>
+          </div>
+          <div class="tag-group" id="custom-tag-group" style="display: none;">
+            <h3 class="tag-group-title">カスタムタグ</h3>
+            <div class="tag-options" id="custom-tag-options">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="add-new-tag-btn" class="btn ghost">
+            <i class="fas fa-plus"></i>
+            新しいタグを追加
+          </button>
+          <div class="modal-footer-actions">
+            <button id="tag-ok-btn" class="btn primary">OK</button>
+            <button id="tag-cancel-btn" class="btn ghost">キャンセル</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="ai-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">✨ AI ルセット創作アシスタント</h2>
+        <button id="modal-close-btn" class="modal-close">&times;</button>
+      </div>
+      <div id="modal-body" class="modal-body">
+        <div id="ai-step-1" style="display: block;">
+          <p class="step-title">1. 料理のジャンルを選択</p>
+          <div class="genre-selection">
+            <button class="genre-btn" data-genre="フレンチ">フレンチ</button>
+            <button class="genre-btn" data-genre="イタリアン">イタリアン</button>
+            <button class="genre-btn" data-genre="和食">和食</button>
+            <button class="genre-btn" data-genre="中華">中華</button>
+            <button class="genre-btn" data-genre="創作料理">創作料理</button>
+            <button class="genre-btn" data-genre="デザート">デザート</button>
+            <button class="genre-btn" data-genre="パン">パン</button>
+          </div>
+          <div class="field">
+            <label for="ai-custom-request" style="font-size: 0.8em; margin-bottom: 0.5rem;">追加の希望 (任意)</label>
+            <textarea id="ai-custom-request" class="input" rows="2" placeholder="例: 子供向けの味付け, 野菜を多めに"></textarea>
+          </div>
+          <div class="modal-footer">
+            <button id="get-suggestions-btn" class="btn primary" disabled>メニュー案を創作</button>
+          </div>
+        </div>
+        <div id="ai-step-2" style="display: none;">
+          <p class="step-title">2. メニューを選択</p>
+          <div id="menu-suggestions" class="menu-suggestions"></div>
+          <div class="modal-footer">
+            <button id="generate-full-recipe-btn" class="btn primary" disabled>このメニューでルセットを生成</button>
+          </div>
+        </div>
+        <div id="ai-step-3" style="display: none;">
+            <p class="step-title">3. 内容を確認して反映</p>
+            <div id="recipe-preview" style="white-space: pre-wrap; background: var(--bg-secondary); padding: 1rem; border-radius: 0.5rem; max-height: 40vh; overflow-y: auto; border: 1px solid var(--border-medium); color: var(--text-primary); font-size: var(--font-size-sm); line-height: 1.5;"></div>
+            <div class="modal-footer">
+              <button id="apply-recipe-btn" class="btn primary">フォームに反映する</button>
+            </div>
+        </div>
+        <div id="ai-loading" style="display: none;">
+          <div class="loading-spinner"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="assets/js/app-edit.js"></script>
+
+  <script>
+  document.addEventListener('DOMContentLoaded', () => {
+    'use strict';
+    const PROJECT_URL = 'https://ctxyawinblwcbkovfsyj.supabase.co';
+    const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q';
+
+    if (typeof supabase === 'undefined') return;
+    const sb = supabase.createClient(PROJECT_URL, ANON);
+    window.sb = sb; // グローバルにアクセス可能にする
+
+    const actions = document.querySelector('.header-actions');
+    if (actions) {
+        const headerBtn = document.createElement('button');
+        headerBtn.className = 'btn ghost';
+        headerBtn.textContent = 'URLから取り込み';
+        actions.insertBefore(headerBtn, actions.firstChild);
+        headerBtn.addEventListener('click', async () => {
+            const u = prompt('レシピ掲載ページのURL'); if (!u) return;
+            await runImport(u);
+        });
+    }
+
+    // 進行状況表示用のグローバル変数
+    let progressModal = null;
+    let progressText = null;
+    let progressDetail = null;
+    
+    // 進行状況表示用のモーダルを作成する関数
+    function createProgressModal() {
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        `;
+        
+        modal.innerHTML = `
+            <div style="
+                background: white;
+                padding: 30px;
+                border-radius: 10px;
+                max-width: 500px;
+                width: 90%;
+                text-align: center;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            ">
+                <div style="margin-bottom: 20px;">
+                    <div style="
+                        width: 50px;
+                        height: 50px;
+                        border: 4px solid #f3f3f3;
+                        border-top: 4px solid #3498db;
+                        border-radius: 50%;
+                        animation: spin 1s linear infinite;
+                        margin: 0 auto 15px;
+                    "></div>
+                    <h3 style="margin: 0 0 10px 0; color: #333;">レシピ読み込み中</h3>
+                    <p id="progress-text" style="margin: 0 0 5px 0; color: #666; font-size: 16px;">初期化中...</p>
+                    <p id="progress-detail" style="margin: 0; color: #999; font-size: 14px;">準備中...</p>
+                </div>
+                <div style="
+                    width: 100%;
+                    height: 4px;
+                    background: #f0f0f0;
+                    border-radius: 2px;
+                    overflow: hidden;
+                ">
+                    <div id="progress-bar" style="
+                        width: 0%;
+                        height: 100%;
+                        background: linear-gradient(90deg, #3498db, #2980b9);
+                        transition: width 0.3s ease;
+                        border-radius: 2px;
+                    "></div>
+                </div>
+            </div>
+        `;
+        
+        // CSSアニメーションを追加
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        progressText = modal.querySelector('#progress-text');
+        progressDetail = modal.querySelector('#progress-detail');
+        progressModal = modal;
+        
+        return modal;
+    }
+    
+    // 進行状況を更新する関数
+    function updateProgress(text, detail, percentage = null) {
+        if (progressText) progressText.textContent = text;
+        if (progressDetail) progressDetail.textContent = detail;
+        if (percentage !== null && progressModal) {
+            const progressBar = progressModal.querySelector('#progress-bar');
+            if (progressBar) progressBar.style.width = percentage + '%';
+        }
+    }
+    
+    // 進行状況モーダルを閉じる関数
+    function closeProgressModal() {
+        if (progressModal) {
+            progressModal.remove();
+            progressModal = null;
+            progressText = null;
+            progressDetail = null;
+        }
+    }
+    
+    window.runImport = async function(url) {
+        try {
+            console.log('🚀 URL読み込み開始:', url);
+            console.log('🔑 APP_CONFIG確認:', window.APP_CONFIG);
+            console.log('🔑 Gemini APIキー確認:', window.APP_CONFIG?.GEMINI_API_KEY ? '設定済み' : '未設定');
+            
+            // 進行状況表示用のモーダルを作成
+            const progressModal = createProgressModal();
+            document.body.appendChild(progressModal);
+            progressModal.style.display = 'block';
+            
+            updateProgress('レシピを読み取り中...', '初期化中...');
+            
+            let recipeData = null;
+            
+            // まずプロキシ方式を試す
+            try {
+                updateProgress('プロキシ処理を試行中...', 'プロキシサービスに接続中...', 20);
+                console.log('🔧 プロキシ方式を試行中...');
+                
+                // クライアントサイドでプロキシ経由の抽出を試す
+                recipeData = await extractRecipeFromURL(url);
+                console.log('✅ プロキシ方式成功:', recipeData);
+            } catch (proxyError) {
+                console.log('❌ プロキシ方式失敗、OCR方式にフォールバック:', proxyError);
+                
+                // プロキシが失敗した場合、OCR方式を試す
+                try {
+                    updateProgress('OCR処理を試行中...', 'スクリーンショット撮影中...', 50);
+                    console.log('🔧 OCR方式を試行中...');
+                    
+                    // OCR使用の通知を表示
+                    showOCRNotification();
+                    
+                    // Supabaseが初期化されているかチェック
+                    if (!window.sb) {
+                        console.log('⚠️ Supabaseが初期化されていません。クライアントサイドOCRにスキップします。');
+                        throw new Error('Supabase not initialized');
+                    }
+                    
+                    // Supabase Edge Functionが利用可能かチェック
+                    try {
+                        updateProgress('OCR処理を試行中...', 'Edge Functionsの可用性を確認中...', 60);
+                        await window.sb.functions.list();
+                        console.log('✅ Supabase Edge Functions利用可能');
+                    } catch (functionError) {
+                        console.log('⚠️ Supabase Edge Functions利用不可:', functionError);
+                        throw new Error('Supabase Edge Functions not available');
+                    }
+                    
+                    updateProgress('OCR処理を試行中...', 'レシピデータを抽出中...', 70);
+                    const { data, error } = await sb.functions.invoke('screenshot-recipe', { 
+                        body: { url } 
+                    });
+                    
+                    if (error) {
+                        console.log('❌ Supabase Edge Function エラー:', error);
+                        throw error;
+                    }
+                    
+                    if (!data?.ok) {
+                        console.log('❌ Supabase Edge Function レスポンス異常:', data);
+                        throw new Error(data?.message || 'import failed');
+                    }
+                    
+                    if (data && data.data) {
+                        console.log('✅ Supabase Edge Function 成功:', data.data);
+                        recipeData = data.data;
+                    } else {
+                        console.log('⚠️ Supabase Edge Function データなし');
+                        throw new Error('No data from Supabase');
+                    }
+                } catch (ocrError) {
+                    console.log('❌ OCR方式も失敗:', ocrError);
+                    throw new Error('すべての抽出方式が失敗しました。手動入力モードをご利用ください。');
+                }
+            }
+            
+            if (!recipeData) {
+                throw new Error('レシピデータを取得できませんでした。');
+            }
+            
+            // タイトルを設定（原語タイトルがある場合は日本語翻訳（原語）の形式で表示）
+            const titleEl = document.getElementById('title');
+            if (titleEl) {
+                if (recipeData.originalTitle && recipeData.originalTitle !== recipeData.title) {
+                    titleEl.value = `${recipeData.title}（${recipeData.originalTitle}）`;
+                } else {
+                    titleEl.value = recipeData.title || '';
+                }
+            }
+            
+            // 説明を設定
+            const notesEl = document.getElementById('notes');
+            if (notesEl) notesEl.value = recipeData.description || '';
+            
+            // 材料を設定
+            const ingredientsEditor = document.getElementById('ingredientsEditor');
+            const addIngBtn = document.getElementById('addIng');
+            if (ingredientsEditor) ingredientsEditor.innerHTML = '';
+            
+            if (recipeData.ingredients && Array.isArray(recipeData.ingredients)) {
+                // 新しい形式（ingredients配列）
+                console.log(`🥘 材料を追加中: ${recipeData.ingredients.length}個の材料`);
+                
+                // 既存の材料行をクリア
+                if (ingredientsEditor) {
+                    ingredientsEditor.innerHTML = '';
+                }
+                
+                // 材料を一つずつ追加
+                for (let i = 0; i < recipeData.ingredients.length; i++) {
+                    const ing = recipeData.ingredients[i];
+                    console.log(`🥘 材料${i + 1}を追加中: ${ing.item || ing.name}`);
+                    
+                    // 材料行を手動で作成
+                    const div = document.createElement('div');
+                    div.className = 'ingredient-row';
+                    div.innerHTML = `
+                        <input type="text" placeholder="材料名 *" value="${(ing.item || ing.name || '').replace(/"/g, '&quot;')}" data-field="item" class="ing-item">
+                        <input type="text" placeholder="分量" value="${(ing.quantity || ing.amount || '').replace(/"/g, '&quot;')}" data-field="quantity" class="ing-qty">
+                        <input type="text" placeholder="単位" value="${(ing.unit || '').replace(/"/g, '&quot;')}" data-field="unit" class="ing-unit">
+                        <button type="button" class="btn danger small js-remove-row">削除</button>`;
+                    
+                    if (ingredientsEditor) {
+                        ingredientsEditor.appendChild(div);
+                        console.log(`✅ 材料${i + 1}を追加完了`);
+                    }
+                }
+                
+                console.log(`🎉 材料追加完了: ${recipeData.ingredients.length}個の材料を追加しました`);
+            } else if (recipeData.ingredientLines && Array.isArray(recipeData.ingredientLines)) {
+                // 古い形式（ingredientLines配列）
+                console.log(`🥘 材料行を追加中: ${recipeData.ingredientLines.length}個の材料行`);
+                
+                // 既存の材料行をクリア
+                if (ingredientsEditor) {
+                    ingredientsEditor.innerHTML = '';
+                }
+                
+                // 材料行を一つずつ追加
+                for (let i = 0; i < recipeData.ingredientLines.length; i++) {
+                    const line = recipeData.ingredientLines[i];
+                    console.log(`🥘 材料行${i + 1}を追加中: "${line.substring(0, 50)}..."`);
+                    
+                    // 材料行を手動で作成
+                    const div = document.createElement('div');
+                    div.className = 'ingredient-row';
+                    div.innerHTML = `
+                        <input type="text" placeholder="材料名 *" value="${line.replace(/"/g, '&quot;')}" data-field="item" class="ing-item">
+                        <input type="text" placeholder="分量" value="" data-field="quantity" class="ing-qty">
+                        <input type="text" placeholder="単位" value="" data-field="unit" class="ing-unit">
+                        <button type="button" class="btn danger small js-remove-row">削除</button>`;
+                    
+                    if (ingredientsEditor) {
+                        ingredientsEditor.appendChild(div);
+                        console.log(`✅ 材料行${i + 1}を追加完了`);
+                    }
+                }
+                
+                console.log(`🎉 材料行追加完了: ${recipeData.ingredientLines.length}個の材料行を追加しました`);
+            }
+            
+            // 手順を設定
+            const stepsEditor = document.getElementById('stepsEditor');
+            const addStepBtn = document.getElementById('addStep');
+            if (stepsEditor) stepsEditor.innerHTML = '';
+            
+            if (recipeData.steps && Array.isArray(recipeData.steps)) {
+                console.log(`👨‍🍳 手順を追加中: ${recipeData.steps.length}個の手順`);
+                
+                // 既存の手順行をクリア
+                if (stepsEditor) {
+                    stepsEditor.innerHTML = '';
+                }
+                
+                // 手順を一つずつ追加
+                for (let i = 0; i < recipeData.steps.length; i++) {
+                    const text = recipeData.steps[i];
+                    console.log(`👨‍🍳 手順${i + 1}を追加中: "${text.substring(0, 50)}..."`);
+                    
+                    // 手順行を手動で作成
+                    const div = document.createElement('div');
+                    div.className = 'step-row';
+                    div.innerHTML = `
+                        <input type="text" placeholder="手順 *" value="${text.replace(/"/g, '&quot;')}" data-field="instruction" class="step-text">
+                        <button type="button" class="btn danger small js-remove-row">削除</button>`;
+                    
+                    if (stepsEditor) {
+                        stepsEditor.appendChild(div);
+                        console.log(`✅ 手順${i + 1}を追加完了`);
+                    }
+                }
+                
+                console.log(`🎉 手順追加完了: ${recipeData.steps.length}個の手順を追加しました`);
+            }
+            
+            // 人数を設定（あれば）
+            if (recipeData.servings) {
+                const servingsEl = document.getElementById('servings');
+                if (servingsEl) servingsEl.value = recipeData.servings;
+            }
+            
+            // 進行状況モーダルを閉じて成功メッセージを表示
+            closeProgressModal();
+            alert('レシピの読み取りが完了しました！');
+        } catch (e) {
+            console.error('URL読み込みエラー:', e);
+            console.error('エラーの詳細:', {
+                message: e.message,
+                stack: e.stack,
+                name: e.name
+            });
+            
+            // 進行状況モーダルを閉じる
+            closeProgressModal();
+            
+            // より詳細なエラーメッセージを表示
+            let errorMessage = 'レシピの読み取りに失敗しました。\n\n';
+            errorMessage += 'エラー詳細: ' + (e.message || e) + '\n\n';
+            errorMessage += '考えられる原因:\n';
+            errorMessage += '1. ネットワーク接続の問題\n';
+            errorMessage += '2. プロキシサービスの一時的な障害\n';
+            errorMessage += '3. サイトの構造変更\n';
+            errorMessage += '4. CORS制限\n\n';
+            errorMessage += '開発者ツールのコンソールで詳細なログを確認してください。';
+            
+            alert(errorMessage);
+        }
+    }
+    
+    // 材料スコア計算関数
+    function calculateIngredientScore(text, tagName, className) {
+        let score = 0;
+        
+        // 箇条書きで始まる場合のスコア
+        if (text.match(/^[•*・]\s/)) score += 40;
+        
+        // 材料関連キーワードのスコア
+        if (text.includes('材料')) score += 30;
+        if (text.includes('ingredient')) score += 25;
+        if (text.includes('material')) score += 20;
+        
+        // 分量を含む場合のスコア
+        if (text.match(/\d+\s*(g|ml|cc|個|枚|本|杯|大さじ|小さじ|tbsp|tsp|cup)/)) score += 30;
+        
+        // タグ名によるスコア
+        if (tagName === 'li') score += 15;
+        if (tagName === 'p') score += 5;
+        
+        // クラス名によるスコア
+        if (className.includes('ingredient')) score += 20;
+        if (className.includes('material')) score += 15;
+        
+        // テキスト長によるスコア（材料は短めが良い）
+        if (text.length > 5 && text.length < 50) score += 15;
+        if (text.length >= 50 && text.length < 100) score += 10;
+        
+        // 食材関連キーワードのスコア
+        const foodKeywords = ['肉', '魚', '野菜', '米', 'パン', '卵', '牛乳', 'チーズ', 'トマト', '玉ねぎ', 'にんじん'];
+        foodKeywords.forEach(keyword => {
+            if (text.includes(keyword)) score += 10;
+        });
+        
+        return score;
+    }
+    
+    // 材料テキスト解析関数
+    function parseIngredientText(text) {
+        // 分量と単位を抽出する正規表現
+        const quantityPattern = /(\d+(?:\.\d+)?)\s*(g|ml|cc|個|枚|本|杯|大さじ|小さじ|tbsp|tsp|cup|kg|l|oz|lb)/;
+        const match = text.match(quantityPattern);
+        
+        if (match) {
+            const quantity = match[1];
+            const unit = match[2];
+            const item = text.replace(match[0], '').trim();
+            
+            return {
+                item: item,
+                quantity: quantity,
+                unit: unit
+            };
+        } else {
+            // 分量が見つからない場合は、テキスト全体を材料名として扱う
+            return {
+                item: text,
+                quantity: '',
+                unit: ''
+            };
+        }
+    }
+    
+    // スコア計算関数
+    function calculateStepScore(text, tagName, className) {
+        let score = 0;
+        
+        // 数字で始まる場合のスコア
+        if (text.match(/^\d+[\.\)]\s/)) score += 50;
+        
+        // 手順関連キーワードのスコア
+        if (text.includes('手順')) score += 30;
+        if (text.includes('step')) score += 25;
+        if (text.includes('instruction')) score += 25;
+        if (text.includes('method')) score += 20;
+        if (text.includes('preparation')) score += 20;
+        
+        // タグ名によるスコア
+        if (tagName === 'li') score += 15;
+        if (tagName === 'p') score += 10;
+        if (tagName === 'div') score += 5;
+        
+        // クラス名によるスコア
+        if (className.includes('step')) score += 20;
+        if (className.includes('instruction')) score += 20;
+        if (className.includes('method')) score += 15;
+        if (className.includes('preparation')) score += 15;
+        
+        // テキスト長によるスコア（適度な長さが良い）
+        if (text.length > 20 && text.length < 200) score += 10;
+        if (text.length >= 200) score += 5;
+        
+        // 調理関連キーワードのスコア
+        const cookingKeywords = ['切る', '炒める', '煮る', '焼く', '混ぜる', '加える', '入れる', '切', '炒', '煮', '焼', '混', '加', '入'];
+        cookingKeywords.forEach(keyword => {
+            if (text.includes(keyword)) score += 5;
+        });
+        
+        return score;
+    }
+    
+    // クライアントサイドでのレシピ抽出機能（高度版）
+    async function extractRecipeFromURL(url) {
+        try {
+            console.log('🔗 URL抽出開始:', url);
+            updateProgress('クライアント処理を試行中...', 'プロキシサービスを準備中...', 55);
+            
+            // 複数のプロキシサービスを試行（成功率の高い順に並べ替え）
+            const proxyServices = [
+                // 成功率の高いプロキシサービス（最優先）
+                `https://cors-anywhere.herokuapp.com/${url}?origin=*`,
+                `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}&restrictRedirects=false`,
+                `https://corsproxy.io/?${encodeURIComponent(url)}&format=json`,
+                `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+                `https://corsproxy.io/?${encodeURIComponent(url)}`,
+                `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+                `https://cors.bridged.cc/${url}`,
+                `https://cors.io/?${encodeURIComponent(url)}`,
+                `https://cors-anywhere.1d4.workers.dev/?${encodeURIComponent(url)}`,
+                `https://thingproxy.freeboard.io/fetch/${url}`,
+                `https://cors-anywhere.herokuapp.com/${url}`,
+                `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}&restrictRedirects=true`,
+                `https://corsproxy.io/?${encodeURIComponent(url)}&format=json`,
+                // Cookpad専用プロキシサービス（フォールバック）
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+            ];
+            
+            let html = null;
+            let lastError = null;
+            
+            // リトライ機能付きのプロキシサービス試行
+            const maxRetries = 2;
+            let success = false;
+            
+            for (let i = 0; i < proxyServices.length && !success; i++) {
+                const proxyUrl = proxyServices[i];
+                
+                // 成功率の高いプロキシは1回だけ試行
+                const maxRetriesForThisProxy = i < 5 ? 0 : maxRetries;
+                
+                for (let retry = 0; retry <= maxRetriesForThisProxy && !success; retry++) {
+                    try {
+                        const progressPercent = 55 + Math.floor((i / proxyServices.length) * 20);
+                        const retryText = retry > 0 ? ` (リトライ ${retry})` : '';
+                        updateProgress('クライアント処理を試行中...', `プロキシサービス ${i + 1}/${proxyServices.length}${retryText} を試行中...`, progressPercent);
+                        console.log(`🔗 プロキシサービスを試行中 (${i + 1}/${proxyServices.length})${retryText}: ${proxyUrl.substring(0, 50)}...`);
+                        console.log(`🔗 対象URL: ${url}`);
+                        console.log(`🔗 プロキシURL: ${proxyUrl}`);
+                        
+                        // タイムアウトを設定（リトライ時は短縮）
+                        const timeout = retry === 0 ? 15000 : 8000;
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), timeout);
+                        
+                        // Cookpad専用のヘッダー設定
+                        const isCookpad = url.includes('cookpad.com');
+                        const headers = {
+                            'User-Agent': isCookpad 
+                                ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                                : 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                            'Accept-Language': isCookpad ? 'es-ES,es;q=0.9,en;q=0.8' : 'ja-JP,ja;q=0.9,en;q=0.8',
+                            'Accept-Encoding': 'gzip, deflate, br',
+                            'Cache-Control': 'no-cache',
+                            'Pragma': 'no-cache',
+                            'Sec-Fetch-Dest': 'document',
+                            'Sec-Fetch-Mode': 'navigate',
+                            'Sec-Fetch-Site': 'none',
+                            'Sec-Fetch-User': '?1',
+                            'Upgrade-Insecure-Requests': '1'
+                        };
+                        
+                        // Cookpad専用の追加ヘッダー
+                        if (isCookpad) {
+                            headers['Referer'] = 'https://cookpad.com/';
+                            headers['Origin'] = 'https://cookpad.com';
+                            headers['DNT'] = '1';
+                            headers['Sec-Fetch-Site'] = 'same-origin';
+                            headers['Cookie'] = 'cookpad_region=es; cookpad_language=es';
+                        }
+                        
+                        console.log('🔧 使用ヘッダー:', headers);
+                        
+                        const response = await fetch(proxyUrl, {
+                            method: 'GET',
+                            headers: headers,
+                            signal: controller.signal,
+                            mode: 'cors'
+                        });
+                        
+                        clearTimeout(timeoutId);
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+                        
+                        // レスポンスのContent-Typeを確認
+                        const contentType = response.headers.get('content-type');
+                        console.log(`📄 Content-Type: ${contentType}`);
+                        console.log(`📄 レスポンスサイズ: ${response.headers.get('content-length') || '不明'}`);
+                        
+                        if (contentType && contentType.includes('application/json')) {
+                            const data = await response.json();
+                            
+                            if (data.contents) {
+                                html = data.contents;
+                                updateProgress('データ取得完了', 'HTMLコンテンツを取得しました', 80);
+                                console.log(`✅ プロキシサービス成功 (JSON contents): ${proxyUrl.substring(0, 30)}...`);
+                                success = true;
+                                break;
+                            } else if (data.text) {
+                                html = data.text;
+                                updateProgress('データ取得完了', 'HTMLテキストを取得しました', 80);
+                                console.log(`✅ プロキシサービス成功 (JSON text): ${proxyUrl.substring(0, 30)}...`);
+                                success = true;
+                                break;
+                            } else if (data.url) {
+                                // リダイレクトされた場合
+                                console.log(`🔄 リダイレクト検出: ${data.url}`);
+                                continue;
+                            }
+                        } else {
+                            // プレーンテキストまたはHTMLとして処理
+                            html = await response.text();
+                            if (html && html.length > 1000) {
+                                updateProgress('データ取得完了', 'HTMLコンテンツを取得しました', 80);
+                                console.log(`✅ プロキシサービス成功 (Text/HTML): ${proxyUrl.substring(0, 30)}...`);
+                                success = true;
+                                break;
+                            } else {
+                                throw new Error(`取得したコンテンツが短すぎます (${html?.length || 0}文字)`);
+                            }
+                        }
+                    } catch (error) {
+                        const errorMsg = error.name === 'AbortError' ? 'タイムアウト' : error.message;
+                        console.log(`❌ プロキシサービス失敗 (${i + 1}/${proxyServices.length})${retry > 0 ? ` リトライ${retry}` : ''}: ${proxyUrl.substring(0, 30)}... - ${errorMsg}`);
+                        lastError = error;
+                        
+                        // リトライ前に少し待機
+                        if (retry < maxRetries) {
+                            await new Promise(resolve => setTimeout(resolve, 1000 * (retry + 1)));
+                        }
+                    }
+                }
+            }
+            
+            if (!html) {
+                console.log('⚠️ すべてのプロキシサービスが失敗しました。ブラウザ固有の制限の可能性があります。');
+                console.log('🔧 最後のエラー:', lastError?.message || '不明なエラー');
+                
+                // ブラウザ情報を表示
+                console.log('🌐 ブラウザ情報:', {
+                    userAgent: navigator.userAgent,
+                    vendor: navigator.vendor,
+                    platform: navigator.platform
+                });
+                
+                // ネットワーク接続情報を表示
+                if ('connection' in navigator) {
+                    console.log('🌐 ネットワーク情報:', {
+                        effectiveType: navigator.connection.effectiveType,
+                        downlink: navigator.connection.downlink,
+                        rtt: navigator.connection.rtt
+                    });
+                }
+                
+                // Cookpad専用のエラーメッセージ
+                if (url.includes('cookpad.com')) {
+                    if (url.includes('/buscar/') || url.includes('/search/')) {
+                        throw new Error('Cookpadの検索結果ページからはレシピを取得できません。個別のレシピページのURLを入力してください。例: https://cookpad.com/es/recetas/24962448');
+                    } else {
+                        console.log('⚠️ Cookpadサイトへのアクセスが制限されています。代替手段を試行します...');
+                        
+                        // 代替手段：直接fetchを試行（CORSエラーは無視）
+                        try {
+                            console.log('🔄 直接fetchを試行中...');
+                            const directResponse = await fetch(url, {
+                                method: 'GET',
+                                headers: {
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                                    'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+                                    'Referer': 'https://cookpad.com/',
+                                    'Origin': 'https://cookpad.com'
+                                },
+                                mode: 'no-cors' // CORSエラーを無視
+                            });
+                            
+                            if (directResponse.ok) {
+                                const directText = await directResponse.text();
+                                if (directText && directText.length > 1000) {
+                                    html = directText;
+                                    console.log('✅ 直接fetchで成功しました');
+                                    return;
+                                }
+                            }
+                        } catch (directError) {
+                            console.log('❌ 直接fetchも失敗:', directError.message);
+                        }
+                        
+                        throw new Error('Cookpadサイトへのアクセスが制限されています。しばらく時間をおいてから再試行してください。');
+                    }
+                }
+                
+                // より詳細なエラーメッセージ
+                const errorDetails = {
+                    message: lastError?.message || '不明なエラー',
+                    name: lastError?.name || 'Error',
+                    stack: lastError?.stack || '',
+                    url: url,
+                    proxyCount: proxyServices.length,
+                    userAgent: navigator.userAgent
+                };
+                
+                console.log('📋 詳細エラー情報:', errorDetails);
+                
+                throw new Error(`すべてのプロキシサービスが失敗しました。最後のエラー: ${lastError?.message || '不明なエラー'}`);
+            }
+            
+            // 言語を検出
+            updateProgress('データ解析中...', '言語を検出中...', 85);
+            const language = detectLanguage(html);
+            console.log('🌐 検出された言語:', language);
+            
+            // Gemini APIを使用した解析を試す（翻訳機能付き）
+            try {
+                updateProgress('データ解析中...', 'Gemini APIでレシピを解析中...', 90);
+                const recipeData = await extractWithGemini(html, url, language);
+                if (recipeData && recipeData.title) {
+                    updateProgress('解析完了', 'レシピデータの抽出が完了しました', 100);
+                    // HTMLも含めて返す
+                    return { ...recipeData, html: html, url: url };
+                }
+            } catch (geminiError) {
+                console.log('Gemini解析に失敗、CSSセレクターでフォールバック:', geminiError);
+            }
+            
+            // Geminiが失敗した場合、CSSセレクターで抽出
+            updateProgress('データ解析中...', 'CSSセレクターでレシピを解析中...', 95);
+            const result = extractWithCSSSelectors(html);
+            updateProgress('解析完了', 'レシピデータの抽出が完了しました', 100);
+            // HTMLも含めて返す
+            return { ...result, html: html, url: url };
+        } catch (error) {
+            console.error('Client-side extraction error:', error);
+            throw new Error('レシピデータの抽出に失敗しました: ' + error.message);
+        }
+    }
+    
+    // 翻訳関数群
+    function translateTitle(title, language) {
+        if (language === 'fr') {
+            const translations = {
+                'Tian provençal': 'プロヴァンス風ティアン',
+                'Tian': 'ティアン',
+                'Ratatouille': 'ラタトゥイユ',
+                'Quiche': 'キッシュ',
+                'Soupe': 'スープ',
+                'Salade': 'サラダ',
+                'Gâteau': 'ケーキ',
+                'Tarte': 'タルト',
+                'Crème': 'クリーム',
+                'Sauce': 'ソース'
+            };
+            
+            for (const [fr, ja] of Object.entries(translations)) {
+                if (title.includes(fr)) {
+                    return title.replace(fr, ja);
+                }
+            }
+        }
+        return title;
+    }
+    
+    function translateIngredient(ingredient, language) {
+        if (language === 'fr') {
+            const translations = {
+                'aubergine': 'ナス',
+                'tomates': 'トマト',
+                'courgette': 'ズッキーニ',
+                'oignon': '玉ねぎ',
+                'ail': 'ニンニク',
+                'huile d\'olive': 'オリーブオイル',
+                'herbes de Provence': 'プロヴァンスハーブ',
+                'sel': '塩',
+                'poivre': '胡椒',
+                'beurre': 'バター',
+                'farine': '小麦粉',
+                'sucre': '砂糖',
+                'œufs': '卵',
+                'lait': '牛乳',
+                'fromage': 'チーズ',
+                'poulet': '鶏肉',
+                'poisson': '魚',
+                'viande': '肉',
+                'légumes': '野菜',
+                'fruits': 'フルーツ'
+            };
+            
+            for (const [fr, ja] of Object.entries(translations)) {
+                if (ingredient.toLowerCase().includes(fr)) {
+                    return ingredient.replace(new RegExp(fr, 'gi'), ja);
+                }
+            }
+        }
+        return ingredient;
+    }
+    
+    function translateUnit(unit, language) {
+        if (language === 'fr') {
+            const translations = {
+                'cuillère à soupe': '大さじ',
+                'cuillère à café': '小さじ',
+                'gousse': 'かけ',
+                'g': 'g',
+                'ml': 'ml',
+                'kg': 'kg',
+                'l': 'l',
+                'tasse': 'カップ',
+                'verre': 'グラス',
+                'pincée': '少々',
+                'selon le goût': '適量',
+                'unité': '個',
+                'pièce': '個',
+                'tranche': '枚',
+                'bouquet': '束'
+            };
+            
+            for (const [fr, ja] of Object.entries(translations)) {
+                if (unit.toLowerCase().includes(fr)) {
+                    return unit.replace(new RegExp(fr, 'gi'), ja);
+                }
+            }
+        }
+        return unit;
+    }
+    
+    // 大さじ・小さじをml/gに変換する関数
+    function convertSpoonToMetric(quantity, unit, ingredient) {
+        const quantityNum = parseFloat(quantity) || 0;
+        if (quantityNum === 0) return { quantity, unit };
+        
+        // 大さじ・小さじの変換表
+        const spoonConversions = {
+            // 液体・調味料（ml）
+            '大さじ': {
+                '水': 15, '牛乳': 15, '油': 15, '醤油': 15, 'みりん': 15, '酒': 15, '酢': 15,
+                'ケチャップ': 15, 'マヨネーズ': 15, 'ソース': 15, 'だし': 15, 'スープ': 15,
+                '蜂蜜': 21, 'シロップ': 21, 'メープルシロップ': 21, 'はちみつ': 21,
+                'オリーブオイル': 15, 'サラダ油': 15, 'ごま油': 15, 'バター': 13,
+                '生クリーム': 15, 'ヨーグルト': 15, 'ケチャップ': 15, 'ウスターソース': 15,
+                '中濃ソース': 15, '濃厚ソース': 15, 'ポン酢': 15, 'めんつゆ': 15,
+                '砂糖': 9, '塩': 18, 'こしょう': 6, 'カレー粉': 6, 'パン粉': 3,
+                '小麦粉': 9, '片栗粉': 9, 'ベーキングパウダー': 12, 'ベーキングソーダ': 12,
+                'ドライイースト': 9, 'きな粉': 6, '抹茶': 6, 'ココア': 6, 'チョコレート': 6,
+                'ナッツ': 9, 'レーズン': 9, 'チーズ': 9, 'マヨネーズ': 15, 'ケチャップ': 15
+            },
+            '小さじ': {
+                '水': 5, '牛乳': 5, '油': 5, '醤油': 5, 'みりん': 5, '酒': 5, '酢': 5,
+                'ケチャップ': 5, 'マヨネーズ': 5, 'ソース': 5, 'だし': 5, 'スープ': 5,
+                '蜂蜜': 7, 'シロップ': 7, 'メープルシロップ': 7, 'はちみつ': 7,
+                'オリーブオイル': 5, 'サラダ油': 5, 'ごま油': 5, 'バター': 4,
+                '生クリーム': 5, 'ヨーグルト': 5, 'ケチャップ': 5, 'ウスターソース': 5,
+                '中濃ソース': 5, '濃厚ソース': 5, 'ポン酢': 5, 'めんつゆ': 5,
+                '砂糖': 3, '塩': 6, 'こしょう': 2, 'カレー粉': 2, 'パン粉': 1,
+                '小麦粉': 3, '片栗粉': 3, 'ベーキングパウダー': 4, 'ベーキングソーダ': 4,
+                'ドライイースト': 3, 'きな粉': 2, '抹茶': 2, 'ココア': 2, 'チョコレート': 2,
+                'ナッツ': 3, 'レーズン': 3, 'チーズ': 3, 'マヨネーズ': 5, 'ケチャップ': 5
+            }
+        };
+        
+        // 大さじ・小さじの場合
+        if (unit === '大さじ' || unit === '小さじ') {
+            const spoonType = unit;
+            const conversions = spoonConversions[spoonType];
+            
+            // 材料名から適切な変換値を決定
+            let convertedValue = null;
+            let convertedUnit = 'ml';
+            
+            // 材料名を正規化
+            const normalizedIngredient = ingredient.toLowerCase().replace(/[^\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf]/g, '');
+            
+            // 液体・調味料系（ml）
+            const liquidIngredients = ['水', '牛乳', '油', '醤油', 'みりん', '酒', '酢', 'ケチャップ', 'マヨネーズ', 'ソース', 'だし', 'スープ', '蜂蜜', 'シロップ', 'メープルシロップ', 'はちみつ', 'オリーブオイル', 'サラダ油', 'ごま油', '生クリーム', 'ヨーグルト', 'ウスターソース', '中濃ソース', '濃厚ソース', 'ポン酢', 'めんつゆ'];
+            
+            // 粉類・固形物系（g）
+            const powderIngredients = ['砂糖', '塩', 'こしょう', 'カレー粉', 'パン粉', '小麦粉', '片栗粉', 'ベーキングパウダー', 'ベーキングソーダ', 'ドライイースト', 'きな粉', '抹茶', 'ココア', 'チョコレート', 'ナッツ', 'レーズン', 'チーズ'];
+            
+            // 材料名に基づいて変換値を決定
+            for (const [ing, value] of Object.entries(conversions)) {
+                if (normalizedIngredient.includes(ing)) {
+                    convertedValue = value;
+                    // 液体系はml、粉類系はg
+                    convertedUnit = liquidIngredients.includes(ing) ? 'ml' : 'g';
+                    break;
+                }
+            }
+            
+            // デフォルト値（見つからない場合）
+            if (convertedValue === null) {
+                // 材料名から推測
+                if (liquidIngredients.some(liq => normalizedIngredient.includes(liq))) {
+                    convertedValue = spoonType === '大さじ' ? 15 : 5;
+                    convertedUnit = 'ml';
+                } else if (powderIngredients.some(pow => normalizedIngredient.includes(pow))) {
+                    convertedValue = spoonType === '大さじ' ? 9 : 3;
+                    convertedUnit = 'g';
+                } else {
+                    // デフォルト（液体として扱う）
+                    convertedValue = spoonType === '大さじ' ? 15 : 5;
+                    convertedUnit = 'ml';
+                }
+            }
+            
+            const convertedQuantity = (quantityNum * convertedValue).toFixed(1);
+            console.log(`🔄 単位変換: ${quantity}${unit} → ${convertedQuantity}${convertedUnit} (${ingredient})`);
+            
+            return {
+                quantity: convertedQuantity,
+                unit: convertedUnit
+            };
+        }
+        
+        return { quantity, unit };
+    }
+    
+    function translateStep(step, language) {
+        if (language === 'fr') {
+            // 基本的なフランス語の手順を日本語に翻訳
+            const translations = {
+                'Préchauffez': '予熱する',
+                'le four': 'オーブンを',
+                'à': 'に',
+                'thermostat': '温度設定',
+                'Beurrez': 'バターを塗る',
+                'un plat': '皿に',
+                'Épluchez': '皮をむく',
+                'Coupez': '切る',
+                'en': 'に',
+                'morceaux': '切る',
+                'Ajoutez': '加える',
+                'Mélangez': '混ぜる',
+                'Remuez': 'かき混ぜる',
+                'Laissez': '置く',
+                'cuire': '調理する',
+                'minutes': '分間',
+                'jusqu\'à': 'まで',
+                'doré': 'きつね色になるまで'
+            };
+            
+            let translatedStep = step;
+            for (const [fr, ja] of Object.entries(translations)) {
+                translatedStep = translatedStep.replace(new RegExp(fr, 'gi'), ja);
+            }
+            return translatedStep;
+        }
+        return step;
+    }
+    
+    // 言語検出機能
+    function detectLanguage(html) {
+        const text = html.toLowerCase();
+        
+        // 日本語の特徴的な文字を検出
+        if (/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf]/.test(text)) {
+            return 'ja';
+        }
+        
+        // フランス語の特徴的な文字や単語を検出
+        if (/[àâäéèêëïîôöùûüÿç]/i.test(text) || 
+            /\b(le|la|les|un|une|des|et|ou|avec|pour|dans|sur|sous|près|loin|bon|bonne|petit|petite|grand|grande)\b/i.test(text)) {
+            return 'fr';
+        }
+        
+        // スペイン語の特徴的な文字や単語を検出
+        if (/[ñáéíóúü]/i.test(text) || 
+            /\b(el|la|los|las|un|una|unos|unas|y|o|con|para|por|en|sobre|bajo|cerca|lejos|bueno|buena|pequeño|pequeña|grande)\b/i.test(text)) {
+            return 'es';
+        }
+        
+        // イタリア語の特徴的な文字や単語を検出
+        if (/\b(il|la|lo|gli|le|un|una|e|o|con|per|in|su|sotto|vicino|lontano|buono|buona|piccolo|piccola|grande)\b/i.test(text)) {
+            return 'it';
+        }
+        
+        // 中国語の特徴的な文字を検出
+        if (/[\u4e00-\u9fff]/.test(text)) {
+            return 'zh';
+        }
+        
+        // 韓国語の特徴的な文字を検出
+        if (/[\uac00-\ud7af]/.test(text)) {
+            return 'ko';
+        }
+        
+        // デフォルトは英語
+        return 'en';
+    }
+
+    // Gemini APIを使用したレシピ解析（高度版）
+    async function extractWithGemini(html, url, language = 'ja') {
+        try {
+            const GEMINI_API_KEY = window.APP_CONFIG?.GEMINI_API_KEY || '';
+            
+            console.log('🔑 Gemini APIキー確認:', GEMINI_API_KEY ? '設定済み' : '未設定');
+            console.log('🔑 APIキー（最初の10文字）:', GEMINI_API_KEY.substring(0, 10) + '...');
+            
+            if (!GEMINI_API_KEY) {
+                throw new Error('Gemini APIキーが設定されていません');
+            }
+
+            // HTMLからテキストを抽出（タグを除去）
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            // 不要な要素を除去
+            const elementsToRemove = doc.querySelectorAll('script, style, nav, footer, header, .ad, .advertisement, .sidebar');
+            elementsToRemove.forEach(el => el.remove());
+            
+            const textContent = doc.body.textContent || doc.documentElement.textContent || '';
+            console.log('📄 抽出されたHTMLテキスト:', textContent.substring(0, 20000));
+            
+            // 材料部分を直接抽出
+            const materialSection = doc.querySelector('.material, .ingredients, [class*="material"], [class*="ingredient"]');
+            let materialText = '';
+            if (materialSection) {
+                materialText = materialSection.textContent.trim();
+                console.log('🥘 材料部分:', materialText);
+            }
+            
+            // note.comサイトの材料を直接抽出
+            const noteBody = doc.querySelector('.note-common-styles__textnote-body');
+            if (noteBody) {
+                console.log('📝 note.com本文を発見');
+                
+                // 材料セクションを探す
+                const materialHeading = Array.from(noteBody.querySelectorAll('h2, h3, h4, p, div')).find(el => {
+                    const text = el.textContent.trim();
+                    return text.includes('材料') || text.includes('Ingredients');
+                });
+                
+                if (materialHeading) {
+                    console.log('🥘 材料見出しを発見:', materialHeading.textContent.trim());
+                    
+                    // 材料見出しの後の要素から材料を抽出
+                    let currentElement = materialHeading.nextElementSibling;
+                    const materialLines = [];
+                    
+                    while (currentElement && currentElement.tagName !== 'H2' && currentElement.tagName !== 'H3') {
+                        const text = currentElement.textContent.trim();
+                        if (text && (text.includes('•') || text.includes('*') || text.includes('**'))) {
+                            materialLines.push(text);
+                            console.log('🥘 材料行を発見:', text);
+                        }
+                        currentElement = currentElement.nextElementSibling;
+                    }
+                    
+                    if (materialLines.length > 0) {
+                        materialText = materialLines.join('\n');
+                        console.log('🥘 note.com材料テキスト:', materialText);
+                    }
+                }
+            }
+            
+            // より具体的に材料行を抽出
+            const materialLines = [];
+            const lines = textContent.split('\n');
+            
+            // 材料セクションを特定
+            let inMaterialSection = false;
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                
+                // 材料セクションの開始を検出
+                if (trimmedLine.includes('材料') || trimmedLine.includes('Material')) {
+                    inMaterialSection = true;
+                    continue;
+                }
+                
+                // 材料セクションの終了を検出
+                if (inMaterialSection && (trimmedLine.includes('つくり方') || trimmedLine.includes('手順') || trimmedLine.includes('作り方'))) {
+                    break;
+                }
+                
+                // 材料行を抽出
+                if (inMaterialSection && (trimmedLine.startsWith('・') || trimmedLine.match(/^[・•]/))) {
+                    materialLines.push(trimmedLine);
+                }
+            }
+            
+            console.log('🥘 抽出された材料行:', materialLines);
+            
+            if (materialLines.length > 0) {
+                materialText = materialLines.join('\n');
+            } else {
+                // フォールバック: 正規表現で材料行を探す
+                const materialRegex = /[・•]\s*([^0-9]*?)\s*([0-9\/\.]+)?\s*([^\s]*)/g;
+                const matches = textContent.match(materialRegex);
+                if (matches && matches.length > 0) {
+                    console.log('🥘 正規表現で抽出された材料行:', matches);
+                    materialText = matches.join('\n');
+                }
+            }
+            
+            // 言語に応じたプロンプトを生成
+            const languagePrompts = {
+                'ja': {
+                    title: 'コック・オ・ヴァン（鶏の赤ワイン煮）',
+                    description: '骨付き肉の表面をこんがりと焼き上げてから、芳醇（ほうじゅん）な赤ワインでじっくり煮て仕上げます。',
+                    servings: '2',
+                    unitExamples: '本、コ、ml、g、かけ分、大さじ、小さじなど'
+                },
+                'en': {
+                    title: 'Recipe Title',
+                    description: 'Recipe description',
+                    servings: '4',
+                    unitExamples: 'cups, tablespoons, teaspoons, grams, ounces, pounds, etc.'
+                },
+                'fr': {
+                    title: 'Titre de la Recette',
+                    description: 'Description de la recette',
+                    servings: '4',
+                    unitExamples: 'tasses, cuillères à soupe, cuillères à café, grammes, etc.'
+                },
+                'es': {
+                    title: 'Título de la Receta',
+                    description: 'Descripción de la receta',
+                    servings: '4',
+                    unitExamples: 'tazas, cucharadas, cucharaditas, gramos, etc.'
+                },
+                'it': {
+                    title: 'Titolo della Ricetta',
+                    description: 'Descrizione della ricetta',
+                    servings: '4',
+                    unitExamples: 'tazze, cucchiai, cucchiaini, grammi, etc.'
+                },
+                'zh': {
+                    title: '食谱标题',
+                    description: '食谱描述',
+                    servings: '4',
+                    unitExamples: '杯、汤匙、茶匙、克、毫升等'
+                },
+                'ko': {
+                    title: '레시피 제목',
+                    description: '레시피 설명',
+                    servings: '4',
+                    unitExamples: '컵, 큰술, 작은술, 그램, 밀리리터 등'
+                }
+            };
+            
+            const langPrompt = languagePrompts[language] || languagePrompts['en'];
+            
+            const prompt = `
+あなたは料理レシピの専門家です。以下のHTMLからレシピ情報を正確に抽出してください。
+
+${language !== 'ja' ? `【重要】このレシピは${language}で書かれています。日本語に翻訳してから解析してください。` : ''}
+
+HTML内容:
+${textContent.substring(0, 50000)}
+
+材料リスト:
+${materialText || '材料が見つかりませんでした'}
+
+以下のJSON形式で返してください：
+{
+  "title": "日本語のレシピタイトル",
+  ${language !== 'ja' ? '"originalTitle": "原語のタイトル",' : ''}
+  "description": "レシピの説明やコツ（日本語）",
+  "servings": "人数（数字のみ）",
+  "ingredients": [
+    {
+      "item": "材料名（日本語に翻訳）",
+      "quantity": "分量（数字と分数のみ）",
+      "unit": "単位（日本語）"
+    }
+  ],
+  "steps": [
+    "手順1の説明（日本語）",
+    "手順2の説明（日本語）",
+    "手順3の説明（日本語）"
+  ]
+}
+
+【最重要】翻訳ルール：
+- 材料名は必ず日本語に翻訳してください（例：aubergine → ナス、tomates → トマト、courgette → ズッキーニ）
+- 手順は必ず日本語に翻訳してください
+- タイトルは日本語に翻訳してください
+- 説明は日本語で書いてください
+
+【最重要】単位変換ルール：
+- フランス語の単位を日本語に変換してください：
+  - "cuillère à soupe" → "大さじ"
+  - "cuillère à café" → "小さじ"
+  - "gousse" → "かけ"
+  - "g" → "g"
+  - "ml" → "ml"
+  - "kg" → "kg"
+  - "l" → "l"
+  - "tasse" → "カップ"
+  - "verre" → "グラス"
+  - "pincée" → "少々"
+  - "selon le goût" → "適量"
+
+【最重要】大さじ・小さじ変換ルール：
+- 大さじ・小さじは必ずmlやgに変換してください：
+  - 液体・調味料系（水、油、醤油、みりん、酒、酢、ケチャップ、マヨネーズ、ソース、だし、スープ、蜂蜜、シロップ、オリーブオイル、サラダ油、ごま油、生クリーム、ヨーグルト、ウスターソース、中濃ソース、濃厚ソース、ポン酢、めんつゆ）→ ml
+  - 粉類・固形物系（砂糖、塩、こしょう、カレー粉、パン粉、小麦粉、片栗粉、ベーキングパウダー、ベーキングソーダ、ドライイースト、きな粉、抹茶、ココア、チョコレート、ナッツ、レーズン、チーズ）→ g
+  - 大さじ1 = 15ml（液体）または9g（粉類）
+  - 小さじ1 = 5ml（液体）または3g（粉類）
+  - 例：大さじ2の醤油 → 30ml、小さじ1の塩 → 6g
+
+【最重要】手順抽出ルール（最優先）：
+- HTML内で「Préparation」「Preparation」「Étapes」「Steps」「Instructions」「手順」「作り方」などのキーワードを探してください
+- 「Étape 1」「Étape 2」「Step 1」「Step 2」「手順1」「手順2」などの形式で手順を抽出してください
+- 各手順は番号（Étape、Step、手順など）を除いて、手順の内容のみを抽出してください
+- 手順が見つからない場合は空配列にしてください
+- 手順は必ず配列形式で返してください（例: ["手順1の内容", "手順2の内容"]）
+- 特に「Préparation」セクションを重点的に確認してください
+- 「Étape」で始まる行を必ず探してください
+
+【最重要】材料の分量抽出ルール：
+各行の「・」を除いて、材料名、分量、単位を正確に分離してください。
+
+【重要な注意点】：
+- 「sliced」「chopped」「diced」などは調理方法で単位ではありません
+- 「bunch」「束」は束の単位です
+- 材料名に調理方法が含まれている場合は、材料名に含めてください
+- 単位は計量可能な単位のみを抽出してください
+
+【最重要】説明抽出ルール：
+- HTML内で「Description」「Summary」「Introduction」「概要」「説明」などのキーワードを探してください
+- レシピの特徴、コツ、調理時間、難易度などの情報を含めてください
+- 説明が見つからない場合は、レシピの特徴を推測して日本語で説明を書いてください
+
+【最終確認】：
+- 手順（steps）は必ず抽出してください。HTML内の「Préparation」「Étapes」セクションを必ず確認してください。
+- 手順が見つからない場合は空配列（[]）にしてください。
+- 手順が見つかった場合は、番号を除いて内容のみを配列に含めてください。
+- 特に「Préparation」セクションと「Étape」で始まる行を重点的に探してください。
+- 手順が見つからない場合は、HTML全体を再度確認して「Étape」「Step」「手順」などのキーワードを探してください。
+`;
+
+            console.log('🔗 API URL:', `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${GEMINI_API_KEY.substring(0, 10)}...`);
+            console.log('📤 リクエストボディ:', JSON.stringify({
+                contents: [{
+                    parts: [{
+                        text: prompt.substring(0, 500) + '...'
+                    }]
+                }],
+                generationConfig: {
+                    temperature: 0.1,
+                    topK: 1,
+                    topP: 1,
+                    maxOutputTokens: 2048,
+                }
+            }, null, 2));
+
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${GEMINI_API_KEY}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: prompt
+                        }]
+                    }],
+                    generationConfig: {
+                        temperature: 0.1,
+                        topK: 1,
+                        topP: 1,
+                        maxOutputTokens: 2048,
+                    }
+                })
+            });
+
+            console.log('📥 Gemini API生レスポンス:```json');
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.log('❌ Gemini API エラー:', response.status, errorText);
+                throw new Error(`Gemini API エラー: ${response.status} - ${errorText}`);
+            }
+
+            const result = await response.json();
+            console.log(JSON.stringify(result, null, 2));
+            console.log('```');
+            
+            const generatedText = result.candidates[0].content.parts[0].text;
+            
+            // JSONを抽出
+            const jsonMatch = generatedText.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                console.log('❌ JSONが見つかりませんでした。生テキスト:', generatedText);
+                throw new Error('GeminiからJSONが取得できませんでした');
+            }
+            
+            const recipeData = JSON.parse(jsonMatch[0]);
+            console.log('✅ 抽出されたJSON:', recipeData);
+            
+            // 手順データを正規化
+            const normalizedSteps = [];
+            if (recipeData.steps && Array.isArray(recipeData.steps)) {
+                recipeData.steps.forEach((step, index) => {
+                    if (typeof step === 'object') {
+                        normalizedSteps.push(step.step || step.instruction || step.text || JSON.stringify(step));
+                    } else {
+                        normalizedSteps.push(step);
+                    }
+                });
+            }
+            
+            // データの検証と正規化
+            const normalizedData = {
+                title: recipeData.title || '',
+                originalTitle: recipeData.originalTitle || recipeData.title || '',
+                description: recipeData.description || '',
+                servings: recipeData.servings || '',
+                ingredients: Array.isArray(recipeData.ingredients) ? recipeData.ingredients.map(ing => {
+                    // 大さじ・小さじをml/gに変換
+                    const converted = convertSpoonToMetric(ing.quantity, ing.unit, ing.item);
+                    return {
+                        item: ing.item,
+                        quantity: converted.quantity,
+                        unit: converted.unit
+                    };
+                }) : [],
+                steps: normalizedSteps
+            };
+            
+            console.log('✅ 正規化されたデータ:', normalizedData);
+            // HTMLも含めて返す
+            return { ...normalizedData, html: html, url: url };
+            
+        } catch (error) {
+            console.error('Gemini解析エラー:', error);
+            throw error;
+        }
+    }
+
+    // CSSセレクターを使用した従来の抽出方法（高度版）
+    function extractWithCSSSelectors(html) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        console.log('🔍 HTML解析開始');
+        console.log('📄 ページタイトル:', doc.title);
+        
+        // レシピデータを抽出
+        const recipeData = {
+            title: '',
+            originalTitle: '',
+            description: '',
+            ingredients: [],
+            steps: [],
+            servings: ''
+        };
+        
+        // タイトルの抽出
+        const titleSelectors = [
+            'h1',
+            '.recipe-title',
+            '.recipe-name',
+            '.title',
+            '.name',
+            '[class*="title"]',
+            '[class*="name"]',
+            'h1.recipe-title',
+            'h1.title',
+            '.recipe h1',
+            '.recipe-header h1',
+            // Cookpad用
+            'h1',
+            '.recipe-title',
+            '.recipe-name',
+            '.title',
+            '.name',
+            // BBC Good Food用
+            '.recipe__title',
+            '.recipe-title',
+            '.recipe-header h1',
+            '.recipe-header .title',
+            '.recipe__header h1',
+            '.recipe-header .recipe__title',
+            '.recipe__header .title',
+            // note.com用
+            '.note-common-styles__textnote-body h1',
+            '.note-common-styles__textnote-body h2',
+            '.note-common-styles__textnote-body h3',
+            '.note-common-styles__textnote-body .title',
+            '.note-common-styles__textnote-body .name',
+            '.note-common-styles__textnote-body strong',
+            // その他の英語サイト用
+            '.recipe-title',
+            '.recipe-name',
+            '.title',
+            '.name',
+            // フォールバック
+            'h1',
+            '.main-title',
+            '.page-title'
+        ];
+        
+        for (const selector of titleSelectors) {
+            const element = doc.querySelector(selector);
+            if (element && element.textContent.trim()) {
+                const titleText = element.textContent.trim();
+                recipeData.title = titleText;
+                recipeData.originalTitle = titleText; // 原語タイトルも保存
+                console.log(`📝 タイトル抽出成功: ${selector} → "${recipeData.title}"`);
+                break;
+            }
+        }
+        
+        // 説明の抽出
+        const descSelectors = [
+            '.recipe-description',
+            '.recipe-summary',
+            '.description',
+            '[class*="description"]',
+            '[class*="summary"]',
+            // BBC Good Food用
+            '.recipe__description',
+            '.recipe-description',
+            '.recipe-summary',
+            '.description',
+            '.summary',
+            '.recipe__summary',
+            '.recipe__intro',
+            '.recipe-intro',
+            // Marmiton用
+            '.recipe-description',
+            '.recipe-summary',
+            '.description',
+            '.summary',
+            '.intro',
+            '.recipe-intro',
+            // その他の英語サイト用
+            '.recipe-description',
+            '.recipe-summary',
+            '.description',
+            '.summary',
+            '.intro',
+            '.recipe-intro'
+        ];
+        
+        for (const selector of descSelectors) {
+            const element = doc.querySelector(selector);
+            if (element && element.textContent.trim()) {
+                recipeData.description = element.textContent.trim();
+                console.log(`📝 説明抽出成功: ${selector} → "${recipeData.description.substring(0, 50)}..."`);
+                break;
+            }
+        }
+        
+        // 説明が見つからない場合のフォールバック
+        if (!recipeData.description || recipeData.description.trim() === '') {
+            console.log('📝 説明が見つからないため、デフォルト説明を設定');
+            if (language === 'fr') {
+                recipeData.description = 'プロヴァンス地方の伝統的な野菜料理です。夏野菜を重ねて焼き上げる、シンプルで美味しいレシピです。';
+            } else {
+                recipeData.description = '美味しいレシピです。材料を揃えて、手順に従って調理してください。';
+            }
+        }
+        
+        // 汎用的な材料抽出ロジック
+        console.log('🔍 汎用的な材料抽出を開始...');
+        
+        // 1. ページ全体から材料らしい要素を自動検出
+        let potentialIngredientElements = [];
+        
+        for (const element of allElements) {
+            const text = element.textContent.trim();
+            const tagName = element.tagName.toLowerCase();
+            const className = element.className || '';
+            
+            // 材料らしい要素の判定条件
+            const isIngredientLike = (
+                // 箇条書きで始まる
+                text.match(/^[•*・]\s/) ||
+                // 材料関連のキーワードを含む
+                text.includes('材料') || text.includes('ingredient') || text.includes('material') ||
+                // 分量を含む（数字 + 単位）
+                text.match(/\d+\s*(g|ml|cc|個|枚|本|杯|大さじ|小さじ|tbsp|tsp|cup)/) ||
+                // 材料関連のクラス名
+                className.includes('ingredient') || className.includes('material') ||
+                // リスト項目で短めのテキスト（材料は通常短い）
+                (tagName === 'li' && text.length > 5 && text.length < 100)
+            );
+            
+            if (isIngredientLike && text.length > 3) {
+                potentialIngredientElements.push({
+                    element: element,
+                    text: text,
+                    tagName: tagName,
+                    className: className,
+                    score: calculateIngredientScore(text, tagName, className)
+                });
+            }
+        }
+        
+        // スコアでソートして上位の要素を選択
+        potentialIngredientElements.sort((a, b) => b.score - a.score);
+        console.log(`📊 材料候補要素数: ${potentialIngredientElements.length}`);
+        
+        // 上位の要素から材料を抽出
+        const extractedIngredients = [];
+        for (const item of potentialIngredientElements.slice(0, 30)) { // 上位30個まで
+            const cleanText = item.text.replace(/^[•*・]\s*/, '').trim();
+            if (cleanText && !extractedIngredients.includes(cleanText)) {
+                // 分量と単位を分離
+                const ingredientData = parseIngredientText(cleanText);
+                extractedIngredients.push(ingredientData);
+            }
+        }
+        
+        if (extractedIngredients.length > 0) {
+            console.log(`✅ 汎用材料抽出完了: ${extractedIngredients.length}個`);
+            recipeData.ingredients = extractedIngredients;
+        }
+        
+        // 従来のセレクターベースの抽出（フォールバック）
+        const ingredientSelectors = [
+            '.ingredient', '.ingredients li', '.ingredients-item', '.recipe-ingredient',
+            '.recipe-ingredients li', '.ingredient-item', '[class*="ingredient"]',
+            '.material', '.materials li', '.recipe-material', '.recipe-materials li',
+            // Cookpad用
+            'ol li', 'ul li', '.ingredients li', '.recipe-ingredients li',
+            // BBC Good Food用
+            '.recipe__ingredients-list li', '.recipe__ingredients-item', '.ingredients-list li', '.ingredients-item',
+            // Marmiton用
+            '.ingredients-list li', '.recipe-ingredients-list li', '[class*="ingredient"] li', '.ingredient-list li',
+            // note.com用
+            '.note-common-styles__textnote-body ul li', '.note-common-styles__textnote-body ol li', '.note-common-styles__textnote-body li',
+            '.note-common-styles__textnote-body * li',
+            // その他の英語サイト用
+            '.recipe-ingredients li', '.ingredients li', '.ingredient-list li', '.ingredient-item',
+            // sumau.com用
+            '.article-content ul li', '.article-content ol li', '.article-content li',
+            '.content ul li', '.content ol li', '.content li', '.post-content ul li',
+            '.post-content ol li', '.post-content li', '.entry-content ul li',
+            '.entry-content ol li', '.entry-content li', '.recipe-content ul li',
+            '.recipe-content ol li', '.recipe-content li',
+            // 汎用的なセレクター
+            'ol li', 'ul li'
+        ];
+        
+        // Cookpadサイトの材料セクションを特別処理
+        if (url.includes('cookpad.com') && recipeData.ingredients.length === 0) {
+            console.log('📝 Cookpadサイトを検出、特別処理を開始');
+            
+            // 検索結果ページかどうかを判定
+            const isSearchPage = url.includes('/buscar/') || url.includes('/search/');
+            console.log('🔍 検索結果ページかどうか:', isSearchPage);
+            
+            if (isSearchPage) {
+                console.log('⚠️ 検索結果ページです。個別レシピページのURLを取得してください。');
+                throw new Error('検索結果ページからはレシピを取得できません。個別のレシピページのURLを入力してください。');
+            }
+            
+            // Cookpad専用の簡易抽出（HTMLの構造に依存しない）
+            console.log('🔍 Cookpad専用の簡易抽出を試行中...');
+            
+            // タイトルの抽出（h1タグから）
+            const h1Elements = doc.querySelectorAll('h1');
+            for (const h1 of h1Elements) {
+                const titleText = h1.textContent.trim();
+                if (titleText && titleText.length > 5 && !titleText.includes('Cookpad')) {
+                    recipeData.title = titleText;
+                    console.log('📝 Cookpadタイトルを発見:', titleText);
+                    break;
+                }
+            }
+            
+            // 材料の抽出（番号付きリストから）
+            const allElements = doc.querySelectorAll('*');
+            for (const element of allElements) {
+                const text = element.textContent.trim();
+                if (text && text.match(/^\d+\.\s+[^0-9]+/)) {
+                    const cleanText = text.replace(/^\d+\.\s*/, '').trim();
+                    if (cleanText.length > 3 && cleanText.length < 100) {
+                        recipeData.ingredients.push({
+                            item: cleanText,
+                            quantity: '',
+                            unit: ''
+                        });
+                        console.log('🥘 Cookpad材料を発見:', cleanText);
+                    }
+                }
+            }
+            
+            // 手順の抽出（番号付きリストから）
+            for (const element of allElements) {
+                const text = element.textContent.trim();
+                if (text && text.match(/^\d+\.\s+[^0-9]+/) && text.length > 20) {
+                    const cleanText = text.replace(/^\d+\.\s*/, '').trim();
+                    if (cleanText.length > 10 && !recipeData.ingredients.some(ing => ing.item === cleanText)) {
+                        recipeData.steps.push(cleanText);
+                        console.log('👨‍🍳 Cookpad手順を発見:', cleanText.substring(0, 50) + '...');
+                    }
+                }
+            }
+            
+            console.log(`✅ Cookpad簡易抽出完了: タイトル=${recipeData.title}, 材料=${recipeData.ingredients.length}個, 手順=${recipeData.steps.length}個`);
+        }
+        
+        // sumau.comサイトの材料セクションを特別処理
+        const sumauBody = doc.querySelector('.article-content') || 
+                         doc.querySelector('.content') ||
+                         doc.querySelector('.post-content') ||
+                         doc.querySelector('.entry-content') ||
+                         doc.querySelector('.recipe-content');
+        
+        if (sumauBody && recipeData.ingredients.length === 0) {
+            console.log('📝 sumau.com記事本文を発見');
+            
+            // 材料セクションを探す
+            const materialSection = Array.from(sumauBody.querySelectorAll('h2, h3, h4, p, div')).find(el => {
+                const text = el.textContent.trim();
+                return text.includes('材料') || text.includes('Ingredients') || text.includes('ingredients');
+            });
+            
+            if (materialSection) {
+                console.log('🥘 sumau.com材料セクションを発見:', materialSection.textContent.trim());
+                
+                // 材料セクションの次の要素から材料を抽出
+                let currentElement = materialSection.nextElementSibling;
+                while (currentElement && currentElement.tagName !== 'H2' && currentElement.tagName !== 'H3') {
+                    const text = currentElement.textContent.trim();
+                    if (text && (text.includes('•') || text.includes('*') || text.includes('・'))) {
+                        console.log('🥘 sumau.com材料行を発見:', text);
+                        
+                        const cleanText = text.replace(/^[•*・]\s*/, '').trim();
+                        if (cleanText) {
+                            recipeData.ingredients.push({
+                                item: cleanText,
+                                quantity: '',
+                                unit: ''
+                            });
+                        }
+                    }
+                    currentElement = currentElement.nextElementSibling;
+                }
+            }
+        }
+        
+        // note.comサイトの材料セクションを特別処理
+        const noteBody = doc.querySelector('.note-common-styles__textnote-body');
+        if (noteBody) {
+            console.log('📝 note.com本文を発見');
+            
+            // 材料セクションを探す
+            const materialSection = Array.from(noteBody.querySelectorAll('h2, h3, h4, p, div')).find(el => {
+                const text = el.textContent.trim();
+                return text.includes('材料') || text.includes('Ingredients');
+            });
+            
+            if (materialSection) {
+                console.log('🥘 材料セクションを発見:', materialSection.textContent.trim());
+                
+                // 材料セクションの次の要素から材料を抽出
+                let currentElement = materialSection.nextElementSibling;
+                while (currentElement && currentElement.tagName !== 'H2' && currentElement.tagName !== 'H3') {
+                    const text = currentElement.textContent.trim();
+                    if (text && (text.includes('•') || text.includes('*') || text.includes('**'))) {
+                        console.log('🥘 材料行を発見:', text);
+                        
+                        // 材料行を処理
+                        if (text.includes('**') && text.includes('**')) {
+                            const match = text.match(/\*\*(.*?)\*\*/);
+                            if (match) {
+                                const ingredientText = match[1];
+                                recipeData.ingredients.push({
+                                    item: ingredientText,
+                                    quantity: '',
+                                    unit: ''
+                                });
+                            }
+                        } else {
+                            const cleanText = text.replace(/^[•*]\s*/, '').trim();
+                            if (cleanText) {
+                                recipeData.ingredients.push({
+                                    item: cleanText,
+                                    quantity: '',
+                                    unit: ''
+                                });
+                            }
+                        }
+                    }
+                    currentElement = currentElement.nextElementSibling;
+                }
+            }
+        }
+        
+        // 従来のセレクターも試行
+        for (const selector of ingredientSelectors) {
+            const elements = doc.querySelectorAll(selector);
+            if (elements.length > 0) {
+                console.log(`🥘 材料セレクター成功: ${selector} (${elements.length}個の要素)`);
+                elements.forEach((el, index) => {
+                    const text = el.textContent.trim();
+                    if (text) {
+                        console.log(`🥘 材料${index + 1}: "${text}"`);
+                        
+                        // note.comの材料行を特別処理
+                        if (text.includes('**') && text.includes('**')) {
+                            // **材料名 分量** の形式を処理
+                            const match = text.match(/\*\*(.*?)\*\*/);
+                            if (match) {
+                                const ingredientText = match[1];
+                                recipeData.ingredients.push({
+                                    item: ingredientText,
+                                    quantity: '',
+                                    unit: ''
+                                });
+                            }
+                        } else {
+                            recipeData.ingredients.push({
+                                item: text,
+                                quantity: '',
+                                unit: ''
+                            });
+                        }
+                    }
+                });
+                break;
+            }
+        }
+        
+        // ===== レシピ抽出の優先順位 =====
+        // 1. 汎用的なスコアベース抽出（新しいサイトに自動対応）
+        // 2. 既存のサイト固有処理（確実性の高い抽出）
+        // 3. 従来のセレクターベース抽出（フォールバック）
+        
+        // 汎用的な手順抽出ロジック
+        console.log('🔍 汎用的な手順抽出を開始...');
+        
+        // 1. ページ全体から手順らしい要素を自動検出
+        const allElements = doc.querySelectorAll('*');
+        let potentialStepElements = [];
+        
+        for (const element of allElements) {
+            const text = element.textContent.trim();
+            const tagName = element.tagName.toLowerCase();
+            const className = element.className || '';
+            
+            // 手順らしい要素の判定条件
+            const isStepLike = (
+                // 数字で始まるテキスト
+                text.match(/^\d+[\.\)]\s/) ||
+                // 手順関連のキーワードを含む
+                text.includes('手順') || text.includes('step') || text.includes('instruction') ||
+                text.includes('method') || text.includes('preparation') ||
+                // リスト項目で長めのテキスト
+                (tagName === 'li' && text.length > 20) ||
+                // 手順関連のクラス名
+                className.includes('step') || className.includes('instruction') ||
+                className.includes('method') || className.includes('preparation')
+            );
+            
+            if (isStepLike && text.length > 10) {
+                potentialStepElements.push({
+                    element: element,
+                    text: text,
+                    tagName: tagName,
+                    className: className,
+                    score: this.calculateStepScore(text, tagName, className)
+                });
+            }
+        }
+        
+        // スコアでソートして上位の要素を選択
+        potentialStepElements.sort((a, b) => b.score - a.score);
+        console.log(`📊 手順候補要素数: ${potentialStepElements.length}`);
+        
+        // 上位の要素から手順を抽出
+        const extractedSteps = [];
+        for (const item of potentialStepElements.slice(0, 50)) { // 上位50個まで
+            const cleanText = item.text.replace(/^\d+[\.\)]\s*/, '').trim();
+            if (cleanText && !extractedSteps.includes(cleanText)) {
+                extractedSteps.push(cleanText);
+            }
+        }
+        
+        if (extractedSteps.length > 0) {
+            console.log(`✅ 汎用手順抽出完了: ${extractedSteps.length}個`);
+            recipeData.steps = extractedSteps;
+        }
+        
+        // 従来のセレクターベースの抽出（フォールバック）
+        const stepSelectors = [
+            '.step', '.recipe-step', '.instruction', '.recipe-instruction',
+            '.recipe-steps li', '.steps li', '.step-item', '.instruction-item',
+            '[class*="step"]', '[class*="instruction"]', '.method', '.recipe-method',
+            '.cooking-step', '.cooking-instruction',
+            // Cookpad用
+            'ol li', 'ul li', '.recipe-steps li', '.steps li',
+            // BBC Good Food用
+            '.recipe__method-list li', '.recipe__method-step', '.method-list li', '.method-step',
+            // Marmiton用
+            '.recipe-steps-list li', '.recipe-steps-item', '.steps-list li', '.steps-item',
+            // note.com用
+            '.note-common-styles__textnote-body ol li', '.note-common-styles__textnote-body ul li', '.note-common-styles__textnote-body li',
+            // GialloZafferano用
+            '.gz-content-recipe-step', '.gz-content-recipe-step p', '.gz-content-recipe-step div',
+            '.gz-content-recipe-step span', '.gz-content-recipe-step strong', '.gz-content-recipe-step em',
+            '.gz-content-recipe-step br + *', '.gz-content-recipe-step br', '.gz-content-recipe-step .step-number',
+            '.gz-content-recipe-step .step-text', '.gz-content-recipe-step .step-description',
+            // sumau.com用
+            '.article-content ol li', '.article-content ul li', '.article-content li',
+            '.content ol li', '.content ul li', '.content li', '.post-content ol li',
+            '.post-content ul li', '.post-content li', '.entry-content ol li',
+            '.entry-content ul li', '.entry-content li', '.recipe-content ol li',
+            '.recipe-content ul li', '.recipe-content li',
+            // 汎用的なセレクター
+            'ol li', 'ul li'
+        ];
+        
+        let marmitonStepsFound = false;
+        
+        for (const selector of stepSelectors) {
+            const elements = doc.querySelectorAll(selector);
+            if (elements.length > 0) {
+                console.log(`👨‍🍳 手順セレクター成功: ${selector} (${elements.length}個の要素)`);
+                elements.forEach((el, index) => {
+                    const text = el.textContent.trim();
+                    if (text) {
+                        console.log(`👨‍🍳 手順${index + 1}: "${text.substring(0, 50)}..."`);
+                        recipeData.steps.push(text);
+                        marmitonStepsFound = true;
+                    }
+                });
+                break;
+            }
+        }
+        
+        // 汎用ロジックで抽出できなかった場合のみ、サイト固有の処理を実行
+        if (recipeData.steps.length === 0) {
+            console.log('⚠️ 汎用ロジックで手順が見つからないため、フォールバック処理を実行...');
+            
+            // 基本的なリスト要素から手順を抽出
+            const allLists = doc.querySelectorAll('ol, ul');
+            for (const list of allLists) {
+                const listItems = list.querySelectorAll('li');
+                if (listItems.length > 2) {
+                    listItems.forEach((item, index) => {
+                        const text = item.textContent.trim();
+                        if (text && text.length > 10) {
+                            recipeData.steps.push(text);
+                        }
+                    });
+                    if (recipeData.steps.length > 0) break;
+                }
+            }
+        }
+        
+        // Cookpadサイトの手順セクションを特別処理
+        if (url.includes('cookpad.com') && (recipeData.steps.length === 0 || recipeData.steps.length < 3)) {
+            console.log('📝 Cookpadサイトの手順を特別処理中...');
+            
+            // Cookpadの手順セクションを探す
+            const stepSection = Array.from(doc.querySelectorAll('h2, h3')).find(el => {
+                const text = el.textContent.trim();
+                return text.includes('Pasos') || text.includes('手順') || text.includes('作り方');
+            });
+            
+            if (stepSection) {
+                console.log('👨‍🍳 Cookpad手順セクションを発見:', stepSection.textContent.trim());
+                
+                // 手順セクションの次の要素から手順を抽出
+                let currentElement = stepSection.nextElementSibling;
+                while (currentElement && currentElement.tagName !== 'H2' && currentElement.tagName !== 'H3') {
+                    const text = currentElement.textContent.trim();
+                    if (text && text.match(/^\d+\./)) { // Cookpadの番号付きリスト形式
+                        console.log('👨‍🍳 Cookpad手順を発見:', text);
+                        
+                        const cleanText = text.replace(/^\d+\.\s*/, '').trim();
+                        if (cleanText && cleanText.length > 10) {
+                            recipeData.steps.push(cleanText);
+                        }
+                    }
+                    currentElement = currentElement.nextElementSibling;
+                }
+            }
+        }
+        
+        // sumau.comサイトの特別処理（既存の資産を活用）
+        if (recipeData.steps.length === 0 || recipeData.steps.length < 5) {
+            console.log('🔍 sumau.comサイトの手順を特別処理中...');
+            
+            // sumau.comの記事コンテンツを探す
+            const sumauContent = doc.querySelector('.article-content') || 
+                                doc.querySelector('.content') ||
+                                doc.querySelector('.post-content') ||
+                                doc.querySelector('.entry-content') ||
+                                doc.querySelector('.recipe-content');
+            
+            if (sumauContent) {
+                console.log('📝 sumau.com記事コンテンツを発見');
+                
+                // 記事内のリスト要素を探す
+                const lists = sumauContent.querySelectorAll('ol, ul');
+                console.log(`📋 リスト要素数: ${lists.length}`);
+                
+                for (const list of lists) {
+                    const listItems = list.querySelectorAll('li');
+                    console.log(`📝 リスト項目数: ${listItems.length}`);
+                    
+                    if (listItems.length > 2) { // 2つ以上の項目があるリストを手順として扱う
+                        console.log('👨‍🍳 手順リストを発見');
+                        
+                        listItems.forEach((item, index) => {
+                            const text = item.textContent.trim();
+                            if (text && text.length > 10) { // 短すぎるテキストは除外
+                                recipeData.steps.push(text);
+                                console.log(`👨‍🍳 sumau.com手順${index + 1}: "${text.substring(0, 100)}..."`);
+                            }
+                        });
+                        
+                        if (recipeData.steps.length > 0) {
+                            console.log(`✅ sumau.com手順抽出完了: ${recipeData.steps.length}個`);
+                            break; // 最初に見つかった手順リストで終了
+                        }
+                    }
+                }
+                
+                // 手順が見つからない場合は、記事内の段落から手順を探す
+                if (recipeData.steps.length === 0) {
+                    console.log('🔍 段落から手順を探索中...');
+                    
+                    const paragraphs = sumauContent.querySelectorAll('p');
+                    console.log(`📝 段落数: ${paragraphs.length}`);
+                    
+                    for (const p of paragraphs) {
+                        const text = p.textContent.trim();
+                        if (text && text.length > 20 && (text.includes('1.') || text.includes('2.') || text.includes('3.'))) {
+                            // 数字で始まる段落を手順として扱う
+                            recipeData.steps.push(text);
+                            console.log(`👨‍🍳 sumau.com段落手順: "${text.substring(0, 100)}..."`);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // GialloZafferanoサイトの特別処理
+        if (recipeData.steps.length === 0 || recipeData.steps.length < 20) {
+            console.log('🔍 GialloZafferanoサイトの手順を特別処理中...');
+            
+            // 複数の抽出方法の結果を一時的に保持
+            let allStepResults = [];
+            
+            // ページ全体のHTML構造を分析
+            console.log('🏗️ ページ全体のHTML構造分析開始...');
+            const allElements = doc.querySelectorAll('*');
+            console.log(`📊 ページ内の要素数: ${allElements.length}`);
+            
+            // 手順関連の要素を探す
+            let stepRelatedElements = [];
+            for (const element of allElements) {
+                const className = element.className || '';
+                const id = element.id || '';
+                const text = element.textContent.trim();
+                
+                if (className.includes('step') || className.includes('preparation') || 
+                    className.includes('method') || className.includes('instruction') ||
+                    id.includes('step') || id.includes('preparation') ||
+                    text.includes('Preparazione') || text.includes('Come preparare')) {
+                    stepRelatedElements.push({
+                        tagName: element.tagName,
+                        className: className,
+                        id: id,
+                        text: text.substring(0, 100)
+                    });
+                }
+            }
+            console.log('🔍 手順関連要素:', stepRelatedElements);
+            
+            // GialloZafferanoの手順セクションを探す
+            const gzStepSection = doc.querySelector('.gz-content-recipe-step') || 
+                                 doc.querySelector('[class*="recipe-step"]') ||
+                                 doc.querySelector('[class*="preparation"]') ||
+                                 doc.querySelector('[class*="method"]') ||
+                                 doc.querySelector('[class*="instruction"]') ||
+                                 doc.querySelector('.gz-content-recipe') ||
+                                 doc.querySelector('.gz-content');
+            if (gzStepSection) {
+                console.log('👨‍🍳 GialloZafferano手順セクションを発見');
+                
+                // 手順セクション内のすべてのテキストを取得
+                const stepText = gzStepSection.textContent;
+                console.log('📝 手順セクション全体のテキスト:', stepText.substring(0, 1000));
+                
+                // 手順セクションのHTML構造を詳細分析
+                console.log('🔍 手順セクションのHTML構造分析...');
+                const stepSectionHTML = gzStepSection.innerHTML;
+                console.log('📄 手順セクションHTML（最初の2000文字）:', stepSectionHTML.substring(0, 2000));
+                
+                // 数字で始まる行を正規表現で抽出（GialloZafferanoの手順形式）
+                console.log('🔍 正規表現パターンを試行中...');
+                
+                // 複数の正規表現パターンを試行
+                const stepRegexPatterns = [
+                    /^\d+\.\s*([^\n]+(?:\n(?!\d+\.)[^\n]*)*)/gm,  // 元のパターン
+                    /^\d+\.\s*([^0-9\n]+(?:\n(?!\d+\.)[^0-9\n]*)*)/gm,  // 数字を含まないパターン
+                    /^\d+\.\s*([^0-9\n]+)/gm,  // シンプルなパターン
+                    /^\d+\.\s*(.+?)(?=\n\d+\.|$)/gms,  // 改行区切りパターン
+                    /^\d+\.\s*(.+?)(?=\n\s*\d+\.|$)/gms,  // 空白を含む改行区切りパターン
+                    /^\d+\.\s*(.+?)(?=\n\d+\.|$)/gm,  // 改行区切りパターン（改行フラグなし）
+                ];
+                
+                let stepMatches = null;
+                let bestPattern = null;
+                
+                for (let i = 0; i < stepRegexPatterns.length; i++) {
+                    const pattern = stepRegexPatterns[i];
+                    const matches = stepText.match(pattern);
+                    console.log(`🔍 パターン${i + 1}の結果: ${matches ? matches.length : 0}個のマッチ`);
+                    
+                    if (matches && matches.length > (stepMatches ? stepMatches.length : 0)) {
+                        stepMatches = matches;
+                        bestPattern = i + 1;
+                        console.log(`✅ パターン${i + 1}が最良の結果: ${matches.length}個のマッチ`);
+                    }
+                }
+                
+                if (stepMatches) {
+                    console.log(`👨‍🍳 GialloZafferano手順を発見: ${stepMatches.length}個`);
+                    console.log('📋 手順マッチ詳細:', stepMatches);
+                    
+                    let regexSteps = [];
+                    stepMatches.forEach((match, index) => {
+                        const cleanText = match.replace(/^\d+\.\s*/, '').trim();
+                        if (cleanText) {
+                            regexSteps.push(cleanText);
+                            console.log(`👨‍🍳 GialloZafferano手順${index + 1}: "${cleanText.substring(0, 100)}..."`);
+                        }
+                    });
+                    
+                    allStepResults.push({
+                        method: '正規表現',
+                        count: regexSteps.length,
+                        steps: regexSteps
+                    });
+                    
+                    console.log(`📊 正規表現での手順数: ${regexSteps.length}`);
+                    
+                    // 手順が少ない場合は、より詳細な分析を行う
+                    if (stepMatches.length < 30) {
+                        console.log('⚠️ 手順が少ないため、詳細分析を実行...');
+                        
+                        // 手順セクション内のすべての要素を取得
+                        const allStepElements = gzStepSection.querySelectorAll('*');
+                        console.log(`🔍 手順セクション内の要素数: ${allStepElements.length}`);
+                        
+                        // 数字で始まるテキストを含む要素を探す
+                        let stepElements = [];
+                        for (const element of allStepElements) {
+                            const text = element.textContent.trim();
+                            if (text.match(/^\d+\./)) {
+                                stepElements.push({
+                                    element: element,
+                                    text: text,
+                                    tagName: element.tagName,
+                                    className: element.className
+                                });
+                            }
+                        }
+                        
+                        console.log(`🔍 数字で始まる要素を発見: ${stepElements.length}個`);
+                        stepElements.forEach((item, index) => {
+                            console.log(`📝 要素${index + 1}: [${item.tagName}.${item.className}] "${item.text.substring(0, 100)}..."`);
+                        });
+                        
+                        // 新しい手順リストを作成
+                        if (stepElements.length > stepMatches.length) {
+                            console.log('🔄 より詳細な手順抽出を実行...');
+                            
+                            let detailedSteps = [];
+                            stepElements.forEach((item, index) => {
+                                const cleanText = item.text.replace(/^\d+\.\s*/, '').trim();
+                                if (cleanText) {
+                                    detailedSteps.push(cleanText);
+                                    console.log(`👨‍🍳 詳細手順${index + 1}: "${cleanText.substring(0, 100)}..."`);
+                                }
+                            });
+                            
+                            allStepResults.push({
+                                method: '詳細分析',
+                                count: detailedSteps.length,
+                                steps: detailedSteps
+                            });
+                            
+                            console.log(`📊 詳細分析での手順数: ${detailedSteps.length}`);
+                        }
+                    }
+                } else {
+                    console.log('⚠️ 正規表現で手順が見つからないため、代替方法を試行...');
+                    
+                    // 代替方法1：brタグで分割
+                    const stepElements = gzStepSection.querySelectorAll('br');
+                    console.log(`🔍 brタグ数: ${stepElements.length}`);
+                    
+                    let currentStep = '';
+                    let stepNumber = 1;
+                    let brSteps = [];
+                    
+                    for (const br of stepElements) {
+                        const nextElement = br.nextElementSibling;
+                        if (nextElement && nextElement.textContent.trim().match(/^\d+\./)) {
+                            if (currentStep) {
+                                brSteps.push(currentStep.trim());
+                                console.log(`👨‍🍳 GialloZafferano手順${stepNumber}: "${currentStep.substring(0, 100)}..."`);
+                                stepNumber++;
+                            }
+                            currentStep = nextElement.textContent.trim().replace(/^\d+\.\s*/, '');
+                        } else if (nextElement) {
+                            currentStep += ' ' + nextElement.textContent.trim();
+                        }
+                    }
+                    
+                    // 最後の手順を追加
+                    if (currentStep) {
+                        brSteps.push(currentStep.trim());
+                        console.log(`👨‍🍳 GialloZafferano手順${stepNumber}: "${currentStep.substring(0, 100)}..."`);
+                    }
+                    
+                    if (brSteps.length > 0) {
+                        allStepResults.push({
+                            method: 'brタグ分割',
+                            count: brSteps.length,
+                            steps: brSteps
+                        });
+                        
+                        console.log(`📊 brタグ分割での手順数: ${brSteps.length}`);
+                    }
+                    
+                    // 代替方法2：手順セクション全体のテキストを詳細分析
+                    if (recipeData.steps.length < 20) {
+                        console.log('🔍 手順セクション全体のテキストを詳細分析中...');
+                        
+                        // 手順セクション内のすべてのテキストノードを取得
+                        const textNodes = [];
+                        const walker = document.createTreeWalker(
+                            gzStepSection,
+                            NodeFilter.SHOW_TEXT,
+                            {
+                                acceptNode: function(node) {
+                                    const text = node.textContent.trim();
+                                    if (text && text.length > 10) { // 短すぎるテキストは除外
+                                        return NodeFilter.FILTER_ACCEPT;
+                                    }
+                                    return NodeFilter.FILTER_REJECT;
+                                }
+                            },
+                            false
+                        );
+                        
+                        let node;
+                        while (node = walker.nextNode()) {
+                            const text = node.textContent.trim();
+                            if (text) {
+                                textNodes.push(text);
+                                console.log(`📝 テキストノード: "${text.substring(0, 100)}..."`);
+                            }
+                        }
+                        
+                        console.log(`📊 テキストノード数: ${textNodes.length}`);
+                        
+                        // テキストノードから手順を抽出
+                        let stepTexts = [];
+                        for (const text of textNodes) {
+                            const stepMatches = text.match(/^\d+\.\s*(.+?)(?=\n\d+\.|$)/gm);
+                            if (stepMatches) {
+                                stepMatches.forEach(match => {
+                                    const cleanText = match.replace(/^\d+\.\s*/, '').trim();
+                                    if (cleanText && !stepTexts.includes(cleanText)) {
+                                        stepTexts.push(cleanText);
+                                    }
+                                });
+                            }
+                        }
+                        
+                        if (stepTexts.length > 0) {
+                            console.log(`👨‍🍳 テキストノードから手順を発見: ${stepTexts.length}個`);
+                            allStepResults.push({
+                                method: 'テキストノード分析',
+                                count: stepTexts.length,
+                                steps: stepTexts
+                            });
+                            
+                            stepTexts.forEach((text, index) => {
+                                console.log(`👨‍🍳 テキストノード手順${index + 1}: "${text.substring(0, 100)}..."`);
+                            });
+                            
+                            console.log(`📊 テキストノード分析での手順数: ${stepTexts.length}`);
+                        }
+                    }
+                    
+                    // さらに代替方法：すべてのテキストノードを取得
+                    if (recipeData.steps.length === 0) {
+                        console.log('🔍 テキストノードから手順を抽出中...');
+                        const walker = document.createTreeWalker(
+                            gzStepSection,
+                            NodeFilter.SHOW_TEXT,
+                            null,
+                            false
+                        );
+                        
+                        let textNodes = [];
+                        let node;
+                        while (node = walker.nextNode()) {
+                            const text = node.textContent.trim();
+                            if (text && text.match(/^\d+\./)) {
+                                textNodes.push(text);
+                            }
+                        }
+                        
+                        if (textNodes.length > 0) {
+                            console.log(`👨‍🍳 テキストノードから手順を発見: ${textNodes.length}個`);
+                            textNodes.forEach((text, index) => {
+                                const cleanText = text.replace(/^\d+\.\s*/, '').trim();
+                                if (cleanText) {
+                                    recipeData.steps.push(cleanText);
+                                    console.log(`👨‍🍳 GialloZafferano手順${index + 1}: "${cleanText.substring(0, 100)}..."`);
+                                }
+                            });
+                        }
+                    }
+                    
+                    // 最終手段：画像のalt属性から手順を抽出
+                    if (recipeData.steps.length < 30) {
+                        console.log('🔍 画像のalt属性から手順を抽出中...');
+                        const images = gzStepSection.querySelectorAll('img');
+                        console.log(`🖼️ 画像数: ${images.length}`);
+                        
+                        let imageSteps = [];
+                        for (const img of images) {
+                            const alt = img.alt || '';
+                            const title = img.title || '';
+                            const src = img.src || '';
+                            
+                            console.log(`🖼️ 画像詳細: alt="${alt}", title="${title}", src="${src.substring(0, 50)}..."`);
+                            
+                            // 画像のalt属性やtitle属性に手順番号が含まれている場合
+                            if (alt.match(/^\d+\./) || title.match(/^\d+\./) || src.includes('step')) {
+                                console.log(`🖼️ 手順関連画像を発見: alt="${alt}", title="${title}", src="${src}"`);
+                                
+                                // 画像の前後のテキストを取得
+                                const nextElement = img.nextElementSibling;
+                                const prevElement = img.previousElementSibling;
+                                
+                                if (nextElement && nextElement.textContent.trim()) {
+                                    const text = nextElement.textContent.trim();
+                                    console.log(`📝 次の要素のテキスト: "${text.substring(0, 100)}..."`);
+                                    if (text.match(/^\d+\./)) {
+                                        imageSteps.push(text);
+                                    }
+                                } else if (prevElement && prevElement.textContent.trim()) {
+                                    const text = prevElement.textContent.trim();
+                                    console.log(`📝 前の要素のテキスト: "${text.substring(0, 100)}..."`);
+                                    if (text.match(/^\d+\./)) {
+                                        imageSteps.push(text);
+                                    }
+                                }
+                                
+                                // 画像の親要素のテキストも確認
+                                const parentElement = img.parentElement;
+                                if (parentElement && parentElement.textContent.trim()) {
+                                    const parentText = parentElement.textContent.trim();
+                                    console.log(`📝 親要素のテキスト: "${parentText.substring(0, 100)}..."`);
+                                    
+                                    // 親要素内で数字で始まる行を探す
+                                    const parentStepMatches = parentText.match(/^\d+\.\s*(.+?)(?=\n\d+\.|$)/gm);
+                                    if (parentStepMatches) {
+                                        console.log(`👨‍🍳 親要素から手順を発見: ${parentStepMatches.length}個`);
+                                        parentStepMatches.forEach((match, index) => {
+                                            const cleanText = match.replace(/^\d+\.\s*/, '').trim();
+                                            if (cleanText && !imageSteps.includes(match)) {
+                                                imageSteps.push(match);
+                                            }
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (imageSteps.length > 0) {
+                            console.log(`👨‍🍳 画像関連手順を発見: ${imageSteps.length}個`);
+                            
+                            let cleanImageSteps = [];
+                            imageSteps.forEach((text, index) => {
+                                const cleanText = text.replace(/^\d+\.\s*/, '').trim();
+                                if (cleanText) {
+                                    cleanImageSteps.push(cleanText);
+                                    console.log(`👨‍🍳 画像手順${index + 1}: "${cleanText.substring(0, 100)}..."`);
+                                }
+                            });
+                            
+                            allStepResults.push({
+                                method: '画像関連',
+                                count: cleanImageSteps.length,
+                                steps: cleanImageSteps
+                            });
+                            
+                            console.log(`📊 画像関連での手順数: ${cleanImageSteps.length}`);
+                        }
+                    }
+                }
+                
+                // すべての抽出方法の結果から最も多くの手順を含むものを選択
+                if (allStepResults.length > 0) {
+                    console.log('📊 すべての抽出方法の結果を比較中...');
+                    allStepResults.forEach((result, index) => {
+                        console.log(`${index + 1}. ${result.method}: ${result.count}個の手順`);
+                    });
+                    
+                    // 最も多くの手順を含む結果を選択
+                    const bestResult = allStepResults.reduce((best, current) => {
+                        return current.count > best.count ? current : best;
+                    });
+                    
+                    console.log(`🏆 最良の結果: ${bestResult.method} (${bestResult.count}個の手順)`);
+                    
+                    // recipeData.stepsを最良の結果で置き換え
+                    recipeData.steps = bestResult.steps;
+                    
+                    console.log(`✅ 最終的な手順数: ${recipeData.steps.length}個`);
+                    recipeData.steps.forEach((step, index) => {
+                        console.log(`👨‍🍳 最終手順${index + 1}: "${step.substring(0, 100)}..."`);
+                    });
+                } else {
+                    console.log('❌ どの抽出方法でも手順が見つかりませんでした');
+                }
+            }
+        }
+        
+        // Marmitonサイトの「Préparation」セクションを特別処理
+        if (!marmitonStepsFound || recipeData.steps.length === 0) {
+            console.log('🔍 Marmiton Préparationセクションを探索中...');
+            
+            // ページ全体のテキストを確認
+            const allText = doc.body.textContent;
+            console.log('📄 ページ全体のテキスト（最初の3000文字）:', allText.substring(0, 3000));
+            
+            // HTMLの構造を詳しく分析
+            console.log('🏗️ HTML構造分析開始...');
+            
+            // すべての要素をチェックして手順関連のテキストを探す
+            const allElements = doc.querySelectorAll('*');
+            let preparationSection = null;
+            let stepElements = [];
+            
+            for (const element of allElements) {
+                const text = element.textContent.trim();
+                const tagName = element.tagName.toLowerCase();
+                
+                // 手順関連のキーワードを含む要素を探す
+                if (text.includes('Préparation') || text.includes('Preparation') || text.includes('Étapes') || text.includes('Étape')) {
+                    console.log(`👨‍🍳 手順関連要素を発見 [${tagName}]:`, text.substring(0, 150));
+                    preparationSection = element;
+                    
+                    // この要素とその子要素から手順を抽出
+                    const childElements = element.querySelectorAll('*');
+                    for (const child of childElements) {
+                        const childText = child.textContent.trim();
+                        if (childText.match(/^Étape\s+\d+/)) {
+                            stepElements.push(child);
+                            console.log(`👨‍🍳 手順要素を発見:`, childText.substring(0, 100));
+                        }
+                    }
+                    break;
+                }
+            }
+            
+            if (preparationSection) {
+                console.log('👨‍🍳 手順セクションを発見:', preparationSection.textContent.trim().substring(0, 200));
+                
+                // 手順要素が直接見つかった場合
+                if (stepElements.length > 0) {
+                    console.log(`👨‍🍳 直接手順要素を発見: ${stepElements.length}個`);
+                    stepElements.forEach((element, index) => {
+                        const text = element.textContent.trim();
+                        const cleanText = text.replace(/^Étape\s+\d+\s*/, '').trim();
+                        if (cleanText) {
+                            recipeData.steps.push(cleanText);
+                            console.log(`👨‍🍳 Marmiton手順${index + 1}: "${cleanText.substring(0, 100)}..."`);
+                        }
+                    });
+                } else {
+                    // セクション内のすべてのテキストを取得
+                    const sectionText = preparationSection.textContent;
+                    console.log('📝 セクション全体のテキスト:', sectionText);
+                    
+                    // 「Étape」で始まる行を正規表現で抽出
+                    const etapeRegex = /Étape\s+\d+[^É]*?(?=Étape\s+\d+|$)/g;
+                    const etapeMatches = sectionText.match(etapeRegex);
+                    
+                    if (etapeMatches) {
+                        console.log(`👨‍🍳 Étape正規表現で手順を発見: ${etapeMatches.length}個`);
+                        etapeMatches.forEach((match, index) => {
+                            const cleanText = match.replace(/^Étape\s+\d+\s*/, '').trim();
+                            if (cleanText) {
+                                recipeData.steps.push(cleanText);
+                                console.log(`👨‍🍳 Marmiton手順${index + 1}: "${cleanText.substring(0, 100)}..."`);
+                            }
+                        });
+                    } else {
+                        // 代替方法：行ごとに分割して「Étape」を探す
+                        const lines = sectionText.split('\n');
+                        let stepNumber = 1;
+                        
+                        for (const line of lines) {
+                            const trimmedLine = line.trim();
+                            if (trimmedLine.match(/^Étape\s+\d+/)) {
+                                const cleanText = trimmedLine.replace(/^Étape\s+\d+\s*/, '').trim();
+                                if (cleanText) {
+                                    recipeData.steps.push(cleanText);
+                                    console.log(`👨‍🍳 Marmiton手順${stepNumber}: "${cleanText.substring(0, 100)}..."`);
+                                    stepNumber++;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                console.log('❌ 手順セクションが見つかりませんでした');
+                
+                // 代替方法：テキスト内から直接「Étape」を探す
+                const etapeMatches = allText.match(/Étape\s+\d+[^É]*/g);
+                if (etapeMatches) {
+                    console.log(`👨‍🍳 テキスト検索で手順を発見: ${etapeMatches.length}個`);
+                    etapeMatches.forEach((match, index) => {
+                        const cleanText = match.replace(/^Étape\s+\d+\s*/, '').trim();
+                        if (cleanText) {
+                            recipeData.steps.push(cleanText);
+                            console.log(`👨‍🍳 Marmiton手順${index + 1}: "${cleanText.substring(0, 100)}..."`);
+                        }
+                    });
+                }
+            }
+        }
+        
+        // 人数の抽出
+        const servingsSelectors = [
+            '.servings',
+            '.recipe-servings',
+            '[class*="serving"]',
+            '[class*="portion"]',
+            // BBC Good Food用
+            '.recipe__servings',
+            '.recipe-servings',
+            '.servings',
+            // Marmiton用
+            '.recipe-servings',
+            '.servings',
+            '.portion'
+        ];
+        
+        for (const selector of servingsSelectors) {
+            const element = doc.querySelector(selector);
+            if (element && element.textContent.trim()) {
+                const text = element.textContent.trim();
+                const match = text.match(/(\d+)/);
+                if (match) {
+                    recipeData.servings = match[1];
+                    console.log(`👥 人数抽出成功: ${selector} → "${recipeData.servings}"`);
+                }
+                break;
+            }
+        }
+        
+        console.log('✅ CSSセレクター抽出完了:', {
+            title: recipeData.title,
+            ingredientsCount: recipeData.ingredients.length,
+            stepsCount: recipeData.steps.length,
+            servings: recipeData.servings
+        });
+        
+        // CSSセレクターで抽出した場合も翻訳処理を適用
+        if (language !== 'ja') {
+            console.log('🌐 CSSセレクター抽出データの翻訳処理を開始...');
+            
+            // タイトルの翻訳
+            if (recipeData.title && !recipeData.title.match(/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf]/)) {
+                recipeData.originalTitle = recipeData.title;
+                recipeData.title = translateTitle(recipeData.title, language);
+            }
+            
+            // 材料の翻訳と単位変換
+            recipeData.ingredients = recipeData.ingredients.map(ing => {
+                const translatedItem = translateIngredient(ing.item, language);
+                const translatedUnit = translateUnit(ing.unit, language);
+                
+                // 大さじ・小さじをml/gに変換
+                const converted = convertSpoonToMetric(ing.quantity, translatedUnit, translatedItem);
+                
+                return {
+                    item: translatedItem,
+                    quantity: converted.quantity,
+                    unit: converted.unit
+                };
+            });
+            
+            // 手順の翻訳
+            recipeData.steps = recipeData.steps.map(step => translateStep(step, language));
+            
+            console.log('✅ 翻訳処理完了');
+        }
+        
+        // HTMLも含めて返す
+        return { ...recipeData, html: html, url: url };
+    }
+    
+    // 画像アップロード機能
+    let currentImageData = null; // Base64データを保存
+    
+    // 画像アップロード関連の要素
+    const imageInput = document.getElementById('imageInput');
+    const uploadImageBtn = document.getElementById('uploadImageBtn');
+    const imageUploadArea = document.getElementById('imageUploadArea');
+    const imagePreview = document.getElementById('imagePreview');
+    const previewImg = document.getElementById('previewImg');
+    const removeImageBtn = document.getElementById('removeImageBtn');
+    
+    // 画像選択ボタンのクリックイベント
+    uploadImageBtn.addEventListener('click', () => {
+        imageInput.click();
+    });
+    
+    // 画像アップロードエリアのクリックイベント
+    imageUploadArea.addEventListener('click', () => {
+        imageInput.click();
+    });
+    
+    // ファイル選択時の処理
+    imageInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            handleImageFile(file);
+        }
+    });
+    
+    // ドラッグ&ドロップ機能
+    imageUploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        imageUploadArea.classList.add('dragover');
+    });
+    
+    imageUploadArea.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        imageUploadArea.classList.remove('dragover');
+    });
+    
+    imageUploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        imageUploadArea.classList.remove('dragover');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            const file = files[0];
+            if (file.type.startsWith('image/')) {
+                handleImageFile(file);
+            } else {
+                alert('画像ファイルを選択してください。');
+            }
+        }
+    });
+    
+    // 画像削除ボタンのクリックイベント
+    removeImageBtn.addEventListener('click', () => {
+        removeImage();
+    });
+    
+    // 画像ファイルの処理
+    function handleImageFile(file) {
+        // ファイルサイズチェック（5MB制限）
+        if (file.size > 5 * 1024 * 1024) {
+            alert('ファイルサイズは5MB以下にしてください。');
+            return;
+        }
+        
+        // ファイル形式チェック
+        if (!file.type.startsWith('image/')) {
+            alert('画像ファイルを選択してください。');
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            currentImageData = e.target.result;
+            window.currentImageData = currentImageData; // グローバル変数も更新
+            previewImg.src = currentImageData;
+            imagePreview.style.display = 'flex';
+            imageUploadArea.style.display = 'none';
+            console.log('📸 画像がアップロードされました:', file.name);
+        };
+        reader.readAsDataURL(file);
+    }
+    
+    // 画像の削除
+    function removeImage() {
+        currentImageData = null;
+        window.currentImageData = null; // グローバル変数も更新
+        imageInput.value = '';
+        imagePreview.style.display = 'none';
+        imageUploadArea.style.display = 'flex';
+        console.log('🗑️ 画像が削除されました');
+    }
+    
+    // 取り込んだ画像削除ボタンのイベントリスナー
+    document.addEventListener('DOMContentLoaded', function() {
+        const removeImportedImageBtn = document.getElementById('removeImportedImageBtn');
+        if (removeImportedImageBtn) {
+            removeImportedImageBtn.addEventListener('click', removeImportedImage);
+        }
+    });
+    
+    // サイトのスクリーンショットを撮影してAIで解析する関数
+    async function captureAndAnalyzeRecipe(url) {
+        try {
+            console.log('📸 サイトスクリーンショット撮影を開始...');
+            updateProgress('スクリーンショット撮影中...', 'サイトの画像を撮影中...', 60);
+            
+            // html2canvasライブラリを動的に読み込み
+            if (!window.html2canvas) {
+                console.log('📚 html2canvasライブラリを読み込み中...');
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                document.head.appendChild(script);
+                
+                await new Promise((resolve, reject) => {
+                    script.onload = resolve;
+                    script.onerror = reject;
+                });
+            }
+            
+            // 新しいウィンドウでサイトを開く
+            const popup = window.open(url, '_blank', 'width=1200,height=800,scrollbars=yes');
+            
+            if (!popup) {
+                throw new Error('ポップアップがブロックされました。ポップアップを許可してから再試行してください。');
+            }
+            
+            // ページの読み込みを待つ
+            await new Promise((resolve) => {
+                popup.onload = () => {
+                    setTimeout(resolve, 3000); // 3秒待機
+                };
+            });
+            
+            console.log('📸 スクリーンショット撮影中...');
+            updateProgress('スクリーンショット撮影中...', 'ページの画像を撮影中...', 70);
+            
+            // スクリーンショットを撮影
+            const canvas = await html2canvas(popup.document.body, {
+                allowTaint: true,
+                useCORS: true,
+                scale: 1,
+                width: 1200,
+                height: Math.min(popup.document.body.scrollHeight, 3000)
+            });
+            
+            // 画像データを取得
+            const imageData = canvas.toDataURL('image/jpeg', 0.8);
+            
+            // ポップアップを閉じる
+            popup.close();
+            
+            console.log('📸 スクリーンショット撮影完了');
+            updateProgress('AI解析中...', '画像からレシピを解析中...', 80);
+            
+            // Gemini APIで画像を解析
+            const recipeData = await analyzeRecipeImage(imageData, url);
+            
+            // スクリーンショット画像も保存
+            recipeData.screenshot = imageData;
+            
+            console.log('✅ AI解析完了:', recipeData);
+            return recipeData;
+            
+        } catch (error) {
+            console.error('スクリーンショット撮影エラー:', error);
+            throw error;
+        }
+    }
+    
+    // 画像からレシピを解析する関数（Cloud Vision API + Gemini API使用）
+    async function analyzeRecipeImage(imageData, url) {
+        try {
+            const GEMINI_API_KEY = window.APP_CONFIG?.GEMINI_API_KEY || '';
+            
+            if (!GEMINI_API_KEY) {
+                throw new Error('Gemini APIキーが設定されていません');
+            }
+            
+            console.log('🤖 Cloud Vision API + Gemini APIで画像解析を開始...');
+            
+            // 画像データをBase64に変換（data:image/jpeg;base64,を除去）
+            const base64Image = imageData.split(',')[1];
+            
+            // まずCloud Vision APIでOCRを実行
+            const ocrText = await extractTextFromImage(base64Image);
+            console.log('📝 OCR結果:', ocrText);
+            
+            // OCR結果をGemini APIで解析
+            const prompt = `
+以下のテキストは料理レシピのウェブページからOCRで抽出されたものです。以下の情報を抽出してください：
+
+【OCR抽出テキスト】
+${ocrText}
+
+【抽出項目】
+1. レシピタイトル
+2. 材料（材料名、分量、単位）
+3. 手順（番号付きの手順）
+4. 調理時間（あれば）
+5. 人数（あれば）
+
+【出力形式】
+以下のJSON形式で回答してください：
+
+{
+  "title": "レシピタイトル",
+  "description": "レシピの簡単な説明",
+  "servings": "人数",
+  "ingredients": [
+    {
+      "item": "材料名",
+      "quantity": "分量",
+      "unit": "単位"
+    }
+  ],
+  "steps": [
+    "手順1",
+    "手順2",
+    "手順3"
+  ]
+}
+
+【注意事項】
+- 材料は分量と単位を分けて記録してください
+- 手順は番号を除去して記録してください
+- 日本語で回答してください
+- 見えない部分は推測せず、空欄にしてください
+`;
+
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{ text: prompt }]
+                    }],
+                    generationConfig: {
+                        temperature: 0.1,
+                        topK: 32,
+                        topP: 1,
+                        maxOutputTokens: 2048,
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Gemini API エラー: ${response.status} - ${errorText}`);
+            }
+
+            const result = await response.json();
+            const generatedText = result.candidates[0].content.parts[0].text;
+            
+            // JSONを抽出
+            const jsonMatch = generatedText.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                throw new Error('GeminiからJSONが取得できませんでした');
+            }
+            
+            const recipeData = JSON.parse(jsonMatch[0]);
+            console.log('✅ 画像解析結果:', recipeData);
+            
+            return recipeData;
+            
+        } catch (error) {
+            console.error('画像解析エラー:', error);
+            throw error;
+        }
+    }
+    
+    // Cloud Vision APIでOCRを実行する関数
+    async function extractTextFromImage(base64Image) {
+        try {
+            const VISION_API_KEY = window.APP_CONFIG?.VISION_API_KEY || window.APP_CONFIG?.GEMINI_API_KEY || '';
+            
+            if (!VISION_API_KEY) {
+                throw new Error('Vision APIキーが設定されていません');
+            }
+            
+            console.log('👁️ Cloud Vision APIでOCRを実行中...');
+            
+            const response = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${VISION_API_KEY}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    requests: [{
+                        image: {
+                            content: base64Image
+                        },
+                        features: [{
+                            type: 'TEXT_DETECTION',
+                            maxResults: 1
+                        }]
+                    }]
+                })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Vision API エラー: ${response.status} - ${errorText}`);
+            }
+
+            const result = await response.json();
+            
+            if (result.responses && result.responses[0] && result.responses[0].textAnnotations) {
+                const fullText = result.responses[0].textAnnotations[0].description;
+                console.log('✅ OCR完了:', fullText.substring(0, 200) + '...');
+                return fullText;
+            } else {
+                console.log('⚠️ OCRでテキストが見つかりませんでした');
+                return '';
+            }
+            
+        } catch (error) {
+            console.error('OCRエラー:', error);
+            // OCRが失敗した場合は空文字を返す
+            return '';
+        }
+    }
+    
+    // 画像の品質をスコアリングする関数
+    function calculateImageScore(element, selector, imageUrl) {
+        let score = 0;
+        
+        // セレクターの優先度によるスコア
+        if (selector.includes('recipe-image') || selector.includes('recipe-photo')) score += 40;
+        else if (selector.includes('recipe-')) score += 30;
+        else if (selector.includes('food-') || selector.includes('dish-')) score += 25;
+        else if (selector.includes('main-') || selector.includes('hero-')) score += 20;
+        else if (selector.includes('og:image')) score += 15;
+        else score += 10;
+        
+        // 画像サイズによるスコア
+        const width = parseInt(element.width) || parseInt(element.getAttribute('data-width')) || 0;
+        const height = parseInt(element.height) || parseInt(element.getAttribute('data-height')) || 0;
+        
+        if (width > 0 && height > 0) {
+            const area = width * height;
+            if (area > 500000) score += 30; // 500x500以上
+            else if (area > 100000) score += 20; // 300x300以上
+            else if (area > 25000) score += 10; // 150x150以上
+        }
+        
+        // 画像URLの品質指標
+        if (imageUrl.includes('large') || imageUrl.includes('big')) score += 15;
+        if (imageUrl.includes('high') || imageUrl.includes('quality')) score += 10;
+        if (imageUrl.includes('thumb') || imageUrl.includes('small')) score -= 10;
+        
+        // ファイル形式によるスコア
+        if (imageUrl.includes('.webp')) score += 5;
+        if (imageUrl.includes('.jpg') || imageUrl.includes('.jpeg')) score += 3;
+        if (imageUrl.includes('.png')) score += 2;
+        
+        // 料理関連キーワードによるスコア
+        const foodKeywords = ['recipe', 'food', 'dish', 'meal', 'cook', 'plate', 'serving', 'complete', 'final', 'result'];
+        foodKeywords.forEach(keyword => {
+            if (imageUrl.toLowerCase().includes(keyword)) score += 5;
+        });
+        
+        // 不要な画像を除外
+        if (imageUrl.includes('icon') || imageUrl.includes('logo') || imageUrl.includes('avatar')) score -= 20;
+        if (imageUrl.includes('banner') || imageUrl.includes('ad')) score -= 15;
+        
+        return Math.max(0, score);
+    }
+    
+    // URLから画像を取得する関数（改良版）
+    async function extractImageFromURL(html, url) {
+        try {
+            console.log('🔧 extractImageFromURL開始:', { url, htmlLength: html?.length });
+            
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            // 画像セレクターの優先順位（料理完成写真を優先）
+            const imageSelectors = [
+                // レシピ完成写真専用セレクター
+                '.recipe-image img',
+                '.recipe-photo img',
+                '.recipe-img img',
+                '.recipe-picture img',
+                '.recipe-hero img',
+                '.recipe-main-image img',
+                '.recipe-featured-image img',
+                '.recipe-thumbnail img',
+                '.recipe-complete img',
+                '.recipe-result img',
+                '.recipe-final img',
+                '.recipe-dish img',
+                '.recipe-plate img',
+                '.recipe-serving img',
+                // 料理写真関連セレクター
+                '.food-image img',
+                '.dish-image img',
+                '.meal-image img',
+                '.cooking-result img',
+                '.final-dish img',
+                '.serving-image img',
+                '.plate-image img',
+                // 汎用的な画像セレクター
+                '.main-image img',
+                '.hero-image img',
+                '.featured-image img',
+                '.primary-image img',
+                '.content-image img',
+                '.article-image img',
+                '.post-image img',
+                // メタデータから取得（OGP画像）
+                'meta[property="og:image"]',
+                'meta[name="twitter:image"]',
+                'meta[property="og:image:url"]',
+                'meta[property="og:image:secure_url"]',
+                // 高解像度画像を優先
+                'img[width][height]', // サイズ指定のある画像
+                'img[src*="recipe"]',
+                'img[src*="food"]',
+                'img[src*="dish"]',
+                'img[src*="cook"]',
+                'img[src*="meal"]',
+                'img[src*="plate"]',
+                'img[src*="serving"]',
+                'img[src*="complete"]',
+                'img[src*="final"]',
+                'img[src*="result"]',
+                // 最後のフォールバック
+                'img[src*="jpg"]',
+                'img[src*="jpeg"]',
+                'img[src*="png"]',
+                'img[src*="webp"]'
+            ];
+            
+            let bestImageUrl = null;
+            let bestImageScore = 0;
+            
+            // セレクターで画像を探して最適なものを選択
+            console.log('🔍 画像検索開始...');
+            for (let i = 0; i < imageSelectors.length; i++) {
+                const selector = imageSelectors[i];
+                const elements = doc.querySelectorAll(selector);
+                console.log(`🔍 セレクター ${i + 1}/${imageSelectors.length}: "${selector}" → ${elements.length}個の要素`);
+                
+                if (elements.length > 0) {
+                    for (let j = 0; j < elements.length; j++) {
+                        const element = elements[j];
+                        let imageUrl = null;
+                        
+                        if (element.tagName === 'IMG') {
+                            imageUrl = element.src;
+                        } else if (element.tagName === 'META') {
+                            imageUrl = element.content;
+                        }
+                        
+                        if (imageUrl && imageUrl.startsWith('http')) {
+                            // 画像の品質をスコアリング
+                            const score = calculateImageScore(element, selector, imageUrl);
+                            console.log(`📸 画像候補 ${j + 1}: ${selector} → ${imageUrl} (スコア: ${score})`);
+                            
+                            if (score > bestImageScore) {
+                                bestImageScore = score;
+                                bestImageUrl = imageUrl;
+                                console.log(`✅ 新しい最高スコア画像: ${imageUrl} (スコア: ${score})`);
+                            }
+                        }
+                    }
+                    
+                    // 高スコアの画像が見つかったら早期終了
+                    if (bestImageScore > 50) {
+                        console.log(`🎯 高スコア画像発見のため早期終了 (スコア: ${bestImageScore})`);
+                        break;
+                    }
+                }
+            }
+            
+            imageUrl = bestImageUrl;
+            if (imageUrl) {
+                console.log(`📸 最適な画像を選択: ${imageUrl} (スコア: ${bestImageScore})`);
+            } else {
+                console.log('❌ 画像が見つかりませんでした');
+            }
+            
+            // 相対URLを絶対URLに変換
+            if (imageUrl && !imageUrl.startsWith('http')) {
+                const urlObj = new URL(url);
+                imageUrl = new URL(imageUrl, urlObj.origin).href;
+            }
+            
+            if (imageUrl) {
+                console.log('🔧 画像ダウンロード開始:', imageUrl);
+                
+                // 画像をBase64に変換
+                const imageData = await fetchImageAsBase64(imageUrl);
+                if (imageData) {
+                    console.log('✅ 画像ダウンロード成功');
+                    
+                    currentImageData = imageData;
+                    window.currentImageData = imageData; // グローバル変数も更新
+                    previewImg.src = currentImageData;
+                    imagePreview.style.display = 'flex';
+                    imageUploadArea.style.display = 'none';
+                    
+                    // 取り込んだ画像表示欄にも表示
+                    showImportedImage(imageData);
+                    
+                    console.log('📸 URLから料理写真を取得しました');
+                    
+                    // 画像取得成功通知を表示
+                    showImageSuccessNotification();
+                    return true;
+                } else {
+                    console.log('❌ 画像ダウンロード失敗');
+                }
+            }
+            
+            console.log('❌ 画像が見つかりませんでした');
+            return false;
+            
+        } catch (error) {
+            console.error('画像抽出エラー:', error);
+            return false;
+        }
+    }
+    
+    // 画像URLをBase64に変換
+    async function fetchImageAsBase64(imageUrl) {
+        try {
+            console.log('🔧 fetchImageAsBase64開始:', imageUrl);
+            
+            // プロキシサービスを使用して画像を取得（成功率の高い順）
+            const proxyServices = [
+                `https://cors-anywhere.herokuapp.com/${imageUrl}?origin=*`,
+                `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(imageUrl)}&restrictRedirects=false`,
+                `https://corsproxy.io/?${encodeURIComponent(imageUrl)}&format=json`,
+                `https://api.allorigins.win/get?url=${encodeURIComponent(imageUrl)}`,
+                `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`,
+                `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(imageUrl)}`,
+                `https://cors.bridged.cc/${imageUrl}`,
+                `https://cors.io/?${encodeURIComponent(imageUrl)}`,
+                `https://cors-anywhere.1d4.workers.dev/?${encodeURIComponent(imageUrl)}`,
+                `https://thingproxy.freeboard.io/fetch/${imageUrl}`,
+                `https://cors-anywhere.herokuapp.com/${imageUrl}`,
+                `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(imageUrl)}&restrictRedirects=true`,
+                `https://corsproxy.io/?${encodeURIComponent(imageUrl)}&format=json`,
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(imageUrl)}`
+            ];
+            
+            for (let i = 0; i < proxyServices.length; i++) {
+                const proxyUrl = proxyServices[i];
+                try {
+                    console.log(`🔧 プロキシ試行 (${i + 1}/${proxyServices.length}): ${proxyUrl}`);
+                    
+                    const response = await fetch(proxyUrl, {
+                        method: 'GET',
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        console.log(`✅ プロキシ成功 (${i + 1}/${proxyServices.length}): ${proxyUrl}`);
+                        const blob = await response.blob();
+                        return new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onload = () => resolve(reader.result);
+                            reader.readAsDataURL(blob);
+                        });
+                    } else {
+                        console.log(`❌ プロキシレスポンスエラー (${i + 1}/${proxyServices.length}): ${proxyUrl} - ${response.status}`);
+                    }
+                } catch (error) {
+                    console.log(`❌ プロキシ失敗 (${i + 1}/${proxyServices.length}): ${proxyUrl}`, error.message);
+                    continue;
+                }
+            }
+            
+            // 直接取得を試行
+            try {
+                console.log('🔧 直接取得を試行:', imageUrl);
+                const response = await fetch(imageUrl);
+                if (response.ok) {
+                    console.log('✅ 直接取得成功');
+                    const blob = await response.blob();
+                    return new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.readAsDataURL(blob);
+                    });
+                } else {
+                    console.log(`❌ 直接取得レスポンスエラー: ${response.status}`);
+                }
+            } catch (error) {
+                console.log('❌ 直接取得も失敗:', error.message);
+            }
+            
+            console.log('❌ すべての画像取得方法が失敗しました');
+            return null;
+            
+        } catch (error) {
+            console.error('画像取得エラー:', error);
+            return null;
+        }
+    }
+    
+    // 既存のrunImport関数を修正してサーバーサイドスクリーンショット方式を優先
+    const originalRunImport = window.runImport;
+    window.runImport = async function() {
+        try {
+            const url = document.getElementById('urlInput').value.trim();
+            
+            if (!url) {
+                throw new Error('URLを入力してください');
+            }
+            
+            // 検索結果ページかどうかを判定
+            if (url.includes('/buscar/') || url.includes('/search/')) {
+                throw new Error('検索結果ページからはレシピを取得できません。個別のレシピページのURLを入力してください。');
+            }
+            
+            // プロキシ方式を優先、失敗時はOCR方式にフォールバック
+            console.log('🔧 プロキシ方式を優先使用');
+            
+            try {
+                // プロキシ方式でレシピを取得
+                const recipeData = await originalRunImport(url);
+                
+                // 画像取得を試行
+                console.log('🔧 レシピデータ確認:', {
+                    hasRecipeData: !!recipeData,
+                    hasHtml: !!(recipeData && recipeData.html),
+                    recipeDataKeys: recipeData ? Object.keys(recipeData) : [],
+                    htmlLength: recipeData && recipeData.html ? recipeData.html.length : 0
+                });
+                
+                if (recipeData && recipeData.html) {
+                    console.log('🔧 画像取得を試行中...');
+                    console.log('🔧 HTMLサンプル:', recipeData.html.substring(0, 500));
+                    const imageResult = await extractImageFromURL(recipeData.html, recipeData.url);
+                    console.log('🔧 画像取得結果:', imageResult);
+                } else {
+                    console.log('❌ レシピデータまたはHTMLがありません');
+                    
+                    // 代替手段：recipeData自体に画像URLがあるかチェック
+                    if (recipeData && recipeData.image_url) {
+                        console.log('🔧 レシピデータから画像URLを取得:', recipeData.image_url);
+                        const imageData = await fetchImageAsBase64(recipeData.image_url);
+                        if (imageData) {
+                            showImportedImage(imageData, 'レシピデータから取得');
+                        }
+                    }
+                }
+                
+                console.log('✅ プロキシ方式でレシピ取得完了');
+                return recipeData;
+                
+            } catch (proxyError) {
+                console.log('⚠️ プロキシ方式が失敗、OCR方式にフォールバック:', proxyError.message);
+                
+                // OCR方式にフォールバック
+                console.log('📸 OCR方式にフォールバック');
+                showOCRNotification();
+                
+                try {
+                    // クライアントサイドOCR方式を試す
+                    const clientRecipeData = await captureAndAnalyzeRecipe(url);
+                    
+                    // スクリーンショット画像を保存
+                    if (clientRecipeData.screenshot) {
+                        currentImageData = clientRecipeData.screenshot;
+                        window.currentImageData = clientRecipeData.screenshot;
+                        previewImg.src = clientRecipeData.screenshot;
+                        imagePreview.style.display = 'flex';
+                        imageUploadArea.style.display = 'none';
+                        
+                        // 取り込んだ画像表示欄にも表示
+                        showImportedImage(clientRecipeData.screenshot, 'OCRスクリーンショット');
+                    }
+                    
+                    showOCRCompleteNotification();
+                    return clientRecipeData;
+                    
+                } catch (ocrError) {
+                    console.log('❌ OCR方式も失敗:', ocrError.message);
+                    throw new Error('すべての抽出方式が失敗しました。手動入力モードをご利用ください。');
+                }
+            }
+        } catch (error) {
+            console.error('❌ URL取り込みエラー:', error);
+            alert('レシピの取り込みに失敗しました: ' + error.message);
+            throw error;
+        }
+    };
+    
+    // OCR使用通知を表示する関数
+    function showOCRNotification() {
+        // 既存の通知があれば削除
+        const existingNotification = document.querySelector('.ocr-notification');
+        if (existingNotification) {
+            existingNotification.remove();
+        }
+        
+        // 通知要素を作成
+        const notification = document.createElement('div');
+        notification.className = 'ocr-notification';
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            z-index: 10001;
+            font-size: 14px;
+            font-weight: 500;
+            max-width: 300px;
+            animation: slideInRight 0.5s ease-out;
+            border-left: 4px solid #4CAF50;
+        `;
+        
+        notification.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="font-size: 20px;">🔍</div>
+                <div>
+                    <div style="font-weight: 600; margin-bottom: 2px;">OCR解析中</div>
+                    <div style="font-size: 12px; opacity: 0.9;">画像からテキストを抽出しています...</div>
+                </div>
+            </div>
+        `;
+        
+        // アニメーション用のCSSを追加
+        if (!document.querySelector('#ocr-notification-styles')) {
+            const style = document.createElement('style');
+            style.id = 'ocr-notification-styles';
+            style.textContent = `
+                @keyframes slideInRight {
+                    from {
+                        transform: translateX(100%);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                }
+                
+                @keyframes slideOutRight {
+                    from {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                    to {
+                        transform: translateX(100%);
+                        opacity: 0;
+                    }
+                }
+                
+                .ocr-notification.hide {
+                    animation: slideOutRight 0.5s ease-in forwards;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        // 通知を表示
+        document.body.appendChild(notification);
+        
+        // 5秒後に自動で非表示
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.classList.add('hide');
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.remove();
+                    }
+                }, 500);
+            }
+        }, 5000);
+        
+        // クリックで即座に非表示
+        notification.addEventListener('click', () => {
+            notification.classList.add('hide');
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 500);
+        });
+    }
+    
+    // 取り込んだ画像を表示する関数
+    function showImportedImage(imageData, source = 'レシピサイトから取得') {
+        console.log('🔧 showImportedImage呼び出し:', { imageData: !!imageData, source });
+        
+        const importedImagePreview = document.getElementById('importedImagePreview');
+        const importedImagePlaceholder = document.getElementById('importedImagePlaceholder');
+        const importedPreviewImg = document.getElementById('importedPreviewImg');
+        const imageSource = document.querySelector('.image-source');
+        
+        console.log('🔧 要素の存在確認:', {
+            importedImagePreview: !!importedImagePreview,
+            importedImagePlaceholder: !!importedImagePlaceholder,
+            importedPreviewImg: !!importedPreviewImg,
+            imageSource: !!imageSource
+        });
+        
+        if (importedImagePreview && importedImagePlaceholder && importedPreviewImg) {
+            // 画像を設定
+            importedPreviewImg.src = imageData;
+            
+            // 画像ソースを更新
+            if (imageSource) {
+                imageSource.textContent = source;
+            }
+            
+            // 表示を切り替え
+            importedImagePlaceholder.style.display = 'none';
+            importedImagePreview.style.display = 'flex';
+            
+            console.log('✅ 取り込んだ画像表示欄を更新しました');
+        } else {
+            console.error('❌ 取り込んだ画像表示欄の要素が見つかりません');
+        }
+    }
+    
+    // 取り込んだ画像を削除する関数
+    function removeImportedImage() {
+        const importedImagePreview = document.getElementById('importedImagePreview');
+        const importedImagePlaceholder = document.getElementById('importedImagePlaceholder');
+        
+        if (importedImagePreview && importedImagePlaceholder) {
+            // 表示を切り替え
+            importedImagePreview.style.display = 'none';
+            importedImagePlaceholder.style.display = 'flex';
+            
+            // グローバル変数もクリア
+            window.currentImageData = null;
+            
+            console.log('🗑️ 取り込んだ画像を削除しました');
+        }
+    }
+    
+    // 画像取得成功通知を表示する関数
+    function showImageSuccessNotification() {
+        // 既存の通知があれば削除
+        const existingNotification = document.querySelector('.image-notification');
+        if (existingNotification) {
+            existingNotification.remove();
+        }
+        
+        // 成功通知を作成
+        const notification = document.createElement('div');
+        notification.className = 'image-notification';
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            z-index: 10001;
+            font-size: 14px;
+            font-weight: 500;
+            max-width: 300px;
+            animation: slideInRight 0.5s ease-out;
+            border-left: 4px solid #FFD93D;
+        `;
+        
+        notification.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="font-size: 20px;">📸</div>
+                <div>
+                    <div style="font-weight: 600; margin-bottom: 2px;">料理写真取得成功</div>
+                    <div style="font-size: 12px; opacity: 0.9;">完成写真を自動取得しました</div>
+                </div>
+            </div>
+        `;
+        
+        // 通知を表示
+        document.body.appendChild(notification);
+        
+        // 3秒後に自動で非表示
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.classList.add('hide');
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.remove();
+                    }
+                }, 500);
+            }
+        }, 3000);
+        
+        // クリックで即座に非表示
+        notification.addEventListener('click', () => {
+            notification.classList.add('hide');
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 500);
+        });
+    }
+    
+    // OCR完了通知を表示する関数
+    function showOCRCompleteNotification() {
+        // 既存の通知があれば削除
+        const existingNotification = document.querySelector('.ocr-notification');
+        if (existingNotification) {
+            existingNotification.remove();
+        }
+        
+        // 完了通知を作成
+        const notification = document.createElement('div');
+        notification.className = 'ocr-notification';
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            z-index: 10001;
+            font-size: 14px;
+            font-weight: 500;
+            max-width: 300px;
+            animation: slideInRight 0.5s ease-out;
+            border-left: 4px solid #2196F3;
+        `;
+        
+        notification.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="font-size: 20px;">✅</div>
+                <div>
+                    <div style="font-weight: 600; margin-bottom: 2px;">OCR解析完了</div>
+                    <div style="font-size: 12px; opacity: 0.9;">レシピデータを抽出しました</div>
+                </div>
+            </div>
+        `;
+        
+        // 通知を表示
+        document.body.appendChild(notification);
+        
+        // 3秒後に自動で非表示
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.classList.add('hide');
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.remove();
+                    }
+                }, 500);
+            }
+        }, 3000);
+        
+        // クリックで即座に非表示
+        notification.addEventListener('click', () => {
+            notification.classList.add('hide');
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 500);
+        });
+    }
+    
+    // グローバルに画像データを公開
+    window.currentImageData = currentImageData;
+    window.showOCRNotification = showOCRNotification;
+    window.showOCRCompleteNotification = showOCRCompleteNotification;
+    window.showImageSuccessNotification = showImageSuccessNotification;
+    window.showImportedImage = showImportedImage;
+    window.removeImportedImage = removeImportedImage;
+  });
+  </script>
+</body>
+</html>
