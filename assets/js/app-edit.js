@@ -14,6 +14,60 @@ let customCategories = [], customTags = [], allCategories = [], allTags = [];
 const escapeHtml = (s) => (s ?? "").toString().replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[m]));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+// Unit conversion utility
+const convertUnits = (quantity, unit, itemName = '') => {
+  if (!quantity || !unit) return { quantity, unit };
+  
+  const qty = parseFloat(quantity.toString().replace(/[^\d\.\/]/g, '')) || 0;
+  const unitLower = unit.toString().toLowerCase().trim();
+  const itemLower = itemName.toString().toLowerCase();
+  
+  // 液体系の材料判定（材料名と単位の両方で判断）
+  const liquidItems = ['水', '油', '醤油', 'しょうゆ', '酒', '酢', 'みりん', '牛乳', 'だし', 'スープ', 'ソース', '出汁', 'だし汁', 'ワイン', 'ビール', 'ココナッツミルク', 'オリーブオイル', 'ごま油', 'サラダ油'];
+  const isLiquid = liquidItems.some(liquid => itemLower.includes(liquid)) || 
+                   unitLower.includes('ml') || unitLower.includes('リットル') || unitLower.includes('cc');
+  
+  // 大さじの変換（15ml/15g）
+  if (unitLower.includes('大さじ') || unitLower.includes('おおさじ') || unitLower.includes('tbsp')) {
+    return {
+      quantity: (qty * 15).toString(),
+      unit: isLiquid ? 'ml' : 'g'
+    };
+  }
+  
+  // 小さじの変換（5ml/5g）
+  if (unitLower.includes('小さじ') || unitLower.includes('こさじ') || unitLower.includes('tsp')) {
+    return {
+      quantity: (qty * 5).toString(),
+      unit: isLiquid ? 'ml' : 'g'
+    };
+  }
+  
+  // カップの変換（200ml）
+  if (unitLower.includes('カップ') || unitLower.includes('cup')) {
+    return {
+      quantity: (qty * 200).toString(),
+      unit: 'ml'
+    };
+  }
+  
+  // 1/2カップ、1/4カップなどの分数対応
+  if (quantity.toString().includes('/') && (unitLower.includes('カップ') || unitLower.includes('cup'))) {
+    const fractionMatch = quantity.toString().match(/(\d+)\/(\d+)/);
+    if (fractionMatch) {
+      const numerator = parseInt(fractionMatch[1]);
+      const denominator = parseInt(fractionMatch[2]);
+      const cupValue = (numerator / denominator) * 200;
+      return {
+        quantity: cupValue.toString(),
+        unit: 'ml'
+      };
+    }
+  }
+  
+  return { quantity, unit };
+};
+
 // API Functions
 async function callGeminiAPI(text, url) {
   await sleep(1000); // Rate limiting
@@ -91,7 +145,19 @@ window.runImport = async function(url) {
       const list = Array.isArray(recipeData.ingredients) ? recipeData.ingredients : [];
       if (list.length > 0) {
         list.forEach(ing => {
-          addIngredientRow({ item: ing.item || '', quantity: ing.quantity || '', unit: ing.unit || '' });
+          // 単位変換を適用（材料名も考慮）
+          const converted = convertUnits(ing.quantity, ing.unit, ing.item);
+          
+          // 変換が行われた場合はコンソールに記録
+          if (converted.quantity !== ing.quantity || converted.unit !== ing.unit) {
+            console.log(`🔄 単位変換: ${ing.item} ${ing.quantity}${ing.unit} → ${converted.quantity}${converted.unit}`);
+          }
+          
+          addIngredientRow({ 
+            item: ing.item || '', 
+            quantity: converted.quantity || '', 
+            unit: converted.unit || '' 
+          });
         });
       } else {
         addIngredientRow();
