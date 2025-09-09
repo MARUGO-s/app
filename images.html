@@ -1,0 +1,957 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>レシピ編集 — Recipe Box</title>
+  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .image-upload-section {
+      border: 2px dashed #ddd;
+      border-radius: 8px;
+      padding: 30px;
+      text-align: center;
+      margin: 20px 0;
+      background: #f9f9f9;
+      transition: border-color 0.3s ease, background-color 0.3s ease;
+    }
+    .image-upload-section.dragover {
+      border-color: #007bff;
+      background: #f0f8ff;
+    }
+    .image-preview {
+      max-width: 100%;
+      max-height: 300px;
+      border-radius: 8px;
+      margin: 10px 0;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .loading-message {
+      color: #007bff;
+      font-style: italic;
+      margin: 10px 0;
+    }
+    .error-message {
+      color: #dc3545;
+      background: #f8d7da;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+    .success-message {
+      color: #155724;
+      background: #d4edda;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+    
+    /* 画像解析メッセージスタイル */
+    .error-message {
+      background-color: #fee;
+      color: #c33;
+      border: 1px solid #fcc;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+    
+    .success-message {
+      background-color: #efe;
+      color: #363;
+      border: 1px solid #cfc;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+    
+    .loading-message {
+      background-color: #eef;
+      color: #336;
+      border: 1px solid #ccf;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+    
+    /* 画像プレビュースタイル */
+    .image-preview {
+      max-width: 100%;
+      max-height: 300px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* アップロードエリアスタイル */
+    .image-upload-section {
+      text-align: center;
+      padding: 2rem;
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      background-color: #f9f9f9;
+    }
+    
+    .image-upload-section:hover {
+      border-color: #999;
+      background-color: #f5f5f5;
+    }
+    
+    /* レシピエディタースタイル */
+    .ingredient-row, .step-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+      align-items: center;
+    }
+    
+    .ing-item, .ing-qty, .ing-unit, .step-text {
+      flex: 1;
+      padding: 0.5rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    .ing-item {
+      flex: 2;
+    }
+    
+    .ing-qty, .ing-unit {
+      flex: 1;
+    }
+    
+    .js-remove-row {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 0.5rem;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .js-remove-row:hover {
+      background: #c82333;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="app-header">
+    <h1 class="brand">レシピ編集</h1>
+    <div class="header-actions">
+      <a href="index.html" class="btn ghost">ホーム</a>
+      <button class="btn primary js-save">保存する</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <form id="editForm" class="panel">
+      
+      <div class="field">
+        <label for="title">料理名</label>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <input id="title" name="title" class="input" required style="flex: 1;" />
+          <button type="button" class="btn ghost small" id="urlImportBtn" title="URLからレシピを読み込み" onclick="document.getElementById('url-import-modal').style.display='flex';">
+            <i class="fas fa-link"></i> URL読み込み
+          </button>
+          <button type="button" class="btn ghost small" id="imageImportBtn" title="画像からレシピを抽出">
+            <i class="fas fa-camera"></i> 画像解析
+          </button>
+        </div>
+      </div>
+      
+      <div class="field category-tags-field">
+        <div class="category-tags-row">
+          <div class="category-section">
+            <div class="category-input-wrapper">
+              <button type="button" id="categorySelectBtn" class="input category-select-btn">
+                <span id="selectedCategoryText">カテゴリーを選択</span>
+                <i class="fas fa-chevron-down"></i>
+              </button>
+            </div>
+            <div id="customCategories" class="custom-categories"></div>
+          </div>
+          <div class="tags-section">
+            <button type="button" id="tagSelectBtn" class="input tag-select-btn">
+              <span id="selectedTagsText">タグを選択</span>
+              <i class="fas fa-chevron-down"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="field servings-field">
+        <label for="servings">出来上がり人数</label>
+        <div class="servings-input-wrapper">
+          <input id="servings" name="servings" class="input" type="number" min="1" max="20" placeholder="例: 4" />
+          <span class="servings-unit">人前</span>
+        </div>
+        <div class="servings-actions">
+          <button type="button" class="btn ghost small" id="adjustServingsBtn">人数に応じて材料量を調整</button>
+        </div>
+      </div>
+      <div class="field notes-field">
+        <label for="notes">メモ・コツ</label>
+        <textarea id="notes" name="notes" class="input" rows="3"></textarea>
+      </div>
+      <div class="field">
+        <label>材料</label>
+        <div id="ingredientsEditor"></div>
+        <div style="margin-top: 1rem; display: flex; gap: 0.75rem;">
+            <button type="button" class="btn ghost small" id="addIng">+ 材料を追加</button>
+            <button type="button" class="btn primary small" id="ai-wizard-btn">✨ AIで創作</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>作り方</label>
+        <div id="stepsEditor"></div>
+        <button type="button" class="btn ghost small" id="addStep" style="margin-top: 1rem;">+ 手順を追加</button>
+      </div>
+    </form>
+  </main>
+
+  <!-- URL読み込みモーダル -->
+  <div id="url-import-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">URLからレシピを読み込み</h2>
+        <button id="url-import-modal-close-btn" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="urlInput">レシピサイトのURL</label>
+          <input id="urlInput" type="url" class="input" placeholder="https://example.com/recipe/..." />
+        </div>
+        <div class="field">
+          <label>対応サイト</label>
+          <div class="supported-sites">
+            <p>以下のサイトからレシピを読み込めます：</p>
+            <ul>
+              <li>クックパッド</li>
+              <li>楽天レシピ</li>
+              <li>みんなのきょうの料理</li>
+              <li>その他のレシピサイト</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="urlImportCancelBtn" class="btn ghost">閉じる</button>
+        <button id="urlImportConfirmBtn" class="btn primary">読み込み</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 画像解析モーダル -->
+  <div id="image-import-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">画像からレシピを抽出</h2>
+        <button id="image-import-modal-close-btn" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="image-upload-section" id="uploadArea">
+          <i class="fas fa-cloud-upload-alt" style="font-size: 3rem; color: #666; margin-bottom: 1rem;"></i>
+          <p>レシピ画像をアップロードしてください</p>
+          <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 1rem;">
+            <button type="button" id="fileSelectBtn" class="btn primary">
+              <i class="fas fa-folder-open"></i> ファイルから選択
+            </button>
+            <button type="button" id="cameraBtn" class="btn secondary">
+              <i class="fas fa-camera"></i> カメラで撮影
+            </button>
+          </div>
+          <input type="file" id="imageInput" accept="image/*" style="display: none;">
+          <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;">
+        </div>
+        
+        <div id="previewArea" style="display: none; text-align: center; margin-top: 1rem;">
+          <img id="previewImage" class="image-preview" alt="プレビュー" style="max-width: 100%; max-height: 300px; border-radius: 8px;">
+          <div style="margin-top: 1rem;">
+            <button type="button" id="analyzeButton" class="btn primary">
+              <i class="fas fa-search"></i> 画像を解析してレシピを抽出
+            </button>
+            <button type="button" id="clearImageButton" class="btn ghost">
+              <i class="fas fa-trash"></i> クリア
+            </button>
+          </div>
+        </div>
+        
+        <div id="imageMessageArea" style="margin-top: 1rem;"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="imageImportCancelBtn" class="btn ghost">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    // Gemini APIキー
+    const GEMINI_API_KEY = 'AIzaSyAUsJcsyFY1vcBlrDNn1DYLRor_oqLErx4';
+    
+    // グローバル変数（1箇所のみで定義）
+    let currentImageFile = null;
+    
+    // 画像解析機能の初期化
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('🚀 画像解析機能を初期化中...');
+      
+      // 要素の取得
+      const imageImportBtn = document.getElementById('imageImportBtn');
+      const imageImportModal = document.getElementById('image-import-modal');
+      const imageImportModalCloseBtn = document.getElementById('image-import-modal-close-btn');
+      const imageImportCancelBtn = document.getElementById('imageImportCancelBtn');
+      const fileSelectBtn = document.getElementById('fileSelectBtn');
+      const cameraBtn = document.getElementById('cameraBtn');
+      const imageInput = document.getElementById('imageInput');
+      const cameraInput = document.getElementById('cameraInput');
+      const analyzeButton = document.getElementById('analyzeButton');
+      const clearImageButton = document.getElementById('clearImageButton');
+      const previewArea = document.getElementById('previewArea');
+      const previewImage = document.getElementById('previewImage');
+      const imageMessageArea = document.getElementById('imageMessageArea');
+      
+      // 要素の存在確認
+      if (!imageImportBtn || !imageImportModal) {
+        console.error('❌ 必要な要素が見つかりません');
+        return;
+      }
+      
+      console.log('✅ 必要な要素を確認しました');
+      
+      // 画像解析ボタンのクリックイベント
+      imageImportBtn.addEventListener('click', function() {
+        console.log('📷 画像解析ボタンがクリックされました！');
+        imageImportModal.style.display = 'flex';
+      });
+      
+      // モーダルを閉じる
+      const closeModal = () => {
+        console.log('❌ モーダルを閉じます');
+        imageImportModal.style.display = 'none';
+        clearImage();
+      };
+      
+      // 閉じるボタンのイベント
+      if (imageImportModalCloseBtn) {
+        imageImportModalCloseBtn.addEventListener('click', closeModal);
+      }
+      if (imageImportCancelBtn) {
+        imageImportCancelBtn.addEventListener('click', closeModal);
+      }
+      
+      // ファイル選択ボタン
+      if (fileSelectBtn && imageInput) {
+        fileSelectBtn.addEventListener('click', function() {
+          console.log('📁 ファイル選択ボタンがクリックされました');
+          imageInput.click();
+        });
+      }
+      
+      // カメラボタン
+      if (cameraBtn && cameraInput) {
+        cameraBtn.addEventListener('click', function() {
+          console.log('📸 カメラボタンがクリックされました');
+          cameraInput.click();
+        });
+      }
+      
+      // ファイル選択のイベント（統一された処理）
+      const handleFileSelect = (event) => {
+        console.log('📄 ファイル選択イベントが発生しました');
+        const file = event.target.files[0];
+        if (file) {
+          console.log('📄 選択されたファイル:', file.name, file.size, 'bytes');
+          handleFile(file);
+        } else {
+          console.log('❌ ファイルが選択されませんでした');
+        }
+      };
+      
+      // ファイル処理（統一された処理）
+      const handleFile = (file) => {
+        console.log('🔍 ファイル処理開始:', file.name);
+        
+        if (!file.type.startsWith('image/')) {
+          showImageMessage('画像ファイルを選択してください', 'error');
+          return;
+        }
+        
+        currentImageFile = file;
+        
+        // プレビュー表示
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          console.log('✅ ファイル読み込み完了');
+          if (previewImage && previewArea) {
+            previewImage.src = e.target.result;
+            previewArea.style.display = 'block';
+            showImageMessage(`画像読み込み完了: ${file.name}`, 'success');
+          }
+        };
+        reader.onerror = () => {
+          console.error('❌ ファイル読み込みエラー');
+          showImageMessage('ファイルの読み込みに失敗しました', 'error');
+        };
+        reader.readAsDataURL(file);
+      };
+      
+      // ファイル入力要素にイベントリスナーを設定
+      if (imageInput) {
+        imageInput.addEventListener('change', handleFileSelect);
+        console.log('✅ imageInputにイベントリスナーを設定しました');
+      }
+      if (cameraInput) {
+        cameraInput.addEventListener('change', handleFileSelect);
+        console.log('✅ cameraInputにイベントリスナーを設定しました');
+      }
+      
+      // 解析ボタン
+      if (analyzeButton) {
+        analyzeButton.addEventListener('click', function() {
+          console.log('🔍 解析ボタンがクリックされました');
+          analyzeImage();
+        });
+      }
+      
+      // クリアボタン
+      if (clearImageButton) {
+        clearImageButton.addEventListener('click', function() {
+          console.log('🗑️ クリアボタンがクリックされました');
+          clearImage();
+        });
+      }
+      
+    console.log('✅ 画像解析機能の初期化完了');
+    
+    // デバッグ: ボタンの存在確認
+    console.log('🔍 ボタンの存在確認:');
+    console.log('- 画像解析ボタン:', !!imageImportBtn);
+    console.log('- URL読み込みボタン:', !!urlImportBtn);
+    console.log('- 材料追加ボタン:', !!addIngBtn);
+    console.log('- 手順追加ボタン:', !!addStepBtn);
+    console.log('- 保存ボタン:', !!saveBtn);
+    console.log('- AIで創作ボタン:', !!aiWizardBtn);
+    
+    // URL読み込み機能の初期化
+    const urlImportModal = document.getElementById('url-import-modal');
+    const urlImportModalCloseBtn = document.getElementById('url-import-modal-close-btn');
+    const urlImportCancelBtn = document.getElementById('urlImportCancelBtn');
+    const urlImportConfirmBtn = document.getElementById('urlImportConfirmBtn');
+    const urlInput = document.getElementById('urlInput');
+    
+    // URL読み込みボタン
+    if (urlImportBtn && urlImportModal) {
+      urlImportBtn.addEventListener('click', function() {
+        console.log('🔗 URL読み込みボタンがクリックされました');
+        urlImportModal.style.display = 'flex';
+      });
+    }
+    
+    // URL読み込みモーダルを閉じる
+    const closeUrlModal = () => {
+      console.log('❌ URL読み込みモーダルを閉じます');
+      urlImportModal.style.display = 'none';
+      if (urlInput) urlInput.value = '';
+    };
+    
+    if (urlImportModalCloseBtn) {
+      urlImportModalCloseBtn.addEventListener('click', closeUrlModal);
+    }
+    if (urlImportCancelBtn) {
+      urlImportCancelBtn.addEventListener('click', closeUrlModal);
+    }
+    
+    // URL読み込み確認ボタン
+    if (urlImportConfirmBtn && urlInput) {
+      urlImportConfirmBtn.addEventListener('click', async function() {
+        const url = urlInput.value.trim();
+        if (!url) {
+          alert('URLを入力してください');
+          return;
+        }
+        
+        console.log('🔗 URL読み込み開始:', url);
+        closeUrlModal();
+        
+        try {
+          // 簡単なURL読み込み機能（実際の実装は必要に応じて追加）
+          alert('URL読み込み機能は開発中です。画像解析機能をご利用ください。');
+        } catch (error) {
+          console.error('❌ URL読み込みエラー:', error);
+          alert('URL読み込みに失敗しました: ' + error.message);
+        }
+      });
+    }
+    
+    // 基本的なフォーム機能
+    // 材料追加ボタン
+    const addIngBtn = document.getElementById('addIng');
+    if (addIngBtn) {
+      addIngBtn.addEventListener('click', function() {
+        const ingredientsEditor = document.getElementById('ingredientsEditor');
+        const ingredientDiv = document.createElement('div');
+        ingredientDiv.className = 'ingredient-row';
+        ingredientDiv.innerHTML = `
+          <input type="text" placeholder="材料名" class="ing-item">
+          <input type="text" placeholder="分量" class="ing-qty">
+          <input type="text" placeholder="単位" class="ing-unit">
+          <button type="button" class="btn danger small js-remove-row">削除</button>
+        `;
+        ingredientsEditor.appendChild(ingredientDiv);
+      });
+    }
+    
+    // 手順追加ボタン
+    const addStepBtn = document.getElementById('addStep');
+    if (addStepBtn) {
+      addStepBtn.addEventListener('click', function() {
+        const stepsEditor = document.getElementById('stepsEditor');
+        const stepDiv = document.createElement('div');
+        stepDiv.className = 'step-row';
+        stepDiv.innerHTML = `
+          <input type="text" placeholder="手順" class="step-text">
+          <button type="button" class="btn danger small js-remove-row">削除</button>
+        `;
+        stepsEditor.appendChild(stepDiv);
+      });
+    }
+    
+    // 削除ボタンの処理
+    document.addEventListener('click', function(e) {
+      if (e.target.classList.contains('js-remove-row')) {
+        const row = e.target.closest('.ingredient-row, .step-row');
+        if (row) row.remove();
+      }
+    });
+    
+    // 初期の材料・手順行を追加
+    if (addIngBtn) addIngBtn.click();
+    if (addStepBtn) addStepBtn.click();
+    
+    // 保存ボタン
+    const saveBtn = document.querySelector('.js-save');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', function() {
+        console.log('💾 保存ボタンがクリックされました');
+        alert('保存機能は開発中です。');
+      });
+    }
+    
+    // AIで創作ボタン
+    const aiWizardBtn = document.getElementById('ai-wizard-btn');
+    if (aiWizardBtn) {
+      aiWizardBtn.addEventListener('click', function() {
+        console.log('✨ AIで創作ボタンがクリックされました');
+        alert('AIで創作機能は開発中です。');
+      });
+    }
+  });
+    
+    // 画像解析関数
+    async function analyzeImage() {
+      if (!currentImageFile) {
+        showImageMessage('画像を選択してください', 'error');
+        return;
+      }
+      
+      console.log('🚀 画像解析開始');
+      showImageMessage('画像を解析中...', 'loading');
+      
+      try {
+        // Base64変換
+        const base64 = await fileToBase64(currentImageFile);
+        const base64Data = base64.split(',')[1];
+        
+        console.log('📤 Gemini Vision API 呼び出し');
+        
+        // Gemini Vision APIを使用してOCRテキストを抽出
+        const ocrPrompt = `以下の画像からレシピのテキストを正確に抽出してください。
+
+重要な指示：
+1. 料理名を最初に特定してください
+2. 材料リストを正確に読み取り、材料名、分量、単位を分けて記録してください
+3. 作り方・手順を順番通りに抽出してください
+4. 人数（人前）の情報があれば抽出してください
+5. メモやコツがあれば抽出してください
+6. 文字が読みにくい場合は推測せず、読み取れる部分のみを抽出してください
+7. 日本語のレシピを想定して、正確に読み取ってください
+
+抽出したテキストは、そのまま出力してください。`;
+        
+        const ocrResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: ocrPrompt },
+                { inline_data: { mime_type: currentImageFile.type, data: base64Data } }
+              ]
+            }]
+          })
+        });
+        
+        if (!ocrResponse.ok) {
+          throw new Error('OCR処理に失敗しました');
+        }
+        
+        const ocrResult = await ocrResponse.json();
+        if (!ocrResult.candidates || !ocrResult.candidates[0] || !ocrResult.candidates[0].content) {
+          throw new Error('OCR結果を取得できませんでした');
+        }
+        
+        const extractedText = ocrResult.candidates[0].content.parts[0].text;
+        console.log('✅ OCRテキスト抽出成功:', extractedText.substring(0, 200) + '...');
+        
+        // 抽出したテキストを構造化
+        if (extractedText) {
+          console.log('🤖 レシピ構造化中...');
+          
+          const prompt = `以下はOCRで抽出したレシピのテキストです。これを次の厳密なJSONスキーマで日本語の値として構造化してください。
+
+【重要】正確な構造化の指示：
+1. 料理名は最初の行または明確に料理名と分かる部分から抽出
+2. 材料は「材料」「材料名」などの見出しの下にあるリストから抽出
+3. 各材料について、材料名、分量、単位を正確に分離
+4. 分量は数字のみ（例：100、1/2、大さじ1）
+5. 単位は「g」「ml」「個」「枚」「大さじ」「小さじ」など
+6. 手順は「作り方」「手順」「調理方法」などの見出しの下から抽出
+7. 手順は番号付きで順番通りに配列
+8. 人数は「人前」「人分」などの表記から数字のみ抽出
+9. メモやコツは「ポイント」「コツ」「注意」などの部分から抽出
+
+JSONスキーマ:
+{
+  "title": "料理名",
+  "description": "レシピの説明", 
+  "servings": "人数（数字のみ）",
+  "ingredients": [
+    { "item": "材料名", "quantity": "分量", "unit": "単位" }
+  ],
+  "steps": ["手順1", "手順2"],
+  "notes": "メモやコツ"
+}
+
+【出力形式】
+- 有効なJSONのみを出力（前後に説明文を付けない）
+- 日本語で記述
+- 材料名、分量、単位を正確に分離
+- 手順は番号なしで配列
+
+OCRテキスト:
+` + extractedText;
+
+          const structureResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              contents: [{
+                parts: [{
+                  text: prompt
+                }]
+              }]
+            })
+          });
+          
+          if (!structureResponse.ok) {
+            console.log('⚠ レシピ構造化エラー');
+            const recipeData = parseTextToRecipe(extractedText);
+            await applyRecipeData(recipeData);
+          } else {
+            const structureResult = await structureResponse.json();
+            console.log('✅ レシピ構造化成功:', structureResult);
+            
+            let generatedText = '';
+            if (structureResult.candidates && structureResult.candidates[0] && structureResult.candidates[0].content) {
+              generatedText = structureResult.candidates[0].content.parts[0].text;
+            
+              // JSONとしてパース
+              try {
+                // JSONのクリーンアップ（前後の不要なテキストを除去）
+                let cleanJson = generatedText.trim();
+                const jsonStart = cleanJson.indexOf('{');
+                const jsonEnd = cleanJson.lastIndexOf('}') + 1;
+                
+                if (jsonStart >= 0 && jsonEnd > jsonStart) {
+                  cleanJson = cleanJson.substring(jsonStart, jsonEnd);
+                }
+                
+                console.log('🧹 クリーンアップ済みJSON:', cleanJson);
+                const recipeData = JSON.parse(cleanJson);
+                
+                // データの妥当性チェック
+                if (!recipeData.title && !recipeData.ingredients && !recipeData.steps) {
+                  throw new Error('有効なレシピデータが含まれていません');
+                }
+                
+                await applyRecipeData(recipeData);
+                
+              } catch (e) {
+                console.log('⚠ JSON解析失敗、テキスト解析にフォールバック:', e.message);
+                const recipeData = parseTextToRecipe(extractedText);
+                await applyRecipeData(recipeData);
+              }
+            }
+          }
+        }
+        
+        console.log('📄 最終レシピデータ適用完了');
+        showImageMessage('画像解析が完了しました！', 'success');
+        
+        // モーダルを閉じる
+        document.getElementById('image-import-modal').style.display = 'none';
+        
+      } catch (error) {
+        console.error('⚠ 解析エラー:', error);
+        showImageMessage('画像解析に失敗しました: ' + error.message, 'error');
+      }
+    }
+    
+    // テキストからレシピを解析する関数
+    function parseTextToRecipe(text) {
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      // タイトルを探す（最初の行または料理名らしい行）
+      let title = 'OCRで抽出したレシピ';
+      const titleCandidates = lines.filter(line => 
+        !line.includes('材料') && 
+        !line.includes('作り方') && 
+        !line.includes('手順') &&
+        !line.includes('人前') &&
+        !line.includes('人分') &&
+        line.length > 2 && line.length < 50
+      );
+      if (titleCandidates.length > 0) {
+        title = titleCandidates[0].trim();
+      }
+      
+      // 人数を抽出
+      let servings = 2;
+      const servingLine = lines.find(line => 
+        line.includes('人前') || line.includes('人分') || line.match(/\d+人/)
+      );
+      if (servingLine) {
+        const match = servingLine.match(/(\d+)/);
+        if (match) servings = parseInt(match[1]);
+      }
+      
+      // 材料部分を抽出
+      const ingredients = [];
+      const ingredientStartIndex = lines.findIndex(line => 
+        line.includes('材料') || line.includes('材料名') || line.includes('ingredient')
+      );
+      
+      if (ingredientStartIndex >= 0) {
+        const stepsStartIndex = lines.findIndex(line => 
+          line.includes('作り方') || line.includes('手順') || line.includes('調理方法') || line.includes('step')
+        );
+        
+        const endIndex = stepsStartIndex >= 0 ? stepsStartIndex : Math.min(ingredientStartIndex + 15, lines.length);
+        
+        for (let i = ingredientStartIndex + 1; i < endIndex; i++) {
+          const line = lines[i].trim();
+          if (line && line.length > 1 && !line.includes('作り方') && !line.includes('手順')) {
+            // 材料名、分量、単位を分離
+            const parts = line.split(/\s+/);
+            let item = line;
+            let quantity = '';
+            let unit = '';
+            
+            // 数字が含まれている場合は分量と単位を分離
+            if (line.match(/\d/)) {
+              const match = line.match(/^(.+?)\s*(\d+(?:\.\d+)?(?:\/\d+)?)\s*(.*)$/);
+              if (match) {
+                item = match[1].trim();
+                quantity = match[2].trim();
+                unit = match[3].trim();
+              }
+            }
+            
+            ingredients.push({ 
+              item: item, 
+              quantity: quantity, 
+              unit: unit 
+            });
+          }
+        }
+      }
+      
+      // 手順部分を抽出
+      const steps = [];
+      const stepsStartIndex = lines.findIndex(line => 
+        line.includes('作り方') || line.includes('手順') || line.includes('調理方法') || line.includes('step')
+      );
+      
+      if (stepsStartIndex >= 0) {
+        for (let i = stepsStartIndex + 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (line && line.length > 2) {
+            // 番号を除去
+            const cleanStep = line.replace(/^\d+[\.\)]\s*/, '').trim();
+            if (cleanStep) {
+              steps.push(cleanStep);
+            }
+          }
+        }
+      }
+      
+      return {
+        title: title,
+        description: `OCRで抽出されたレシピです。\n\n${text.substring(0, 200)}...`,
+        servings: servings,
+        ingredients: ingredients.length > 0 ? ingredients : [{ item: '材料情報が見つかりませんでした', quantity: '', unit: '' }],
+        steps: steps.length > 0 ? steps : ['手順情報が見つかりませんでした']
+      };
+    }
+    
+    // レシピデータをフォームに適用する関数
+    async function applyRecipeData(recipeData) {
+      console.log('📝 レシピデータをフォームに適用中:', recipeData);
+      
+      // タイトル設定
+      const titleEl = document.getElementById('title');
+      if (titleEl && recipeData.title) {
+        titleEl.value = recipeData.title.trim();
+        console.log('✅ タイトル設定完了:', recipeData.title);
+      }
+      
+      // 説明・メモ設定
+      const notesEl = document.getElementById('notes');
+      if (notesEl && (recipeData.description || recipeData.notes)) {
+        const description = recipeData.description || recipeData.notes || '';
+        notesEl.value = description.trim();
+        console.log('✅ 説明設定完了:', description.substring(0, 50) + '...');
+      }
+      
+      // 人数設定
+      const servingsEl = document.getElementById('servings');
+      if (servingsEl && recipeData.servings) {
+        // 数字のみ抽出
+        const servings = recipeData.servings.toString().replace(/[^\d]/g, '');
+        if (servings) {
+          servingsEl.value = servings;
+          console.log('✅ 人数設定完了:', servings);
+        }
+      }
+      
+      // 材料設定
+      const ingredientsEditor = document.getElementById('ingredientsEditor');
+      const addIngBtn = document.getElementById('addIng');
+      if (ingredientsEditor && recipeData.ingredients && recipeData.ingredients.length > 0) {
+        ingredientsEditor.innerHTML = '';
+        
+        for (let i = 0; i < recipeData.ingredients.length; i++) {
+          const ingredient = recipeData.ingredients[i];
+          
+          // 材料行を追加
+          addIngBtn?.dispatchEvent(new Event('click'));
+          
+          // 追加完了を待つ
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
+          const rows = ingredientsEditor?.querySelectorAll('.ingredient-row');
+          const row = rows?.[rows.length - 1];
+          
+          if (row) {
+            const itemInput = row.querySelector('.ing-item');
+            const qtyInput = row.querySelector('.ing-qty');
+            const unitInput = row.querySelector('.ing-unit');
+            
+            if (itemInput && ingredient.item) {
+              itemInput.value = ingredient.item.trim();
+            }
+            if (qtyInput && ingredient.quantity) {
+              qtyInput.value = ingredient.quantity.trim();
+            }
+            if (unitInput && ingredient.unit) {
+              unitInput.value = ingredient.unit.trim();
+            }
+            
+            console.log(`✅ 材料${i + 1}設定完了:`, ingredient.item, ingredient.quantity, ingredient.unit);
+          }
+        }
+        
+        console.log('✅ 材料設定完了:', recipeData.ingredients.length + '個の材料');
+      }
+      
+      // 手順設定
+      const stepsEditor = document.getElementById('stepsEditor');
+      const addStepBtn = document.getElementById('addStep');
+      if (stepsEditor && recipeData.steps && recipeData.steps.length > 0) {
+        stepsEditor.innerHTML = '';
+        
+        for (let i = 0; i < recipeData.steps.length; i++) {
+          const step = recipeData.steps[i];
+          
+          // 手順行を追加
+          addStepBtn?.dispatchEvent(new Event('click'));
+          
+          // 追加完了を待つ
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
+          const rows = stepsEditor?.querySelectorAll('.step-row input[type="text"]');
+          const el = rows?.[rows.length - 1];
+          
+          if (el && step) {
+            el.value = step.trim();
+            console.log(`✅ 手順${i + 1}設定完了:`, step.substring(0, 30) + '...');
+          }
+        }
+        
+        console.log('✅ 手順設定完了:', recipeData.steps.length + '個の手順');
+      }
+      
+      console.log('🎉 レシピデータの適用が完了しました！');
+    }
+    
+    // 画像をクリアする関数
+    function clearImage() {
+      currentImageFile = null;
+      const previewArea = document.getElementById('previewArea');
+      const imageInput = document.getElementById('imageInput');
+      const cameraInput = document.getElementById('cameraInput');
+      const imageMessageArea = document.getElementById('imageMessageArea');
+      
+      if (previewArea) previewArea.style.display = 'none';
+      if (imageInput) imageInput.value = '';
+      if (cameraInput) cameraInput.value = '';
+      if (imageMessageArea) imageMessageArea.innerHTML = '';
+      
+      console.log('🗑️ 画像クリア完了');
+    }
+    
+    // メッセージ表示関数
+    function showImageMessage(message, type = 'info') {
+      const messageArea = document.getElementById('imageMessageArea');
+      if (!messageArea) return;
+      
+      const className = type === 'error' ? 'error-message' : 
+                      type === 'success' ? 'success-message' : 'loading-message';
+      
+      messageArea.innerHTML = `<div class="${className}">${message}</div>`;
+      
+      if (type === 'success') {
+        setTimeout(() => {
+          messageArea.innerHTML = '';
+        }, 3000);
+      }
+    }
+    
+    // Base64変換関数
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+    
+  </script>
+</body>
+</html>
