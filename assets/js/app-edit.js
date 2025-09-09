@@ -129,8 +129,10 @@ window.runImport = async function(url) {
         if (imgUrl){
           window.currentImageData = imgUrl;
           // インライン（人数横）
+          const inlineContainer = document.getElementById('inlineRecipeImageContainer');
           const inlineImg = document.getElementById('inlineRecipeImageImg');
-          if (inlineImg){ inlineImg.src = imgUrl; inlineImg.style.display = 'inline-block'; }
+          if (inlineImg){ inlineImg.src = imgUrl; }
+          if (inlineContainer) { inlineContainer.style.display = 'inline-block'; }
           // プレビュー枠
           const cont = document.getElementById('uploadedImagePreviewContainer');
           const prev = document.getElementById('uploadedImagePreview');
@@ -319,8 +321,10 @@ const setupModalEvents = () => {
       if (img) img.src = publicUrl;
       if (cont) cont.style.display = 'flex';
       window.currentImageData = publicUrl;
+      const inlineContainer = document.getElementById('inlineRecipeImageContainer');
       const inlineImg = document.getElementById('inlineRecipeImageImg');
-      if (inlineImg) { inlineImg.src = publicUrl; inlineImg.style.display = 'inline-block'; }
+      if (inlineImg) { inlineImg.src = publicUrl; }
+      if (inlineContainer) { inlineContainer.style.display = 'inline-block'; }
     } catch (err) {
       console.error('Upload error:', err);
       alert('画像アップロードに失敗しました: ' + (err.message || err));
@@ -360,6 +364,50 @@ const setupModalEvents = () => {
       const file = e.target.files?.[0];
       uploadSelectedImageFile(file);
       try{ e.target.value=''; }catch(_){ }
+    });
+  }
+
+  // 画像削除ボタンのイベントハンドラー
+  const deleteUploadedImageBtn = document.getElementById('deleteUploadedImageBtn');
+  const deleteInlineImageBtn = document.getElementById('deleteInlineImageBtn');
+  
+  function deleteRecipeImage() {
+    // 画像データを削除
+    window.currentImageData = null;
+    
+    // アップロード画像プレビューを非表示
+    const uploadedContainer = document.getElementById('uploadedImagePreviewContainer');
+    const uploadedImg = document.getElementById('uploadedImagePreview');
+    if (uploadedContainer) uploadedContainer.style.display = 'none';
+    if (uploadedImg) uploadedImg.src = '';
+    
+    // インライン画像を非表示
+    const inlineContainer = document.getElementById('inlineRecipeImageContainer');
+    const inlineImg = document.getElementById('inlineRecipeImageImg');
+    if (inlineContainer) inlineContainer.style.display = 'none';
+    if (inlineImg) inlineImg.src = '';
+    
+    // ファイル入力をクリア
+    if (imageFileInput) {
+      try { imageFileInput.value = ''; } catch(_) {}
+    }
+    
+    console.log('レシピ画像を削除しました');
+  }
+  
+  if (deleteUploadedImageBtn) {
+    deleteUploadedImageBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      deleteRecipeImage();
+    });
+  }
+  
+  if (deleteInlineImageBtn) {
+    deleteInlineImageBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      deleteRecipeImage();
     });
   }
   
@@ -696,10 +744,13 @@ const initializeApp = () => {
     }
     // show inline image preview if already selected via upload
     try {
+      const inlineContainer = document.getElementById('inlineRecipeImageContainer');
       const imgEl = document.getElementById('inlineRecipeImageImg');
       if (imgEl && window.currentImageData) {
         imgEl.src = window.currentImageData;
-        imgEl.style.display = 'inline-block';
+      }
+      if (inlineContainer && window.currentImageData) {
+        inlineContainer.style.display = 'inline-block';
       }
     } catch (e) {}
   }
@@ -724,10 +775,13 @@ const loadExistingRecipe = async (id) => {
     // Inline image preview if available
     if (recipe.image_url) {
       window.currentImageData = recipe.image_url;
+      const inlineContainer = document.getElementById('inlineRecipeImageContainer');
       const imgEl = document.getElementById('inlineRecipeImageImg');
       if (imgEl) {
         imgEl.src = recipe.image_url;
-        imgEl.style.display = 'inline-block';
+      }
+      if (inlineContainer) {
+        inlineContainer.style.display = 'inline-block';
       }
     }
     
