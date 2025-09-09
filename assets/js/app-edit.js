@@ -316,18 +316,34 @@ const setupModalEvents = () => {
     if (!url.startsWith('http')) return alert('有効なURLを入力してください。');
     
     const btn = document.getElementById('urlImportConfirmBtn');
+    const loadingPopup = document.getElementById('urlLoadingPopup');
+    
+    // ボタンを無効化
     btn.disabled = true;
     btn.textContent = '読み込み中...';
-  
+    
+    // モーダルを閉じてローディングアニメーション表示
+    toggleModal('url-import-modal', false);
+    if (loadingPopup) {
+      loadingPopup.style.display = 'flex';
+    }
     
     try {
       await window.runImport(url);
-      toggleModal('url-import-modal', false);
+      alert('レシピの読み込みが完了しました！');
     } catch (error) {
       alert(`レシピの読み込みに失敗しました: ${error.message}`);
     } finally {
+      // ローディングアニメーション非表示
+      if (loadingPopup) {
+        loadingPopup.style.display = 'none';
+      }
+      // ボタン復旧
       btn.disabled = false;
-      btn.textContent = '読み込み';
+      btn.textContent = '読み込み開始';
+      // URLフィールドクリア
+      const urlInput = document.getElementById('urlInput');
+      if (urlInput) urlInput.value = '';
     }
   });
   
