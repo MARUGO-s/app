@@ -269,13 +269,15 @@ const setupModalEvents = () => {
   });
   
   // Category Modal
-  document.getElementById('categorySelectBtn')?.addEventListener('click', () => {
+  document.getElementById('categorySelectBtn')?.addEventListener('click', async () => {
     toggleModal('category-modal', true);
+    await loadCategories(); // モーダル表示時にカテゴリーを読み込み
   });
   
   // Tag Modal  
-  document.getElementById('tagSelectBtn')?.addEventListener('click', () => {
+  document.getElementById('tagSelectBtn')?.addEventListener('click', async () => {
     toggleModal('tag-modal', true);
+    await loadTags(); // モーダル表示時にタグを読み込み
   });
   
   // AI Modal
@@ -433,6 +435,723 @@ const setupModalEvents = () => {
     }
   });
 
+  // カテゴリー一覧を読み込む関数
+  async function loadCategories() {
+    try {
+      console.log('カテゴリー一覧を読み込み中...');
+      
+      // 基本カテゴリーを設定（固定）
+      const basicCategories = [
+        'すべて', 'アミューズ', '前菜', 'ソース', 'スープ', 'パスタ', 
+        '魚料理', '肉料理', 'メイン', 'デザート', 'パン', 'その他'
+      ];
+      
+      const categoryOptionsEl = document.getElementById('category-options');
+      if (categoryOptionsEl) {
+        categoryOptionsEl.innerHTML = '';
+        
+        basicCategories.forEach(category => {
+          const categoryDiv = document.createElement('div');
+          categoryDiv.className = 'category-option';
+          categoryDiv.textContent = category;
+          categoryDiv.addEventListener('click', () => {
+            // 既存の選択を解除
+            document.querySelectorAll('.category-option').forEach(el => {
+              el.classList.remove('selected');
+            });
+            // 新しい選択を追加
+            categoryDiv.classList.add('selected');
+          });
+          categoryOptionsEl.appendChild(categoryDiv);
+        });
+        
+        console.log('基本カテゴリーを読み込み完了:', basicCategories.length, '件');
+      }
+      
+      // データベースからカスタムカテゴリーを取得
+      try {
+        const { data: customCategories, error } = await sb.from('categories').select('name').order('name');
+        if (error) {
+          // テーブルが存在しない場合はスキップ
+          if (error.code === 'PGRST116' || error.message.includes('does not exist')) {
+            console.log('categoriesテーブルがまだ作成されていません');
+            return;
+          }
+          throw error;
+        }
+        
+        if (customCategories && customCategories.length > 0) {
+          const customCategoryOptionsEl = document.getElementById('custom-category-options');
+          const customCategoryGroupEl = document.getElementById('custom-category-group');
+          
+          if (customCategoryOptionsEl && customCategoryGroupEl) {
+            customCategoryOptionsEl.innerHTML = '';
+            customCategoryGroupEl.style.display = 'block';
+            
+            customCategories.forEach(cat => {
+              const categoryDiv = document.createElement('div');
+              categoryDiv.className = 'category-option custom-category';
+              categoryDiv.style.position = 'relative';
+              categoryDiv.style.display = 'flex';
+              categoryDiv.style.justifyContent = 'space-between';
+              categoryDiv.style.alignItems = 'center';
+              
+              const categoryText = document.createElement('span');
+              categoryText.textContent = cat.name;
+              categoryText.style.flex = '1';
+              
+              const deleteBtn = document.createElement('button');
+              deleteBtn.innerHTML = '<i class="fas fa-times"></i>';
+              deleteBtn.className = 'btn danger small category-delete-btn';
+              deleteBtn.style.marginLeft = '8px';
+              deleteBtn.style.padding = '2px 6px';
+              deleteBtn.style.fontSize = '12px';
+              deleteBtn.title = 'このカテゴリーを削除';
+              
+              categoryDiv.appendChild(categoryText);
+              categoryDiv.appendChild(deleteBtn);
+              
+              // カテゴリー選択イベント
+              categoryText.addEventListener('click', () => {
+                document.querySelectorAll('.category-option').forEach(el => {
+                  el.classList.remove('selected');
+                });
+                categoryDiv.classList.add('selected');
+              });
+              
+              // カテゴリー削除イベント
+              deleteBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await deleteCustomCategory(cat.name);
+              });
+              
+              customCategoryOptionsEl.appendChild(categoryDiv);
+            });
+            
+            console.log('カスタムカテゴリーを読み込み完了:', customCategories.length, '件');
+          }
+        }
+      } catch (customError) {
+        console.log('カスタムカテゴリーの取得をスキップ:', customError.message);
+      }
+      
+    } catch (error) {
+      console.error('カテゴリー読み込みエラー:', error);
+    }
+  }
+
+  // Load Tags function
+  async function loadTags() {
+    try {
+      console.log('タグ一覧を読み込み中...');
+      
+      const tagOptionsEl = document.getElementById('tag-options');
+      if (tagOptionsEl) {
+        tagOptionsEl.innerHTML = '';
+      }
+      
+      // データベースからタグを取得
+      try {
+        const { data: allTags, error } = await sb.from('tags').select('*').order('name');
+        if (error) {
+          // テーブルが存在しない場合はスキップ
+          if (error.code === 'PGRST116' || error.message.includes('does not exist')) {
+            console.log('tagsテーブルがまだ作成されていません');
+            return;
+          }
+          throw error;
+        }
+        
+        if (allTags && allTags.length > 0 && tagOptionsEl) {
+          // 全てのタグに削除ボタンを表示（使用中かどうかは削除時にチェック）
+          allTags.forEach(tag => {
+            const tagDiv = document.createElement('div');
+            tagDiv.className = 'tag-option custom-tag';
+            tagDiv.innerHTML = `
+              ${tag.name}
+              <i class="fas fa-times tag-delete-btn" data-tag-id="${tag.id}" data-tag-name="${tag.name}"></i>
+            `;
+            
+            tagDiv.setAttribute('data-tag-id', tag.id);
+            tagDiv.setAttribute('data-tag-name', tag.name);
+            tagOptionsEl.appendChild(tagDiv);
+          });
+          
+          console.log('タグを読み込み完了:', allTags.length, '件');
+        }
+        
+        // カスタムタグセクションの処理（将来的な拡張用）
+        const customTagOptionsEl = document.getElementById('custom-tag-options');
+        const customTagGroupEl = document.getElementById('custom-tag-group');
+        
+        if (customTagOptionsEl && customTagGroupEl) {
+          // 現在は全てのタグを基本タグ扱いにするので非表示
+          customTagGroupEl.style.display = 'none';
+        }
+        
+      } catch (tagError) {
+        console.log('タグの取得をスキップ:', tagError.message);
+      }
+      
+    } catch (error) {
+      console.error('タグ読み込みエラー:', error);
+    }
+  }
+
+  // 新しいカテゴリーを追加する関数
+  async function addNewCategory(categoryName) {
+    try {
+      console.log('新しいカテゴリーを追加中:', categoryName);
+      
+      // データベースにカテゴリーを追加
+      const { data, error } = await sb.from('categories').insert([
+        { name: categoryName, created_at: new Date().toISOString() }
+      ]);
+      
+      if (error) {
+        // カテゴリーテーブルが存在しない場合は作成
+        if (error.code === '42P01') {
+          console.log('カテゴリーテーブルが存在しないため作成します');
+          alert('カテゴリーテーブルを作成する必要があります。管理者に連絡してください。');
+          return;
+        }
+        throw error;
+      }
+      
+      console.log('カテゴリー追加成功:', categoryName);
+      alert(`カテゴリー「${categoryName}」を追加しました！`);
+      
+      // カテゴリー一覧を再読み込み
+      await loadCategories();
+      
+      // index.htmlのカテゴリータブに追加するために、カテゴリー情報を保存
+      localStorage.setItem('newCategoryAdded', JSON.stringify({
+        name: categoryName,
+        timestamp: Date.now()
+      }));
+      
+    } catch (error) {
+      console.error('カテゴリー追加エラー:', error);
+      alert('カテゴリーの追加に失敗しました: ' + error.message);
+    }
+  }
+
+  // 新しいタグを追加する関数
+  async function addNewTag(tagName) {
+    try {
+      console.log('新しいタグを追加中:', tagName);
+      
+      // データベースにタグを追加
+      const { data, error } = await sb.from('tags').insert([
+        { name: tagName, created_at: new Date().toISOString() }
+      ]);
+      
+      if (error) {
+        // タグテーブルが存在しない場合は作成
+        if (error.code === 'PGRST116' || error.message.includes('does not exist')) {
+          alert('tagsテーブルが作成されていません。まずSQLファイルを実行してください。');
+          return;
+        }
+        
+        // 重複エラーの場合
+        if (error.code === '23505' || error.message.includes('duplicate')) {
+          alert('このタグは既に存在します。');
+          return;
+        }
+        
+        throw error;
+      }
+      
+      console.log('タグ追加成功:', data);
+      
+      // タグリストを再読み込み
+      await loadTags();
+      
+      alert('新しいタグを追加しました: ' + tagName);
+      
+    } catch (error) {
+      console.error('タグ追加エラー:', error);
+      alert('タグの追加に失敗しました: ' + error.message);
+    }
+  }
+
+  // タグ削除関数
+  async function deleteCustomTag(tagId, tagName) {
+    try {
+      console.log('タグ削除を開始:', { tagId, tagName });
+      
+      // タグが使用中かどうかをチェック
+      console.log('タグ使用状況をチェック中:', tagName);
+      
+      const { data: recipesWithTag, error: checkError } = await sb
+        .from('recipes')
+        .select('id, title, tags')
+        .not('tags', 'is', null);
+      
+      if (checkError) {
+        console.error('タグ使用状況チェックエラー:', checkError);
+        alert('タグの使用状況確認中にエラーが発生しました。');
+        return;
+      }
+      
+      // tagsフィールドに指定されたタグが含まれているレシピを検索
+      const recipesUsingTag = recipesWithTag.filter(recipe => {
+        if (Array.isArray(recipe.tags)) {
+          return recipe.tags.includes(tagName);
+        }
+        return false;
+      });
+      
+      console.log('タグを使用しているレシピ:', recipesUsingTag.length, '件');
+      
+      if (recipesUsingTag.length > 0) {
+        const recipeNames = recipesUsingTag.slice(0, 3).map(r => r.title).join('、');
+        const moreText = recipesUsingTag.length > 3 ? ` 他${recipesUsingTag.length - 3}件` : '';
+        alert(`タグ「${tagName}」は現在使用中のため削除できません。\n使用レシピ: ${recipeNames}${moreText}`);
+        return;
+      }
+      
+      // 削除前の存在確認
+      const trimmedTagName = tagName.trim();
+      console.log('削除前の検索:', trimmedTagName);
+      
+      const { data: preDeleteCheck, error: preError } = await sb.from('tags').select('*').eq('name', trimmedTagName);
+      console.log('削除前の検索結果:', preDeleteCheck ? preDeleteCheck.length : 0, preDeleteCheck);
+      
+      if (preError) {
+        console.error('削除前チェックエラー:', preError);
+        alert('タグの確認中にエラーが発生しました。');
+        return;
+      }
+      
+      if (!preDeleteCheck || preDeleteCheck.length === 0) {
+        console.log('削除対象のタグが見つかりません');
+        alert('削除対象のタグが見つかりません。');
+        return;
+      }
+      
+      const targetTag = preDeleteCheck[0];
+      console.log('削除対象を確認しました:', targetTag);
+      
+      // 確認ダイアログ
+      if (!confirm(`タグ「${tagName}」を削除しますか？`)) {
+        return;
+      }
+      
+      // IDでの削除を試行
+      let targetId = tagId || targetTag.id;
+      console.log('IDでの削除を試行:', targetId);
+      
+      const { data: deleteResult, error: deleteError } = await sb
+        .from('tags')
+        .delete()
+        .eq('id', targetId)
+        .select();
+      
+      console.log('データベース削除結果:', deleteResult ? deleteResult.length : 0, deleteResult);
+      
+      if (deleteError) {
+        console.error('削除エラー:', deleteError);
+        alert('タグの削除に失敗しました: ' + deleteError.message);
+        return;
+      }
+      
+      if (!deleteResult || deleteResult.length === 0) {
+        console.log('IDでの削除に失敗、全件検索で再試行');
+        
+        // 全件取得して名前で検索
+        const { data: allTags, error: allError } = await sb.from('tags').select('*');
+        if (allError) {
+          console.error('全件取得エラー:', allError);
+          alert('タグの削除に失敗しました。');
+          return;
+        }
+        
+        // 名前で検索（trim等も考慮）
+        const foundTag = allTags.find(tag => 
+          tag.name === tagName || 
+          tag.name === trimmedTagName ||
+          tag.name.trim() === trimmedTagName
+        );
+        
+        if (foundTag) {
+          console.log('名前検索で発見:', foundTag);
+          const { data: retryResult, error: retryError } = await sb
+            .from('tags')
+            .delete()
+            .eq('id', foundTag.id)
+            .select();
+          
+          if (retryError || !retryResult || retryResult.length === 0) {
+            console.error('再試行でも削除失敗:', retryError);
+            alert('タグの削除に失敗しました。');
+            return;
+          }
+          
+          console.log('再試行で削除成功:', retryResult);
+        } else {
+          alert('削除対象のタグが見つかりませんでした。');
+          return;
+        }
+      }
+      
+      // UI更新
+      updateUIAfterTagDelete(tagName);
+      
+      // タグリストを再読み込み
+      await loadTags();
+      
+      alert('タグを削除しました: ' + tagName);
+      
+    } catch (error) {
+      console.error('タグ削除エラー:', error);
+      alert('タグの削除中にエラーが発生しました: ' + error.message);
+    }
+  }
+
+  // タグ削除後のUI更新
+  function updateUIAfterTagDelete(tagName) {
+    // 選択されていたタグを解除
+    selectedTags = selectedTags.filter(tag => tag !== tagName);
+    updateTagSelect();
+    
+    console.log('UI更新処理完了');
+  }
+
+  // 未使用タグの削除関数（レシピ削除時に呼び出される）
+  async function cleanupUnusedTags(tagsToCheck) {
+    if (!Array.isArray(tagsToCheck) || tagsToCheck.length === 0) {
+      return;
+    }
+    
+    try {
+      console.log('未使用タグのクリーンアップを開始:', tagsToCheck);
+      
+      // 全レシピのタグを取得
+      const { data: allRecipes, error: recipesError } = await sb
+        .from('recipes')
+        .select('tags')
+        .not('tags', 'is', null);
+      
+      if (recipesError) {
+        console.error('レシピ取得エラー:', recipesError);
+        return;
+      }
+      
+      // 使用されているタグを集計
+      const usedTags = new Set();
+      allRecipes.forEach(recipe => {
+        if (Array.isArray(recipe.tags)) {
+          recipe.tags.forEach(tag => usedTags.add(tag));
+        }
+      });
+      
+      // チェック対象のタグで使用されていないものを削除
+      for (const tagName of tagsToCheck) {
+        if (!usedTags.has(tagName)) {
+          console.log('未使用タグを削除:', tagName);
+          
+          const { error: deleteError } = await sb
+            .from('tags')
+            .delete()
+            .eq('name', tagName);
+          
+          if (deleteError) {
+            console.error('タグ削除エラー:', tagName, deleteError);
+          } else {
+            console.log('未使用タグ削除成功:', tagName);
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.error('未使用タグクリーンアップエラー:', error);
+    }
+  }
+
+  // 未使用カテゴリーの削除関数（recipe_view.htmlと共通）
+  async function cleanupUnusedCategory(categoryName) {
+    try {
+      console.log('カテゴリー使用状況をチェック中:', categoryName);
+      
+      // 基本カテゴリーは削除しない
+      const basicCategories = [
+        'すべて', 'アミューズ', '前菜', 'ソース', 'スープ', 'パスタ', 
+        '魚料理', '肉料理', 'メイン', 'デザート', 'パン', 'その他'
+      ];
+      
+      if (basicCategories.includes(categoryName)) {
+        console.log('基本カテゴリーなので削除をスキップ:', categoryName);
+        return;
+      }
+      
+      // 同じカテゴリーを使用している他のレシピがあるかチェック
+      const { data: recipesWithCategory, error: checkError } = await sb
+        .from('recipes')
+        .select('id')
+        .eq('category', categoryName);
+      
+      if (checkError) {
+        console.error('カテゴリー使用状況チェックエラー:', checkError);
+        return;
+      }
+      
+      // 使用しているレシピが0件の場合、categoriesテーブルからも削除
+      if (recipesWithCategory.length === 0) {
+        console.log('未使用カテゴリーを削除中:', categoryName);
+        
+        const { error: deleteError } = await sb
+          .from('categories')
+          .delete()
+          .eq('name', categoryName);
+        
+        if (deleteError) {
+          console.error('カテゴリー削除エラー:', deleteError);
+        } else {
+          console.log('未使用カテゴリーを削除しました:', categoryName);
+          
+          // index.htmlに未使用カテゴリー削除の通知を送る
+          localStorage.setItem('categoryDeleted', JSON.stringify({
+            name: categoryName,
+            timestamp: Date.now()
+          }));
+        }
+      } else {
+        console.log('カテゴリーは他のレシピで使用中:', categoryName, '使用数:', recipesWithCategory.length);
+      }
+      
+    } catch (error) {
+      console.error('カテゴリークリーンアップエラー:', error);
+    }
+  }
+
+  // カスタムカテゴリーの手動削除関数
+  async function deleteCustomCategory(categoryName) {
+    try {
+      console.log('カスタムカテゴリー削除を試行中:', categoryName);
+      
+      // 削除前にカテゴリーがデータベースに存在するかチェック
+      const { data: existingCategory, error: existError } = await sb
+        .from('categories')
+        .select('*')
+        .eq('name', categoryName)
+        .single();
+      
+      if (existError && existError.code !== 'PGRST116') {
+        console.error('カテゴリー存在確認エラー:', existError);
+        alert('カテゴリーの存在確認に失敗しました: ' + existError.message);
+        return;
+      }
+      
+      if (!existingCategory) {
+        console.warn('削除対象のカテゴリーがデータベースに存在しません:', categoryName);
+        alert('このカテゴリーはすでに削除されています。');
+        // 画面からは削除する
+        const categoryElements = document.querySelectorAll('.custom-category');
+        categoryElements.forEach(el => {
+          const textSpan = el.querySelector('span');
+          if (textSpan && textSpan.textContent === categoryName) {
+            el.remove();
+          }
+        });
+        return;
+      }
+      
+      console.log('削除対象カテゴリーを確認:', existingCategory);
+      
+      // テスト: カテゴリーテーブルの権限確認
+      try {
+        const { data: testData, error: testError } = await sb
+          .from('categories')
+          .select('count', { count: 'exact' });
+        console.log('categoriesテーブルへのアクセス権限確認 - カウント:', testData);
+        if (testError) {
+          console.error('テーブルアクセス権限エラー:', testError);
+        }
+      } catch (permError) {
+        console.error('権限テストエラー:', permError);
+      }
+      
+      // 削除確認
+      if (!confirm(`カテゴリー「${categoryName}」を削除しますか？\n\n※このカテゴリーを使用しているレシピがある場合は削除できません。`)) {
+        return;
+      }
+      
+      // 使用状況をチェック
+      const { data: recipesWithCategory, error: checkError } = await sb
+        .from('recipes')
+        .select('id, title')
+        .eq('category', categoryName);
+      
+      if (checkError) {
+        console.error('カテゴリー使用状況チェックエラー:', checkError);
+        alert('カテゴリーの使用状況確認に失敗しました: ' + checkError.message);
+        return;
+      }
+      
+      // 使用中のレシピがある場合は削除を拒否
+      if (recipesWithCategory && recipesWithCategory.length > 0) {
+        const recipeList = recipesWithCategory.map(r => `・${r.title}`).join('\n');
+        alert(`使用中のカテゴリーなので削除できません。\n\n【使用中のレシピ】\n${recipeList}\n\n先にこれらのレシピのカテゴリーを変更してから削除してください。`);
+        return;
+      }
+      
+      // カテゴリーをデータベースから削除
+      console.log('データベースからカテゴリーを削除中:', categoryName);
+      
+      // より詳細な削除処理
+      console.log('削除前のカテゴリー検索:', categoryName);
+      
+      // 削除前に再度存在確認（トリム処理を含む）
+      const trimmedCategoryName = categoryName.trim();
+      console.log('トリム後のカテゴリー名:', `"${trimmedCategoryName}"`);
+      
+      const { data: preDeleteCheck, error: preDeleteError } = await sb
+        .from('categories')
+        .select('*')
+        .eq('name', trimmedCategoryName);
+      
+      console.log('削除前の検索結果:', preDeleteCheck);
+      
+      if (preDeleteError) {
+        console.error('削除前検索エラー:', preDeleteError);
+        throw preDeleteError;
+      }
+      
+      if (!preDeleteCheck || preDeleteCheck.length === 0) {
+        console.warn('名前での検索で削除対象が見つかりません。全カテゴリーをチェックします...');
+        
+        // 全カテゴリーを取得して比較
+        const { data: allCategories, error: allError } = await sb
+          .from('categories')
+          .select('*');
+          
+        console.log('全カテゴリー一覧:', allCategories);
+        
+        if (allCategories) {
+          const matchingCategory = allCategories.find(cat => 
+            cat.name === categoryName || 
+            cat.name === trimmedCategoryName ||
+            cat.name.trim() === trimmedCategoryName
+          );
+          
+          if (matchingCategory) {
+            console.log('一致するカテゴリーを発見:', matchingCategory);
+            // 見つかったカテゴリーを削除
+            const { data: deleteData2, error: deleteError2 } = await sb
+              .from('categories')
+              .delete()
+              .eq('id', matchingCategory.id)
+              .select();
+              
+            if (deleteError2) {
+              console.error('ID指定削除エラー:', deleteError2);
+              alert('カテゴリーの削除に失敗しました: ' + deleteError2.message);
+              return;
+            }
+            
+            console.log('代替方法での削除成功:', deleteData2);
+            alert(`カテゴリー「${categoryName}」を削除しました！`);
+            
+            // 画面更新処理をここに移動
+            await updateUIAfterDelete(categoryName);
+            return;
+          }
+        }
+        
+        console.warn('削除対象が見つかりません。すでに削除済みの可能性があります。');
+        alert('カテゴリーが見つかりません。すでに削除済みかもしれません。');
+        
+        // 画面からは削除する
+        await updateUIAfterDelete(categoryName);
+        return;
+      }
+      
+      console.log('削除対象を確認しました:', preDeleteCheck[0]);
+      
+      // 正確なIDでの削除を試行
+      const targetId = preDeleteCheck[0].id;
+      console.log('IDでの削除を試行:', targetId);
+      
+      const { data: deleteData, error: deleteError } = await sb
+        .from('categories')
+        .delete()
+        .eq('id', targetId)
+        .select();
+      
+      if (deleteError) {
+        console.error('カテゴリー削除エラー:', deleteError);
+        alert('カテゴリーの削除に失敗しました: ' + deleteError.message);
+        return;
+      }
+      
+      console.log('データベース削除結果:', deleteData);
+      
+      // 削除されたレコードがあるかチェック
+      if (!deleteData || deleteData.length === 0) {
+        console.warn('削除対象のカテゴリーがデータベースに見つかりませんでした:', categoryName);
+        alert('カテゴリーが見つからないため削除できませんでした。すでに削除済みの可能性があります。');
+        // 画面からは削除する
+      } else {
+        console.log('データベースから正常に削除されました:', deleteData);
+      }
+      
+      console.log('カスタムカテゴリーを削除しました:', categoryName);
+      alert(`カテゴリー「${categoryName}」を削除しました！`);
+      
+      // UI更新処理
+      await updateUIAfterDelete(categoryName);
+      
+    } catch (error) {
+      console.error('カスタムカテゴリー削除エラー:', error);
+      alert('カテゴリーの削除中にエラーが発生しました: ' + error.message);
+    }
+  }
+
+  // UI更新処理を共通関数として分離
+  async function updateUIAfterDelete(categoryName) {
+    console.log('UI更新処理を開始:', categoryName);
+    
+    // 即座に画面からカテゴリーを削除
+    const categoryElements = document.querySelectorAll('.custom-category');
+    categoryElements.forEach(el => {
+      const textSpan = el.querySelector('span');
+      if (textSpan && textSpan.textContent === categoryName) {
+        el.remove();
+        console.log('画面からカテゴリー要素を削除:', categoryName);
+      }
+    });
+    
+    // 選択されていたカテゴリーが削除された場合は選択をクリア
+    const selectedEl = document.querySelector('.category-option.selected span');
+    if (selectedEl && selectedEl.textContent === categoryName) {
+      selectedCategory = null;
+      document.getElementById('selectedCategoryText').textContent = 'カテゴリーを選択';
+    }
+    
+    // カスタムカテゴリーグループが空になった場合は非表示
+    const customCategoryOptionsEl = document.getElementById('custom-category-options');
+    if (customCategoryOptionsEl && customCategoryOptionsEl.children.length === 0) {
+      const customCategoryGroupEl = document.getElementById('custom-category-group');
+      if (customCategoryGroupEl) {
+        customCategoryGroupEl.style.display = 'none';
+      }
+    }
+    
+    // index.htmlにカテゴリー削除の通知を送る
+    localStorage.setItem('categoryDeleted', JSON.stringify({
+      name: categoryName,
+      timestamp: Date.now()
+    }));
+    
+    // 少し遅延してからカテゴリー一覧を再読み込み（確実な同期のため）
+    setTimeout(async () => {
+      await loadCategories();
+    }, 100);
+    
+    console.log('UI更新処理完了:', categoryName);
+  }
+
   // Category Modal buttons
   document.getElementById('category-ok-btn')?.addEventListener('click', () => {
     // Handle category selection
@@ -448,17 +1167,35 @@ const setupModalEvents = () => {
     toggleModal('category-modal', false);
   });
 
+  // 新しいカテゴリー追加ボタン
+  document.getElementById('add-new-category-btn')?.addEventListener('click', async () => {
+    const categoryName = prompt('新しいカテゴリー名を入力してください:');
+    if (categoryName && categoryName.trim()) {
+      await addNewCategory(categoryName.trim());
+    }
+  });
+
   // Tag Modal buttons  
   document.getElementById('tag-ok-btn')?.addEventListener('click', () => {
     // Handle tag selection
-    const selectedTags = Array.from(document.querySelectorAll('.tag-options .selected')).map(el => el.textContent);
+    const selectedTagElements = Array.from(document.querySelectorAll('#tag-options .selected'));
+    selectedTags = selectedTagElements.map(el => el.textContent.trim());
     const tagText = selectedTags.length > 0 ? selectedTags.join(', ') : 'タグを選択';
     document.getElementById('selectedTagsText').textContent = tagText;
+    console.log('選択されたタグ:', selectedTags);
     toggleModal('tag-modal', false);
   });
 
   document.getElementById('tag-cancel-btn')?.addEventListener('click', () => {
     toggleModal('tag-modal', false);
+  });
+
+  // 新規タグ追加ボタン
+  document.getElementById('add-new-tag-btn')?.addEventListener('click', async () => {
+    const tagName = prompt('新しいタグ名を入力してください:');
+    if (tagName && tagName.trim()) {
+      await addNewTag(tagName.trim());
+    }
   });
 
   // AI Modal buttons
@@ -490,7 +1227,18 @@ const setupModalEvents = () => {
     
     // Tag selection (multiple selection)
     if (e.target.classList.contains('tag-option')) {
+      console.log('タグクリック検出:', e.target.textContent);
       e.target.classList.toggle('selected');
+      console.log('選択状態:', e.target.classList.contains('selected'));
+    }
+
+    // Tag delete button
+    if (e.target.classList.contains('tag-delete-btn')) {
+      e.stopPropagation(); // タグ選択を防ぐ
+      const tagId = e.target.getAttribute('data-tag-id');
+      const tagName = e.target.getAttribute('data-tag-name');
+      console.log('タグ削除ボタンクリック:', { tagId, tagName });
+      deleteCustomTag(tagId, tagName);
     }
     
     // Genre selection in AI modal
@@ -543,6 +1291,19 @@ const saveRecipe = async () => {
     
     console.log('Final ingredients:', ingredients);
     console.log('Final steps:', steps);
+    
+    // 編集時の元のカテゴリーとタグを記録（未使用削除用）
+    let originalCategory = null;
+    let originalTags = [];
+    if (recipeId) {
+      try {
+        const { data: existingRecipe } = await sb.from('recipes').select('category, tags').eq('id', recipeId).single();
+        originalCategory = existingRecipe?.category;
+        originalTags = Array.isArray(existingRecipe?.tags) ? existingRecipe.tags : [];
+      } catch (e) {
+        console.log('元のデータ取得をスキップ:', e.message);
+      }
+    }
     
     const recipeData = {
       title,
@@ -613,6 +1374,27 @@ const saveRecipe = async () => {
       }
     }
     
+    // カテゴリーが変更された場合、元のカテゴリーの使用状況をチェック
+    if (originalCategory && originalCategory !== selectedCategory) {
+      try {
+        await cleanupUnusedCategory(originalCategory);
+      } catch (cleanupError) {
+        console.error('カテゴリークリーンアップエラー:', cleanupError);
+      }
+    }
+    
+    // タグが変更された場合、元のタグの使用状況をチェック
+    if (originalTags.length > 0) {
+      const removedTags = originalTags.filter(tag => !selectedTags.includes(tag));
+      if (removedTags.length > 0) {
+        try {
+          await cleanupUnusedTags(removedTags);
+        } catch (cleanupError) {
+          console.error('タグクリーンアップエラー:', cleanupError);
+        }
+      }
+    }
+
     alert('レシピを保存しました！');
     window.location.href = `recipe_view.html?id=${encodeURIComponent(savedId)}`;
     
