@@ -1401,6 +1401,7 @@ body {
     color: var(--text-primary);
     transition: all var(--transition-normal);
     font-weight: 500;
+    text-align: center;
 }
 
 .search-input:focus {
@@ -1507,18 +1508,20 @@ body {
     transform: translateY(0);
 }
 
-/* --- 9. Category Filter - Mobile Style --- */
+/* --- 9. Category Filter - 2行表示 中央寄せ --- */
 .category-filter-section {
     margin: var(--space-4) 0;
-    overflow-x: auto;
-    padding-right: 16px; /* Safari スクロールバー分の余白 */
+    display: flex;
+    justify-content: center;
 }
 
 .category-filter {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--space-2);
     padding: var(--space-2) 0;
-    min-width: max-content;
+    justify-content: center;
+    max-width: 800px;
 }
 
 .category-btn {
@@ -1781,6 +1784,7 @@ body {
     
     .category-filter {
         padding: var(--space-2);
+        max-width: 100%;
     }
     
     .footer-content {
