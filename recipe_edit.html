@@ -288,9 +288,8 @@
     <form id="editForm" class="panel">
       
       <div class="field">
-        <label for="title">料理名</label>
-        <div style="display: flex; gap: 0.5rem; align-items: center;">
-          <input id="title" name="title" class="input" required style="flex: 1;" />
+        <!-- URL読み込み/画像解析/画像アップロードボタンを料理名の上に配置 -->
+        <div class="recipe-action-buttons">
           <button type="button" class="btn ghost small" id="urlImportBtn" title="URLからレシピを読み込み">
             <i class="fas fa-link"></i> URL読み込み
           </button>
@@ -302,15 +301,9 @@
           </button>
           <input type="file" id="recipeImageFile" accept="image/*" style="display:none;">
         </div>
-        <div id="uploadedImagePreviewContainer" style="margin-top:8px; display:none; align-items:center; gap:8px;">
-          <div style="position: relative; display: inline-block;">
-            <img id="uploadedImagePreview" src="" alt="アップロード画像" style="max-height:80px; border-radius:6px;">
-            <button id="deleteUploadedImageBtn" type="button" class="btn ghost" style="position: absolute; top: -8px; right: -8px; background: rgba(220,53,69,0.9); color: white; border: none; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; cursor: pointer;" title="画像を削除">
-              <i class="fas fa-times"></i>
-            </button>
-          </div>
-          <span id="uploadedImageHint" style="color:#666; font-size:12px;">この画像が保存されます</span>
-        </div>
+        
+        <label for="title">料理名</label>
+        <input id="title" name="title" class="input" required />
       </div>
       <div class="field category-tags-field">
         <div class="category-tags-row">
@@ -640,17 +633,6 @@
     }
     const sb = window.sb;
 
-    const actions = document.querySelector('.header-actions');
-    if (actions) {
-        const headerBtn = document.createElement('button');
-        headerBtn.className = 'btn ghost';
-        headerBtn.textContent = 'URLから取り込み';
-        actions.insertBefore(headerBtn, actions.firstChild);
-        headerBtn.addEventListener('click', async () => {
-            const u = prompt('レシピ掲載ページのURL'); if (!u) return;
-            await runImport(u);
-        });
-    }
 
     async function runImport(url) {
         try {

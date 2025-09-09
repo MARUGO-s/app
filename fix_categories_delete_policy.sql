@@ -16,3 +16,4 @@ CREATE POLICY "Enable all operations for all users" ON categories
 -- テスト削除
 DELETE FROM categories WHERE name = 'デセール';
 SELECT * FROM categories;
+

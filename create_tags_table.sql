@@ -38,3 +38,4 @@ ON CONFLICT (name) DO NOTHING;
 
 -- 作成結果を確認
 SELECT * FROM tags ORDER BY name;
+

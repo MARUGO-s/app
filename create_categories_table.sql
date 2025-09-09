@@ -26,3 +26,4 @@ COMMENT ON COLUMN categories.id IS '主キー';
 COMMENT ON COLUMN categories.name IS 'カテゴリー名（ユニーク）';
 COMMENT ON COLUMN categories.created_at IS '作成日時';
 COMMENT ON COLUMN categories.updated_at IS '更新日時';
+
