@@ -659,7 +659,7 @@
             if (stepsEditor) stepsEditor.innerHTML = '';
             (r.steps || []).forEach(text => {
                 addStepBtn?.dispatchEvent(new Event('click'));
-                const rows = stepsEditor?.querySelectorAll('.step-row input[type="text"]');
+                const rows = stepsEditor?.querySelectorAll('.step-row .step-text');
                 const el = rows?.[rows.length-1];
                 if (el) el.value = text;
             });
@@ -766,7 +766,7 @@
         const text = steps[i];
         addStepBtn?.dispatchEvent(new Event('click'));
         await new Promise(resolve => setTimeout(resolve, 50));
-        const rows = stepsEditor?.querySelectorAll('.step-row input[type="text"]');
+        const rows = stepsEditor?.querySelectorAll('.step-row .step-text');
         const el = rows?.[rows.length-1];
         if (el) {
           el.value = (text || '').toString();
