@@ -1032,10 +1032,137 @@ ${stepText}
     btnDelete?.addEventListener('click', async ()=>{
       if(!confirm('このレシピを削除しますか？（材料・手順は残る場合があります）')) return;
       try{
+        // 削除前に現在のレシピのカテゴリーとタグを取得
+        const { data: currentRecipe } = await sb.from('recipes').select('category, tags').eq('id', id).single();
+        const deletedCategory = currentRecipe?.category;
+        const deletedTags = Array.isArray(currentRecipe?.tags) ? currentRecipe.tags : [];
+        
+        // レシピを削除
         await sb.from('recipes').delete().eq('id', id);
-        alert('削除しました'); location.href = 'index.html';
-      }catch(e){ alert('削除に失敗: ' + (e.message||e)); }
+        
+        // カスタムカテゴリーの自動削除チェック
+        if (deletedCategory) {
+          await cleanupUnusedCategory(deletedCategory);
+        }
+        
+        // タグの自動削除チェック
+        if (deletedTags.length > 0) {
+          await cleanupUnusedTags(deletedTags);
+        }
+        
+        alert('削除しました'); 
+        location.href = 'index.html';
+      }catch(e){ 
+        alert('削除に失敗: ' + (e.message||e)); 
+      }
     });
+    
+    // 未使用カテゴリーの削除関数
+    async function cleanupUnusedCategory(categoryName) {
+      try {
+        console.log('カテゴリー使用状況をチェック中:', categoryName);
+        
+        // 基本カテゴリーは削除しない
+        const basicCategories = [
+          'すべて', 'アミューズ', '前菜', 'ソース', 'スープ', 'パスタ', 
+          '魚料理', '肉料理', 'メイン', 'デザート', 'パン', 'その他'
+        ];
+        
+        if (basicCategories.includes(categoryName)) {
+          console.log('基本カテゴリーなので削除をスキップ:', categoryName);
+          return;
+        }
+        
+        // 同じカテゴリーを使用している他のレシピがあるかチェック
+        const { data: recipesWithCategory, error: checkError } = await sb
+          .from('recipes')
+          .select('id')
+          .eq('category', categoryName);
+        
+        if (checkError) {
+          console.error('カテゴリー使用状況チェックエラー:', checkError);
+          return;
+        }
+        
+        // 使用しているレシピが0件の場合、categoriesテーブルからも削除
+        if (recipesWithCategory.length === 0) {
+          console.log('未使用カテゴリーを削除中:', categoryName);
+          
+          const { error: deleteError } = await sb
+            .from('categories')
+            .delete()
+            .eq('name', categoryName);
+          
+          if (deleteError) {
+            console.error('カテゴリー削除エラー:', deleteError);
+          } else {
+            console.log('未使用カテゴリーを削除しました:', categoryName);
+            
+            // index.htmlに未使用カテゴリー削除の通知を送る
+            localStorage.setItem('categoryDeleted', JSON.stringify({
+              name: categoryName,
+              timestamp: Date.now()
+            }));
+          }
+        } else {
+          console.log('カテゴリーは他のレシピで使用中:', categoryName, '使用数:', recipesWithCategory.length);
+        }
+        
+      } catch (error) {
+        console.error('カテゴリークリーンアップエラー:', error);
+      }
+    }
+
+    // 未使用タグの削除関数
+    async function cleanupUnusedTags(tagsToCheck) {
+      if (!Array.isArray(tagsToCheck) || tagsToCheck.length === 0) {
+        return;
+      }
+      
+      try {
+        console.log('未使用タグのクリーンアップを開始:', tagsToCheck);
+        
+        // 全レシピのタグを取得
+        const { data: allRecipes, error: recipesError } = await sb
+          .from('recipes')
+          .select('tags')
+          .not('tags', 'is', null);
+        
+        if (recipesError) {
+          console.error('レシピ取得エラー:', recipesError);
+          return;
+        }
+        
+        // 使用されているタグを集計
+        const usedTags = new Set();
+        allRecipes.forEach(recipe => {
+          if (Array.isArray(recipe.tags)) {
+            recipe.tags.forEach(tag => usedTags.add(tag));
+          }
+        });
+        
+        // チェック対象のタグで使用されていないものを削除
+        for (const tagName of tagsToCheck) {
+          if (!usedTags.has(tagName)) {
+            console.log('未使用タグを削除:', tagName);
+            
+            const { error: deleteError } = await sb
+              .from('tags')
+              .delete()
+              .eq('name', tagName);
+            
+            if (deleteError) {
+              console.error('タグ削除エラー:', tagName, deleteError);
+            } else {
+              console.log('未使用タグ削除成功:', tagName);
+            }
+          }
+        }
+        
+      } catch (error) {
+        console.error('未使用タグクリーンアップエラー:', error);
+      }
+    }
 
     function getClientId(){
       let cid = localStorage.getItem('client_id');
