@@ -45,6 +45,59 @@
       border-radius: var(--radius-sm);
       padding: var(--space-2);
     }
+    
+    /* 読み込みポップアップ */
+    #loadingPopup {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 2000;
+      backdrop-filter: blur(4px);
+    }
+    
+    #loadingContent {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      padding: var(--space-6);
+      border-radius: var(--radius-xl);
+      text-align: center;
+      box-shadow: var(--shadow-lg);
+      border: 1px solid var(--border-medium);
+      min-width: 300px;
+    }
+    
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid var(--border-light);
+      border-top: 4px solid var(--accent-primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem auto;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .loading-text {
+      font-size: var(--font-size-lg);
+      font-weight: 600;
+      margin-bottom: var(--space-2);
+    }
+    
+    .loading-subtext {
+      font-size: var(--font-size-sm);
+      color: var(--text-secondary);
+      opacity: 0.8;
+    }
   </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
@@ -371,6 +424,15 @@
       <div class="modal-footer">
         <button id="imageImportCancelBtn" class="btn ghost" type="button">閉じる</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ローディングポップアップ -->
+  <div id="loadingPopup">
+    <div id="loadingContent">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">画像を解析中...</div>
+      <div class="loading-subtext">AIがレシピを抽出しています。しばらくお待ちください。</div>
     </div>
   </div>
   
@@ -704,6 +766,13 @@
     // モーダルを閉じる
     const closeImageModal = () => {
       imageImportModal.style.display = 'none';
+      
+      // ローディングポップアップも非表示にする
+      const loadingPopup = document.getElementById('loadingPopup');
+      if (loadingPopup) {
+        loadingPopup.style.display = 'none';
+      }
+      
       clearImage();
     };
 
@@ -905,6 +974,12 @@
         return;
       }
 
+      // ローディングポップアップを表示
+      const loadingPopup = document.getElementById('loadingPopup');
+      if (loadingPopup) {
+        loadingPopup.style.display = 'flex';
+      }
+
       showImageMessage('画像を解析中...', 'loading');
       
       // ステータス表示開始
@@ -1078,6 +1153,12 @@ OCRテキスト:
           await applyRecipeData(recipeData);
           showImageMessage('画像解析が完了しました！', 'success');
           
+          // ローディングポップアップを非表示
+          const loadingPopup = document.getElementById('loadingPopup');
+          if (loadingPopup) {
+            loadingPopup.style.display = 'none';
+          }
+          
           // ステータス表示完了
           if (typeof updateStatusPopup === 'function') {
             updateStatusPopup('完了', '画像解析が完了しました！', 'success');
@@ -1093,6 +1174,12 @@ OCRテキスト:
         } else {
           showImageMessage('レシピデータの抽出に失敗しました', 'error');
           
+          // ローディングポップアップを非表示
+          const loadingPopup = document.getElementById('loadingPopup');
+          if (loadingPopup) {
+            loadingPopup.style.display = 'none';
+          }
+          
           // ステータス表示エラー
           if (typeof updateStatusPopup === 'function') {
             updateStatusPopup('エラー', 'レシピデータの抽出に失敗しました', 'error');
@@ -1106,6 +1193,12 @@ OCRテキスト:
         
       } catch (error) {
         showImageMessage('画像解析に失敗しました: ' + error.message, 'error');
+        
+        // ローディングポップアップを非表示
+        const loadingPopup = document.getElementById('loadingPopup');
+        if (loadingPopup) {
+          loadingPopup.style.display = 'none';
+        }
         
         // ステータス表示エラー
         if (typeof updateStatusPopup === 'function') {
