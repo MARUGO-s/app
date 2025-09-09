@@ -253,6 +253,7 @@ const setupModalEvents = () => {
     const btn = document.getElementById('urlImportConfirmBtn');
     btn.disabled = true;
     btn.textContent = '読み込み中...';
+  
     
     try {
       await window.runImport(url);
@@ -307,7 +308,7 @@ const setupModalEvents = () => {
       const fileName = `${crypto?.randomUUID?.() || Date.now()}.${fileExt}`;
       const filePath = `recipes/${fileName}`;
       const bucket = CONFIG.STORAGE_BUCKET || 'images';
-      const { error: upErr } = await sb.storage.from(bucket).upload(filePath, file, { upsert: true, cacheControl: '3600' });
+      const { error: upErr } = await sb.storage.from(bucket).upload(filePath, file, { upsert: true, cacheControl: '3600', contentType: file.type || 'image/jpeg' });
       if (upErr) throw upErr;
       const { data } = sb.storage.from(bucket).getPublicUrl(filePath);
       const publicUrl = data?.publicUrl;
@@ -326,16 +327,32 @@ const setupModalEvents = () => {
     }
   }
   if (imageUploadBtn) {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     imageUploadBtn.addEventListener('click', () => {
-      // Create a fresh input each time to ensure change event fires consistently
-      const temp = document.createElement('input');
-      temp.type = 'file';
-      temp.accept = 'image/*';
-      temp.onchange = (ev) => {
-        const file = (ev.target && ev.target.files) ? ev.target.files[0] : null;
-        uploadSelectedImageFile(file);
-      };
-      temp.click();
+      if (isIOS) {
+        const temp = document.createElement('input');
+        temp.type = 'file';
+        temp.accept = 'image/*';
+        temp.onchange = (ev) => {
+          const file = (ev.target && ev.target.files) ? ev.target.files[0] : null;
+          uploadSelectedImageFile(file);
+        };
+        document.body.appendChild(temp);
+        temp.click();
+        setTimeout(() => { try { document.body.removeChild(temp); } catch(_){} }, 1000);
+      } else if (imageFileInput) {
+        try { imageFileInput.value = ''; } catch(_){ }
+        imageFileInput.click();
+      } else {
+        const temp = document.createElement('input');
+        temp.type = 'file';
+        temp.accept = 'image/*';
+        temp.onchange = (ev) => {
+          const file = (ev.target && ev.target.files) ? ev.target.files[0] : null;
+          uploadSelectedImageFile(file);
+        };
+        temp.click();
+      }
     });
   }
   if (imageFileInput) {
@@ -614,9 +631,18 @@ const initializeApp = () => {
   }
   console.log('Supabase loaded successfully');
   
-  // Initialize Supabase
-  sb = window.sb || supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-  window.sb = sb;
+  // Initialize Supabase (avoid multiple GoTrueClient by reusing global and unique storageKey)
+  if (!window.sb) {
+    window.sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, {
+      auth: {
+        storageKey: 'app-main-11-edit',
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false
+      }
+    });
+  }
+  sb = window.sb;
   
   // Setup event listeners
   setupModalEvents();
