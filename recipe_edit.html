@@ -372,27 +372,6 @@
           <label for="urlInput">レシピサイトのURL</label>
           <input id="urlInput" type="url" class="input" placeholder="https://example.com/recipe/..." />
         </div>
-        <div class="field">
-          <label>対応サイト</label>
-          <div class="supported-sites">
-            <p>以下のサイトからレシピを読み込めます：</p>
-            <ul>
-              <li>クックパッド</li>
-              <li>楽天レシピ</li>
-              <li>みんなのきょうの料理</li>
-              <li>その他のレシピサイト</li>
-            </ul>
-          </div>
-        </div>
-        <div class="field">
-          <label>代替手段</label>
-          <div class="alternative-method">
-            <p>URL読み込みが失敗した場合は、以下の方法をお試しください：</p>
-            <button type="button" class="btn ghost small" id="manualInputBtn">
-              <i class="fas fa-edit"></i> 手動入力モード
-            </button>
-          </div>
-        </div>
       </div>
       <div class="modal-footer">
         <button id="urlImportCancelBtn" class="btn ghost">キャンセル</button>
@@ -667,6 +646,60 @@
             // Error handling without debug logging
         }
     }
+    // ===== 単位変換ユーティリティ =====
+    function convertUnits(quantity, unit, itemName = '') {
+      if (!quantity || !unit) return { quantity, unit };
+      
+      const qty = parseFloat(quantity.toString().replace(/[^\d\.\/]/g, '')) || 0;
+      const unitLower = unit.toString().toLowerCase().trim();
+      const itemLower = itemName.toString().toLowerCase();
+      
+      // 液体系の材料判定（材料名と単位の両方で判断）
+      const liquidItems = ['水', '油', '醤油', 'しょうゆ', '酒', '酢', 'みりん', '牛乳', 'だし', 'スープ', 'ソース', '出汁', 'だし汁', 'ワイン', 'ビール', 'ココナッツミルク', 'オリーブオイル', 'ごま油', 'サラダ油'];
+      const isLiquid = liquidItems.some(liquid => itemLower.includes(liquid)) || 
+                       unitLower.includes('ml') || unitLower.includes('リットル') || unitLower.includes('cc');
+      
+      // 大さじの変換（15ml/15g）
+      if (unitLower.includes('大さじ') || unitLower.includes('おおさじ') || unitLower.includes('tbsp')) {
+        return {
+          quantity: (qty * 15).toString(),
+          unit: isLiquid ? 'ml' : 'g'
+        };
+      }
+      
+      // 小さじの変換（5ml/5g）
+      if (unitLower.includes('小さじ') || unitLower.includes('こさじ') || unitLower.includes('tsp')) {
+        return {
+          quantity: (qty * 5).toString(),
+          unit: isLiquid ? 'ml' : 'g'
+        };
+      }
+      
+      // カップの変換（200ml）
+      if (unitLower.includes('カップ') || unitLower.includes('cup')) {
+        return {
+          quantity: (qty * 200).toString(),
+          unit: 'ml'
+        };
+      }
+      
+      // 1/2カップ、1/4カップなどの分数対応
+      if (quantity.toString().includes('/') && (unitLower.includes('カップ') || unitLower.includes('cup'))) {
+        const fractionMatch = quantity.toString().match(/(\d+)\/(\d+)/);
+        if (fractionMatch) {
+          const numerator = parseInt(fractionMatch[1]);
+          const denominator = parseInt(fractionMatch[2]);
+          const cupValue = (numerator / denominator) * 200;
+          return {
+            quantity: cupValue.toString(),
+            unit: 'ml'
+          };
+        }
+      }
+      
+      return { quantity, unit };
+    }
+
     // ===== Vision/Gemini からの受け取り（ローカルストレージ / URLパラメータ） =====
     (async () => {
       try {
@@ -731,6 +764,15 @@
 
       for (let i = 0; i < ingredients.length; i++) {
         const ing = ingredients[i];
+        
+        // 単位変換を適用（材料名も考慮）
+        const converted = convertUnits(ing.quantity, ing.unit, ing.item);
+        const convertedIng = {
+          ...ing,
+          quantity: converted.quantity,
+          unit: converted.unit
+        };
+        
         addIngBtn?.dispatchEvent(new Event('click'));
         // 追加完了を待つ（エディタが行を挿入するのを待機）
         await new Promise(resolve => setTimeout(resolve, 50));
@@ -741,13 +783,18 @@
         const qtyInput  = row?.querySelector('.ing-qty');
         const unitInput = row?.querySelector('.ing-unit');
         const priceInput = row?.querySelector('.ing-price');
-        const line = [ing.item, ing.quantity, ing.unit].filter(Boolean).join(' ');
+        const line = [convertedIng.item, convertedIng.quantity, convertedIng.unit].filter(Boolean).join(' ');
         if (itemInput && (qtyInput || unitInput)) {
-          if (itemInput) itemInput.value = (ing.item || '').toString();
-          if (qtyInput)  qtyInput.value  = (ing.quantity || '').toString();
-          if (unitInput) unitInput.value = (ing.unit || '').toString();
-          if (priceInput) priceInput.value = (ing.price || '').toString();
-          console.log(`✅ 材料${i + 1}設定完了:`, ing.item, ing.quantity, ing.unit);
+          if (itemInput) itemInput.value = (convertedIng.item || '').toString();
+          if (qtyInput)  qtyInput.value  = (convertedIng.quantity || '').toString();
+          if (unitInput) unitInput.value = (convertedIng.unit || '').toString();
+          if (priceInput) priceInput.value = (convertedIng.price || '').toString();
+          
+          // 変換が行われた場合はログに記録
+          if (converted.quantity !== ing.quantity || converted.unit !== ing.unit) {
+            console.log(`🔄 単位変換: ${convertedIng.item} ${ing.quantity}${ing.unit} → ${converted.quantity}${converted.unit}`);
+          }
+          console.log(`✅ 材料${i + 1}設定完了:`, convertedIng.item, convertedIng.quantity, convertedIng.unit);
         } else if (itemInput) {
           itemInput.value = line;
           console.log(`✅ 材料${i + 1}設定完了(統合):`, line);
