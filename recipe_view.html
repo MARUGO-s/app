@@ -7,6 +7,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.0.2/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.plugin.standard_fonts_metrics.min.js"></script>
+  <!-- 日本語フォント対応 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.plugin.unicode.min.js"></script>
+  <!-- HTML to Canvas変換 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <link rel="stylesheet" href="assets/css/style.css">
   <style>
@@ -56,10 +63,45 @@
     
     .translated-section {
       margin: 1.5rem 0;
-      padding: 1rem;
+      padding: 1rem 1rem 1rem 1.5rem;
       background: rgba(255, 255, 255, 0.03);
       border-radius: 8px;
       border-left: 3px solid #4a90e2;
+    }
+    
+    .translated-section ol {
+      padding-left: 0;
+      margin-left: 0;
+    }
+    
+    .translated-section ol li {
+      list-style: none;
+      position: relative;
+      padding-left: 2rem;
+      margin-bottom: 0.8rem;
+      line-height: 1.6;
+    }
+    
+    .translated-section ol li::before {
+      content: counter(step-counter);
+      counter-increment: step-counter;
+      position: absolute;
+      left: 0;
+      top: 0;
+      background: #4a90e2;
+      color: white;
+      width: 1.5rem;
+      height: 1.5rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: bold;
+    }
+    
+    .translated-section ol {
+      counter-reset: step-counter;
     }
     
     .translated-section h4 {
@@ -78,6 +120,42 @@
       color: #cccccc;
       margin-bottom: 0.5rem;
       font-size: 0.9em;
+    }
+    
+    .original-section ol {
+      padding-left: 0;
+      margin-left: 0;
+    }
+    
+    .original-section ol li {
+      list-style: none;
+      position: relative;
+      padding-left: 2rem;
+      margin-bottom: 0.8rem;
+      line-height: 1.6;
+      color: #cccccc;
+    }
+    
+    .original-section ol li::before {
+      content: counter(original-step-counter);
+      counter-increment: original-step-counter;
+      position: absolute;
+      left: 0;
+      top: 0;
+      background: #666;
+      color: white;
+      width: 1.5rem;
+      height: 1.5rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: bold;
+    }
+    
+    .original-section ol {
+      counter-reset: original-step-counter;
     }
     
     /* 翻訳ポップアップのダークテーマ */
@@ -537,6 +615,8 @@
       <button class="btn primary small js-ai-advice">✨ AIアドバイス</button>
       <button class="btn js-edit">編集</button>
       <button class="btn ghost js-delete" style="color:#c0392b;border-color:#c0392b;">削除</button>
+      <button class="btn secondary js-export-pdf">📄 PDF出力</button>
+      <button class="btn secondary js-export-csv">📊 CSV出力</button>
       <button class="btn js-back" onclick="window.location.href='index.html'">戻る</button>
     </div>
   </header>
@@ -1921,8 +2001,22 @@ ${stepText}
       if(error){ console.error(error); alert('レシピの取得に失敗しました'); return; }
       const r = recs?.[0];
       if(!r){ alert('レシピが見つかりません'); return; }
+      
+      // 元のレシピIDを保存（翻訳データ保存時に使用）
+      window.originalRecipeId = id;
+      console.log('元のレシピIDを保存:', id);
 
       titleEl.textContent = r.title || '無題のレシピ';
+      
+      // 言語タグを確認して自動翻訳
+      const languageTag = r.tags?.find(tag => tag.startsWith('翻訳:'));
+      if (languageTag) {
+        const targetLanguage = languageTag.replace('翻訳:', '');
+        console.log('言語タグを検出:', languageTag, '対象言語:', targetLanguage);
+        // 自動翻訳を実行
+        await autoTranslateRecipe(targetLanguage);
+        return; // 自動翻訳の場合は早期リターン
+      }
       
       // HTML形式のレシピかどうかチェック
       if (r.display_format === 'html') {
@@ -1931,9 +2025,45 @@ ${stepText}
         return; // HTML形式の場合は早期リターン
       }
       
-      // 翻訳タイトルの取得・表示
+      // 翻訳データの取得・表示
+      let translationRecipes = null;
       try {
         console.log('翻訳データを取得中... recipe_id:', id);
+        
+        // 翻訳レシピテーブルから翻訳データを取得
+        console.log('翻訳データを取得中 - レシピID:', id);
+        const { data: translationRecipesData, error: translationRecipeError } = await sb
+          .from('translation_recipes')
+          .select('*')
+          .eq('original_recipe_id', id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        
+        console.log('翻訳データ取得結果:', { translationRecipesData, translationRecipeError });
+        
+        // テーブルが存在しない場合のエラーハンドリング
+        if (translationRecipeError) {
+          if (translationRecipeError.code === 'PGRST116' || translationRecipeError.message.includes('relation "translation_recipes" does not exist')) {
+            console.log('translation_recipesテーブルが存在しません。create_translation_recipe_tables.sqlを実行してください。');
+            translationRecipes = null;
+          } else if (translationRecipeError.code === 'PGRST200') {
+            console.log('translation_recipesテーブルの関係性に問題があります。テーブル構造を確認してください。');
+            translationRecipes = null;
+          } else {
+            console.error('翻訳レシピ取得エラー:', translationRecipeError);
+            translationRecipes = null;
+          }
+        } else {
+          translationRecipes = translationRecipesData;
+        }
+        console.log('翻訳レシピ取得結果:', { translationRecipes, translationRecipeError });
+        if (translationRecipes && translationRecipes.length > 0) {
+          console.log('翻訳データが見つかりました:', translationRecipes[0]);
+        } else {
+          console.log('翻訳データが見つかりませんでした');
+        }
+        
+        // フォールバック: 古い翻訳テーブルからも取得
         const { data: translations, error: translationError } = await sb
           .from('recipe_translations')
           .select('translated_title, language_code, html_content')
@@ -1941,8 +2071,199 @@ ${stepText}
         
         console.log('翻訳取得結果:', { translations, translationError });
         
+        // 翻訳レシピデータが存在する場合
+        if (translationRecipes && translationRecipes.length > 0) {
+          const translationRecipe = translationRecipes[0];
+          console.log('翻訳レシピデータを表示:', translationRecipe);
+          console.log('翻訳レシピの言語コード:', translationRecipe.language_code);
+          console.log('翻訳材料データ:', translationRecipe.translation_recipe_ingredients);
+          console.log('翻訳手順データ:', translationRecipe.translation_recipe_steps);
+          
+          // 翻訳材料データを取得
+          const { data: translationIngredients, error: ingredientsError } = await sb
+            .from('translation_recipe_ingredients')
+            .select('*')
+            .eq('translation_recipe_id', translationRecipe.id)
+            .order('position', { ascending: true });
+          
+          // 翻訳手順データを取得
+          const { data: translationSteps, error: stepsError } = await sb
+            .from('translation_recipe_steps')
+            .select('*')
+            .eq('translation_recipe_id', translationRecipe.id)
+            .order('position', { ascending: true });
+          
+          // 翻訳データを統合
+          translationRecipe.translation_recipe_ingredients = translationIngredients || [];
+          translationRecipe.translation_recipe_steps = translationSteps || [];
+          
+          // タイトルを翻訳版に変更
+          if (translationRecipe.translated_title) {
+            titleEl.textContent = translationRecipe.translated_title;
+            
+            // 翻訳タイトル要素に元のタイトルを表示
+            const translatedTitleEl = document.getElementById('translatedTitle');
+            if (translatedTitleEl) {
+              const flagEmoji = getFlagEmoji(translationRecipe.language_code);
+              translatedTitleEl.innerHTML = `
+                <span class="original-text">（${translationRecipe.original_title}）</span>
+                <span class="flag-emoji">${flagEmoji}</span>
+              `;
+              translatedTitleEl.style.display = 'block';
+            }
+          }
+          
+          // 説明を翻訳版に変更
+          if (translationRecipe.translated_description) {
+            const notesEl = document.getElementById('notes');
+            if (notesEl) {
+              notesEl.innerHTML = `
+                <div class="translated-description">
+                  <div class="translated-text">${translationRecipe.translated_description}</div>
+                  <div class="original-text">（${translationRecipe.original_description}）</div>
+                </div>
+              `;
+            }
+          }
+          
+          // 翻訳された材料を表示
+          if (translationRecipe.translation_recipe_ingredients && translationRecipe.translation_recipe_ingredients.length > 0) {
+            console.log('翻訳材料データを表示中:', translationRecipe.translation_recipe_ingredients);
+            const ingredientsEl = document.getElementById('ingredients');
+            if (ingredientsEl) {
+              // 元の材料データを取得（翻訳版と併記するため）
+              let originalIngredientsHTML = '';
+              try {
+                const { data: originalIngredients } = await sb
+                  .from('recipe_ingredients')
+                  .select('*')
+                  .eq('recipe_id', id)
+                  .order('position', { ascending: true });
+                
+                if (originalIngredients && originalIngredients.length > 0) {
+                  const translations = uiTranslations[translationRecipe.language_code] || {};
+                  originalIngredientsHTML = `
+                    <div style="overflow-x: auto; width: 100%;">
+                      <table class="table">
+                        <thead>
+                          <tr>
+                            <th>${translations.number || '番号'}</th>
+                            <th>${translations.ingredient_name || '材料名'}</th>
+                            <th>${translations.quantity || '分量'}</th>
+                            <th>${translations.unit || '単位'}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${originalIngredients.map(ing => `
+                            <tr>
+                              <td>${ing.position}</td>
+                              <td>${ing.item}</td>
+                              <td>${ing.quantity}</td>
+                              <td>${ing.unit}</td>
+                            </tr>
+                          `).join('')}
+                        </tbody>
+                      </table>
+                    </div>
+                  `;
+                }
+              } catch (error) {
+                console.warn('元の材料データ取得エラー:', error);
+              }
+              
+              const translations = uiTranslations[translationRecipe.language_code] || {};
+              const translatedIngredientsHTML = `
+                <div class="translated-section">
+                  <h4>${translations.ingredients || 'Ingredients'}</h4>
+                  <div style="overflow-x: auto; width: 100%;">
+                    <table class="table">
+                      <thead>
+                        <tr>
+                          <th>${translations.number || '番号'}</th>
+                          <th>${translations.ingredient_name || '材料名'}</th>
+                          <th>${translations.quantity || '分量'}</th>
+                          <th>${translations.unit || '単位'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${translationRecipe.translation_recipe_ingredients.map(ing => `
+                          <tr>
+                            <td>${ing.position}</td>
+                            <td>${ing.translated_item || ''}</td>
+                            <td>${ing.quantity || ''}</td>
+                            <td>${ing.unit || ''}</td>
+                          </tr>
+                        `).join('')}
+                      </tbody>
+                    </table>
+                  </div>
+                  ${originalIngredientsHTML ? `
+                    <div class="original-section">
+                      <h5>${translations.original_ingredients || '元の材料'}</h5>
+                      ${originalIngredientsHTML}
+                    </div>
+                  ` : ''}
+                </div>
+              `;
+              ingredientsEl.innerHTML = translatedIngredientsHTML;
+            }
+          }
+          
+          // 翻訳された手順を表示
+          if (translationRecipe.translation_recipe_steps && translationRecipe.translation_recipe_steps.length > 0) {
+            const stepsEl = document.getElementById('steps');
+            if (stepsEl) {
+              // 元の手順データを取得（翻訳版と併記するため）
+              let originalStepsHTML = '';
+              try {
+                const { data: originalSteps } = await sb
+                  .from('recipe_steps')
+                  .select('*')
+                  .eq('recipe_id', id)
+                  .order('position', { ascending: true });
+                
+                if (originalSteps && originalSteps.length > 0) {
+                  originalStepsHTML = `
+                    <ol>
+                      ${originalSteps.map(step => `
+                        <li>${step.instruction || step.step || step.description || step.body || ''}</li>
+                      `).join('')}
+                    </ol>
+                  `;
+                }
+              } catch (error) {
+                console.warn('元の手順データ取得エラー:', error);
+              }
+              
+              const translations = uiTranslations[translationRecipe.language_code] || {};
+              const translatedStepsHTML = `
+                <div class="translated-section">
+                  <h4>${translations.instructions || 'Instructions'}</h4>
+                  <ol>
+                    ${translationRecipe.translation_recipe_steps.map(step => `
+                      <li>${step.translated_instruction || ''}</li>
+                    `).join('')}
+                  </ol>
+                  ${originalStepsHTML ? `
+                    <div class="original-section">
+                      <h5>${translations.original_instructions || '元の作り方'}</h5>
+                      ${originalStepsHTML}
+                    </div>
+                  ` : ''}
+                </div>
+              `;
+              stepsEl.innerHTML = translatedStepsHTML;
+            }
+          }
+          
+          // UI要素を翻訳
+          if (translationRecipe.language_code) {
+            console.log('UI要素を翻訳中:', translationRecipe.language_code);
+            translateUI(translationRecipe.language_code);
+          }
+        }
         // テーブルが存在しない場合のエラーハンドリング
-        if (translationError) {
+        else if (translationError) {
           if (translationError.code === 'PGRST116' || translationError.message.includes('relation "recipe_translations" does not exist')) {
             console.log('recipe_translationsテーブルが存在しません。翻訳機能をスキップします。');
             console.log('テーブルを作成するには、fix_recipe_translations_error.sqlを実行してください。');
@@ -1970,11 +2291,18 @@ ${stepText}
           } else {
             console.error('translatedTitle要素が見つかりません');
           }
+          
+          // UI要素を翻訳
+          if (translation.language_code) {
+            console.log('UI要素を翻訳中:', translation.language_code);
+            translateUI(translation.language_code);
+          }
         } else {
           console.log('翻訳データがありません');
         }
       } catch (translationError) {
         console.error('翻訳取得エラー:', translationError);
+        translationRecipes = null; // エラー時は翻訳データなしとして扱う
         if (translationError.message && translationError.message.includes('recipe_translations')) {
           console.log('recipe_translationsテーブルが存在しない可能性があります。');
         }
@@ -2038,42 +2366,49 @@ ${stepText}
         console.log('📸 レシピ画像を表示しました');
       } else {
         recipeImageContainer.style.display = 'none';
-        console.log('❌ 画像データがありません');
+        console.warn('⚠️ 画像データがありません');
       }
 
-      try{
-        const { data: ings, error: e1 } = await sb.from('recipe_ingredients').select('*').eq('recipe_id', id).order('position', {ascending:true}).order('id', {ascending:true});
-        if(!e1 && ings?.length){
-          // 列名を日本語にマッピング
-          const columnMapping = {
-            'position': '番号',
-            'item': '材料名',
-            'quantity': '分量',
-            'unit': '単位',
-            'price': '価格',
-            'html_content': 'HTML形式'
-          };
-          
-          const cols = ['position', 'item', 'quantity', 'unit'].filter(k => ings[0].hasOwnProperty(k));
-          const thead = `<thead><tr>${cols.map(c=>`<th>${esc(columnMapping[c] || c)}</th>`).join('')}</tr></thead>`;
-          const tbody = `<tbody>${ings.map(row=>`<tr>${cols.map(c=>`<td>${esc(row[c])}</td>`).join('')}</tr>`).join('')}</tbody>`;
-          ingEl.innerHTML = `<div style="overflow-x: auto; width: 100%;"><table class="table">${thead}${tbody}</table></div>`;
-        }else{
+      // 翻訳データがない場合のみ通常の材料表示処理を実行
+      if (!translationRecipes || translationRecipes.length === 0) {
+        console.log('翻訳データなし - 通常の材料表示処理を実行');
+        try{
+          const { data: ings, error: e1 } = await sb.from('recipe_ingredients').select('*').eq('recipe_id', id).order('position', {ascending:true}).order('id', {ascending:true});
+          if(!e1 && ings?.length){
+            // 列名を日本語にマッピング
+            const columnMapping = {
+              'position': '番号',
+              'item': '材料名',
+              'quantity': '分量',
+              'unit': '単位',
+              'price': '価格',
+              'html_content': 'HTML形式'
+            };
+            
+            const cols = ['position', 'item', 'quantity', 'unit'].filter(k => ings[0].hasOwnProperty(k));
+            const thead = `<thead><tr>${cols.map(c=>`<th>${esc(columnMapping[c] || c)}</th>`).join('')}</tr></thead>`;
+            const tbody = `<tbody>${ings.map(row=>`<tr>${cols.map(c=>`<td>${esc(row[c])}</td>`).join('')}</tr>`).join('')}</tbody>`;
+            ingEl.innerHTML = `<div style="overflow-x: auto; width: 100%;"><table class="table">${thead}${tbody}</table></div>`;
+          }else{
+            ingEl.innerHTML = '<div class="muted">未登録</div>';
+          }
+        }catch(_){
           ingEl.innerHTML = '<div class="muted">未登録</div>';
         }
-      }catch(_){
-        ingEl.innerHTML = '<div class="muted">未登録</div>';
       }
 
-      try{
-        const { data: steps, error: e2 } = await sb.from('recipe_steps').select('*').eq('recipe_id', id).order('position', {ascending:true}).order('id', {ascending:true});
-        if(!e2 && steps?.length){
-          stepsEl.innerHTML = steps.map(s=>`<li>${esc(s.instruction || s.step || s.description || s.body || '')}</li>`).join('');
-        }else{
+      // 翻訳データがない場合のみ通常の手順表示処理を実行
+      if (!translationRecipes || translationRecipes.length === 0) {
+        try{
+          const { data: steps, error: e2 } = await sb.from('recipe_steps').select('*').eq('recipe_id', id).order('position', {ascending:true}).order('id', {ascending:true});
+          if(!e2 && steps?.length){
+            stepsEl.innerHTML = steps.map(s=>`<li>${esc(s.instruction || s.step || s.description || s.body || '')}</li>`).join('');
+          }else{
+            stepsEl.innerHTML = '<li class="muted">未登録</li>';
+          }
+        }catch(_){
           stepsEl.innerHTML = '<li class="muted">未登録</li>';
         }
-      }catch(_){
-        stepsEl.innerHTML = '<li class="muted">未登録</li>';
       }
 
       await refreshFavState();
@@ -2187,6 +2522,151 @@ async function startTranslation(language) {
     
     alert(errorMessage);
   }
+}
+
+// UI要素の翻訳辞書（グローバルスコープ）
+const uiTranslations = {
+  'fr': {
+    'ingredients': 'Ingrédients',
+    'steps': 'Instructions',
+    'instructions': 'Instructions',
+    'original_ingredients': 'Ingrédients originaux',
+    'original_instructions': 'Instructions originales',
+    'notes': 'Notes',
+    'category': 'Catégorie',
+    'servings': 'Portions',
+    'cooking_time': 'Temps de cuisson',
+    'preparation_time': 'Temps de préparation',
+    'number': 'N°',
+    'ingredient_name': 'Ingrédient',
+    'quantity': 'Quantité',
+    'unit': 'Unité'
+  },
+  'it': {
+    'ingredients': 'Ingredienti',
+    'steps': 'Istruzioni',
+    'instructions': 'Istruzioni',
+    'original_ingredients': 'Ingredienti originali',
+    'original_instructions': 'Istruzioni originali',
+    'notes': 'Note',
+    'category': 'Categoria',
+    'servings': 'Porzioni',
+    'cooking_time': 'Tempo di cottura',
+    'preparation_time': 'Tempo di preparazione',
+    'number': 'N°',
+    'ingredient_name': 'Ingrediente',
+    'quantity': 'Quantità',
+    'unit': 'Unità'
+  },
+  'es': {
+    'ingredients': 'Ingredientes',
+    'steps': 'Instrucciones',
+    'instructions': 'Instrucciones',
+    'original_ingredients': 'Ingredientes originales',
+    'original_instructions': 'Instrucciones originales',
+    'notes': 'Notas',
+    'category': 'Categoría',
+    'servings': 'Porciones',
+    'cooking_time': 'Tiempo de cocción',
+    'preparation_time': 'Tiempo de preparación',
+    'number': 'N°',
+    'ingredient_name': 'Ingrediente',
+    'quantity': 'Cantidad',
+    'unit': 'Unidad'
+  },
+  'de': {
+    'ingredients': 'Zutaten',
+    'steps': 'Anweisungen',
+    'instructions': 'Anweisungen',
+    'original_ingredients': 'Originale Zutaten',
+    'original_instructions': 'Originale Anweisungen',
+    'notes': 'Notizen',
+    'category': 'Kategorie',
+    'servings': 'Portionen',
+    'cooking_time': 'Kochzeit',
+    'preparation_time': 'Vorbereitungszeit',
+    'number': 'Nr.',
+    'ingredient_name': 'Zutat',
+    'quantity': 'Menge',
+    'unit': 'Einheit'
+  },
+  'en': {
+    'ingredients': 'Ingredients',
+    'steps': 'Instructions',
+    'instructions': 'Instructions',
+    'original_ingredients': 'Original Ingredients',
+    'original_instructions': 'Original Instructions',
+    'notes': 'Notes',
+    'category': 'Category',
+    'servings': 'Servings',
+    'cooking_time': 'Cooking Time',
+    'preparation_time': 'Preparation Time',
+    'number': 'No.',
+    'ingredient_name': 'Ingredient',
+    'quantity': 'Quantity',
+    'unit': 'Unit'
+  },
+  'zh': {
+    'ingredients': '食材',
+    'steps': '制作步骤',
+    'instructions': '制作步骤',
+    'original_ingredients': '原始食材',
+    'original_instructions': '原始步骤',
+    'notes': '备注',
+    'category': '分类',
+    'servings': '份量',
+    'cooking_time': '烹饪时间',
+    'preparation_time': '准备时间',
+    'number': '序号',
+    'ingredient_name': '食材名称',
+    'quantity': '数量',
+    'unit': '单位'
+  }
+};
+
+// UI要素を翻訳する関数（グローバルスコープ）
+function translateUI(language) {
+  const translations = uiTranslations[language];
+  if (!translations) return;
+  
+  // 材料セクションのタイトルを翻訳
+  const ingredientsTitle = document.querySelector('aside h3');
+  if (ingredientsTitle && ingredientsTitle.textContent.includes('材料')) {
+    ingredientsTitle.textContent = translations.ingredients;
+  }
+  
+  // 手順セクションのタイトルを翻訳
+  const stepsTitle = document.querySelector('aside h3:nth-of-type(2)');
+  if (stepsTitle && stepsTitle.textContent.includes('手順')) {
+    stepsTitle.textContent = translations.steps;
+  }
+  
+  // 翻訳セクション内のタイトルを翻訳
+  const translatedInstructions = document.querySelector('.translated-section h4');
+  if (translatedInstructions) {
+    translatedInstructions.textContent = `${translations.instructions} (${translations.instructions})`;
+  }
+  
+  // 元のセクションのタイトルを翻訳
+  const originalInstructions = document.querySelector('.original-section h5');
+  if (originalInstructions) {
+    originalInstructions.textContent = translations.original_instructions;
+  }
+  
+  // テーブルヘッダーを翻訳
+  const tableHeaders = document.querySelectorAll('table thead th');
+  tableHeaders.forEach(header => {
+    const text = header.textContent.trim();
+    if (text === '番号') {
+      header.textContent = translations.number || '番号';
+    } else if (text === '材料名') {
+      header.textContent = translations.ingredient_name || '材料名';
+    } else if (text === '分量') {
+      header.textContent = translations.quantity || '分量';
+    } else if (text === '単位') {
+      header.textContent = translations.unit || '単位';
+    }
+  });
 }
 
 // レシピ翻訳関数
@@ -2458,17 +2938,18 @@ async function showTranslatedResult(translatedData, language) {
     console.log('ingredientsEl found:', !!ingredientsEl);
     if (ingredientsEl) {
       const originalIngredients = ingredientsEl.innerHTML;
+      const translations = uiTranslations[language] || {};
       const translatedIngredientsHTML = `
         <div class="translated-section">
-          <h4>材料 (Ingredients)</h4>
+          <h4>${translations.ingredients || 'Ingredients'}</h4>
           <div style="overflow-x: auto; width: 100%;">
             <table class="table">
               <thead>
                 <tr>
-                  <th>番号</th>
-                  <th>材料名</th>
-                  <th>分量</th>
-                  <th>単位</th>
+                  <th>${translations.number || '番号'}</th>
+                  <th>${translations.ingredient_name || '材料名'}</th>
+                  <th>${translations.quantity || '分量'}</th>
+                  <th>${translations.unit || '単位'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -2490,7 +2971,7 @@ async function showTranslatedResult(translatedData, language) {
             </table>
           </div>
           <div class="original-section">
-            <h5>元の材料</h5>
+            <h5>${translations.original_ingredients || '元の材料'}</h5>
             ${originalIngredients}
           </div>
         </div>
@@ -2506,9 +2987,10 @@ async function showTranslatedResult(translatedData, language) {
     console.log('stepsEl found:', !!stepsEl);
     if (stepsEl) {
       const originalSteps = stepsEl.innerHTML;
+      const translations = uiTranslations[language] || {};
       const translatedStepsHTML = `
         <div class="translated-section">
-          <h4>作り方 (Instructions)</h4>
+          <h4>${translations.instructions || 'Instructions'}</h4>
           <ol>
             ${translatedData.steps.map(step => {
               const instruction = step.instruction || step.text || '';
@@ -2516,7 +2998,7 @@ async function showTranslatedResult(translatedData, language) {
             }).join('')}
           </ol>
           <div class="original-section">
-            <h5>元の作り方</h5>
+            <h5>${translations.original_instructions || '元の作り方'}</h5>
             ${originalSteps}
           </div>
         </div>
@@ -2524,6 +3006,9 @@ async function showTranslatedResult(translatedData, language) {
       stepsEl.innerHTML = translatedStepsHTML;
     }
   }
+  
+  // UI要素を翻訳
+  translateUI(language);
   
   // 翻訳完了 - 自動的に翻訳版を保存
   console.log('翻訳表示完了。自動的に翻訳版を保存します。');
@@ -2538,9 +3023,266 @@ async function showTranslatedResult(translatedData, language) {
   }
 }
 
+// 自動翻訳関数（言語タグから翻訳を実行）
+async function autoTranslateRecipe(targetLanguage) {
+  console.log('自動翻訳を開始:', targetLanguage);
+  
+  try {
+    // 翻訳データを取得
+    const { data: translationRecipes, error } = await sb
+      .from('translation_recipes')
+      .select('*')
+      .eq('original_recipe_id', window.originalRecipeId)
+      .eq('language_code', targetLanguage)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    
+    if (error) {
+      console.error('翻訳データ取得エラー:', error);
+      return;
+    }
+    
+    if (!translationRecipes || translationRecipes.length === 0) {
+      console.log('翻訳データが見つかりません。通常表示に切り替えます。');
+      return;
+    }
+    
+    const translationRecipe = translationRecipes[0];
+    console.log('翻訳データを発見:', translationRecipe);
+    
+    // 翻訳材料と手順データを取得
+    const { data: translationIngredients } = await sb
+      .from('translation_recipe_ingredients')
+      .select('*')
+      .eq('translation_recipe_id', translationRecipe.id)
+      .order('position', { ascending: true });
+    
+    const { data: translationSteps } = await sb
+      .from('translation_recipe_steps')
+      .select('*')
+      .eq('translation_recipe_id', translationRecipe.id)
+      .order('position', { ascending: true });
+    
+    // 翻訳データを統合
+    translationRecipe.translation_recipe_ingredients = translationIngredients || [];
+    translationRecipe.translation_recipe_steps = translationSteps || [];
+    
+    // 翻訳表示を実行
+    await displayTranslatedRecipe(translationRecipe);
+    
+  } catch (error) {
+    console.error('自動翻訳エラー:', error);
+  }
+}
+
+// 翻訳レシピの表示関数
+async function displayTranslatedRecipe(translationRecipe) {
+  console.log('翻訳レシピを表示中:', translationRecipe);
+  
+  // タイトルを翻訳版に変更
+  const titleEl = document.getElementById('recipeTitle');
+  if (titleEl && translationRecipe.translated_title) {
+    titleEl.textContent = translationRecipe.translated_title;
+    
+    // 翻訳タイトル要素に元のタイトルを表示
+    const translatedTitleEl = document.getElementById('translatedTitle');
+    if (translatedTitleEl) {
+      const flagEmoji = getFlagEmoji(translationRecipe.language_code);
+      translatedTitleEl.innerHTML = `
+        <span class="original-text">（${translationRecipe.original_title}）</span>
+        <span class="flag-emoji">${flagEmoji}</span>
+      `;
+      translatedTitleEl.style.display = 'block';
+    }
+  }
+  
+  // 説明を翻訳版に変更
+  if (translationRecipe.translated_description) {
+    const notesEl = document.getElementById('notes');
+    if (notesEl) {
+      notesEl.innerHTML = `
+        <div class="translated-description">
+          <div class="translated-text">${translationRecipe.translated_description}</div>
+          <div class="original-text">（${translationRecipe.original_description}）</div>
+        </div>
+      `;
+    }
+  }
+  
+  // 翻訳された材料を表示
+  if (translationRecipe.translation_recipe_ingredients && translationRecipe.translation_recipe_ingredients.length > 0) {
+    const ingredientsEl = document.getElementById('ingredients');
+    if (ingredientsEl) {
+      // 元の材料データを取得（翻訳版と併記するため）
+      let originalIngredientsHTML = '';
+      try {
+        const { data: originalIngredients } = await sb
+          .from('recipe_ingredients')
+          .select('*')
+          .eq('recipe_id', window.originalRecipeId)
+          .order('position', { ascending: true });
+        
+        if (originalIngredients && originalIngredients.length > 0) {
+          const translations = uiTranslations[translationRecipe.language_code] || {};
+          originalIngredientsHTML = `
+            <div style="overflow-x: auto; width: 100%;">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>${translations.number || '番号'}</th>
+                    <th>${translations.ingredient_name || '材料名'}</th>
+                    <th>${translations.quantity || '分量'}</th>
+                    <th>${translations.unit || '単位'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${originalIngredients.map(ing => `
+                    <tr>
+                      <td>${ing.position}</td>
+                      <td>${ing.item}</td>
+                      <td>${ing.quantity}</td>
+                      <td>${ing.unit}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        }
+      } catch (error) {
+        console.warn('元の材料データ取得エラー:', error);
+      }
+      
+      const translations = uiTranslations[translationRecipe.language_code] || {};
+      const translatedIngredientsHTML = `
+        <div class="translated-section">
+          <h4>${translations.ingredients || 'Ingredients'}</h4>
+          <div style="overflow-x: auto; width: 100%;">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>${translations.number || '番号'}</th>
+                  <th>${translations.ingredient_name || '材料名'}</th>
+                  <th>${translations.quantity || '分量'}</th>
+                  <th>${translations.unit || '単位'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${translationRecipe.translation_recipe_ingredients.map(ing => `
+                  <tr>
+                    <td>${ing.position}</td>
+                    <td>${ing.translated_item || ''}</td>
+                    <td>${ing.quantity || ''}</td>
+                    <td>${ing.unit || ''}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          ${originalIngredientsHTML ? `
+            <div class="original-section">
+              <h5>${translations.original_ingredients || '元の材料'}</h5>
+              ${originalIngredientsHTML}
+            </div>
+          ` : ''}
+        </div>
+      `;
+      ingredientsEl.innerHTML = translatedIngredientsHTML;
+    }
+  }
+  
+  // 翻訳された手順を表示
+  if (translationRecipe.translation_recipe_steps && translationRecipe.translation_recipe_steps.length > 0) {
+    const stepsEl = document.getElementById('steps');
+    if (stepsEl) {
+      // 元の手順データを取得（翻訳版と併記するため）
+      let originalStepsHTML = '';
+      try {
+        const { data: originalSteps } = await sb
+          .from('recipe_steps')
+          .select('*')
+          .eq('recipe_id', window.originalRecipeId)
+          .order('position', { ascending: true });
+        
+        if (originalSteps && originalSteps.length > 0) {
+          originalStepsHTML = `
+            <ol>
+              ${originalSteps.map(step => `
+                <li>${step.instruction || step.step || step.description || step.body || ''}</li>
+              `).join('')}
+            </ol>
+          `;
+        }
+      } catch (error) {
+        console.warn('元の手順データ取得エラー:', error);
+      }
+      
+      const translations = uiTranslations[translationRecipe.language_code] || {};
+      const translatedStepsHTML = `
+        <div class="translated-section">
+          <h4>${translations.instructions || 'Instructions'}</h4>
+          <ol>
+            ${translationRecipe.translation_recipe_steps.map(step => `
+              <li>${step.translated_instruction || ''}</li>
+            `).join('')}
+          </ol>
+          ${originalStepsHTML ? `
+            <div class="original-section">
+              <h5>${translations.original_instructions || '元の作り方'}</h5>
+              ${originalStepsHTML}
+            </div>
+          ` : ''}
+        </div>
+      `;
+      stepsEl.innerHTML = translatedStepsHTML;
+    }
+  }
+  
+  // UI要素を翻訳
+  if (translationRecipe.language_code) {
+    console.log('UI要素を翻訳中:', translationRecipe.language_code);
+    translateUI(translationRecipe.language_code);
+  }
+  
+  console.log('自動翻訳表示完了');
+}
+
+// 言語タグを削除して通常表示に戻す関数
+async function resetToOriginalLanguage() {
+  try {
+    const currentRecipeId = window.originalRecipeId || new URLSearchParams(window.location.search).get('i');
+    const { data: originalRecipe } = await sb.from('recipes').select('tags').eq('id', currentRecipeId).single();
+    
+    if (originalRecipe?.tags) {
+      // 翻訳タグを削除
+      const filteredTags = originalRecipe.tags.filter(tag => !tag.startsWith('翻訳:'));
+      
+      await sb.from('recipes')
+        .update({ tags: filteredTags })
+        .eq('id', currentRecipeId);
+      
+      console.log('言語タグを削除しました');
+      
+      // ページを再読み込みして通常表示に戻す
+      location.reload();
+    }
+  } catch (error) {
+    console.error('言語タグ削除エラー:', error);
+  }
+}
+
 // 翻訳データと元の日本語を分離して保存（新しいテーブル構造）
 async function saveCombinedRecipe(translatedData, language) {
-  const currentRecipeId = new URLSearchParams(window.location.search).get('i');
+  // 元のレシピIDを取得（翻訳前のID）
+  const originalRecipeId = window.originalRecipeId || new URLSearchParams(window.location.search).get('i');
+  console.log('翻訳データ保存中 - 元のレシピID:', originalRecipeId);
+  console.log('window.originalRecipeId:', window.originalRecipeId);
+  console.log('URL param i:', new URLSearchParams(window.location.search).get('i'));
+  
+  if (!originalRecipeId) {
+    console.error('翻訳データ保存: originalRecipeIdが取得できません');
+    return;
+  }
   
   // 元のレシピデータを取得
   const originalTitle = document.getElementById('recipeTitle')?.textContent?.trim() || '';
@@ -2565,11 +3307,16 @@ async function saveCombinedRecipe(translatedData, language) {
   });
   
   // 元のレシピのカテゴリーとタグを取得
-  const { data: originalRecipe } = await sb.from('recipes').select('category, tags').eq('id', currentRecipeId).single();
+  console.log('元のレシピデータを取得中 - ID:', originalRecipeId);
+  if (!originalRecipeId) {
+    console.error('originalRecipeIdがnullです');
+    return;
+  }
+  const { data: originalRecipe } = await sb.from('recipes').select('category, tags').eq('id', originalRecipeId).single();
   
   // 翻訳レシピメインデータを作成
   const translationRecipeData = {
-    original_recipe_id: currentRecipeId,
+    original_recipe_id: originalRecipeId,
     translated_title: translatedData.title,
     original_title: originalTitle,
     translated_description: translatedData.description,
@@ -2583,6 +3330,7 @@ async function saveCombinedRecipe(translatedData, language) {
   console.log('翻訳レシピデータ:', translationRecipeData);
   
   // 翻訳レシピを保存
+  console.log('翻訳レシピデータを保存中:', translationRecipeData);
   const { data: translationResult, error: translationError } = await sb
     .from('translation_recipes')
     .insert(translationRecipeData)
@@ -2596,7 +3344,33 @@ async function saveCombinedRecipe(translatedData, language) {
     return;
   }
   
+  console.log('翻訳レシピ保存成功:', translationResult);
+  
   const translationRecipeId = translationResult.id;
+  
+  // 元のレシピに翻訳言語タグを追加
+  try {
+    console.log('言語タグ追加中 - ID:', originalRecipeId);
+    if (!originalRecipeId) {
+      console.error('言語タグ追加: originalRecipeIdがnullです');
+      return;
+    }
+    const { data: originalRecipe } = await sb.from('recipes').select('tags').eq('id', originalRecipeId).single();
+    const currentTags = originalRecipe?.tags || [];
+    const languageTag = `翻訳:${language}`;
+    
+    // 既存の翻訳タグを削除して新しいタグを追加
+    const filteredTags = currentTags.filter(tag => !tag.startsWith('翻訳:'));
+    const newTags = [...filteredTags, languageTag];
+    
+    await sb.from('recipes')
+      .update({ tags: newTags })
+      .eq('id', originalRecipeId);
+    
+    console.log('元のレシピに言語タグを追加:', languageTag);
+  } catch (error) {
+    console.warn('言語タグ追加エラー:', error);
+  }
   
   // 翻訳材料を保存
   if (translatedData.ingredients && translatedData.ingredients.length > 0) {
@@ -2967,6 +3741,805 @@ async function saveTranslatedRecipe(translatedData, saveBoth = false) {
     }
   }
 }
+
+// ===== PDF/CSV出力機能 =====
+
+// 日本語フォント読み込み関数（改良版）
+async function loadJapaneseFont(doc) {
+  return new Promise((resolve) => {
+    try {
+      // 日本語対応フォントの設定
+      // まず、利用可能なフォントを確認
+      const availableFonts = doc.getFontList();
+      console.log('利用可能なフォント:', availableFonts);
+      
+      // 日本語対応のフォントを試す
+      const japaneseFonts = ['NotoSansJP', 'NotoSerifJP', 'HiraginoSans', 'YuGothic', 'Meiryo'];
+      let fontSet = false;
+      
+      for (const fontName of japaneseFonts) {
+        if (availableFonts[fontName]) {
+          doc.setFont(fontName);
+          console.log(`日本語フォント設定完了: ${fontName}`);
+          fontSet = true;
+          break;
+        }
+      }
+      
+      if (!fontSet) {
+        // フォールバック: デフォルトフォントを使用し、日本語文字を安全に処理
+        doc.setFont('helvetica');
+        console.log('デフォルトフォントを使用（日本語文字は安全に処理）');
+      }
+      
+      resolve();
+    } catch (error) {
+      console.warn('フォント設定エラー:', error);
+      doc.setFont('helvetica');
+      resolve();
+    }
+  });
+}
+
+// HTMLからCanvasを経由してPDFを生成（日本語対応・改善されたレイアウト）
+async function generatePDFFromHTML(doc, title, ingredients, steps, notes) {
+  return new Promise((resolve, reject) => {
+    try {
+      // 一時的なHTMLコンテナを作成
+      const tempContainer = document.createElement('div');
+      tempContainer.style.position = 'absolute';
+      tempContainer.style.left = '-9999px';
+      tempContainer.style.top = '-9999px';
+      tempContainer.style.width = '1200px'; // 幅を広げてレイアウトを改善
+      tempContainer.style.padding = '30px';
+      tempContainer.style.fontFamily = 'Arial, "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif';
+      tempContainer.style.fontSize = '14px';
+      tempContainer.style.lineHeight = '1.6';
+      tempContainer.style.color = '#333';
+      tempContainer.style.backgroundColor = '#fff';
+      
+      // レシピ画像を取得
+      const recipeImage = document.querySelector('#inlineRecipeImageImg, #recipeImage');
+      let imageHtml = '';
+      if (recipeImage && recipeImage.src && !recipeImage.src.includes('data:image/svg')) {
+        imageHtml = `<div style="text-align: center; margin-bottom: 20px;">
+          <img src="${recipeImage.src}" alt="レシピ画像" style="max-width: 200px; max-height: 150px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        </div>`;
+      }
+      
+      // HTMLコンテンツを生成（改善されたレイアウト）
+      let htmlContent = `
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="font-size: 28px; margin-bottom: 15px; color: #2c3e50; font-weight: bold;">${escapeHtml(title)}</h1>
+          ${imageHtml}
+        </div>
+      `;
+      
+      if (notes) {
+        htmlContent += `<div style="margin-bottom: 25px; padding: 15px; background-color: #f8f9fa; border-left: 5px solid #007bff; border-radius: 5px;">
+          <strong style="color: #007bff; font-size: 16px;">メモ・コツ</strong><br>
+          <span style="font-size: 14px; line-height: 1.5;">${escapeHtml(notes)}</span>
+        </div>`;
+      }
+      
+      // 2カラムレイアウト
+      htmlContent += `<div style="display: flex; gap: 30px; margin-top: 20px;">`;
+      
+      // 左側：材料（1/3の幅）
+      htmlContent += `<div style="flex: 1; min-width: 0;">`;
+      htmlContent += `<h2 style="font-size: 20px; margin: 0 0 20px 0; color: #e74c3c; font-weight: bold; border-bottom: 2px solid #e74c3c; padding-bottom: 8px;">材料</h2>`;
+      htmlContent += `<div style="margin-bottom: 20px;">`;
+      
+      ingredients.forEach(ingredient => {
+        const item = escapeHtml(ingredient.item || '').trim();
+        const quantity = escapeHtml(ingredient.quantity || '').trim();
+        const unit = escapeHtml(ingredient.unit || '').trim();
+        
+        // 分量と単位を適切に組み合わせて表示
+        let amount = '';
+        if (quantity && unit) {
+          amount = `${quantity}${unit}`;
+        } else if (quantity) {
+          amount = quantity;
+        } else if (unit) {
+          amount = unit;
+        }
+        
+        // 材料名と分量の間に十分な間隔を設ける（番号なし）
+        htmlContent += `
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #ecf0f1; margin-bottom: 8px;">
+            <span style="font-size: 15px; flex: 1; margin-right: 25px; line-height: 1.4;">${item}</span>
+            <span style="font-size: 15px; font-weight: bold; color: #2c3e50; white-space: nowrap; min-width: 60px; text-align: right;">${amount}</span>
+          </div>
+        `;
+      });
+      htmlContent += `</div>`;
+      htmlContent += `</div>`; // 左側終了
+      
+      // 右側：作り方（2/3の幅）
+      htmlContent += `<div style="flex: 2; min-width: 0;">`;
+      htmlContent += `<h2 style="font-size: 20px; margin: 0 0 15px 0; color: #27ae60; font-weight: bold; border-bottom: 2px solid #27ae60; padding-bottom: 5px;">作り方</h2>`;
+      htmlContent += `<ol style="padding-left: 0; margin: 0;">`;
+      
+      steps.forEach((step, index) => {
+        htmlContent += `
+          <li style="margin-bottom: 15px; padding: 12px; background-color: #f8f9fa; border-left: 4px solid #27ae60; border-radius: 0 5px 5px 0; list-style: none; position: relative;">
+            <span style="position: absolute; left: -15px; top: 12px; background-color: #27ae60; color: white; width: 25px; height: 25px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px;">${index + 1}</span>
+            <span style="margin-left: 15px; font-size: 14px; line-height: 1.5;">${escapeHtml(step)}</span>
+          </li>
+        `;
+      });
+      htmlContent += `</ol>`;
+      htmlContent += `</div>`; // 右側終了
+      
+      htmlContent += `</div>`; // 2カラムレイアウト終了
+      
+      tempContainer.innerHTML = htmlContent;
+      document.body.appendChild(tempContainer);
+      
+      // html2canvasを使用してCanvasに変換
+      if (typeof html2canvas !== 'undefined') {
+        html2canvas(tempContainer, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          logging: false,
+          width: tempContainer.offsetWidth,
+          height: tempContainer.offsetHeight
+        }).then(canvas => {
+          // CanvasをPDFに追加
+          const imgData = canvas.toDataURL('image/png', 1.0);
+          const imgWidth = 210; // A4 width in mm
+          const pageHeight = 295; // A4 height in mm
+          const imgHeight = (canvas.height * imgWidth) / canvas.width;
+          let heightLeft = imgHeight;
+          
+          let position = 0;
+          
+          // 最初のページに画像を追加
+          doc.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+          heightLeft -= pageHeight;
+          
+          // 複数ページに分割
+          while (heightLeft >= 0) {
+            position = heightLeft - imgHeight;
+            doc.addPage();
+            doc.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pageHeight;
+          }
+          
+          // 一時的なコンテナを削除
+          document.body.removeChild(tempContainer);
+          console.log('HTML to PDF変換完了');
+          resolve();
+        }).catch(error => {
+          console.error('html2canvas変換エラー:', error);
+          document.body.removeChild(tempContainer);
+          reject(error);
+        });
+      } else {
+        // html2canvasが利用できない場合はフォールバック
+        document.body.removeChild(tempContainer);
+        reject(new Error('html2canvas is not available'));
+      }
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+// HTMLエスケープ関数
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// PDF出力機能
+async function exportToPDF() {
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    
+    // 日本語フォント設定（文字化け回避）
+    // NotoSansJPフォントを使用（Google Fontsから読み込み）
+    try {
+      // 日本語フォントを動的に読み込み
+      await loadJapaneseFont(doc);
+    } catch (fontError) {
+      console.warn('日本語フォントの読み込みに失敗、デフォルトフォントを使用:', fontError);
+      // フォールバック: デフォルトフォントを使用
+      doc.setFont('helvetica');
+    }
+    
+    // 現在のレシピデータを取得
+    const recipeTitle = document.getElementById('recipeTitle')?.textContent || 'レシピ';
+    const recipeNotes = document.getElementById('notes')?.textContent || '';
+    
+    // 材料データをより確実に取得（複数のセレクターを試す）
+    const ingredients = [];
+    
+    // 複数のセレクターパターンを試す（より包括的）
+    const ingredientSelectors = [
+      '#ingredients .ingredient-row',
+      '#ingredients tr',
+      '#ingredients .table-row',
+      '.ingredients-table tr',
+      '.ingredients-table .ingredient-row',
+      '.ingredients tr',
+      '.ingredients .row',
+      'table.ingredients tr',
+      'table.ingredients .ingredient-row',
+      '.recipe-ingredients tr',
+      '.recipe-ingredients .ingredient-row',
+      'table tr',
+      '.table tr',
+      'tbody tr',
+      '.ingredient-row',
+      '.ingredient-item',
+      '.material-row',
+      '.material-item'
+    ];
+    
+    let ingredientRows = [];
+    for (const selector of ingredientSelectors) {
+      ingredientRows = document.querySelectorAll(selector);
+      if (ingredientRows.length > 0) {
+        console.log(`材料セレクター "${selector}" で ${ingredientRows.length} 行を発見`);
+        break;
+      }
+    }
+    
+    console.log('材料行数:', ingredientRows.length);
+    
+    // 材料が見つからない場合の追加デバッグ
+    if (ingredientRows.length === 0) {
+      console.warn('材料が見つかりません。利用可能な要素を確認中...');
+      
+      // ページ内のすべてのテーブル要素を確認
+      const allTables = document.querySelectorAll('table');
+      console.log('ページ内のテーブル数:', allTables.length);
+      
+      allTables.forEach((table, index) => {
+        const rows = table.querySelectorAll('tr');
+        console.log(`テーブル${index + 1}: ${rows.length}行`);
+        if (rows.length > 0) {
+          console.log('最初の行:', rows[0].textContent);
+        }
+      });
+      
+      // 材料関連の要素を確認
+      const ingredientElements = document.querySelectorAll('[class*="ingredient"], [class*="material"], [id*="ingredient"], [id*="material"]');
+      console.log('材料関連要素数:', ingredientElements.length);
+      ingredientElements.forEach((el, index) => {
+        console.log(`材料関連要素${index + 1}:`, el.className, el.id, el.textContent.substring(0, 50));
+      });
+    }
+    
+    ingredientRows.forEach((row, index) => {
+      // テーブル構造を確認して正しいセレクターを使用
+      const cells = row.querySelectorAll('td');
+      console.log(`材料行${index + 1}のセル数:`, cells.length);
+      
+      if (cells.length >= 3) {
+        // 通常のテーブル構造: 材料名, 分量, 単位
+        let item = cells[0] ? cells[0].textContent.trim() : '';
+        const quantity = cells[1] ? cells[1].textContent.trim() : '';
+        const unit = cells[2] ? cells[2].textContent.trim() : '';
+        
+        // 材料名から番号を削除（例: "1. 生牡蠣" -> "生牡蠣"）
+        item = item.replace(/^\d+\.?\s*/, '').trim();
+        
+        // 材料名に分量が含まれている場合の処理（例: "生牡蠣6" -> item: "生牡蠣", quantity: "6"）
+        if (!quantity && !unit && item) {
+          const itemMatch = item.match(/^(.+?)([0-9\/\.]+)$/);
+          if (itemMatch) {
+            item = itemMatch[1].trim();
+            const extractedQuantity = itemMatch[2].trim();
+            if (!quantity) quantity = extractedQuantity;
+          }
+        }
+        
+        console.log(`材料${index + 1}:`, { item, quantity, unit });
+        
+        if (item) {
+          ingredients.push({ item, quantity, unit });
+        }
+      } else if (cells.length === 2) {
+        // 2セル構造: 材料名, 分量+単位
+        let item = cells[0] ? cells[0].textContent.trim() : '';
+        const amountText = cells[1] ? cells[1].textContent.trim() : '';
+        
+        // 材料名から番号を削除（例: "1. 生牡蠣" -> "生牡蠣"）
+        item = item.replace(/^\d+\.?\s*/, '').trim();
+        
+        // 分量と単位を分離
+        let quantity = '', unit = '';
+        if (amountText) {
+          // 数字と単位を分離（例: "100g" -> quantity: "100", unit: "g"）
+          const match = amountText.match(/^([0-9\/\.]+)(.*)$/);
+          if (match) {
+            quantity = match[1];
+            unit = match[2];
+          } else {
+            // 分離できない場合は全体を分量として扱う
+            quantity = amountText;
+          }
+        }
+        
+        console.log(`材料${index + 1} (2セル):`, { item, quantity, unit, original: amountText });
+        
+        if (item) {
+          ingredients.push({ item, quantity, unit });
+        }
+      } else {
+        // 複数のセレクターパターンを試す（フォールバック）
+        const itemSelectors = ['.ing-item', '.ingredient-name', '.item'];
+        const quantitySelectors = ['.ing-quantity', '.quantity'];
+        const unitSelectors = ['.ing-unit', '.unit'];
+        
+        let itemEl = null, quantityEl = null, unitEl = null;
+        
+        for (const selector of itemSelectors) {
+          itemEl = row.querySelector(selector);
+          if (itemEl) break;
+        }
+        
+        for (const selector of quantitySelectors) {
+          quantityEl = row.querySelector(selector);
+          if (quantityEl) break;
+        }
+        
+        for (const selector of unitSelectors) {
+          unitEl = row.querySelector(selector);
+          if (unitEl) break;
+        }
+        
+        let item = itemEl ? itemEl.textContent.trim() : '';
+        const quantity = quantityEl ? quantityEl.textContent.trim() : '';
+        const unit = unitEl ? unitEl.textContent.trim() : '';
+        
+        // 材料名から番号を削除（例: "1. 生牡蠣" -> "生牡蠣"）
+        item = item.replace(/^\d+\.?\s*/, '').trim();
+        
+        console.log(`材料${index + 1} (フォールバック):`, { item, quantity, unit });
+        
+        if (item) {
+          ingredients.push({ item, quantity, unit });
+        }
+      }
+    });
+    
+    // 手順データをより確実に取得（<ol><li>構造に対応）
+    const steps = [];
+    
+    // <ol id="steps">内の<li>要素を取得
+    const stepElements = document.querySelectorAll('#steps li');
+    console.log('手順要素数:', stepElements.length);
+    
+    stepElements.forEach((li, index) => {
+      const stepText = li.textContent.trim();
+      console.log(`手順${index + 1}:`, stepText);
+      
+      // "未登録"や空のテキストは除外
+      if (stepText && stepText !== '未登録' && stepText.length > 0) {
+        steps.push(stepText);
+      }
+    });
+    
+    console.log('取得した材料:', ingredients);
+    console.log('取得した手順:', steps);
+    
+    // 材料が取得できなかった場合のフォールバック処理
+    if (ingredients.length === 0) {
+      console.warn('材料データが取得できませんでした。追加のセレクターを試します...');
+      
+      // より基本的なセレクターを試す
+      const fallbackSelectors = [
+        'tr',
+        'div[class*="ingredient"]',
+        'div[class*="material"]',
+        'li',
+        'p',
+        'span[class*="ingredient"]',
+        'span[class*="material"]'
+      ];
+      
+      for (const selector of fallbackSelectors) {
+        const elements = document.querySelectorAll(selector);
+        console.log(`フォールバックセレクター "${selector}": ${elements.length}個の要素`);
+        
+        elements.forEach((el, index) => {
+          const text = el.textContent.trim();
+          // 材料らしいテキストをチェック（数字と単位が含まれている）
+          if (text && text.match(/[0-9]/) && text.match(/[a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/) && text.length < 100) {
+            console.log(`材料候補${index + 1}:`, text);
+            
+            // 材料名と分量を分離
+            const match = text.match(/^(.+?)([0-9\/\.]+)([a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]*)$/);
+            if (match) {
+              const item = match[1].trim().replace(/^\d+\.?\s*/, '');
+              const quantity = match[2].trim();
+              const unit = match[3].trim();
+              
+              if (item && item.length > 0) {
+                ingredients.push({ item, quantity, unit });
+                console.log('フォールバックで抽出した材料:', { item, quantity, unit });
+              }
+            }
+          }
+        });
+        
+        if (ingredients.length > 0) {
+          console.log(`フォールバックセレクター "${selector}" で材料を取得しました`);
+          break;
+        }
+      }
+      
+      // それでも材料が見つからない場合は手順から抽出
+      if (ingredients.length === 0) {
+        console.warn('手順から材料を抽出します...');
+        
+        steps.forEach(step => {
+          // 手順から材料と分量を抽出（例: "バター10g"、"生クリーム40ml"）
+          const materialMatches = step.match(/([^0-9\s]+)([0-9\/\.]+)([a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+)/g);
+          if (materialMatches) {
+            materialMatches.forEach(match => {
+              const parts = match.match(/([^0-9\s]+)([0-9\/\.]+)([a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+)/);
+              if (parts && parts.length >= 4) {
+                const item = parts[1].trim();
+                const quantity = parts[2].trim();
+                const unit = parts[3].trim();
+                
+                // 重複チェック
+                const exists = ingredients.some(ing => ing.item === item);
+                if (!exists && item.length > 0) {
+                  ingredients.push({ item, quantity, unit });
+                  console.log('手順から抽出した材料:', { item, quantity, unit });
+                }
+              }
+            });
+          }
+        });
+      }
+    }
+    
+    // 改善されたテキストベースのPDF生成（文字化け回避）
+    let pdfContent = '';
+    
+    // タイトル
+    pdfContent += recipeTitle + '\n';
+    pdfContent += '='.repeat(recipeTitle.length) + '\n\n';
+    
+    // メモ
+    if (recipeNotes) {
+      pdfContent += '【メモ・コツ】\n';
+      pdfContent += recipeNotes + '\n\n';
+    }
+    
+    // 材料（単位を正しく表示、間隔を調整、番号なし）
+    pdfContent += '【材料】\n';
+    pdfContent += '-'.repeat(40) + '\n';
+    ingredients.forEach(ingredient => {
+      const item = (ingredient.item || '').trim();
+      const quantity = (ingredient.quantity || '').trim();
+      const unit = (ingredient.unit || '').trim();
+      
+      // 分量と単位を適切に組み合わせて表示
+      let amount = '';
+      if (quantity && unit) {
+        amount = `${quantity}${unit}`;
+      } else if (quantity) {
+        amount = quantity;
+      } else if (unit) {
+        amount = unit;
+      }
+      
+      // 材料名と分量の間に十分な間隔を設ける（番号なし）
+      if (amount) {
+        // 材料名を左寄せ、分量を右寄せで表示（より広い間隔）
+        const maxItemLength = 35;
+        const itemPadded = item.padEnd(maxItemLength, ' ');
+        pdfContent += `・${itemPadded} ${amount}\n`;
+      } else {
+        pdfContent += `・${item}\n`;
+      }
+    });
+    pdfContent += '\n';
+    
+    // 作り方
+    pdfContent += '【作り方】\n';
+    pdfContent += '-'.repeat(30) + '\n';
+    steps.forEach((step, index) => {
+      pdfContent += `${index + 1}. ${step}\n\n`;
+    });
+    
+    // HTMLからCanvasを経由してPDFを生成（日本語対応）
+    try {
+      await generatePDFFromHTML(doc, recipeTitle, ingredients, steps, recipeNotes);
+    } catch (htmlError) {
+      console.warn('HTML to PDF変換に失敗、テキストベースにフォールバック:', htmlError);
+      
+      // フォールバック: テキストベースのPDF生成
+      doc.setFontSize(12);
+      const lines = pdfContent.split('\n');
+      let yPosition = 20;
+      const lineHeight = 7;
+      
+      lines.forEach(line => {
+        if (yPosition > 280) {
+          doc.addPage();
+          yPosition = 20;
+        }
+        
+        // 文字化けを防ぐため、安全な文字のみを使用
+        const safeLine = line
+          .replace(/[^\x20-\x7E\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF00-\uFFEF]/g, '?') // 未対応文字を?に置換
+          .replace(/\s+/g, ' ') // 連続する空白を1つに
+          .trim(); // 前後の空白を削除
+        
+        if (safeLine.length > 0) {
+          try {
+            // 行が長すぎる場合は分割
+            const maxLength = 80;
+            if (safeLine.length > maxLength) {
+              const words = safeLine.split(' ');
+              let currentLine = '';
+              
+              words.forEach(word => {
+                if ((currentLine + ' ' + word).length > maxLength) {
+                  if (currentLine.length > 0) {
+                    doc.text(currentLine, 20, yPosition);
+                    yPosition += lineHeight;
+                    if (yPosition > 280) {
+                      doc.addPage();
+                      yPosition = 20;
+                    }
+                  }
+                  currentLine = word;
+                } else {
+                  currentLine += (currentLine.length > 0 ? ' ' : '') + word;
+                }
+              });
+              
+              if (currentLine.length > 0) {
+                doc.text(currentLine, 20, yPosition);
+                yPosition += lineHeight;
+              }
+            } else {
+              doc.text(safeLine, 20, yPosition);
+              yPosition += lineHeight;
+            }
+          } catch (error) {
+            console.warn('PDF文字出力エラー:', error, '行:', safeLine);
+            // エラーが出た場合はスキップ
+          }
+        } else {
+          // 空行の場合は改行のみ
+          yPosition += lineHeight;
+        }
+      });
+    }
+    
+    // フッター
+    const totalPages = doc.internal.getNumberOfPages();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.text(`ページ ${i} / ${totalPages}`, pageWidth - 30, pageHeight - 10);
+    }
+    
+    // PDFをダウンロード
+    const fileName = `${recipeTitle.replace(/[^\w\s]/gi, '')}_レシピ.pdf`;
+    doc.save(fileName);
+    
+    console.log('PDF出力完了:', fileName);
+    
+    // デバッグ用のログ
+    console.log('PDF内容プレビュー:');
+    console.log('タイトル:', recipeTitle);
+    console.log('材料数:', ingredients.length);
+    console.log('手順数:', steps.length);
+    console.log('最初の手順:', steps[0] || 'なし');
+    
+    // 材料の単位表示状況をチェック
+    console.log('材料詳細:');
+    ingredients.forEach((ingredient, index) => {
+      console.log(`材料${index + 1}:`, {
+        item: ingredient.item,
+        quantity: ingredient.quantity,
+        unit: ingredient.unit,
+        combined: `${ingredient.quantity || ''}${ingredient.unit || ''}`
+      });
+    });
+    
+  } catch (error) {
+    console.error('PDF出力エラー:', error);
+    alert('PDF出力に失敗しました: ' + error.message);
+  }
+}
+
+// CSV出力機能
+async function exportToCSV() {
+  try {
+    // 現在のレシピデータを取得
+    const recipeTitle = document.getElementById('recipeTitle')?.textContent || 'レシピ';
+    const recipeNotes = document.getElementById('notes')?.textContent || '';
+    
+    // 材料データをより確実に取得（複数のセレクターを試す）
+    const ingredients = [];
+    
+    // 複数のセレクターパターンを試す
+    const ingredientSelectors = [
+      '#ingredients .ingredient-row',
+      '#ingredients tr',
+      '#ingredients .table-row',
+      '.ingredients-table tr',
+      '.ingredients-table .ingredient-row',
+      '.ingredients tr',
+      '.ingredients .row',
+      'table.ingredients tr',
+      'table.ingredients .ingredient-row',
+      '.recipe-ingredients tr',
+      '.recipe-ingredients .ingredient-row'
+    ];
+    
+    let ingredientRows = [];
+    for (const selector of ingredientSelectors) {
+      ingredientRows = document.querySelectorAll(selector);
+      if (ingredientRows.length > 0) {
+        console.log(`CSV出力 - 材料セレクター "${selector}" で ${ingredientRows.length} 行を発見`);
+        break;
+      }
+    }
+    
+    console.log('CSV出力 - 材料行数:', ingredientRows.length);
+    
+    ingredientRows.forEach((row, index) => {
+      // テーブル構造を確認して正しいセレクターを使用
+      const cells = row.querySelectorAll('td');
+      console.log(`CSV出力 - 材料行${index + 1}のセル数:`, cells.length);
+      
+      if (cells.length >= 3) {
+        // 通常のテーブル構造: 材料名, 分量, 単位
+        const item = cells[0] ? cells[0].textContent.trim() : '';
+        const quantity = cells[1] ? cells[1].textContent.trim() : '';
+        const unit = cells[2] ? cells[2].textContent.trim() : '';
+        
+        console.log(`CSV出力 - 材料${index + 1}:`, { item, quantity, unit });
+        
+        if (item) {
+          ingredients.push({ item, quantity, unit });
+        }
+      } else {
+        // 複数のセレクターパターンを試す（フォールバック）
+        const itemSelectors = ['.ing-item', '.ingredient-name', '.item'];
+        const quantitySelectors = ['.ing-quantity', '.quantity'];
+        const unitSelectors = ['.ing-unit', '.unit'];
+        
+        let itemEl = null, quantityEl = null, unitEl = null;
+        
+        for (const selector of itemSelectors) {
+          itemEl = row.querySelector(selector);
+          if (itemEl) break;
+        }
+        
+        for (const selector of quantitySelectors) {
+          quantityEl = row.querySelector(selector);
+          if (quantityEl) break;
+        }
+        
+        for (const selector of unitSelectors) {
+          unitEl = row.querySelector(selector);
+          if (unitEl) break;
+        }
+        
+        const item = itemEl ? itemEl.textContent.trim() : '';
+        const quantity = quantityEl ? quantityEl.textContent.trim() : '';
+        const unit = unitEl ? unitEl.textContent.trim() : '';
+        
+        console.log(`CSV出力 - 材料${index + 1} (フォールバック):`, { item, quantity, unit });
+        
+        if (item) {
+          ingredients.push({ item, quantity, unit });
+        }
+      }
+    });
+    
+    // 手順データをより確実に取得（<ol><li>構造に対応）
+    const steps = [];
+    
+    // <ol id="steps">内の<li>要素を取得
+    const stepElements = document.querySelectorAll('#steps li');
+    console.log('CSV出力 - 手順要素数:', stepElements.length);
+    
+    stepElements.forEach((li, index) => {
+      const stepText = li.textContent.trim();
+      console.log(`CSV出力 - 手順${index + 1}:`, stepText);
+      
+      // "未登録"や空のテキストは除外
+      if (stepText && stepText !== '未登録' && stepText.length > 0) {
+        steps.push(stepText);
+      }
+    });
+    
+    console.log('CSV出力 - 取得した材料:', ingredients);
+    console.log('CSV出力 - 取得した手順:', steps);
+    
+    // データが空の場合の警告
+    if (ingredients.length === 0) {
+      console.warn('材料データが取得できませんでした');
+    }
+    if (steps.length === 0) {
+      console.warn('手順データが取得できませんでした');
+    }
+    
+    // CSVデータを構築（より整理された形式）
+    let csvContent = '';
+    
+    // レシピ基本情報
+    csvContent += 'レシピ名,メモ\n';
+    csvContent += `"${recipeTitle.replace(/"/g, '""')}","${recipeNotes.replace(/"/g, '""')}"\n\n`;
+    
+    // 材料情報
+    csvContent += '材料名,分量,単位\n';
+    ingredients.forEach(ingredient => {
+      const item = ingredient.item.replace(/"/g, '""');
+      const quantity = ingredient.quantity.replace(/"/g, '""');
+      const unit = ingredient.unit.replace(/"/g, '""');
+      csvContent += `"${item}","${quantity}","${unit}"\n`;
+    });
+    
+    // 空行で区切り
+    csvContent += '\n';
+    
+    // 作り方
+    csvContent += '手順番号,作り方\n';
+    steps.forEach((step, index) => {
+      const stepText = step.replace(/"/g, '""');
+      csvContent += `${index + 1},"${stepText}"\n`;
+    });
+    
+    // BOMを追加してUTF-8エンコーディングを明示
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    
+    // ダウンロードリンクを作成
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${recipeTitle.replace(/[^\w\s]/gi, '')}_レシピ.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    console.log('CSV出力完了');
+    
+  } catch (error) {
+    console.error('CSV出力エラー:', error);
+    alert('CSV出力に失敗しました: ' + error.message);
+  }
+}
+
+// イベントリスナーを追加
+document.addEventListener('DOMContentLoaded', () => {
+  // PDF出力ボタン
+  const pdfBtn = document.querySelector('.js-export-pdf');
+  if (pdfBtn) {
+    pdfBtn.addEventListener('click', exportToPDF);
+  }
+  
+  // CSV出力ボタン
+  const csvBtn = document.querySelector('.js-export-csv');
+  if (csvBtn) {
+    csvBtn.addEventListener('click', exportToCSV);
+  }
+});
 </script>
 </body>
 </html>

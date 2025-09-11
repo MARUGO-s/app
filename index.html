@@ -7,6 +7,349 @@
   <link rel="stylesheet" href="assets/css/style.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* 一括選択UI用のスタイル */
+    .bulk-selection-ui {
+      background: var(--bg-secondary, #f8f9fa);
+      border: 1px solid var(--border-medium, #dee2e6);
+      border-radius: var(--radius-lg, 8px);
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.1));
+    }
+    
+    .bulk-selection-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+    
+    .bulk-selection-info {
+      font-weight: 600;
+      color: var(--text-primary, #333);
+      font-size: 1.1rem;
+    }
+    
+    .bulk-selection-actions {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    
+    .bulk-selection-actions .btn {
+      font-size: 0.9rem;
+      padding: 0.5rem 1rem;
+    }
+    
+    /* レシピカードの選択モード用スタイル */
+    .recipe-card.bulk-mode {
+      position: relative;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .recipe-card.bulk-mode:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md, 0 4px 12px rgba(0,0,0,0.15));
+    }
+    
+    .recipe-card.bulk-mode.selected {
+      border: 2px solid var(--accent-primary, #007bff);
+      background: var(--accent-light, #e3f2fd);
+    }
+    
+    .recipe-card.bulk-mode.selected .recipe-title {
+      color: #2c3e50 !important;
+    }
+    
+    .recipe-card.bulk-mode.selected .recipe-header {
+      color: #2c3e50 !important;
+    }
+    
+    .recipe-card .bulk-checkbox {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+      width: 24px;
+      height: 24px;
+      border: 2px solid var(--border-medium, #dee2e6);
+      border-radius: 6px;
+      background: white;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      color: white;
+      z-index: 10;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      transition: all 0.2s ease;
+    }
+    
+    .recipe-card.bulk-mode .bulk-checkbox {
+      display: flex;
+    }
+    
+    .recipe-card.bulk-mode:hover .bulk-checkbox {
+      border-color: var(--accent-primary, #007bff);
+      transform: scale(1.1);
+    }
+    
+    .recipe-card.bulk-mode.selected .bulk-checkbox {
+      background: var(--accent-primary, #007bff);
+      border-color: var(--accent-primary, #007bff);
+      transform: scale(1.1);
+    }
+    
+    .recipe-card.bulk-mode.selected .bulk-checkbox::before {
+      content: '✓';
+      font-weight: bold;
+    }
+    
+    /* レスポンシブ対応 */
+    @media (max-width: 768px) {
+      .bulk-selection-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+      }
+      
+      .bulk-selection-actions {
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      
+      .bulk-selection-actions .btn {
+        flex: 1;
+        min-width: 120px;
+      }
+    }
+    
+    /* 進行状況ポップアップのスタイル */
+    .progress-popup {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      backdrop-filter: blur(5px);
+    }
+    
+    .progress-popup-content {
+      background: white;
+      border-radius: 16px;
+      padding: 2rem;
+      max-width: 500px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      animation: popupSlideIn 0.3s ease-out;
+    }
+    
+    @keyframes popupSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+    
+    .progress-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 2px solid #f0f0f0;
+    }
+    
+    .progress-header h3 {
+      margin: 0;
+      color: #2c3e50;
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+    
+    .progress-spinner {
+      color: #007bff;
+      font-size: 1.5rem;
+    }
+    
+    .progress-steps {
+      margin-bottom: 2rem;
+    }
+    
+    .progress-step {
+      display: flex;
+      align-items: center;
+      padding: 1rem 0;
+      border-bottom: 1px solid #f5f5f5;
+      transition: all 0.3s ease;
+    }
+    
+    .progress-step:last-child {
+      border-bottom: none;
+    }
+    
+    .progress-step.active {
+      background: #f8f9ff;
+      border-radius: 8px;
+      padding: 1rem;
+      margin: 0 -1rem;
+    }
+    
+    .progress-step.completed {
+      opacity: 0.7;
+    }
+    
+    .step-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #e9ecef;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 1rem;
+      transition: all 0.3s ease;
+    }
+    
+    .progress-step.active .step-icon {
+      background: #007bff;
+      color: white;
+      transform: scale(1.1);
+    }
+    
+    .progress-step.completed .step-icon {
+      background: #28a745;
+      color: white;
+    }
+    
+    .step-content {
+      flex: 1;
+    }
+    
+    .step-title {
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 0.25rem;
+    }
+    
+    .step-description {
+      font-size: 0.9rem;
+      color: #6c757d;
+    }
+    
+    .step-status {
+      color: #6c757d;
+      font-size: 1.2rem;
+    }
+    
+    .progress-step.active .step-status {
+      color: #007bff;
+    }
+    
+    .progress-step.completed .step-status {
+      color: #28a745;
+    }
+    
+    .progress-bar-container {
+      margin-bottom: 1.5rem;
+    }
+    
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #e9ecef;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 0.5rem;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #007bff, #0056b3);
+      border-radius: 4px;
+      width: 0%;
+      transition: width 0.5s ease;
+      position: relative;
+    }
+    
+    .progress-fill::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+      animation: progressShine 2s infinite;
+    }
+    
+    @keyframes progressShine {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    
+    .progress-text {
+      text-align: center;
+      font-weight: 600;
+      color: #007bff;
+      font-size: 1.1rem;
+    }
+    
+    .progress-footer {
+      text-align: center;
+      padding-top: 1rem;
+      border-top: 1px solid #f0f0f0;
+    }
+    
+    .progress-info {
+      color: #6c757d;
+      font-size: 0.9rem;
+    }
+    
+    .progress-completion-message {
+      color: #28a745;
+      font-size: 0.9rem;
+      font-weight: 500;
+      margin-top: 0.5rem;
+      padding: 0.5rem;
+      background: #f8fff9;
+      border: 1px solid #d4edda;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    /* レスポンシブ対応 */
+    @media (max-width: 768px) {
+      .progress-popup-content {
+        padding: 1.5rem;
+        margin: 1rem;
+      }
+      
+      .progress-header h3 {
+        font-size: 1.3rem;
+      }
+      
+      .step-icon {
+        width: 35px;
+        height: 35px;
+        margin-right: 0.75rem;
+      }
+    }
+  </style>
 </head>
 <body>
 
@@ -16,6 +359,14 @@
         <h1 class="brand">Recipe Box</h1>
       </div>
       <div class="header-actions">
+        <button class="btn secondary js-bulk-select" style="display: none;">
+          <i class="fas fa-check-square"></i>
+          一括選択
+        </button>
+        <button class="btn secondary js-bulk-pdf" style="display: none;">
+          <i class="fas fa-file-pdf"></i>
+          レシピブック作成
+        </button>
         <button class="btn primary js-new">
           <i class="fas fa-plus"></i>
           新規レシピ
@@ -116,6 +467,33 @@
       </div>
     </section>
 
+    <!-- 一括選択モード用のUI -->
+    <section id="bulk-selection-ui" class="bulk-selection-ui" style="display: none;">
+      <div class="bulk-selection-header">
+        <div class="bulk-selection-info">
+          <span id="selected-count">0</span>件選択中
+        </div>
+        <div class="bulk-selection-actions">
+          <button class="btn ghost js-select-all">
+            <i class="fas fa-check-double"></i>
+            すべて選択
+          </button>
+          <button class="btn ghost js-deselect-all">
+            <i class="fas fa-times"></i>
+            選択解除
+          </button>
+          <button class="btn primary js-create-recipe-book">
+            <i class="fas fa-book"></i>
+            レシピブック作成
+          </button>
+          <button class="btn ghost js-cancel-bulk">
+            <i class="fas fa-times"></i>
+            キャンセル
+          </button>
+        </div>
+      </div>
+    </section>
+
     <!-- レシピカードグリッド -->
     <section class="recipes-section">
       <div class="card-grid" id="cardList" aria-live="polite">
@@ -134,10 +512,108 @@
       </div>
     </section>
 
+    <!-- 進行状況ポップアップ -->
+    <div id="progress-popup" class="progress-popup" style="display: none;">
+      <div class="progress-popup-content">
+        <div class="progress-header">
+          <h3>レシピブック作成中</h3>
+          <div class="progress-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+          </div>
+        </div>
+        
+        <div class="progress-steps">
+          <div class="progress-step" id="step-data-loading">
+            <div class="step-icon">
+              <i class="fas fa-database"></i>
+            </div>
+            <div class="step-content">
+              <div class="step-title">データ読み込み中...</div>
+              <div class="step-description">レシピ情報を取得しています</div>
+            </div>
+            <div class="step-status">
+              <i class="fas fa-spinner fa-spin"></i>
+            </div>
+          </div>
+          
+          <div class="progress-step" id="step-cover-generation">
+            <div class="step-icon">
+              <i class="fas fa-book"></i>
+            </div>
+            <div class="step-content">
+              <div class="step-title">表紙生成中...</div>
+              <div class="step-description">レシピブックの表紙を作成しています</div>
+            </div>
+            <div class="step-status">
+              <i class="fas fa-clock"></i>
+            </div>
+          </div>
+          
+          <div class="progress-step" id="step-toc-generation">
+            <div class="step-icon">
+              <i class="fas fa-list"></i>
+            </div>
+            <div class="step-content">
+              <div class="step-title">目次生成中...</div>
+              <div class="step-description">レシピ一覧の目次を作成しています</div>
+            </div>
+            <div class="step-status">
+              <i class="fas fa-clock"></i>
+            </div>
+          </div>
+          
+          <div class="progress-step" id="step-recipes-generation">
+            <div class="step-icon">
+              <i class="fas fa-utensils"></i>
+            </div>
+            <div class="step-content">
+              <div class="step-title">レシピページ生成中...</div>
+              <div class="step-description">各レシピの詳細ページを作成しています</div>
+            </div>
+            <div class="step-status">
+              <i class="fas fa-clock"></i>
+            </div>
+          </div>
+          
+          <div class="progress-step" id="step-pdf-finalization">
+            <div class="step-icon">
+              <i class="fas fa-file-pdf"></i>
+            </div>
+            <div class="step-content">
+              <div class="step-title">PDF最終化中...</div>
+              <div class="step-description">PDFファイルを完成させています</div>
+            </div>
+            <div class="step-status">
+              <i class="fas fa-clock"></i>
+            </div>
+          </div>
+        </div>
+        
+        <div class="progress-bar-container">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <div class="progress-text" id="progress-text">0%</div>
+        </div>
+        
+        <div class="progress-footer">
+          <div class="progress-info" id="progress-info">準備中...</div>
+          <div class="progress-completion-message" id="progress-completion-message" style="display: none;">
+            <i class="fas fa-check-circle" style="color: #28a745; margin-right: 8px;"></i>
+            レシピブックが正常に作成されました。サイトをリセットしています...
+          </div>
+        </div>
+      </div>
+    </div>
+
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
+  <!-- PDF生成用ライブラリ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.plugin.unicode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="assets/js/app-index.js"></script>
 </body>
 </html>
