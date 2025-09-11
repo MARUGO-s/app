@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Recipe Box — レシピ管理アプリ</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="stylesheet" href="assets/css/style.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -141,7 +142,7 @@
     }
     
     .progress-popup-content {
-      background: white;
+      background: var(--bg-primary);
       border-radius: 16px;
       padding: 2rem;
       max-width: 500px;
@@ -150,6 +151,7 @@
       overflow-y: auto;
       box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
       animation: popupSlideIn 0.3s ease-out;
+      border: 1px solid var(--border-medium);
     }
     
     @keyframes popupSlideIn {
@@ -169,12 +171,12 @@
       justify-content: space-between;
       margin-bottom: 2rem;
       padding-bottom: 1rem;
-      border-bottom: 2px solid #f0f0f0;
+      border-bottom: 2px solid var(--border-light);
     }
     
     .progress-header h3 {
       margin: 0;
-      color: #2c3e50;
+      color: var(--text-primary);
       font-size: 1.5rem;
       font-weight: 600;
     }
@@ -192,7 +194,7 @@
       display: flex;
       align-items: center;
       padding: 1rem 0;
-      border-bottom: 1px solid #f5f5f5;
+      border-bottom: 1px solid var(--border-light);
       transition: all 0.3s ease;
     }
     
@@ -201,7 +203,7 @@
     }
     
     .progress-step.active {
-      background: #f8f9ff;
+      background: var(--bg-secondary);
       border-radius: 8px;
       padding: 1rem;
       margin: 0 -1rem;
@@ -240,17 +242,17 @@
     
     .step-title {
       font-weight: 600;
-      color: #2c3e50;
+      color: var(--text-primary);
       margin-bottom: 0.25rem;
     }
     
     .step-description {
       font-size: 0.9rem;
-      color: #6c757d;
+      color: var(--text-muted);
     }
     
     .step-status {
-      color: #6c757d;
+      color: var(--text-muted);
       font-size: 1.2rem;
     }
     
@@ -609,10 +611,10 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js"></script>
+  <script src="assets/js/utils.js"></script>
+  <script src="config/config.js"></script>
   <!-- PDF生成用ライブラリ -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.plugin.unicode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="assets/js/app-index.js"></script>
 </body>
