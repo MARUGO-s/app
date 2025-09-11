@@ -1103,10 +1103,12 @@ ${base}
 
     function applyRecipeToView(recipe){
       try{
+        console.log('applyRecipeToView called with:', recipe);
         const ingEl = document.getElementById('ingredients');
         const stepsEl = document.getElementById('steps');
         const titleEl = document.getElementById('recipeTitle');
         const notesEl = document.getElementById('notes');
+        console.log('stepsEl found:', !!stepsEl);
         if (titleEl && recipe.title) titleEl.textContent = recipe.title;
         if (notesEl && (recipe.description || recipe.notes)) notesEl.textContent = recipe.description || recipe.notes;
         const ings = Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
@@ -1115,7 +1117,14 @@ ${base}
         const tbody = `<tbody>${ings.map((it,idx)=>`<tr><td>${idx+1}</td><td>${(it.item||it.name||'')}</td><td>${it.quantity||''}</td><td>${it.unit||''}</td></tr>`).join('')}</tbody>`;
         ingEl.innerHTML = `<div style="overflow-x: auto; width: 100%;"><table class="table">${thead}${tbody}</table></div>`;
         const steps = Array.isArray(recipe.steps) ? recipe.steps : [];
-        stepsEl.innerHTML = steps.map(s=>`<li>${(s||'').toString()}</li>`).join('') || '<li class="muted">未登録</li>';
+        console.log('手順データ:', steps);
+        if (steps.length > 0) {
+          const stepsHTML = steps.map(s=>`<li>${(s||'').toString()}</li>`).join('');
+          console.log('手順HTML:', stepsHTML);
+          stepsEl.innerHTML = stepsHTML;
+        } else {
+          stepsEl.innerHTML = '<li class="muted">未登録</li>';
+        }
       }catch(e){ console.error('applyRecipeToView error', e); }
     }
 
