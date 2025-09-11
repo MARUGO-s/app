@@ -74,23 +74,22 @@ ol#steps li {
 
 body {
     overflow-x: hidden;
-    word-wrap: break-word;
-    word-break: break-word;
 }
 
-/* 長いテキストの処理 */
+/* 長いテキストの処理 - 省略表示 */
 h1, h2, h3, h4, h5, h6 {
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    hyphens: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 p, span, div {
-    word-wrap: break-word;
-    overflow-wrap: break-word;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-/* ボタンのテキスト折り返し */
+/* ボタンのテキスト省略表示 */
 .btn {
     white-space: nowrap;
     overflow: hidden;
@@ -106,9 +105,9 @@ p, span, div {
 
 .table th,
 .table td {
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    hyphens: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* 画像アップロード関連スタイル */
@@ -285,7 +284,8 @@ p, span, div {
 }
 
 .image-field .btn {
-    min-width: 120px;
+    min-width: 0;
+    flex: 1;
 }
 
 /* ドラッグ&ドロップ状態 */
@@ -379,7 +379,7 @@ body {
     max-width: 1200px;
     margin: 0 auto;
     padding: 0 var(--space-4);
-    padding-right: calc(var(--space-4) + 8px); /* Safari スクロールバー分の余白 */
+    box-sizing: border-box;
 }
 
 /* --- 4. Header --- */
@@ -400,6 +400,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    box-sizing: border-box;
 }
 
 .brand-section {
@@ -639,7 +640,7 @@ body {
 
 .category-options {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
     gap: var(--space-2);
 }
 
@@ -688,7 +689,7 @@ body {
 
 .tag-options {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
     gap: var(--space-2);
 }
 
@@ -780,7 +781,7 @@ body {
 
 .servings-input-wrapper .input {
     flex: 1;
-    max-width: 120px;
+    max-width: 100%;
 }
 
 .servings-unit {
@@ -922,45 +923,7 @@ body {
     }
 }
 
-@media (max-width: 480px) {
-    .category-tags-row {
-        grid-template-columns: 1fr 1fr;
-        gap: var(--space-1);
-    }
-    
-    .category-input-wrapper select {
-        font-size: var(--font-size-xs);
-        padding: var(--space-1);
-    }
-    
-    .category-input-wrapper .btn {
-        padding: var(--space-1);
-        font-size: var(--font-size-xs);
-    }
-    
-    .tags-section input {
-        font-size: var(--font-size-xs);
-        padding: var(--space-1);
-    }
-    
-    .custom-category-tag {
-        font-size: var(--font-size-xs);
-        padding: var(--space-1);
-    }
-    
-    .stats-mini {
-        gap: var(--space-4);
-        padding: var(--space-2) var(--space-3);
-    }
-    
-    .stat-mini {
-        font-size: var(--font-size-xs);
-    }
-    
-    .stat-mini i {
-        font-size: var(--font-size-sm);
-    }
-}
+/* 削除: 480px以下の複雑な設定は3段階レスポンシブに統合 */
 
 .ingredient-row {
     padding: var(--space-3);
@@ -1001,7 +964,7 @@ body {
     .ingredient-row .remove-ingredient {
         padding: var(--space-2) var(--space-3);
         font-size: var(--font-size-sm);
-        min-width: 60px;
+        min-width: 50px;
     }
 }
 
@@ -1033,6 +996,7 @@ body {
     cursor: pointer;
     white-space: nowrap;
     transition: all var(--transition-normal);
+    min-width: 50px;
 }
 
 .ingredient-row .remove-ingredient:hover {
@@ -1144,6 +1108,7 @@ body {
         padding: var(--space-1) var(--space-2);
         font-size: var(--font-size-xs);
         white-space: nowrap;
+        min-width: 50px;
     }
 }
 
@@ -1169,6 +1134,7 @@ body {
     .ingredient-row .remove-ingredient {
         padding: var(--space-1);
         font-size: var(--font-size-xs);
+        min-width: 50px;
     }
 }
 
@@ -1197,7 +1163,7 @@ body {
     
     .step-row .step-instruction {
         flex: 1;
-        min-width: 400px;
+        min-width: 0;
         padding: var(--space-3);
         font-size: var(--font-size-base);
     }
@@ -1206,7 +1172,7 @@ body {
         flex: 0 0 auto;
         padding: var(--space-2) var(--space-3);
         font-size: var(--font-size-sm);
-        min-width: 60px;
+        min-width: 50px;
     }
 }
 
@@ -1257,6 +1223,7 @@ body {
     border-radius: var(--radius-sm);
     cursor: pointer;
     white-space: nowrap;
+    min-width: 50px;
 }
 
 
@@ -1446,7 +1413,7 @@ body {
 }
 
 .search-container {
-    max-width: 400px;
+    max-width: 100%;
     margin: 0 auto;
     position: relative;
 }
@@ -1542,32 +1509,38 @@ body {
         inset 0 2px 4px rgba(0, 0, 0, 0.2),
         0 4px 16px rgba(0, 0, 0, 0.3);
     border: 2px solid var(--border-light);
-    max-width: 400px; /* 大きい画面でも4つ並びを維持するため幅を拡大 */
+    width: 100%;
+    max-width: 100%;
     margin: 0 auto;
     overflow: hidden;
     position: relative;
-    padding-right: 16px; /* Safari スクロールバー分の余白 */
+    padding-right: var(--space-2);
+    -webkit-overflow-scrolling: touch;
+    box-sizing: border-box;
 }
 
 .tab {
     display: flex;
     align-items: center;
     gap: var(--space-1);
+    flex: 1 1 auto;
     padding: var(--space-2) var(--space-3);
     border: none;
     background: transparent;
     color: var(--text-secondary);
-    font-size: var(--font-size-sm); /* フォントサイズを少し大きく */
+    font-size: var(--font-size-sm);
     font-weight: 600;
     border-radius: var(--radius-lg);
     cursor: pointer;
     transition: all var(--transition-normal);
-    flex: 1;
     justify-content: center;
     white-space: nowrap;
     position: relative;
     overflow: hidden;
-    min-width: 0; /* フレックスアイテムの最小幅を0に設定 */
+    text-overflow: ellipsis;
+    min-width: 0;
+    max-width: none;
+    box-sizing: border-box;
 }
 
 .tab::before {
@@ -1617,7 +1590,7 @@ body {
     gap: var(--space-2);
     padding: var(--space-2) 0;
     justify-content: center;
-    max-width: 800px;
+    max-width: 100%;
 }
 
 .category-btn {
@@ -1658,9 +1631,12 @@ body {
 
 .card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: 1fr; /* デフォルト: 1列 */
     gap: var(--space-4);
-    padding-right: 12px; /* Safari スクロールバー分の余白 */
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .recipe-card {
@@ -1669,6 +1645,9 @@ body {
     padding: var(--space-3);
     box-shadow: var(--shadow-sm);
     cursor: pointer;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
     transition: all var(--transition-normal);
     position: relative;
     border: 2px solid var(--border-light);
@@ -1759,7 +1738,7 @@ body {
 
 .recipe-group {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: 1fr; /* デフォルト: 1列 */
     gap: var(--space-4);
 }
 
@@ -1833,24 +1812,27 @@ body {
     color: var(--accent-primary);
 }
 
-/* --- 13. Responsive Design --- */
-@media (max-width: 1200px) {
-    .card-grid {
-        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    }
-    
-    .recipe-group {
-        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    }
+/* --- 13. Responsive Design - 3段階シンプル --- */
+
+/* スマートフォン: 1列表示 (デフォルト) */
+.card-grid,
+.recipe-group {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
 }
 
-@media (max-width: 768px) {
+/* スマートフォン用の追加調整 */
+@media (max-width: 767px) {
     .container {
-        padding: 0 var(--space-3);
+        padding: 0 var(--space-2);
+        max-width: 100vw;
+        overflow-x: hidden;
     }
     
     .header-content {
-        padding: 0 var(--space-3);
+        padding: 0 var(--space-2);
+        max-width: 100vw;
+        overflow-x: hidden;
     }
     
     .stats-grid {
@@ -1862,27 +1844,125 @@ body {
         padding: var(--space-3);
     }
     
-    .card-grid {
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: var(--space-3);
-    }
-    
-    .recipe-group {
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: var(--space-3);
+    .recipe-card {
+        padding: var(--space-2);
+        min-height: 40px;
     }
     
     .tabs {
-        flex-direction: row;
+        gap: var(--space-1);
+        padding: var(--space-1);
+        margin: 0;
+        width: 100%;
+        box-sizing: border-box;
         overflow-x: auto;
-        max-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .tab {
+        font-size: 0.7rem;
+        padding: var(--space-1) var(--space-2);
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        box-sizing: border-box;
+    }
+}
+
+/* 500px以下での特別な調整 */
+@media (max-width: 500px) {
+    .container {
+        padding: 0 var(--space-1);
+        max-width: 100vw;
+        overflow-x: hidden;
+    }
+    
+    .header-content {
+        padding: 0 var(--space-1);
+        max-width: 100vw;
+        overflow-x: hidden;
+    }
+    
+    .tabs {
+        gap: 0.125rem;
+        padding: 0.25rem;
+        margin: 0;
+        width: 100%;
+        box-sizing: border-box;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .tab {
+        font-size: 0.6rem;
+        padding: 0.2rem 0.3rem;
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        box-sizing: border-box;
+    }
+    
+    .category-options,
+    .tag-options {
+        grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+        gap: var(--space-1);
+    }
+    
+    .recipe-action-buttons {
+        gap: var(--space-1);
+        flex-wrap: wrap;
+    }
+    
+    .recipe-action-buttons .btn {
+        flex: 1;
+        min-width: 0;
+        padding: var(--space-1) var(--space-2);
+        font-size: var(--font-size-xs);
+    }
+}
+
+/* タブレット: 2列表示 (768px以上) */
+@media (min-width: 768px) {
+    .card-grid,
+    .recipe-group {
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--space-4);
+    }
+    
+    .container {
+        padding: 0 var(--space-3);
+    }
+    
+    .header-content {
+        padding: 0 var(--space-3);
+    }
+}
+
+/* PC: 4列表示 (1024px以上) */
+@media (min-width: 1024px) {
+    .card-grid,
+    .recipe-group {
+        grid-template-columns: repeat(4, 1fr);
+        gap: var(--space-4);
+    }
+    
+    .container {
+        padding: 0 var(--space-4);
+    }
+    
+    .header-content {
+        padding: 0 var(--space-4);
     }
 }
 
 /* 大きい画面（PC）でのタブ表示を最適化 */
 @media (min-width: 1200px) {
     .tabs {
-        max-width: 500px; /* 大きい画面ではさらに幅を拡大 */
+        max-width: 500px;
         gap: var(--space-3); /* ボタン間の間隔を広げる */
     }
     
@@ -1903,32 +1983,7 @@ body {
     }
 }
 
-@media (max-width: 480px) {
-    .brand {
-        font-size: var(--font-size-base);
-    }
-    
-    .stat-card {
-        padding: var(--space-2);
-    }
-    
-    .recipe-card {
-        padding: var(--space-2);
-        min-height: 40px;
-    }
-    
-    .stats-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .card-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .recipe-group {
-        grid-template-columns: 1fr;
-    }
-}
+/* 削除: 480px以下の複雑な設定は3段階レスポンシブに統合 */
 
 /* --- 14. Animations --- */
 @keyframes fadeIn {
@@ -2188,7 +2243,7 @@ body {
     
     .step-row .step-instruction {
         flex: 1;
-        min-width: 120px;
+        min-width: 0;
         padding: var(--space-2);
         font-size: var(--font-size-sm);
     }
@@ -2203,6 +2258,7 @@ body {
         border-radius: var(--radius-sm);
         cursor: pointer;
         white-space: nowrap;
+        min-width: 50px;
     }
     
     .modal-content {
@@ -2231,7 +2287,7 @@ body {
 
 .recipe-action-buttons .btn {
     flex: 1;
-    min-width: 100px;
+    min-width: 0;
     white-space: nowrap;
 }
 
@@ -2246,7 +2302,7 @@ body {
     
     .recipe-action-buttons .btn {
         flex: 1;
-        min-width: 120px;
+        min-width: 0;
         padding: var(--space-3) var(--space-4);
         font-size: var(--font-size-base);
     }
@@ -2275,222 +2331,11 @@ body {
     }
 }
 
-/* 小さなスマートフォン画面での対応 */
-@media (max-width: 480px) {
-    .recipe-action-buttons {
-        gap: var(--space-1);
-        flex-wrap: wrap;
-    }
-    
-    .recipe-action-buttons .btn {
-        flex: 1;
-        min-width: 0;
-        padding: var(--space-1) var(--space-2);
-        font-size: var(--font-size-xs);
-    }
-    
-    .recipe-action-buttons .btn i {
-        font-size: 12px;
-        margin-right: 4px;
-    }
-}
+/* 削除: 480px以下の複雑な設定は3段階レスポンシブに統合 */
 
-/* iPhone用の詳細な調整 */
-@media (max-width: 414px) {
-    /* コンテナのパディングを最小限に */
-    .container {
-        padding: 0 var(--space-2);
-        max-width: 100vw;
-        overflow-x: hidden;
-    }
-    
-    .header-content {
-        padding: 0 var(--space-2);
-        max-width: 100vw;
-        overflow-x: hidden;
-    }
-    
-    /* ヘッダーの調整 */
-    .app-header {
-        padding: 0 var(--space-2);
-        max-width: 100vw;
-        overflow-x: hidden;
-    }
-    
-    .header-actions {
-        flex-wrap: wrap;
-        gap: var(--space-1);
-    }
-    
-    /* フォントサイズをさらに小さく */
-    .brand {
-        font-size: 0.875rem;
-    }
-    
-    /* ボタンのサイズを調整 */
-    .btn {
-        font-size: 0.75rem;
-        padding: var(--space-1) var(--space-2);
-        min-height: 36px;
-    }
-    
-    /* ヘッダーアクションの調整 */
-    .header-actions {
-        gap: var(--space-1);
-    }
-    
-    .header-actions .btn {
-        font-size: 0.7rem;
-        padding: var(--space-1);
-        min-width: 60px;
-    }
-    
-    /* カードのパディングを調整 */
-    .recipe-card {
-        padding: var(--space-2);
-    }
-    
-    .recipe-card h3 {
-        font-size: 0.875rem;
-        line-height: 1.3;
-    }
-    
-    .recipe-card p {
-        font-size: 0.75rem;
-    }
-    
-    /* テーブルの調整 */
-    .table {
-        font-size: 0.75rem;
-    }
-    
-    .table th,
-    .table td {
-        padding: var(--space-1);
-    }
-    
-    /* フォーム要素の調整 */
-    .input,
-    .textarea,
-    select {
-        font-size: 0.875rem;
-        padding: var(--space-2);
-    }
-    
-    /* モーダルの調整 */
-    .modal-content {
-        margin: var(--space-2);
-        padding: var(--space-3);
-        max-height: calc(100vh - var(--space-4));
-        overflow-y: auto;
-    }
-    
-    /* タブの調整 */
-    .tabs {
-        gap: var(--space-1);
-    }
-    
-    .tab {
-        font-size: 0.75rem;
-        padding: var(--space-1) var(--space-2);
-    }
-    
-    /* 統計カードの調整 */
-    .stat-card {
-        padding: var(--space-1);
-    }
-    
-    .stat-number {
-        font-size: 1rem;
-    }
-    
-    .stat-label {
-        font-size: 0.7rem;
-    }
-}
+/* 削除: iPhone用の複雑な設定は3段階レスポンシブに統合 */
 
-/* iPhone SE (320px) 用の特別な調整 */
-@media (max-width: 320px) {
-    .container {
-        padding: 0 var(--space-1);
-        max-width: 100vw;
-        overflow-x: hidden;
-    }
-    
-    .header-content {
-        padding: 0 var(--space-1);
-        max-width: 100vw;
-        overflow-x: hidden;
-    }
-    
-    .app-header {
-        padding: 0 var(--space-1);
-        max-width: 100vw;
-        overflow-x: hidden;
-    }
-    
-    .header-actions {
-        flex-wrap: wrap;
-        gap: 4px;
-    }
-    
-    .brand {
-        font-size: 0.8rem;
-    }
-    
-    .btn {
-        font-size: 0.7rem;
-        padding: 6px var(--space-1);
-        min-height: 32px;
-    }
-    
-    .header-actions .btn {
-        font-size: 0.65rem;
-        padding: 6px;
-        min-width: 50px;
-    }
-    
-    .recipe-card {
-        padding: var(--space-1);
-    }
-    
-    .recipe-card h3 {
-        font-size: 0.8rem;
-    }
-    
-    .recipe-card p {
-        font-size: 0.7rem;
-    }
-    
-    .table {
-        font-size: 0.7rem;
-    }
-    
-    .input,
-    .textarea,
-    select {
-        font-size: 0.8rem;
-        padding: var(--space-1);
-    }
-    
-    .modal-content {
-        margin: var(--space-1);
-        padding: var(--space-2);
-    }
-    
-    .tab {
-        font-size: 0.7rem;
-        padding: 6px var(--space-1);
-    }
-    
-    .stat-number {
-        font-size: 0.9rem;
-    }
-    
-    .stat-label {
-        font-size: 0.65rem;
-    }
-}
+/* 削除: iPhone SE用の複雑な設定は3段階レスポンシブに統合 */
 
 /* 横画面での調整 */
 @media (max-width: 768px) and (orientation: landscape) {
