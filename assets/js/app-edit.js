@@ -35,6 +35,30 @@ const parseIngredientString = (ingredientStr) => {
     return result;
   }
   
+  // 分量フィールドに「大さじ2」のような形式が入った場合の処理
+  const spoonUnits = str.match(/^(大さじ|小さじ|tbsp|tsp)([0-9\/\.]+)$/);
+  if (spoonUnits) {
+    const result = {
+      item: '',
+      quantity: spoonUnits[2].trim(),
+      unit: spoonUnits[1].trim()
+    };
+    console.log(`✅ スプーン単位解析成功:`, result);
+    return result;
+  }
+  
+  // 分量フィールドに「大さじ2 材料名」のような形式が入った場合の処理
+  const spoonWithItem = str.match(/^(大さじ|小さじ|tbsp|tsp)([0-9\/\.]+)\s+(.+)$/);
+  if (spoonWithItem) {
+    const result = {
+      item: spoonWithItem[3].trim(),
+      quantity: spoonWithItem[2].trim(),
+      unit: spoonWithItem[1].trim()
+    };
+    console.log(`✅ スプーン+材料解析成功:`, result);
+    return result;
+  }
+  
   // 数値 + 単位 + 材料名の形式
   const numUnitItem = str.match(/^([0-9\/\.]+)\s*([a-zA-Z]+|ml|g|mg|kg|個|本|枚|匙|杯|滴)\s+(.+)$/);
   if (numUnitItem) {
@@ -104,7 +128,9 @@ const convertUnits = (quantity, unit, itemName = '') => {
                    unitLower.includes('ml') || unitLower.includes('リットル') || unitLower.includes('cc');
   
   // 大さじの変換（15ml/15g）
-  if (unitLower.includes('大さじ') || unitLower.includes('おおさじ') || unitLower.includes('tbsp')) {
+  if (unitLower.includes('大さじ') || unitLower.includes('おおさじ') || unitLower.includes('tbsp') || 
+      unitLower === '大さじ' || unitLower === 'おおさじ' || unitLower === 'tbsp') {
+    console.log(`🔄 大さじ変換: ${qty}${unit} → ${qty * 15}${isLiquid ? 'ml' : 'g'}`);
     return {
       quantity: (qty * 15).toString(),
       unit: isLiquid ? 'ml' : 'g'
@@ -112,7 +138,9 @@ const convertUnits = (quantity, unit, itemName = '') => {
   }
   
   // 小さじの変換（5ml/5g）
-  if (unitLower.includes('小さじ') || unitLower.includes('こさじ') || unitLower.includes('tsp')) {
+  if (unitLower.includes('小さじ') || unitLower.includes('こさじ') || unitLower.includes('tsp') || 
+      unitLower === '小さじ' || unitLower === 'こさじ' || unitLower === 'tsp') {
+    console.log(`🔄 小さじ変換: ${qty}${unit} → ${qty * 5}${isLiquid ? 'ml' : 'g'}`);
     return {
       quantity: (qty * 5).toString(),
       unit: isLiquid ? 'ml' : 'g'
@@ -382,6 +410,28 @@ const addIngredientRow = (data = {}) => {
         const parsed = parseIngredientString(quantity);
         if (parsed.quantity && parsed.unit) {
           console.log(`🔍 分量フィールド解析: "${quantity}" → ${JSON.stringify(parsed)}`);
+          const converted = convertUnits(parsed.quantity, parsed.unit, itemName);
+          
+          if (converted.quantity !== parsed.quantity || converted.unit !== parsed.unit) {
+            console.log(`🔄 分量フィールド単位変換: ${itemName} ${parsed.quantity}${parsed.unit} → ${converted.quantity}${converted.unit}`);
+            qtyInput.value = converted.quantity;
+            unitInput.value = converted.unit;
+            
+            // 変更を視覚的に示すため一時的にハイライト
+            qtyInput.style.background = '#e8f5e8';
+            unitInput.style.background = '#e8f5e8';
+            setTimeout(() => {
+              qtyInput.style.background = '';
+              unitInput.style.background = '';
+            }, 1500);
+          }
+        }
+      }
+      // 分量フィールドに「大さじ2」のような形式が入っている場合の追加処理
+      else if (quantity && (quantity.includes('大さじ') || quantity.includes('小さじ') || quantity.includes('tbsp') || quantity.includes('tsp'))) {
+        const parsed = parseIngredientString(quantity);
+        if (parsed.quantity && parsed.unit) {
+          console.log(`🔍 分量フィールド単位検出: "${quantity}" → ${JSON.stringify(parsed)}`);
           const converted = convertUnits(parsed.quantity, parsed.unit, itemName);
           
           if (converted.quantity !== parsed.quantity || converted.unit !== parsed.unit) {
@@ -2468,11 +2518,16 @@ const generateMenuSuggestions = async () => {
   
   try {
     const languageName = getLanguageName(selectedGenre);
-    const prompt = `${selectedGenre}料理のメニューを3つ提案してください。
+    const prompt = `${selectedGenre}料理のメニューを5つ提案してください。
 ${baseIngredient}
 ${customRequest ? `追加条件: ${customRequest}` : ''}
 
 ${existingIngredients.length >= 2 ? '複数の材料を指定している場合は、それらすべてを効果的に組み合わせた料理を提案してください。材料の相性や調理法のバリエーションを考慮して、それぞれ異なるアプローチで創作してください。' : ''}
+
+**重要**: 材料の分量は必ずgまたはmlで表記してください。大さじ、小さじ、カップなどの単位は使用せず、以下の換算で数値化してください：
+- 大さじ1 = 15ml/15g
+- 小さじ1 = 5ml/5g  
+- カップ1 = 200ml
 
 各メニューの説明は以下の要素を含む簡潔な文章（50文字以内）で作成してください：
 - 調理法の特徴（例：低温調理、燻製、分子ガストロノミー）
@@ -2545,6 +2600,229 @@ const displayMenuSuggestions = (suggestions) => {
       document.getElementById('generate-full-recipe-btn').disabled = false;
     });
   });
+  
+  // 「さらに提案」ボタンを追加
+  const moreSuggestionsBtn = document.createElement('button');
+  moreSuggestionsBtn.id = 'more-suggestions-btn';
+  moreSuggestionsBtn.className = 'btn secondary';
+  moreSuggestionsBtn.innerHTML = '🔄 さらに5つ提案してもらう';
+  moreSuggestionsBtn.style.marginTop = '15px';
+  moreSuggestionsBtn.style.width = '100%';
+  
+  moreSuggestionsBtn.addEventListener('click', async () => {
+    // 追加の要望を聞く
+    const additionalRequest = prompt('追加の要望があれば入力してください（空欄でもOK）:\n\n例：\n・もっとヘルシーな料理\n・簡単に作れるもの\n・見た目が美しい料理\n・スパイシーな味付け\n・和風のアレンジ');
+    
+    if (additionalRequest === null) {
+      // キャンセルされた場合は何もしない
+      return;
+    }
+    
+    moreSuggestionsBtn.disabled = true;
+    moreSuggestionsBtn.innerHTML = '⏳ 生成中...';
+    
+    try {
+      await generateMoreMenuSuggestions(additionalRequest.trim());
+    } catch (error) {
+      console.error('追加提案生成エラー:', error);
+      alert('追加提案の生成に失敗しました: ' + error.message);
+    } finally {
+      moreSuggestionsBtn.disabled = false;
+      moreSuggestionsBtn.innerHTML = '🔄 さらに5つ提案してもらう';
+    }
+  });
+  
+  // 既存の「さらに提案」ボタンを削除
+  const existingBtn = document.getElementById('more-suggestions-btn');
+  if (existingBtn) {
+    existingBtn.remove();
+  }
+  
+  container.appendChild(moreSuggestionsBtn);
+};
+
+// 追加のメニュー提案を生成する関数
+const generateMoreMenuSuggestions = async (additionalRequest = '') => {
+  const selectedGenreBtn = document.querySelector('.genre-btn.selected');
+  if (!selectedGenreBtn) {
+    alert('ジャンルを選択してください');
+    return;
+  }
+
+  const selectedGenre = selectedGenreBtn.dataset.genre;
+  const existingIngredients = getExistingIngredients();
+  const originalCustomRequest = document.getElementById('custom-request')?.value?.trim() || '';
+  
+  // 前の要望と追加の要望を結合
+  let combinedRequest = '';
+  if (originalCustomRequest && additionalRequest) {
+    combinedRequest = `\n追加条件: ${originalCustomRequest}\nさらに追加の要望: ${additionalRequest}`;
+  } else if (originalCustomRequest) {
+    combinedRequest = `\n追加条件: ${originalCustomRequest}`;
+  } else if (additionalRequest) {
+    combinedRequest = `\n追加条件: ${additionalRequest}`;
+  }
+  
+  // 既存の提案を取得して、重複を避ける
+  const existingSuggestions = Array.from(document.querySelectorAll('.menu-item h4'))
+    .map(el => el.textContent.trim());
+  
+  let baseIngredient = '';
+  if (existingIngredients.length > 0) {
+    baseIngredient = `\n主材料: ${existingIngredients.join('、')}`;
+  }
+  
+  try {
+    // APIキーを動的に取得
+    const { data: apiKeyData, error: apiKeyError } = await sb.functions.invoke('get-api-keys', {
+      body: { keyName: 'GEMINI_API_KEY' }
+    });
+    
+    if (apiKeyError || !apiKeyData?.apiKey) {
+      throw new Error('APIキーの取得に失敗しました');
+    }
+    
+    const languageName = getLanguageName(selectedGenre);
+    const prompt = `${selectedGenre}料理のメニューを5つ提案してください。
+${baseIngredient}${combinedRequest}
+
+既存の提案: ${existingSuggestions.join(', ')}
+
+上記の既存提案とは異なる、新しいアプローチや調理法のメニューを提案してください。同じような料理は避けて、バリエーション豊かな提案をお願いします。
+
+${existingIngredients.length >= 2 ? '複数の材料を指定している場合は、それらすべてを効果的に組み合わせた料理を提案してください。材料の相性や調理法のバリエーションを考慮して、それぞれ異なるアプローチで創作してください。' : ''}
+
+**重要**: 材料の分量は必ずgまたはmlで表記してください。大さじ、小さじ、カップなどの単位は使用せず、以下の換算で数値化してください：
+- 大さじ1 = 15ml/15g
+- 小さじ1 = 5ml/5g  
+- カップ1 = 200ml
+
+各メニューの説明は以下の要素を含む簡潔な文章（50文字以内）で作成してください：
+- 調理法の特徴（例：低温調理、燻製、分子ガストロノミー）
+- 味の特徴（例：酸味、甘み、スパイシー）
+- 食感の特徴（例：クリーミー、サクサク、とろける）
+- プレゼンテーションの特徴（例：色彩豊か、ミニマル、アート的）
+
+また、各メニュー名を${languageName}語で翻訳してください。
+    
+以下のJSON形式で回答してください:
+[
+  {
+    "name": "料理名（日本語）",
+    "translated_name": "翻訳された料理名（${languageName}）",
+    "description": "料理の説明（日本語）"
+  }
+]`;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKeyData.apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.9,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 2048,
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (generatedText) {
+      // JSONを抽出
+      const jsonMatch = generatedText.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const suggestions = JSON.parse(jsonMatch[0]);
+        if (Array.isArray(suggestions) && suggestions.length > 0) {
+          // 既存の提案に追加
+          const container = document.getElementById('menu-suggestions');
+          const existingItems = container.querySelectorAll('.menu-item');
+          const startIndex = existingItems.length;
+          
+          // 新しい提案を追加
+          const newSuggestionsHTML = suggestions.map((suggestion, index) => `
+            <div class="menu-item" data-index="${startIndex + index}">
+              <h4>${escapeHtml(suggestion.name)}</h4>
+              ${suggestion.translated_name ? `<div class="translated-menu-name">${escapeHtml(suggestion.translated_name)}</div>` : ''}
+              <p>${escapeHtml(suggestion.description)}</p>
+            </div>
+          `).join('');
+          
+          // 既存の「さらに提案」ボタンを一時的に削除
+          const moreBtn = document.getElementById('more-suggestions-btn');
+          if (moreBtn) {
+            moreBtn.remove();
+          }
+          
+          // 新しい提案を挿入
+          container.insertAdjacentHTML('beforeend', newSuggestionsHTML);
+          
+          // 新しい提案にクリックハンドラーを追加
+          const newItems = container.querySelectorAll('.menu-item');
+          newItems.forEach((el, index) => {
+            if (index >= startIndex) {
+              el.addEventListener('click', () => {
+                container.querySelectorAll('.menu-item').forEach(item => item.classList.remove('selected'));
+                el.classList.add('selected');
+                document.getElementById('generate-full-recipe-btn').disabled = false;
+              });
+            }
+          });
+          
+          // 「さらに提案」ボタンを再追加
+          const newMoreBtn = document.createElement('button');
+          newMoreBtn.id = 'more-suggestions-btn';
+          newMoreBtn.className = 'btn secondary';
+          newMoreBtn.innerHTML = '🔄 さらに5つ提案してもらう';
+          newMoreBtn.style.marginTop = '15px';
+          newMoreBtn.style.width = '100%';
+          
+          newMoreBtn.addEventListener('click', async () => {
+            // 追加の要望を聞く
+            const additionalRequest = prompt('追加の要望があれば入力してください（空欄でもOK）:\n\n例：\n・もっとヘルシーな料理\n・簡単に作れるもの\n・見た目が美しい料理\n・スパイシーな味付け\n・和風のアレンジ');
+            
+            if (additionalRequest === null) {
+              // キャンセルされた場合は何もしない
+              return;
+            }
+            
+            newMoreBtn.disabled = true;
+            newMoreBtn.innerHTML = '⏳ 生成中...';
+            
+            try {
+              await generateMoreMenuSuggestions(additionalRequest.trim());
+            } catch (error) {
+              console.error('追加提案生成エラー:', error);
+              alert('追加提案の生成に失敗しました: ' + error.message);
+            } finally {
+              newMoreBtn.disabled = false;
+              newMoreBtn.innerHTML = '🔄 さらに5つ提案してもらう';
+            }
+          });
+          
+          container.appendChild(newMoreBtn);
+          
+          console.log('追加提案を生成しました:', suggestions.length, '件');
+        } else {
+          throw new Error('提案の生成に失敗しました');
+        }
+      } else {
+        throw new Error('提案の生成に失敗しました');
+      }
+    } else {
+      throw new Error('提案の生成に失敗しました');
+    }
+  } catch (error) {
+    console.error('追加提案生成エラー:', error);
+    throw error;
+  }
 };
 
 const generateFullRecipe = async () => {
@@ -2779,14 +3057,64 @@ const applyAIRecipeToForm = async () => {
   }
   
   // Add steps
-  if (recipe.steps) {
-    recipe.steps.forEach(() => addStepRow());
-    const stepRows = document.querySelectorAll('.step-row input[type="text"]');
+  console.log('=== PROCESSING STEPS ===');
+  console.log('AI Recipe Steps:', recipe.steps);
+  console.log('Steps is array?', Array.isArray(recipe.steps));
+  
+  if (recipe.steps && Array.isArray(recipe.steps)) {
+    console.log(`Found ${recipe.steps.length} steps to add`);
+    
+    // Add all step rows first
+    for (let i = 0; i < recipe.steps.length; i++) {
+      console.log(`Adding step ${i + 1}:`, recipe.steps[i]);
+      addStepRow();
+      // Wait a bit between each addition
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    
+    // Wait for DOM update
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Try multiple selectors to find step inputs (textarea elements)
+    let stepRows = document.querySelectorAll('.step-row textarea.step-text');
+    console.log(`Found ${stepRows.length} step textarea elements with .step-row textarea.step-text`);
+    
+    // If no elements found, try alternative selectors
+    if (stepRows.length === 0) {
+      stepRows = document.querySelectorAll('#stepsEditor textarea.step-text');
+      console.log(`Found ${stepRows.length} step textarea elements with #stepsEditor textarea.step-text`);
+    }
+    
+    if (stepRows.length === 0) {
+      stepRows = document.querySelectorAll('#stepsEditor textarea');
+      console.log(`Found ${stepRows.length} textarea elements in #stepsEditor`);
+    }
+    
     recipe.steps.forEach((step, index) => {
       if (stepRows[index]) {
-        stepRows[index].value = step;
+        // 文字列の場合
+        if (typeof step === 'string') {
+          stepRows[index].value = step;
+          console.log(`Set step ${index + 1} to: "${step}"`);
+        }
+        // オブジェクトの場合（翻訳データ形式）
+        else if (typeof step === 'object' && step.text) {
+          stepRows[index].value = step.text;
+          console.log(`Set step ${index + 1} to: "${step.text}"`);
+        }
+        // その他の場合
+        else {
+          stepRows[index].value = (step || '').toString();
+          console.log(`Set step ${index + 1} to: "${step}"`);
+        }
+      } else {
+        console.error(`Could not find step input for index ${index}`);
       }
     });
+    
+    console.log('=== STEPS PROCESSING COMPLETE ===');
+  } else {
+    console.log('No valid steps array found');
   }
   
   // Reset AI modal to step 1

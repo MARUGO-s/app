@@ -1004,6 +1004,7 @@
               <button type="button" class="example-btn" data-example="プレゼンテーション重視">プレゼンテーション</button>
               <button type="button" class="example-btn" data-example="季節感を活かした食材">季節感</button>
               <button type="button" class="example-btn" data-example="伝統的な技法とモダンなアレンジ">伝統技法</button>
+              <button type="button" class="example-btn" data-example="モダンなメニューを考えてもらう">モダン</button>
               <button type="button" class="example-btn" data-example="ワインとのペアリングを考慮">ワインペアリング</button>
               <button type="button" class="example-btn" data-example="複雑な味の層を作る">味の層</button>
               <button type="button" class="example-btn" data-example="分子ガストロノミー要素">分子ガストロノミー</button>
@@ -1139,6 +1140,30 @@
           unit: japaneseUnits[2].trim()
         };
         console.log(`✅ OCR日本語単位解析成功:`, result);
+        return result;
+      }
+      
+      // 分量フィールドに「大さじ2」のような形式が入った場合の処理
+      const spoonUnits = str.match(/^(大さじ|小さじ|tbsp|tsp)([0-9\/\.]+)$/);
+      if (spoonUnits) {
+        const result = {
+          item: '',
+          quantity: spoonUnits[2].trim(),
+          unit: spoonUnits[1].trim()
+        };
+        console.log(`✅ OCRスプーン単位解析成功:`, result);
+        return result;
+      }
+      
+      // 分量フィールドに「大さじ2 材料名」のような形式が入った場合の処理
+      const spoonWithItem = str.match(/^(大さじ|小さじ|tbsp|tsp)([0-9\/\.]+)\s+(.+)$/);
+      if (spoonWithItem) {
+        const result = {
+          item: spoonWithItem[3].trim(),
+          quantity: spoonWithItem[2].trim(),
+          unit: spoonWithItem[1].trim()
+        };
+        console.log(`✅ OCRスプーン+材料解析成功:`, result);
         return result;
       }
       

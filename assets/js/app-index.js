@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let allRecipes = [];
     let favoriteRecipes = [];
+    let translatedRecipes = [];
     let currentTab = 'all';
     let currentCategoryFilter = 'all';
     let currentSearchTerm = '';
@@ -52,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const fetchAllRecipes = async () => {
-        const { data, error } = await sb.from("recipes").select("id,title,category,created_at").order("created_at", { ascending: false });
+        const { data, error } = await sb.from("recipes").select("id,title,category,created_at,tags").order("created_at", { ascending: false });
         if (error) {
             console.error('Failed to fetch recipes:', error);
             throw error;
@@ -62,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const fetchFavoriteRecipes = async () => {
-        const { data, error } = await sb.from("favorites").select("recipes!inner(id,title,category,created_at)").eq("client_id", getClientId()).order("created_at", { ascending: false });
+        const { data, error } = await sb.from("favorites").select("recipes!inner(id,title,category,created_at,tags)").eq("client_id", getClientId()).order("created_at", { ascending: false });
         if (error) {
             console.error('Failed to fetch favorites:', error);
             throw error;
@@ -72,15 +73,28 @@ document.addEventListener('DOMContentLoaded', () => {
         return favorites;
     };
 
+    const fetchTranslatedRecipes = async () => {
+        const { data, error } = await sb.from("recipes").select("id,title,category,created_at,tags").contains("tags", ["翻訳"]).order("created_at", { ascending: false });
+        if (error) {
+            console.error('Failed to fetch translated recipes:', error);
+            throw error;
+        }
+        console.log(`🌍 翻訳レシピ読み込み: ${data?.length || 0}件`);
+        return data || [];
+    };
+
     const updateStats = () => {
         const totalRecipes = allRecipes.length;
         const favoriteCount = favoriteRecipes.length;
+        const translatedCount = translatedRecipes.length;
 
         const totalEl = document.getElementById('totalRecipes');
         const favoriteEl = document.getElementById('favoriteRecipes');
+        const translatedEl = document.getElementById('translatedRecipes');
         
         if (totalEl) totalEl.textContent = totalRecipes;
         if (favoriteEl) favoriteEl.textContent = favoriteCount;
+        if (translatedEl) translatedEl.textContent = translatedCount;
     };
 
 
@@ -103,12 +117,35 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const filterRecipes = () => {
-        let recipes = currentTab === 'favorites' ? favoriteRecipes : allRecipes;
+        let recipes;
+        if (currentTab === 'favorites') {
+            recipes = favoriteRecipes;
+            console.log(`❤️ お気に入りタブ: ${recipes.length}件`);
+        } else if (currentTab === 'translated') {
+            recipes = translatedRecipes;
+            console.log(`🌍 翻訳タブ: ${recipes.length}件`);
+        } else if (currentTab === 'updated') {
+            recipes = allRecipes;
+            console.log(`🔄 更新順タブ: ${recipes.length}件`);
+        } else {
+            recipes = allRecipes;
+            console.log(`📚 すべてタブ: ${recipes.length}件`);
+        }
+
+        // 更新順タブの場合は作成日時でソート（updated_atフィールドが存在しないため）
+        if (currentTab === 'updated') {
+            recipes = recipes.sort((a, b) => {
+                const dateA = new Date(a.created_at);
+                const dateB = new Date(b.created_at);
+                return dateB - dateA; // 降順（新しい順）
+            });
+        }
 
         // カテゴリーフィルター
         if (currentCategoryFilter !== 'all' && currentCategoryFilter !== 'favorites') {
             recipes = recipes.filter(r => (r.category || 'その他') === currentCategoryFilter);
         }
+
 
         // 検索フィルター（正規化されたテキストで部分一致検索）
         if (currentSearchTerm.trim()) {
@@ -133,6 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     const renderCards = (recipes) => {
+        console.log(`🎨 レンダリング開始: ${recipes.length}件のレシピ`);
         cardListEl.innerHTML = '';
         
         if (!recipes || recipes.length === 0) {
@@ -249,8 +287,10 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const updateView = () => {
+        console.log(`🔄 ビュー更新開始: タブ=${currentTab}, カテゴリー=${currentCategoryFilter}, 検索=${currentSearchTerm}`);
         cardListEl.className = '';
         const recipes = filterRecipes();
+        console.log(`📊 フィルター結果: ${recipes.length}件`);
         renderCards(recipes);
         updateCategoryButtons();
     };
@@ -262,6 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const tab = event.target.closest('.tab');
             if (tab) {
                 currentTab = tab.dataset.tab;
+                console.log(`🖱️ タブクリック: ${currentTab}`);
                 updateActiveTab();
                 updateView();
             }
@@ -281,6 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.toggle('active', category === currentCategoryFilter);
         });
     };
+
 
     const setupSearch = () => {
         if (searchInput) {
@@ -324,6 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`📋 カテゴリーボタン: ${currentButtons.length}個`);
     };
 
+
     // カテゴリーボタンクリックハンドラー（イベント委譲で動的ボタンにも対応）
     const handleCategoryClick = (e) => {
         if (e.target.classList.contains('category-btn')) {
@@ -337,7 +380,6 @@ document.addEventListener('DOMContentLoaded', () => {
             updateView();
         }
     };
-
 
 
     const setupFavoriteToggle = () => {
@@ -522,9 +564,10 @@ document.addEventListener('DOMContentLoaded', () => {
         cardListEl.innerHTML = '<div class="loading-spinner"></div>';
         
         try {
-            const [allResult, favResult] = await Promise.allSettled([
+            const [allResult, favResult, transResult] = await Promise.allSettled([
                 fetchAllRecipes(), 
-                fetchFavoriteRecipes()
+                fetchFavoriteRecipes(),
+                fetchTranslatedRecipes()
             ]);
 
             if (allResult.status === 'rejected') {
@@ -533,11 +576,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (favResult.status === 'rejected') {
                 console.error('Failed to fetch favorites:', favResult.reason);
             }
+            if (transResult.status === 'rejected') {
+                console.error('Failed to fetch translated recipes:', transResult.reason);
+            }
 
             allRecipes = allResult.status === 'fulfilled' ? allResult.value : [];
             favoriteRecipes = favResult.status === 'fulfilled' ? favResult.value : [];
+            translatedRecipes = transResult.status === 'fulfilled' ? transResult.value : [];
 
-            console.log(`✅ 初期化完了: ${allRecipes.length}件のレシピ`);
+            console.log(`✅ 初期化完了: 全レシピ=${allRecipes.length}件, お気に入り=${favoriteRecipes.length}件, 翻訳=${translatedRecipes.length}件`);
             updateStats();
             updateView();
             setupTabs();

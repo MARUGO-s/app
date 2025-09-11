@@ -537,7 +537,7 @@
       <button class="btn primary small js-ai-advice">✨ AIアドバイス</button>
       <button class="btn js-edit">編集</button>
       <button class="btn ghost js-delete" style="color:#c0392b;border-color:#c0392b;">削除</button>
-      <button class="btn js-back">戻る</button>
+      <button class="btn js-back" onclick="window.location.href='index.html'">戻る</button>
     </div>
   </header>
 
@@ -743,7 +743,7 @@
 
 
     // 既存の翻訳機能に新機能を統合
-    function toggleEnhancedLanguageDisplay() {
+    async function toggleEnhancedLanguageDisplay() {
       // 既存の翻訳データがあるかチェック
       if (currentTranslatedData) {
         // 既存の翻訳表示と元表示を切り替え
@@ -759,7 +759,7 @@
         } else {
           // 翻訳版を再表示（元の言語を検出）
           const detectedLanguage = detectOriginalLanguage();
-          showTranslatedResult(currentTranslatedData, detectedLanguage);
+          await showTranslatedResult(currentTranslatedData, detectedLanguage);
           btnToggleLanguage.textContent = '🔄 元の言語に戻す';
         }
       }
@@ -776,7 +776,6 @@
       if (firstIngredient.match(/[中国語]/)) return 'zh';
       // デフォルトは英語
       return 'en';
-      }
     }
 
     async function saveEnhancedTranslation() {
@@ -881,7 +880,7 @@
 
 ## 改善提案（要約版）
 
-### 主要な改善点（3-4個）
+### 主要な改善点（5個）
 
 各改善点を簡潔に記述してください：
 
@@ -895,6 +894,21 @@
 - **実装:** 具体的な手順（1-2行）
 - **注意点:** 重要なリスクや注意事項
 
+#### 3. [改善項目名]
+- **根拠:** 簡潔な科学的根拠
+- **実装:** 具体的な手順（1-2行）
+- **注意点:** 重要なリスクや注意事項
+
+#### 4. [改善項目名]
+- **根拠:** 簡潔な科学的根拠
+- **実装:** 具体的な手順（1-2行）
+- **注意点:** 重要なリスクや注意事項
+
+#### 5. [改善項目名]
+- **根拠:** 簡潔な科学的根拠
+- **実装:** 具体的な手順（1-2行）
+- **注意点:** 重要なリスクや注意事項
+
 ### 調理科学のポイント
 
 重要な調理科学の観点を簡潔に箇条書きで：
@@ -902,7 +916,7 @@
 - パン/生地系の場合はベーカーズ％の妥当性
 
 **必ず簡潔で実用的なアドバイスにしてください。**`;
-      const temps = `あなたはプロの食品安全コンサルタントです。以下のレシピの重要管理点（CCP）における温度と時間を管理するための表を作成してください。\n\n${base}\n\n— 出力仕様 —\n- 必ずMarkdownの表形式で出力してください。\n- 表には「工程」「温度（表面/中心）」「時間」「備考（食品安全上の根拠など）」の列を含めてください。`;
+      const temps = `あなたはプロの食品安全コンサルタントです。以下のレシピの重要管理点（CCP）における温度と時間を管理するための表を作成してください。\n\n${base}\n\n— 出力仕様 —\n- 必ずMarkdownの表形式で出力してください。\n- 表には「工程」「温度（表面/中心）」「時間」「備考（食品安全上の根拠等）」の列を含めてください。`;
       const hazards = `以下のレシピに関する危害要因（微生物/アレルゲン/化学・物理）とCCP候補、簡単な管理基準案を箇条書きで。\n\n${base}`;
       const newRecipe = `あなたはレシピ開発の専門家です。以下の会話履歴・提案内容・現在のレシピ情報をすべて考慮し、改善された新規レシピを厳密なJSONだけで出力してください。
 
@@ -1037,7 +1051,18 @@ ${base}
               </tbody>
             </table>
           </div>`;
-        const stepList = `<ol style="margin-top:8px;">${steps.map(s=>`<li>${(s||'').toString()}</li>`).join('')}</ol>`;
+        const stepList = `<ol style="margin-top:8px;">${steps.map(step => {
+          // 文字列の場合
+          if (typeof step === 'string') {
+            return `<li>${step}</li>`;
+          }
+          // オブジェクトの場合（翻訳データ形式）
+          if (typeof step === 'object' && step.text) {
+            return `<li>${step.text}</li>`;
+          }
+          // その他の場合
+          return `<li>${(step || '').toString()}</li>`;
+        }).join('')}</ol>`;
 
         const wrap = document.createElement('div');
         wrap.className = 'card';
@@ -1119,7 +1144,18 @@ ${base}
         const steps = Array.isArray(recipe.steps) ? recipe.steps : [];
         console.log('手順データ:', steps);
         if (steps.length > 0) {
-          const stepsHTML = steps.map(s=>`<li>${(s||'').toString()}</li>`).join('');
+          const stepsHTML = steps.map(step => {
+            // 文字列の場合
+            if (typeof step === 'string') {
+              return `<li>${step}</li>`;
+            }
+            // オブジェクトの場合（翻訳データ形式）
+            if (typeof step === 'object' && step.text) {
+              return `<li>${step.text}</li>`;
+            }
+            // その他の場合
+            return `<li>${(step || '').toString()}</li>`;
+          }).join('');
           console.log('手順HTML:', stepsHTML);
           stepsEl.innerHTML = stepsHTML;
         } else {
@@ -1485,11 +1521,23 @@ ${stepText}
     const btnBack   = document.querySelector('.js-back');
     const favBtn    = document.getElementById('favBtn');
 
+    console.log('戻るボタン要素:', btnBack);
+    console.log('戻るボタンが存在するか:', !!btnBack);
+
     btnEdit?.addEventListener('click', ()=>{ location.href = `recipe_edit.html?id=${encodeURIComponent(id)}`; });
-    btnBack?.addEventListener('click', ()=>{
-      console.log('戻るボタンがクリックされました');
-      location.href='index.html';
-    });
+    
+    // 戻るボタンのイベントリスナーを確実に設定
+    if (btnBack) {
+      btnBack.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('戻るボタンがクリックされました');
+        window.location.href = 'index.html';
+      });
+      console.log('戻るボタンのイベントリスナーを設定しました');
+    } else {
+      console.error('戻るボタンが見つかりません');
+    }
     btnDelete?.addEventListener('click', async ()=>{
       if(!confirm('このレシピを削除しますか？（材料・手順は残る場合があります）')) return;
       try{
@@ -2116,13 +2164,15 @@ async function startTranslation(language) {
     currentTranslatedData = translatedData;
     
     console.log('翻訳結果:', translatedData);
+    console.log('翻訳タイトル:', translatedData.title);
+    console.log('翻訳説明:', translatedData.description);
     
     console.log('翻訳材料数:', translatedData.ingredients ? translatedData.ingredients.length : 0);
     console.log('翻訳手順数:', translatedData.steps ? translatedData.steps.length : 0);
     
     // ローディングを非表示にして翻訳結果を表示
     hideTranslateLoading();
-    showTranslatedResult(translatedData, language);
+    await showTranslatedResult(translatedData, language);
     
   } catch (error) {
     console.error('翻訳エラー:', error);
@@ -2163,10 +2213,12 @@ ${recipeData.ingredients.map(ing => `${ing.position}. ${ing.item} ${ing.quantity
 作り方:
 ${recipeData.steps.map(step => `${step.number}. ${step.text}`).join('\n')}
 
-重要: 必ず以下のJSON形式のみで回答してください。説明や追加のテキストは一切含めないでください。
+重要: 必ず以下のJSON形式のみで回答してください。説明や追加のテキスト、Markdown記号（\`\`\`など）は一切含めないでください。純粋なJSONのみを返してください。
+
+料理名は必ず${languageName}で翻訳してください。日本語のままにしないでください。
 
 {
-  "title": "翻訳された料理名",
+  "title": "翻訳された料理名（${languageName}）",
   "description": "翻訳された説明",
   "ingredients": [
     {"position": "番号", "item": "材料名", "quantity": "分量", "unit": "単位"}
@@ -2217,25 +2269,44 @@ ${recipeData.steps.map(step => `${step.number}. ${step.text}`).join('\n')}
   }
 
   console.log('翻訳レスポンス:', translatedText);
+  console.log('翻訳レスポンスの長さ:', translatedText.length);
 
   try {
+    // Markdown形式のコードブロックを除去
+    let cleanText = translatedText;
+    if (cleanText.includes('```json+')) {
+      cleanText = cleanText.replace(/```json\+?\s*/, '');
+    }
+    if (cleanText.includes('```')) {
+      cleanText = cleanText.replace(/```\s*$/, '');
+    }
+    
     // JSON形式の部分を抽出
-    const jsonMatch = translatedText.match(/\{[\s\S]*\}/);
+    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       console.log('JSON形式で翻訳結果を解析:', jsonMatch[0]);
-      const parsed = JSON.parse(jsonMatch[0]);
-      console.log('解析された翻訳データ:', parsed);
-      return parsed;
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        console.log('解析された翻訳データ:', parsed);
+        console.log('解析されたタイトル:', parsed.title);
+        return parsed;
+      } catch (parseError) {
+        console.error('JSON解析エラー:', parseError);
+        console.log('翻訳テキスト:', translatedText);
+        // フォールバック: 手動で構造化
+        return parseTranslatedTextManually(cleanText);
+      }
     } else {
       console.log('JSON形式ではないため、手動で構造化');
-      // JSON形式でない場合は、手動で構造化
-      const lines = translatedText.split('\n').filter(line => line.trim());
-      const result = {
-        title: lines[0] || '翻訳された料理名',
-        description: lines.slice(1, 3).join(' ') || '翻訳された説明',
-        ingredients: [],
-        steps: []
-      };
+    // JSON形式でない場合は、手動で構造化
+    const lines = translatedText.split('\n').filter(line => line.trim());
+    const result = {
+      title: lines[0] || '翻訳された料理名',
+      description: lines.slice(1, 3).join(' ') || '翻訳された説明',
+      ingredients: [],
+      steps: []
+    };
+    console.log('手動構造化の結果:', result);
       
       // 材料と手順を抽出（簡易版）
       let currentSection = '';
@@ -2276,9 +2347,63 @@ ${recipeData.steps.map(step => `${step.number}. ${step.text}`).join('\n')}
   }
 }
 
+// 翻訳テキストを手動で構造化する関数
+function parseTranslatedTextManually(text) {
+  console.log('手動で翻訳テキストを構造化:', text);
+  
+  try {
+    // まず、不完全なJSONを修正してみる
+    let fixedText = text;
+    
+    // 不完全なJSONの修正
+    if (fixedText.includes('"ingredients": [')) {
+      // ingredients配列の終了を確認
+      if (!fixedText.includes(']')) {
+        fixedText += ']';
+      }
+    }
+    if (fixedText.includes('"steps": [')) {
+      // steps配列の終了を確認
+      if (!fixedText.includes(']')) {
+        fixedText += ']';
+      }
+    }
+    
+    // 最後の}を確認
+    if (!fixedText.includes('}')) {
+      fixedText += '}';
+    }
+    
+    // 修正されたテキストでJSON解析を試行
+    const jsonMatch = fixedText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        console.log('修正されたJSON解析成功:', parsed);
+        return parsed;
+      } catch (e) {
+        console.log('修正されたJSONでも解析失敗:', e);
+      }
+    }
+  } catch (e) {
+    console.log('JSON修正失敗:', e);
+  }
+  
+  // 完全にフォールバック: 基本的な構造を返す
+  return {
+    title: '翻訳された料理名',
+    description: '翻訳された説明',
+    ingredients: [],
+    steps: []
+  };
+}
+
 // 翻訳結果表示
-function showTranslatedResult(translatedData, language) {
+async function showTranslatedResult(translatedData, language) {
   console.log('showTranslatedResult called with:', { translatedData, language });
+  console.log('翻訳データのタイトル:', translatedData.title);
+  console.log('翻訳データ全体:', JSON.stringify(translatedData, null, 2));
+  
   const flagEmoji = getFlagEmoji(language);
   
   // 翻訳タイトルを表示
@@ -2287,13 +2412,29 @@ function showTranslatedResult(translatedData, language) {
   if (translatedTitleEl) {
     // 元のレシピタイトルを取得
     const originalTitle = document.getElementById('recipeTitle')?.textContent?.trim() || '';
+    console.log('元のタイトル:', originalTitle);
+    console.log('翻訳タイトル:', translatedData.title);
     
-    translatedTitleEl.innerHTML = `
-      <span class="translated-text">${translatedData.title}</span>
-      <span class="original-text">（${originalTitle}）</span>
-      <span class="flag-emoji">${flagEmoji}</span>
-    `;
-    translatedTitleEl.style.display = 'block';
+    // 翻訳タイトルが空でない場合のみ表示
+    if (translatedData.title && translatedData.title.trim() && translatedData.title !== '翻訳された料理名') {
+      // メインの料理名も翻訳版に置き換え
+      const mainTitleEl = document.getElementById('recipeTitle');
+      if (mainTitleEl) {
+        mainTitleEl.textContent = translatedData.title;
+        console.log('メインタイトルを翻訳版に置き換えました:', translatedData.title);
+      }
+      
+      // 翻訳タイトル要素には元の日本語を表示
+      translatedTitleEl.innerHTML = `
+        <span class="original-text">（${originalTitle}）</span>
+        <span class="flag-emoji">${flagEmoji}</span>
+      `;
+      translatedTitleEl.style.display = 'block';
+      console.log('翻訳タイトルを表示しました:', translatedData.title);
+    } else {
+      console.log('翻訳タイトルが空またはデフォルト値のため表示しません');
+      translatedTitleEl.style.display = 'none';
+    }
   }
   
   // 翻訳説明文を表示
@@ -2384,8 +2525,17 @@ function showTranslatedResult(translatedData, language) {
     }
   }
   
-  // 翻訳完了 - 手動保存を可能にするため、自動保存はしない
-  console.log('翻訳表示完了。手動で保存ボタンを使用してください。');
+  // 翻訳完了 - 自動的に翻訳版を保存
+  console.log('翻訳表示完了。自動的に翻訳版を保存します。');
+  
+  // 自動的に翻訳版を保存
+  try {
+    await saveTranslatedRecipe(translatedData, false);
+    console.log('翻訳版を自動保存しました');
+  } catch (error) {
+    console.error('翻訳版自動保存エラー:', error);
+    alert('翻訳版の自動保存に失敗しました: ' + error.message);
+  }
 }
 
 // 翻訳データと元の日本語を分離して保存（新しいテーブル構造）
@@ -2414,6 +2564,9 @@ async function saveCombinedRecipe(translatedData, language) {
     return { number, text };
   });
   
+  // 元のレシピのカテゴリーとタグを取得
+  const { data: originalRecipe } = await sb.from('recipes').select('category, tags').eq('id', currentRecipeId).single();
+  
   // 翻訳レシピメインデータを作成
   const translationRecipeData = {
     original_recipe_id: currentRecipeId,
@@ -2422,8 +2575,8 @@ async function saveCombinedRecipe(translatedData, language) {
     translated_description: translatedData.description,
     original_description: originalDescription,
     language_code: language,
-    category: '翻訳レシピ',
-    tags: ['翻訳', '多言語'],
+    category: originalRecipe?.category || '翻訳レシピ',
+    tags: [...(originalRecipe?.tags || []), '翻訳', '多言語'],
     servings: 4
   };
   
@@ -2497,12 +2650,17 @@ async function saveCombinedRecipe(translatedData, language) {
 async function saveCombinedRecipeFallback(translatedData, language, originalTitle, originalDescription, originalIngredients, originalSteps) {
   console.log('フォールバック: 既存のテーブル構造を使用');
   
+  const currentRecipeId = new URLSearchParams(window.location.search).get('i');
+  
+  // 元のレシピのカテゴリーとタグを取得
+  const { data: originalRecipe } = await sb.from('recipes').select('category, tags').eq('id', currentRecipeId).single();
+  
   // 既存のテーブル構造で保存
   const combinedRecipeData = {
     title: `${translatedData.title} （${originalTitle}）`,
     notes: `翻訳版:\n${translatedData.description}\n\n元の日本語版:\n${originalDescription}`,
-    category: '翻訳レシピ',
-    tags: ['翻訳', '多言語'],
+    category: originalRecipe?.category || '翻訳レシピ',
+    tags: [...(originalRecipe?.tags || []), '翻訳', '多言語'],
     servings: 4
   };
   
@@ -2692,16 +2850,20 @@ async function saveTranslatedTitle(translatedTitle, language) {
   }
 }
 
+
 // 翻訳レシピ保存関数
 async function saveTranslatedRecipe(translatedData, saveBoth = false) {
   const currentRecipeId = new URLSearchParams(window.location.search).get('i');
+  
+  // 元のレシピのカテゴリーとタグを取得
+  const { data: originalRecipe } = await sb.from('recipes').select('category, tags').eq('id', currentRecipeId).single();
   
   // 翻訳版のレシピデータを作成
   const recipeData = {
     title: translatedData.title,
     notes: translatedData.description, // descriptionではなくnotesを使用
-    category: '翻訳レシピ', // カテゴリーを設定
-    tags: ['翻訳'],
+    category: originalRecipe?.category || '翻訳レシピ', // 元のカテゴリーを継承
+    tags: [...(originalRecipe?.tags || []), '翻訳'], // 元のタグに翻訳タグを追加
     servings: 4 // デフォルト値
   };
   
@@ -2717,6 +2879,7 @@ async function saveTranslatedRecipe(translatedData, saveBoth = false) {
   }
   
   const newRecipeId = recipeResult.id;
+  console.log('翻訳レシピ保存成功:', recipeResult);
   
   // 材料を保存
   if (translatedData.ingredients && translatedData.ingredients.length > 0) {
@@ -2782,6 +2945,25 @@ async function saveTranslatedRecipe(translatedData, saveBoth = false) {
     } catch (error) {
       console.warn('翻訳タイトル保存エラー（スキップ）:', error);
       // 翻訳タイトル保存エラーは警告として記録するが、処理を続行
+    }
+    
+    // 元のレシピにも翻訳タグを追加
+    try {
+      const { data: originalRecipe } = await sb.from('recipes').select('tags').eq('id', currentRecipeId).single();
+      if (originalRecipe && originalRecipe.tags) {
+        const updatedTags = [...originalRecipe.tags];
+        if (!updatedTags.includes('翻訳')) {
+          updatedTags.push('翻訳');
+        }
+        if (!updatedTags.includes('多言語')) {
+          updatedTags.push('多言語');
+        }
+        
+        await sb.from('recipes').update({ tags: updatedTags }).eq('id', currentRecipeId);
+        console.log('元のレシピに翻訳タグを追加しました');
+      }
+    } catch (error) {
+      console.warn('元のレシピタグ更新でエラー（スキップ）:', error);
     }
   }
 }
