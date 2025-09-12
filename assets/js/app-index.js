@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentCategoryFilter = 'all';
     let currentSearchTerm = '';
     let filteredRecipes = [];
-    
+
     // 一括選択機能用の変数
     let isBulkMode = false;
     let selectedRecipes = new Set();

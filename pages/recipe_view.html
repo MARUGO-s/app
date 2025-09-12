@@ -21,7 +21,7 @@
   <script src="../assets/js/ui-components.js"></script>
   <script src="../assets/js/recipe-view.js"></script>
 
-  <link rel="stylesheet" href="../assets/css/style.css?v=20250115p">
+  <link rel="stylesheet" href="../assets/css/style.css?v=20250115q">
   <link rel="stylesheet" href="../assets/css/components.css?v=20250115">
   <style>
     /* 翻訳タイトルのスタイル */
@@ -1310,10 +1310,12 @@
         <button class="ai-tab" role="tab" aria-selected="true" data-tab="advice">提案</button>
         <button class="ai-tab" role="tab" aria-selected="false" data-tab="temps">温度・時間</button>
         <button class="ai-tab" role="tab" aria-selected="false" data-tab="hazards">危害要因</button>
+        <button class="ai-tab" role="tab" aria-selected="false" data-tab="wine">ペアリングワイン</button>
       </nav>
       <section id="tab-advice" class="ai-chat-container active"></section>
       <section id="tab-temps" class="ai-chat-container"></section>
       <section id="tab-hazards" class="ai-chat-container"></section>
+      <section id="tab-wine" class="ai-chat-container"></section>
       <div class="ai-input-row">
         <textarea id="aiInput" placeholder="質問や要望を入力…"></textarea>
         <button class="ai-btn" id="aiSave">レシピ化</button>
@@ -1348,7 +1350,7 @@
     const modalContent = modal.querySelector('.ai-view-modal-content');
     const btnClose = document.getElementById('aiClose');
     const tabs = document.querySelectorAll('.ai-tab');
-    const panes = { advice: document.getElementById('tab-advice'), temps: document.getElementById('tab-temps'), hazards: document.getElementById('tab-hazards') };
+    const panes = { advice: document.getElementById('tab-advice'), temps: document.getElementById('tab-temps'), hazards: document.getElementById('tab-hazards'), wine: document.getElementById('tab-wine') };
     const input = document.getElementById('aiInput');
     const btnSend = document.getElementById('aiSend');
     const btnSave = document.getElementById('aiSave');
@@ -1370,10 +1372,10 @@
 
 
     // ▼▼▼【変更点 1】会話履歴を保存するオブジェクトを追加 ▼▼▼
-    const chatHistories = { advice: [], temps: [], hazards: [] };
+    const chatHistories = { advice: [], temps: [], hazards: [], wine: [] };
 
     // ===== タブ切替（遅延生成対応） =====
-    const tabLoaded = { advice:false, temps:false, hazards:false };
+    const tabLoaded = { advice:false, temps:false, hazards:false, wine:false };
     tabs.forEach(t=>t.addEventListener('click', async ()=>{
       tabs.forEach(x=>x.setAttribute('aria-selected','false'));
       t.setAttribute('aria-selected','true');
@@ -1664,7 +1666,8 @@
 - パン/生地系の場合はベーカーズ％の妥当性`;
       const temps = `あなたはプロの食品安全コンサルタントです。以下のレシピの重要管理点（CCP）における温度と時間を管理するための表を作成してください。\n\n${base}\n\n— 出力仕様 —\n- 必ずMarkdownの表形式で出力してください。\n- 表には「工程」「温度（表面/中心）」「時間」「備考（食品安全上の根拠等）」の列を含めてください。`;
       const hazards = `以下のレシピに関する危害要因（微生物/アレルゲン/化学・物理）とCCP候補、簡単な管理基準案を箇条書きで。\n\n${base}`;
-      return { advice, temps, hazards };
+      const wine = `あなたはプロのソムリエです。以下のレシピに最適なペアリングワインを3種類提案してください。\n\n${base}\n\n## ペアリングワイン提案\n\n### 1. [ワイン名・産地・年]（[色・タイプ]）\n- **選定理由:** 料理の特徴とワインの特性の相性\n- **味わい:** ワインの味わいの特徴\n- **セパージュ:** 使用されているブドウ品種\n- **検証:** なぜこの組み合わせが良いのかの科学的・感覚的根拠\n\n### 2. [ワイン名・産地・年]（[色・タイプ]）\n- **選定理由:** 料理の特徴とワインの特性の相性\n- **味わい:** ワインの味わいの特徴\n- **セパージュ:** 使用されているブドウ品種\n- **検証:** なぜこの組み合わせが良いのかの科学的・感覚的根拠\n\n### 3. [ワイン名・産地・年]（[色・タイプ]）\n- **選定理由:** 料理の特徴とワインの特性の相性\n- **味わい:** ワインの味わいの特徴\n- **セパージュ:** 使用されているブドウ品種\n- **検証:** なぜこの組み合わせが良いのかの科学的・感覚的根拠\n\n## ペアリングの基本原則\n\n- **相補性:** 料理とワインの味のバランス\n- **相乗効果:** 料理とワインが互いを引き立てる効果\n- **地域性:** 同じ地域の料理とワインの相性\n- **温度:** 適切な飲用温度の提案`;
+      return { advice, temps, hazards, wine };
     }
 
     // ===== 直接Gemini API呼び出し =====
