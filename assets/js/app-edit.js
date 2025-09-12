@@ -1581,8 +1581,7 @@ const setupModalEvents = () => {
     // Handle tag selection
     const selectedTagElements = Array.from(document.querySelectorAll('#tag-options .selected'));
     selectedTags = selectedTagElements.map(el => el.textContent.trim());
-    const tagText = selectedTags.length > 0 ? selectedTags.join(', ') : 'タグを選択';
-    document.getElementById('selectedTagsText').textContent = tagText;
+    updateTagSelect(); // 統一された関数を使用
     console.log('選択されたタグ:', selectedTags);
     toggleModal('tag-modal', false);
   });

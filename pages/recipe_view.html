@@ -21,8 +21,8 @@
   <script src="../assets/js/ui-components.js"></script>
   <script src="../assets/js/recipe-view.js"></script>
 
-  <link rel="stylesheet" href="../assets/css/style.css">
-  <link rel="stylesheet" href="../assets/css/components.css">
+  <link rel="stylesheet" href="../assets/css/style.css?v=20250115p">
+  <link rel="stylesheet" href="../assets/css/components.css?v=20250115">
   <style>
     /* 翻訳タイトルのスタイル */
     .translated-title {
@@ -353,20 +353,304 @@
       }
     }
     /* ===== AIモーダル（3タブ統合版） ===== */
-    .ai-view-modal-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000; display:none; align-items:center; justify-content:center; }
-    .ai-view-modal-content{ background:var(--bg-panel,#fff); color:var(--fg,#222); width:clamp(320px,92vw,860px); max-height:92vh; overflow:hidden; border-radius:12px; box-shadow:0 8px 28px rgba(0,0,0,.35); display:flex; flex-direction:column; }
-    .ai-view-modal-header{ display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.85rem 1rem; border-bottom:1px solid rgba(0,0,0,.08); }
-    .ai-view-modal-title{ font-weight:700; }
-    .ai-view-modal-close{ background:none; border:none; font-size:1.5rem; line-height:1; cursor:pointer; }
-    .ai-view-tabs{ display:flex; gap:.25rem; padding:.5rem; border-bottom:1px solid rgba(0,0,0,.06); background:var(--bg-muted,#f7f7f7); }
-    .ai-tab{ padding:.4rem .75rem; border-radius:999px; cursor:pointer; border:1px solid transparent; }
+    .ai-view-modal-overlay{ 
+      position:fixed; 
+      inset:0; 
+      background:rgba(0,0,0,.45); 
+      z-index:1000; 
+      display:none; 
+      align-items:center; 
+      justify-content:center; 
+      padding:1rem;
+    }
+    .ai-view-modal-content{ 
+      background:var(--bg-panel,#fff); 
+      color:var(--fg,#222); 
+      width:clamp(320px,95vw,860px); 
+      max-height:90vh; 
+      overflow:hidden; 
+      border-radius:12px; 
+      box-shadow:0 8px 28px rgba(0,0,0,.35); 
+      display:flex; 
+      flex-direction:column;
+      margin:auto;
+    }
+    .ai-view-modal-header{ 
+      display:flex; 
+      align-items:center; 
+      justify-content:space-between; 
+      gap:1rem; 
+      padding:.85rem 1rem; 
+      border-bottom:1px solid rgba(0,0,0,.08);
+      flex-shrink:0;
+    }
+    .ai-view-modal-title{ 
+      font-weight:700; 
+      font-size:clamp(1rem,4vw,1.25rem);
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .ai-view-modal-close{ 
+      background:#f3f4f6; 
+      border:1px solid #d1d5db; 
+      font-size:1.2rem; 
+      line-height:1; 
+      cursor:pointer;
+      flex-shrink:0;
+      padding:0.5rem;
+      border-radius:6px;
+      color:#374151;
+      transition:all 0.2s ease;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      width:32px;
+      height:32px;
+    }
+    
+    .ai-view-modal-close:hover{ 
+      background:#e5e7eb; 
+      border-color:#9ca3af;
+      color:#1f2937;
+      transform:scale(1.05);
+    }
+    
+    .ai-view-modal-close:active{ 
+      transform:scale(0.95);
+    }
+    
+    .ai-view-modal-close:focus{ 
+      outline:2px solid #3b82f6;
+      outline-offset:2px;
+    }
+    .ai-view-tabs{ 
+      display:flex; 
+      gap:.25rem; 
+      padding:.5rem; 
+      border-bottom:1px solid rgba(0,0,0,.06); 
+      background:var(--bg-muted,#f7f7f7);
+      flex-shrink:0;
+      overflow-x:auto;
+      scrollbar-width:none;
+      -ms-overflow-style:none;
+    }
+    .ai-view-tabs::-webkit-scrollbar{ display:none; }
+    .ai-tab{ 
+      padding:.4rem .75rem; 
+      border-radius:999px; 
+      cursor:pointer; 
+      border:1px solid transparent;
+      white-space:nowrap;
+      flex-shrink:0;
+      font-size:clamp(0.8rem,3vw,0.9rem);
+    }
     .ai-tab[aria-selected="true"]{ background:#e8f0fe; border-color:#b6cef7; }
-    .ai-chat-container{ flex:1; overflow:auto; padding:1rem; display:none; }
+    .ai-chat-container{ 
+      flex:1; 
+      overflow:auto; 
+      padding:1rem; 
+      display:none;
+      min-height:0;
+      max-width:100%;
+      box-sizing:border-box;
+      word-wrap:break-word;
+      word-break:break-word;
+      overflow-wrap:break-word;
+      overflow-x:auto;
+      overflow-y:auto;
+      white-space:normal;
+      text-overflow:unset;
+      hyphens:auto;
+      -webkit-hyphens:auto;
+      -moz-hyphens:auto;
+      -ms-hyphens:auto;
+    }
+    
+    /* AIアシスタント内のすべての要素に対して根本的な折り返し設定 */
+    .ai-chat-container * {
+      overflow: visible !important;
+      text-overflow: unset !important;
+      white-space: normal !important;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+    }
     .ai-chat-container.active{ display:block; }
-    .ai-input-row{ display:flex; gap:.5rem; padding:.75rem 1rem; border-top:1px solid rgba(0,0,0,.08); }
-    .ai-input-row textarea{ flex:1; resize:vertical; min-height:42px; }
-    .ai-btn{ padding:.5rem .85rem; border:1px solid #d0d7de; border-radius:8px; background:#fff; cursor:pointer; }
+    .ai-input-row{ 
+      display:flex; 
+      gap:.5rem; 
+      padding:.75rem 1rem; 
+      border-top:1px solid rgba(0,0,0,.08);
+      flex-shrink:0;
+      flex-wrap:wrap;
+    }
+    .ai-input-row textarea{ 
+      flex:1; 
+      resize:vertical; 
+      min-height:42px;
+      min-width:200px;
+    }
+    .ai-btn{ 
+      padding:.5rem .85rem; 
+      border:1px solid #d0d7de; 
+      border-radius:8px; 
+      background:#fff; 
+      cursor:pointer;
+      white-space:nowrap;
+      flex-shrink:0;
+    }
     .ai-btn.primary{ background:#2563eb; color:#fff; border-color:#2563eb; }
+    
+    /* レスポンシブ対応 */
+    @media (max-width: 768px) {
+      .ai-view-modal-overlay{ 
+        padding:0.5rem;
+        align-items:flex-start;
+        padding-top:2rem;
+      }
+      .ai-view-modal-content{ 
+        width:100%;
+        max-height:95vh;
+        border-radius:8px;
+      }
+      .ai-view-modal-header{ 
+        padding:.75rem 1rem;
+      }
+      .ai-view-modal-title{ 
+        font-size:1rem;
+      }
+      .ai-view-modal-close{ 
+        width:28px;
+        height:28px;
+        font-size:1rem;
+        padding:0.4rem;
+      }
+      .ai-view-tabs{ 
+        padding:.4rem;
+        gap:.2rem;
+      }
+      .ai-tab{ 
+        padding:.3rem .6rem;
+        font-size:0.8rem;
+      }
+      
+      /* 手順リストのモバイル対応 */
+      .ai-msg ol li {
+        margin: 0.4rem 0 !important;
+        padding: 0.3rem 0 !important;
+        line-height: 1.6 !important;
+        font-size: 0.9em !important;
+      }
+      
+      .ai-msg ol {
+        padding-left: 1.2rem !important;
+        margin: 0.6rem 0 !important;
+      }
+      .ai-chat-container{ 
+        padding:.75rem;
+      }
+      .ai-input-row{ 
+        padding:.5rem .75rem;
+        gap:.4rem;
+      }
+      .ai-input-row textarea{ 
+        min-width:150px;
+        min-height:36px;
+      }
+      .ai-btn{ 
+        padding:.4rem .7rem;
+        font-size:0.85rem;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      .ai-view-modal-overlay{ 
+        padding:0.25rem;
+        padding-top:1rem;
+      }
+      .ai-view-modal-content{ 
+        max-height:98vh;
+        border-radius:6px;
+      }
+      .ai-view-modal-header{ 
+        padding:.6rem .8rem;
+      }
+      .ai-view-modal-title{ 
+        font-size:0.9rem;
+      }
+      .ai-view-modal-close{ 
+        width:26px;
+        height:26px;
+        font-size:0.9rem;
+        padding:0.3rem;
+      }
+      .ai-view-tabs{ 
+        padding:.3rem;
+        gap:.15rem;
+      }
+      .ai-tab{ 
+        padding:.25rem .5rem;
+        font-size:0.75rem;
+      }
+      .ai-chat-container{ 
+        padding:.5rem;
+      }
+      .ai-input-row{ 
+        padding:.4rem .6rem;
+        gap:.3rem;
+        flex-direction:column;
+      }
+      .ai-input-row textarea{ 
+        min-width:100%;
+        min-height:32px;
+      }
+      .ai-btn{ 
+        padding:.35rem .6rem;
+        font-size:0.8rem;
+        width:100%;
+      }
+      
+      /* 手順リストのスマートフォン対応 */
+      .ai-msg ol li {
+        margin: 0.3rem 0 !important;
+        padding: 0.2rem 0 !important;
+        line-height: 1.5 !important;
+        font-size: 0.85em !important;
+      }
+      
+      .ai-msg ol {
+        padding-left: 1rem !important;
+        margin: 0.5rem 0 !important;
+      }
+      
+      .ai-msg{ 
+        padding:.75rem 1rem;
+        font-size:0.9em;
+        margin:.6rem 0;
+      }
+      
+      .ai-msg h1, .ai-msg h2, .ai-msg h3, .ai-msg h4 {
+        font-size:1.1em;
+        margin:1rem 0 0.6rem 0;
+      }
+      
+      .ai-msg ul, .ai-msg ol {
+        padding-left:1.2rem;
+      }
+      
+      .ai-msg pre {
+        padding:.75rem;
+        font-size:0.85em;
+      }
+      
+      .ai-msg .improvement-section {
+        padding:.75rem;
+      }
+    }
+    
     .ai-msg{ 
       margin:.8rem 0; 
       padding:1rem 1.2rem; 
@@ -375,6 +659,19 @@
       background:#fafafa; 
       line-height:1.7; 
       font-size: 0.95em;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      hyphens: auto !important;
+      -webkit-hyphens: auto !important;
+      -moz-hyphens: auto !important;
+      -ms-hyphens: auto !important;
+      max-width: 100% !important;
+      width: 100% !important;
+      box-sizing: border-box !important;
+      overflow: visible !important;
+      white-space: normal !important;
+      text-overflow: unset !important;
     }
     .ai-msg.user{ 
       background:#eef5ff; 
@@ -386,10 +683,33 @@
       margin: 1.5rem 0 0.8rem 0;
       color: #1a1a1a;
       font-weight: 600;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      max-width: 100% !important;
+      white-space: normal !important;
     }
     
-    .ai-msg h1 { font-size: 1.4em; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.5rem; }
-    .ai-msg h2 { font-size: 1.3em; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.3rem; }
+    .ai-msg h1 { 
+      font-size: 1.4em; 
+      border-bottom: 2px solid #e5e7eb; 
+      padding-bottom: 0.5rem; 
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      max-width: 100% !important;
+      white-space: normal !important;
+    }
+    .ai-msg h2 { 
+      font-size: 1.3em; 
+      border-bottom: 1px solid #e5e7eb; 
+      padding-bottom: 0.3rem; 
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      max-width: 100% !important;
+      white-space: normal !important;
+    }
     
     /* ===== ステータスポップアップ ===== */
     .status-popup {
@@ -475,16 +795,122 @@
     .ai-msg p {
       margin: 0.8rem 0;
       line-height: 1.7;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      max-width: 100% !important;
+      white-space: normal !important;
     }
     
     .ai-msg ul, .ai-msg ol {
       margin: 0.8rem 0;
       padding-left: 1.5rem;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      max-width: 100% !important;
+      white-space: normal !important;
+      overflow: visible !important;
     }
     
     .ai-msg li {
       margin: 0.4rem 0;
       line-height: 1.6;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      max-width: 100% !important;
+      white-space: normal !important;
+      padding: 0.2rem 0;
+      overflow: visible !important;
+    }
+    
+    /* 手順リストの特別なスタイリング */
+    .ai-msg ol li {
+      margin: 0.6rem 0 !important;
+      padding: 0.4rem 0 !important;
+      line-height: 1.7 !important;
+      overflow: visible !important;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      max-width: 100% !important;
+      white-space: normal !important;
+      display: block !important;
+      width: 100% !important;
+      box-sizing: border-box !important;
+      text-overflow: unset !important;
+      hyphens: auto !important;
+      -webkit-hyphens: auto !important;
+      -moz-hyphens: auto !important;
+      -ms-hyphens: auto !important;
+      list-style-position: outside !important;
+      list-style-type: decimal !important;
+      position: relative !important;
+    }
+    
+    /* 手順リストの番号部分のスタイリング */
+    .ai-msg ol li::marker {
+      content: counter(list-item) ". " !important;
+      font-weight: bold !important;
+      color: #374151 !important;
+    }
+    
+    /* 手順リストのテキスト部分のスタイリング */
+    .ai-msg ol li > * {
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      max-width: 100% !important;
+      white-space: normal !important;
+      text-overflow: unset !important;
+      hyphens: auto !important;
+      -webkit-hyphens: auto !important;
+      -moz-hyphens: auto !important;
+      -ms-hyphens: auto !important;
+    }
+    
+    /* 手順リスト全体のスタイリング */
+    .ai-msg ol {
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+      overflow: visible !important;
+      margin: 0.8rem 0 !important;
+      padding-left: 1.5rem !important;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+      text-overflow: unset !important;
+    }
+    
+    /* AIアシスタント内のすべての要素に対して折り返しを強制適用 */
+    .ai-msg * {
+      overflow: visible !important;
+      text-overflow: unset !important;
+      white-space: normal !important;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+    }
+    
+    /* ただし、ボタンや特定の要素は除外 */
+    .ai-msg .btn,
+    .ai-msg button,
+    .ai-msg input,
+    .ai-msg select,
+    .ai-msg textarea {
+      overflow: visible !important;
+      text-overflow: unset !important;
+      white-space: normal !important;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
     }
     
     .ai-msg strong {
@@ -512,6 +938,11 @@
       font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
       font-size: 0.9em;
       color: #dc2626;
+      word-wrap: break-word !important;
+      word-break: break-all !important;
+      overflow-wrap: break-word !important;
+      max-width: 100% !important;
+      white-space: normal !important;
     }
     
     .ai-msg pre {
@@ -519,8 +950,16 @@
       padding: 1rem;
       border-radius: 8px;
       overflow-x: auto;
+      overflow-y: auto;
       border: 1px solid #e5e7eb;
       margin: 1rem 0;
+      max-width: 100% !important;
+      width: 100% !important;
+      box-sizing: border-box !important;
+      white-space: pre-wrap !important;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
     }
     
     .ai-msg pre code {
@@ -536,6 +975,13 @@
       border-radius: 8px;
       padding: 1rem;
       margin: 1rem 0;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      max-width: 100% !important;
+      width: 100% !important;
+      box-sizing: border-box !important;
+      white-space: normal !important;
     }
     
     .ai-msg .improvement-title {
@@ -543,12 +989,24 @@
       font-weight: 600;
       font-size: 1.1em;
       margin-bottom: 0.8rem;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      max-width: 100% !important;
+      white-space: normal !important;
     }
     
     .ai-msg .rationale, .ai-msg .implementation, .ai-msg .risk {
       margin: 0.8rem 0;
       padding: 0.6rem 0.8rem;
       border-radius: 6px;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      max-width: 100% !important;
+      width: 100% !important;
+      box-sizing: border-box !important;
+      white-space: normal !important;
     }
     
     .ai-msg .rationale {
@@ -586,18 +1044,96 @@
     .loading{ width:24px; height:24px; border:3px solid rgba(0,0,0,.15); border-top-color:rgba(0,0,0,.45); border-radius:50%; animation:spin 1s linear infinite; margin:.25rem auto; }
     @keyframes spin{ to{ transform:rotate(360deg);} }
     body.modal-open{ overflow:hidden; }
+    
+    /* レシピ化進行状況ポップアップ */
+    .recipe-progress-popup {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    }
+    
+    .recipe-progress-content {
+      background: white;
+      padding: 2rem;
+      border-radius: 12px;
+      text-align: center;
+      min-width: 300px;
+      max-width: 400px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+    
+    .progress-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      animation: bounce 2s infinite;
+    }
+    
+    .progress-title {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 0.5rem;
+    }
+    
+    .progress-text {
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 1.5rem;
+      min-height: 1.2rem;
+    }
+    
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #e5e7eb;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 0.5rem;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+    
+    .progress-percentage {
+      font-size: 0.8rem;
+      color: #666;
+      font-weight: 500;
+    }
+    
+    @keyframes bounce {
+      0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+      40% { transform: translateY(-10px); }
+      60% { transform: translateY(-5px); }
+    }
     /* 既存の解析カードの体裁補助 */
     .grid{ display:grid; grid-template-columns: 1fr auto; gap:.25rem .75rem; align-items:baseline; }
     .card .num{ text-align:right; }
 
     /* AIモーダル内のテーブルを見やすくするスタイル */
     .ai-chat-container table {
-        width: 100%;
+        width: 100% !important;
+        max-width: 100% !important;
         border-collapse: collapse;
         margin-top: 1rem;
         margin-bottom: 1rem;
         font-size: 0.9em;
         line-height: 1.5;
+        table-layout: fixed;
+        word-wrap: break-word !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
     }
     .ai-chat-container th,
     .ai-chat-container td {
@@ -605,10 +1141,19 @@
         padding: 0.6rem 0.75rem;
         text-align: left;
         vertical-align: top;
+        word-wrap: break-word !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+        max-width: 0 !important;
+        white-space: normal !important;
     }
     .ai-chat-container th {
         background-color: #f8f9fa; /* Lighter than --bg-muted */
         font-weight: 600;
+        word-wrap: break-word !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+        white-space: normal !important;
     }
     .ai-chat-container tr:nth-child(even) {
         background-color: #f7f7f7; /* var(--bg-muted) */
@@ -735,6 +1280,19 @@
     </div>
   </div>
 
+  <!-- レシピ化進行状況ポップアップ -->
+  <div id="recipeProgressPopup" class="recipe-progress-popup" style="display: none;">
+    <div class="recipe-progress-content">
+      <div class="progress-icon">🍳</div>
+      <div class="progress-title">レシピ化中...</div>
+      <div class="progress-text" id="progressText">AIがレシピを分析しています</div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-percentage" id="progressPercentage">0%</div>
+    </div>
+  </div>
+
   <style>
     @keyframes spin {
       0% { transform: rotate(0deg); }
@@ -746,21 +1304,19 @@
     <div class="ai-view-modal-content" tabindex="-1">
       <header class="ai-view-modal-header">
         <div class="ai-view-modal-title" id="aiTitle">✨ AI レシピ アシスタント</div>
-        <button class="ai-view-modal-close" id="aiClose" aria-label="閉じる">×</button>
+        <button class="ai-view-modal-close" id="aiClose" aria-label="閉じる">✕</button>
       </header>
       <nav class="ai-view-tabs" role="tablist">
         <button class="ai-tab" role="tab" aria-selected="true" data-tab="advice">提案</button>
         <button class="ai-tab" role="tab" aria-selected="false" data-tab="temps">温度・時間</button>
         <button class="ai-tab" role="tab" aria-selected="false" data-tab="hazards">危害要因</button>
-        <button class="ai-tab" role="tab" aria-selected="false" data-tab="new">新規レシピ</button>
       </nav>
       <section id="tab-advice" class="ai-chat-container active"></section>
       <section id="tab-temps" class="ai-chat-container"></section>
       <section id="tab-hazards" class="ai-chat-container"></section>
-      <section id="tab-new" class="ai-chat-container"></section>
       <div class="ai-input-row">
         <textarea id="aiInput" placeholder="質問や要望を入力…"></textarea>
-        <button class="ai-btn" id="aiSave">新規レシピ化</button>
+        <button class="ai-btn" id="aiSave">レシピ化</button>
         <button class="ai-btn primary" id="aiSend">送信</button>
       </div>
     </div>
@@ -779,12 +1335,20 @@
     // ===== 要素参照 =====
     const btnOpen = document.querySelector('.js-ai-advice');
     const btnBack = document.querySelector('.js-back');
+    console.log('AIアドバイスボタン要素:', btnOpen);
     console.log('戻るボタン要素:', btnBack);
+    
+    // ボタンの存在確認
+    if (!btnOpen) {
+      console.error('AIアドバイスボタンが見つかりません');
+    } else {
+      console.log('AIアドバイスボタンが見つかりました:', btnOpen);
+    }
     const modal = document.getElementById('aiModal');
     const modalContent = modal.querySelector('.ai-view-modal-content');
     const btnClose = document.getElementById('aiClose');
     const tabs = document.querySelectorAll('.ai-tab');
-    const panes = { advice: document.getElementById('tab-advice'), temps: document.getElementById('tab-temps'), hazards: document.getElementById('tab-hazards'), new: document.getElementById('tab-new') };
+    const panes = { advice: document.getElementById('tab-advice'), temps: document.getElementById('tab-temps'), hazards: document.getElementById('tab-hazards') };
     const input = document.getElementById('aiInput');
     const btnSend = document.getElementById('aiSend');
     const btnSave = document.getElementById('aiSave');
@@ -806,10 +1370,10 @@
 
 
     // ▼▼▼【変更点 1】会話履歴を保存するオブジェクトを追加 ▼▼▼
-    const chatHistories = { advice: [], temps: [], hazards: [], new: [] };
+    const chatHistories = { advice: [], temps: [], hazards: [] };
 
     // ===== タブ切替（遅延生成対応） =====
-    const tabLoaded = { advice:false, temps:false, hazards:false, new:false };
+    const tabLoaded = { advice:false, temps:false, hazards:false };
     tabs.forEach(t=>t.addEventListener('click', async ()=>{
       tabs.forEach(x=>x.setAttribute('aria-selected','false'));
       t.setAttribute('aria-selected','true');
@@ -819,12 +1383,31 @@
     }));
 
     // ===== 開閉（Esc/背景クリック/戻る導線） =====
-    const openModal = ()=>{ modal.style.display='flex'; document.body.classList.add('modal-open'); modalContent.focus({preventScroll:true}); };
+    const openModal = ()=>{ 
+      console.log('openModal関数が呼び出されました');
+      modal.style.display='flex'; 
+      document.body.classList.add('modal-open'); 
+      modalContent.focus({preventScroll:true}); 
+    };
     const closeModalLocal = ()=>{ modal.style.display='none'; document.body.classList.remove('modal-open'); };
-    btnOpen?.addEventListener('click', async ()=>{ openModal(); if(!tabLoaded.advice) { await generateTab('advice'); tabLoaded.advice=true; } });
+    btnOpen?.addEventListener('click', async ()=>{
+      console.log('AIアドバイスボタンがクリックされました');
+      try {
+        openModal(); 
+        if(!tabLoaded.advice) { 
+          console.log('AIアドバイスタブを生成中...');
+          await generateTab('advice'); 
+          tabLoaded.advice=true; 
+        }
+      } catch (error) {
+        console.error('AIアドバイスボタンクリック時のエラー:', error);
+      }
+    });
     btnClose?.addEventListener('click', closeModalLocal);
     modal.addEventListener('click', (e)=>{ if(e.target === modal) closeModalLocal(); });
     document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && modal.style.display==='flex') closeModalLocal(); });
+    
+    console.log('AIアドバイスボタンのイベントリスナー設定完了');
 
     // ===== 翻訳機能拡張 =====
     let enhancedTranslatedData = null;
@@ -931,17 +1514,94 @@
 
     // ===== 便利関数 =====
     const md = (s)=>{ try{ return marked.parse(s||''); }catch{ return (s||''); } };
+    
+    // ===== レシピ化進行状況ポップアップ制御 =====
+    function showRecipeProgressPopup() {
+      const popup = document.getElementById('recipeProgressPopup');
+      if (popup) {
+        popup.style.display = 'flex';
+        updateRecipeProgress(0, 'AIがレシピを分析しています...');
+      }
+    }
+    
+    function hideRecipeProgressPopup() {
+      const popup = document.getElementById('recipeProgressPopup');
+      if (popup) {
+        popup.style.display = 'none';
+      }
+    }
+    
+    function updateRecipeProgress(percentage, text) {
+      const progressFill = document.getElementById('progressFill');
+      const progressPercentage = document.getElementById('progressPercentage');
+      const progressText = document.getElementById('progressText');
+      
+      if (progressFill) progressFill.style.width = `${percentage}%`;
+      if (progressPercentage) progressPercentage.textContent = `${percentage}%`;
+      if (progressText) progressText.textContent = text;
+    }
     const pushMsg = (pane, role, text)=>{ 
       const el=document.createElement('div'); 
       el.className=`ai-msg ${role}`; 
       el.innerHTML = role==='assistant'? md(text): (text||''); 
       pane.appendChild(el); 
       
-      // 最初のAIアドバイス生成時のみ一番上にスクロール
-      const isFirstAIResponse = pane.children.length === 1 && role === 'assistant';
-      if (isFirstAIResponse) {
-        pane.scrollTop = 0;
+      // AI応答の場合、生成されたHTMLに折り返しスタイルを強制適用
+      if (role === 'assistant') {
+        setTimeout(() => {
+          // 手順リスト（ol, li）に折り返しスタイルを強制適用
+          const olElements = el.querySelectorAll('ol');
+          olElements.forEach(ol => {
+            ol.style.overflow = 'visible';
+            ol.style.textOverflow = 'unset';
+            ol.style.whiteSpace = 'normal';
+            ol.style.wordWrap = 'break-word';
+            ol.style.wordBreak = 'break-word';
+            ol.style.overflowWrap = 'break-word';
+            ol.style.maxWidth = '100%';
+            ol.style.boxSizing = 'border-box';
+            ol.style.margin = '0.8rem 0';
+            ol.style.paddingLeft = '1.5rem';
+          });
+          
+          const liElements = el.querySelectorAll('ol li');
+          liElements.forEach(li => {
+            li.style.overflow = 'visible';
+            li.style.textOverflow = 'unset';
+            li.style.whiteSpace = 'normal';
+            li.style.wordWrap = 'break-word';
+            li.style.wordBreak = 'break-word';
+            li.style.overflowWrap = 'break-word';
+            li.style.maxWidth = '100%';
+            li.style.boxSizing = 'border-box';
+            li.style.margin = '0.6rem 0';
+            li.style.padding = '0.4rem 0';
+            li.style.lineHeight = '1.7';
+          });
+          
+          // その他の要素にも折り返しスタイルを適用
+          const allElements = el.querySelectorAll('*');
+          allElements.forEach(element => {
+            element.style.overflow = 'visible';
+            element.style.textOverflow = 'unset';
+            element.style.whiteSpace = 'normal';
+            element.style.wordWrap = 'break-word';
+            element.style.wordBreak = 'break-word';
+            element.style.overflowWrap = 'break-word';
+            element.style.maxWidth = '100%';
+            element.style.boxSizing = 'border-box';
+          });
+        }, 50);
+      }
+      
+      // スクロール位置の調整
+      if (role === 'assistant') {
+        // 新しいAI返答の場合、その返答の開始位置にスクロール
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
       } else {
+        // ユーザーメッセージの場合は一番下にスクロール
         pane.scrollTop = pane.scrollHeight;
       }
     };
@@ -1001,33 +1661,10 @@
 
 重要な調理科学の観点を簡潔に箇条書きで：
 - メイラード反応、酵素活性、タンパク質変性など
-- パン/生地系の場合はベーカーズ％の妥当性
-
-**必ず簡潔で実用的なアドバイスにしてください。**`;
+- パン/生地系の場合はベーカーズ％の妥当性`;
       const temps = `あなたはプロの食品安全コンサルタントです。以下のレシピの重要管理点（CCP）における温度と時間を管理するための表を作成してください。\n\n${base}\n\n— 出力仕様 —\n- 必ずMarkdownの表形式で出力してください。\n- 表には「工程」「温度（表面/中心）」「時間」「備考（食品安全上の根拠等）」の列を含めてください。`;
       const hazards = `以下のレシピに関する危害要因（微生物/アレルゲン/化学・物理）とCCP候補、簡単な管理基準案を箇条書きで。\n\n${base}`;
-      const newRecipe = `あなたはレシピ開発の専門家です。以下の会話履歴・提案内容・現在のレシピ情報をすべて考慮し、改善された新規レシピを厳密なJSONだけで出力してください。
-
-【現在のレシピ情報】
-${base}
-
-【出力仕様】
-- JSONのみを出力（前後説明・マークダウン不可）
-- 形式は次の通り：
-{
-  "recipe": {
-    "title": "料理名",
-    "description": "説明",
-    "servings": "人数",
-    "ingredients": [{"item":"材料名","quantity":"分量","unit":"単位"}],
-    "steps": ["手順1","手順2"],
-    "notes": "メモ"
-  },
-  "analysis": "置き換えの理由、味・質感・栄養・安全面の考察を簡潔に"
-}
-- 単位は g / ml に統一（tsp=5ml, tbsp=15ml, 小さじ=5ml, 大さじ=15ml, カップ=200ml）
-- steps は配列のテキストで簡潔に`;
-      return { advice, temps, hazards, new: newRecipe };
+      return { advice, temps, hazards };
     }
 
     // ===== 直接Gemini API呼び出し =====
@@ -1139,17 +1776,17 @@ ${base}
               </tbody>
             </table>
           </div>`;
-        const stepList = `<ol style="margin-top:8px;">${steps.map(step => {
+        const stepList = `<ol style="margin-top:8px; overflow: visible !important; text-overflow: unset !important; white-space: normal !important; word-wrap: break-word !important; word-break: break-word !important; overflow-wrap: break-word !important; max-width: 100% !important; box-sizing: border-box !important;">${steps.map(step => {
           // 文字列の場合
           if (typeof step === 'string') {
-            return `<li>${step}</li>`;
+            return `<li style="overflow: visible !important; text-overflow: unset !important; white-space: normal !important; word-wrap: break-word !important; word-break: break-word !important; overflow-wrap: break-word !important; max-width: 100% !important; box-sizing: border-box !important; margin: 0.6rem 0 !important; padding: 0.4rem 0 !important; line-height: 1.7 !important;">${step}</li>`;
           }
           // オブジェクトの場合（翻訳データ形式）
           if (typeof step === 'object' && step.text) {
-            return `<li>${step.text}</li>`;
+            return `<li style="overflow: visible !important; text-overflow: unset !important; white-space: normal !important; word-wrap: break-word !important; word-break: break-word !important; overflow-wrap: break-word !important; max-width: 100% !important; box-sizing: border-box !important; margin: 0.6rem 0 !important; padding: 0.4rem 0 !important; line-height: 1.7 !important;">${step.text}</li>`;
           }
           // その他の場合
-          return `<li>${(step || '').toString()}</li>`;
+          return `<li style="overflow: visible !important; text-overflow: unset !important; white-space: normal !important; word-wrap: break-word !important; word-break: break-word !important; overflow-wrap: break-word !important; max-width: 100% !important; box-sizing: border-box !important; margin: 0.6rem 0 !important; padding: 0.4rem 0 !important; line-height: 1.7 !important;">${(step || '').toString()}</li>`;
         }).join('')}</ol>`;
 
         const wrap = document.createElement('div');
@@ -1171,14 +1808,65 @@ ${base}
         btnRow.style.display = 'flex';
         btnRow.style.gap = '8px';
         btnRow.style.marginTop = '8px';
+        btnRow.style.justifyContent = 'flex-start';
+        btnRow.style.alignItems = 'flex-start';
+        btnRow.style.flexWrap = 'wrap';
         const btnApply = document.createElement('button');
         btnApply.className = 'ai-btn';
         btnApply.textContent = '反映';
+        btnApply.style.flex = '1';
+        btnApply.style.minWidth = '80px';
+        btnApply.style.maxWidth = '120px';
+        btnApply.style.padding = '8px 16px';
+        btnApply.style.fontSize = '14px';
+        btnApply.style.borderRadius = '6px';
+        btnApply.style.border = '1px solid #d1d5db';
+        btnApply.style.backgroundColor = '#ffffff';
+        btnApply.style.color = '#374151';
+        btnApply.style.cursor = 'pointer';
+        btnApply.style.whiteSpace = 'normal';
+        btnApply.style.overflow = 'visible';
+        btnApply.style.textOverflow = 'unset';
+        btnApply.style.wordWrap = 'break-word';
+        btnApply.style.wordBreak = 'break-word';
+        btnApply.style.textAlign = 'center';
+        btnApply.addEventListener('mouseenter', () => {
+          btnApply.style.backgroundColor = '#f9fafb';
+          btnApply.style.borderColor = '#9ca3af';
+        });
+        btnApply.addEventListener('mouseleave', () => {
+          btnApply.style.backgroundColor = '#ffffff';
+          btnApply.style.borderColor = '#d1d5db';
+        });
         btnApply.addEventListener('click', ()=> applyRecipeToView(recipeObj));
 
         const btnNew = document.createElement('button');
         btnNew.className = 'ai-btn primary';
         btnNew.textContent = '新規';
+        btnNew.style.flex = '1';
+        btnNew.style.minWidth = '80px';
+        btnNew.style.maxWidth = '120px';
+        btnNew.style.padding = '8px 16px';
+        btnNew.style.fontSize = '14px';
+        btnNew.style.borderRadius = '6px';
+        btnNew.style.border = '1px solid #3b82f6';
+        btnNew.style.backgroundColor = '#3b82f6';
+        btnNew.style.color = '#ffffff';
+        btnNew.style.cursor = 'pointer';
+        btnNew.style.whiteSpace = 'normal';
+        btnNew.style.overflow = 'visible';
+        btnNew.style.textOverflow = 'unset';
+        btnNew.style.wordWrap = 'break-word';
+        btnNew.style.wordBreak = 'break-word';
+        btnNew.style.textAlign = 'center';
+        btnNew.addEventListener('mouseenter', () => {
+          btnNew.style.backgroundColor = '#2563eb';
+          btnNew.style.borderColor = '#2563eb';
+        });
+        btnNew.addEventListener('mouseleave', () => {
+          btnNew.style.backgroundColor = '#3b82f6';
+          btnNew.style.borderColor = '#3b82f6';
+        });
         btnNew.addEventListener('click', ()=>{
           try {
             // 2系統で受け渡し（URLパラメータ + localStorage フォールバック）
@@ -1194,6 +1882,30 @@ ${base}
         const btnCancel = document.createElement('button');
         btnCancel.className = 'ai-btn';
         btnCancel.textContent = 'キャンセル';
+        btnCancel.style.flex = '1';
+        btnCancel.style.minWidth = '80px';
+        btnCancel.style.maxWidth = '120px';
+        btnCancel.style.padding = '8px 16px';
+        btnCancel.style.fontSize = '14px';
+        btnCancel.style.borderRadius = '6px';
+        btnCancel.style.border = '1px solid #d1d5db';
+        btnCancel.style.backgroundColor = '#ffffff';
+        btnCancel.style.color = '#374151';
+        btnCancel.style.cursor = 'pointer';
+        btnCancel.style.whiteSpace = 'normal';
+        btnCancel.style.overflow = 'visible';
+        btnCancel.style.textOverflow = 'unset';
+        btnCancel.style.wordWrap = 'break-word';
+        btnCancel.style.wordBreak = 'break-word';
+        btnCancel.style.textAlign = 'center';
+        btnCancel.addEventListener('mouseenter', () => {
+          btnCancel.style.backgroundColor = '#f9fafb';
+          btnCancel.style.borderColor = '#9ca3af';
+        });
+        btnCancel.addEventListener('mouseleave', () => {
+          btnCancel.style.backgroundColor = '#ffffff';
+          btnCancel.style.borderColor = '#d1d5db';
+        });
         btnCancel.addEventListener('click', ()=>{
           // キャンセル: ボタン行を無効化してメッセージ表示
           btnApply.disabled = true;
@@ -1209,6 +1921,11 @@ ${base}
         btnRow.appendChild(btnNew);
         btnRow.appendChild(btnCancel);
         pane.appendChild(btnRow);
+        
+        // レシピカードが表示されたら、その位置にスクロール
+        setTimeout(() => {
+          wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
       }catch(e){
         console.error('renderRecipeCard error', e);
       }
@@ -1254,16 +1971,16 @@ ${base}
 
     // ===== タブ内容生成（必要時に呼び出し） =====
     async function generateTab(kind){
-      const prompts = buildPrompts();
-      const pane = panes[kind];
-      const basePrompt = prompts[kind];
-      let promptToSend = basePrompt;
-      if (kind === 'new' && chatHistories.new.length){
-        const historyText = chatHistories.new.map(m=>`${m.role==='user'?'ユーザー':'アシスタント'}:\n${m.content}`).join('\n\n');
-        promptToSend = `${basePrompt}\n\n---\n以下はこれまでの会話履歴です。すべて考慮して新規レシピJSONを出力してください。\n\n${historyText}`;
-      }
-      const r = await invokeGemini(promptToSend);
-      const t = extractLLMText(r) || '（結果なし）';
+      console.log(`generateTab関数が呼び出されました: ${kind}`);
+      try {
+        const prompts = buildPrompts();
+        const pane = panes[kind];
+        const basePrompt = prompts[kind];
+        let promptToSend = basePrompt;
+        console.log(`${kind}タブのプロンプトを送信中...`);
+        const r = await invokeGemini(promptToSend);
+        const t = extractLLMText(r) || '（結果なし）';
+        console.log(`${kind}タブの生成完了`);
       // JSONを人間向けカード表示
       const jsonMatchForView = t && t.match(/\{[\s\S]*\}/);
       if (jsonMatchForView) {
@@ -1286,15 +2003,9 @@ ${base}
         pushMsg(pane, 'assistant', t);
       }
       chatHistories[kind].push({ role: 'assistant', content: t });
-      // 自動整形→適用（new タブのみ）
-      if (kind === 'new') {
-        try {
-          const jsonMatch = t.match(/\{[\s\S]*\}/);
-          const jsonText = jsonMatch ? jsonMatch[0] : t;
-          const obj = JSON.parse(jsonText);
-          localStorage.setItem('ai_generated_recipe', JSON.stringify(obj));
-          // ビューへの反映/編集画面ボタンはカードに追加済み
-        } catch (_) {}
+      } catch (error) {
+        console.error(`generateTab関数でエラーが発生しました (${kind}):`, error);
+        pushMsg(pane, 'assistant', `エラーが発生しました: ${error.message}`);
       }
     }
 
@@ -1333,10 +2044,6 @@ ${base}
         updateStatusPopup('完了', 'AI回答を生成しました', 'success');
         setTimeout(hideStatusPopup, 1500);
         
-        // 新規レシピ提案の場合、送信ボタンを表示
-        if (kind === 'advice' && t.includes('レシピ') && t.includes('材料')) {
-          showNewRecipeSendButton(t);
-        }
       } catch (error) {
         console.error('AI回答生成エラー:', error);
         updateStatusPopup('エラー', 'AI回答の生成に失敗しました', 'error');
@@ -1396,109 +2103,24 @@ ${base}
       }
     }
 
-    // ===== 新規レシピ送信機能 =====
-    function showNewRecipeSendButton(recipeText) {
-      // 既存の送信ボタンを削除
-      const existingBtn = document.getElementById('newRecipeSendBtn');
-      if (existingBtn) existingBtn.remove();
-      
-      // 新規レシピ送信ボタンを作成
-      const sendBtn = document.createElement('button');
-      sendBtn.id = 'newRecipeSendBtn';
-      sendBtn.className = 'ai-btn primary';
-      sendBtn.innerHTML = '📝 新規レシピとして作成';
-      sendBtn.style.marginTop = '10px';
-      sendBtn.style.width = '100%';
-      
-      // ボタンをAIアドバイスパネルに追加
-      const advicePane = panes.advice;
-      if (advicePane) {
-        advicePane.appendChild(sendBtn);
-        
-        // ボタンクリックイベント
-        sendBtn.addEventListener('click', async () => {
-          try {
-            await createNewRecipeFromText(recipeText);
-          } catch (error) {
-            console.error('新規レシピ作成エラー:', error);
-            updateStatusPopup('エラー', '新規レシピの作成に失敗しました', 'error');
-            setTimeout(hideStatusPopup, 3000);
-          }
-        });
-      }
-    }
-    
-    async function createNewRecipeFromText(recipeText) {
-      console.log('新規レシピ作成開始:', recipeText);
-      
-      // ステータス表示開始
-      showStatusPopup('レシピ構造化中...', 'AIがレシピデータを整理しています', 'loading');
-      
-      try {
-        // レシピテキストを構造化
-        const structuredPrompt = `以下のレシピテキストを構造化されたJSON形式に変換してください：
-
-${recipeText}
-
-以下のJSON形式で回答してください（コメントや説明は含めず、JSONのみを返してください）：
-{
-  "title": "料理名",
-  "description": "料理の説明",
-  "servings": "人数",
-  "ingredients": [
-    {
-      "item": "材料名",
-      "quantity": "分量",
-      "unit": "単位"
-    }
-  ],
-  "steps": [
-    "手順1",
-    "手順2"
-  ],
-  "notes": "メモやコツ"
-}`;
-
-        updateStatusPopup('AI処理中...', 'レシピデータを構造化しています', 'loading');
-        
-        const result = await invokeGemini(structuredPrompt);
-        const structuredRecipe = result || {};
-        
-        console.log('構造化されたレシピ:', structuredRecipe);
-        
-        if (!structuredRecipe.title || !structuredRecipe.ingredients || !structuredRecipe.steps) {
-          throw new Error('レシピの構造化に失敗しました');
-        }
-        
-        updateStatusPopup('ページ準備中...', '新規レシピ作成ページを開いています', 'loading');
-        
-        // 新規レシピ作成ページに遷移
-        const recipeData = encodeURIComponent(JSON.stringify(structuredRecipe));
-        window.open(`recipe_edit.html?newRecipe=${recipeData}`, '_blank');
-        
-        // 送信ボタンを削除
-        const sendBtn = document.getElementById('newRecipeSendBtn');
-        if (sendBtn) sendBtn.remove();
-        
-        // ステータス表示完了
-        updateStatusPopup('完了', '新規レシピ作成ページを開きました！', 'success');
-        setTimeout(hideStatusPopup, 2000);
-        
-      } catch (error) {
-        console.error('新規レシピ作成エラー:', error);
-        throw error; // エラーを上位に再スロー
-      }
-    }
 
     // ▼▼▼【ここから元に戻した箇所】▼▼▼
     // ===== 新規レシピ化（JSON + 単位正規化） =====
     btnSave.addEventListener('click', async ()=>{
-      const schema = { type:"OBJECT", properties:{ title:{type:"STRING"}, category:{type:"STRING"}, tags:{type:"ARRAY",items:{type:"STRING"}}, notes:{type:"STRING"}, ingredients:{type:"ARRAY", items:{type:"OBJECT", properties:{ item:{type:"STRING"}, quantity:{type:"STRING"}, unit:{type:"STRING"} }, required:["item"]}}, steps:{type:"ARRAY",items:{type:"STRING"}} }, required:["title","category","tags","notes","ingredients","steps"] };
+      // 進行状況ポップアップを表示
+      showRecipeProgressPopup();
       
-      // 新規レシピ化専用のプロンプトを作成
-      const { title, ings, steps } = scrapeRecipe();
-      const ingText = ings.map(i=>`- ${i.item} ${i.quantity||''} ${i.unit||''}`).join('\n');
-      const stepText = steps.map((s,i)=> `${i+1}. ${s}`).join('\n');
+      try {
+        updateRecipeProgress(10, 'レシピデータを収集中...');
+        
+        const schema = { type:"OBJECT", properties:{ title:{type:"STRING"}, category:{type:"STRING"}, tags:{type:"ARRAY",items:{type:"STRING"}}, notes:{type:"STRING"}, ingredients:{type:"ARRAY", items:{type:"OBJECT", properties:{ item:{type:"STRING"}, quantity:{type:"STRING"}, unit:{type:"STRING"} }, required:["item"]}}, steps:{type:"ARRAY",items:{type:"STRING"}} }, required:["title","category","tags","notes","ingredients","steps"] };
+        
+        // 新規レシピ化専用のプロンプトを作成
+        const { title, ings, steps } = scrapeRecipe();
+        const ingText = ings.map(i=>`- ${i.item} ${i.quantity||''} ${i.unit||''}`).join('\n');
+        const stepText = steps.map((s,i)=> `${i+1}. ${s}`).join('\n');
+        
+        updateRecipeProgress(30, 'AIにレシピ化を依頼中...');
       
       const recipePrompt = `以下のレシピを基に、改善された新レシピを作成してください：
 
@@ -1534,9 +2156,14 @@ ${stepText}
         const historyText = chatHistories.advice.map(m=>`${m.role==='user'?'ユーザー':'アシスタント'}:\n${m.content}`).join('\n\n');
         promptWithHistory = `${recipePrompt}\n\n---\n以下はこれまでの会話履歴です。置き換え依頼や条件を必ず考慮して出力してください。\n\n${historyText}\n\n---\n出力は次のJSON形式：\n{\n  "recipe": {"title":"…","description":"…","servings":"…","ingredients":[{"item":"…","quantity":"…","unit":"…"}],"steps":["…","…"],"notes":"…"},\n  "analysis": "置き換えの理由・味・質感・安全の考察"\n}`;
       }
+      updateRecipeProgress(50, 'AIがレシピを生成中...');
+      
       const r = await invokeGemini(promptWithHistory, schema);
       const jsonText = extractLLMText(r);
       if (!jsonText){ alert('JSONを取得できませんでした。'); return; }
+      
+      updateRecipeProgress(70, 'レシピデータを処理中...');
+      
       try{
         const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
         const cleanJsonText = jsonMatch ? jsonMatch[0] : jsonText;
@@ -1546,6 +2173,9 @@ ${stepText}
         const unitMap = { 'tsp':'ml', 'tbsp':'ml', '小さじ':'ml', '大さじ':'ml' };
         const toVol = (q,u)=>{ const n=Number(q); if(!Number.isFinite(n)) return q; if(u==='tsp'||u==='小さじ') return n*5; if(u==='tbsp'||u==='大さじ') return n*15; return n; };
         obj.ingredients = (obj.ingredients||[]).map(it=>{ const u=(it.unit||'').toLowerCase(); if(unitMap[u]) return { ...it, quantity:String(toVol(it.quantity,u)), unit:'ml' }; return it; });
+        
+        updateRecipeProgress(90, 'レシピカードを表示中...');
+        
         // 同じチャットライン（提案タブ）に人間向けカードで表示し、反映/編集ボタンを提供
         renderRecipeCard(panes.advice, obj, '新規レシピ化（AI）');
         if (parsed.analysis) {
@@ -1557,9 +2187,35 @@ ${stepText}
           panes.advice.appendChild(ana);
         }
         localStorage.setItem('ai_generated_recipe', JSON.stringify(obj));
+        
+        updateRecipeProgress(100, 'レシピ化完了！');
+        
+        // 完了後少し待ってからポップアップを閉じる
+        setTimeout(() => {
+          hideRecipeProgressPopup();
+        }, 1000);
+        
       }catch(e){
+        console.error('レシピ化エラー:', e);
+        updateRecipeProgress(0, `エラー: ${e.message}`);
+        pushMsg(panes.advice, 'assistant', `エラー: ${e.message}`);
+        
+        // エラー時も少し待ってからポップアップを閉じる
+        setTimeout(() => {
+          hideRecipeProgressPopup();
+        }, 2000);
         console.error('JSON解析エラー:', e, '元のテキスト:', jsonText);
         alert('JSONの解析に失敗: '+ e.message + '\n\n取得されたテキスト: ' + jsonText.substring(0, 200) + '...');
+      }
+      }catch(e){
+        console.error('レシピ化全体のエラー:', e);
+        updateRecipeProgress(0, `エラー: ${e.message}`);
+        pushMsg(panes.advice, 'assistant', `エラー: ${e.message}`);
+        
+        // エラー時も少し待ってからポップアップを閉じる
+        setTimeout(() => {
+          hideRecipeProgressPopup();
+        }, 2000);
       }
     });
     // ▲▲▲【ここまで元に戻した箇所】▲▲▲
