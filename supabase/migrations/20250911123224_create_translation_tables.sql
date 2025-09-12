@@ -57,3 +57,4 @@ COMMENT ON COLUMN translation_recipes.translated_description IS '翻訳された
 COMMENT ON COLUMN translation_recipes.original_description IS '元の日本語説明';
 COMMENT ON COLUMN translation_recipes.language_code IS '翻訳言語コード';
 
+

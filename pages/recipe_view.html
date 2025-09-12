@@ -21,7 +21,7 @@
   <script src="../assets/js/ui-components.js"></script>
   <script src="../assets/js/recipe-view.js"></script>
 
-  <link rel="stylesheet" href="../assets/css/style.css?v=20250115q">
+  <link rel="stylesheet" href="../assets/css/style.css?v=20250115r">
   <link rel="stylesheet" href="../assets/css/components.css?v=20250115">
   <style>
     /* 翻訳タイトルのスタイル */
@@ -1596,16 +1596,10 @@
         }, 50);
       }
       
-      // スクロール位置の調整
-      if (role === 'assistant') {
-        // 新しいAI返答の場合、その返答の開始位置にスクロール
-        setTimeout(() => {
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 100);
-      } else {
-        // ユーザーメッセージの場合は一番下にスクロール
+      // スクロール位置の調整 - すべてのメッセージで一番下にスクロール（タグ選択を妨げないように）
+      setTimeout(() => {
         pane.scrollTop = pane.scrollHeight;
-      }
+      }, 100);
     };
     const spinner = ()=>{ const d=document.createElement('div'); d.className='loading'; return d; };
 
@@ -1925,9 +1919,12 @@
         btnRow.appendChild(btnCancel);
         pane.appendChild(btnRow);
         
-        // レシピカードが表示されたら、その位置にスクロール
+        // レシピカードが表示されたら、一番下にスクロール（タグ選択を妨げないように）
         setTimeout(() => {
-          wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          const pane = document.querySelector('.ai-chat-container.active');
+          if (pane) {
+            pane.scrollTop = pane.scrollHeight;
+          }
         }, 100);
       }catch(e){
         console.error('renderRecipeCard error', e);
