@@ -44,3 +44,4 @@ CREATE POLICY "Allow delete access to translation_recipe_ingredients" ON transla
 
 CREATE POLICY "Allow delete access to translation_recipe_steps" ON translation_recipe_steps
   FOR DELETE USING (true);
+

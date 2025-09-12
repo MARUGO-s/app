@@ -353,6 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const updateBulkSelectionUI = () => {
         const selectedCount = document.getElementById('selected-count');
         const createBookBtn = document.querySelector('.js-create-recipe-book');
+        const bulkDeleteBtn = document.querySelector('.js-bulk-delete');
         
         if (selectedCount) {
             selectedCount.textContent = selectedRecipes.size;
@@ -360,6 +361,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (createBookBtn) {
             createBookBtn.disabled = selectedRecipes.size === 0;
+        }
+        
+        if (bulkDeleteBtn) {
+            bulkDeleteBtn.disabled = selectedRecipes.size === 0;
         }
     };
 
@@ -398,6 +403,113 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         selectedRecipes.clear();
         updateBulkSelectionUI();
+    };
+
+    // 一括削除機能
+    const bulkDeleteRecipes = async () => {
+        if (selectedRecipes.size === 0) {
+            alert('削除するレシピを選択してください。');
+            return;
+        }
+
+        // 削除確認モーダルを表示
+        showBulkDeleteModal();
+    };
+
+    // 削除確認モーダルを表示
+    const showBulkDeleteModal = () => {
+        const modal = document.getElementById('bulk-delete-modal');
+        const countElement = document.getElementById('delete-count-number');
+        const recipeListElement = document.getElementById('delete-recipe-list');
+        
+        if (!modal || !countElement || !recipeListElement) {
+            console.error('削除確認モーダルの要素が見つかりません');
+            return;
+        }
+
+        // 削除対象のレシピ情報を取得
+        const selectedRecipeIds = Array.from(selectedRecipes);
+        const selectedRecipesData = allRecipes.filter(recipe => 
+            selectedRecipeIds.includes(recipe.id)
+        );
+
+        // 削除件数を表示
+        countElement.textContent = selectedRecipesData.length;
+
+        // 削除対象レシピ一覧を表示
+        recipeListElement.innerHTML = '';
+        selectedRecipesData.forEach(recipe => {
+            const item = document.createElement('div');
+            item.className = 'delete-recipe-item';
+            item.innerHTML = `
+                <i class="fas fa-utensils"></i>
+                <span>${escapeHtml(recipe.title)}</span>
+            `;
+            recipeListElement.appendChild(item);
+        });
+
+        // モーダルを表示
+        modal.style.display = 'flex';
+    };
+
+    // 削除確認モーダルを非表示
+    const hideBulkDeleteModal = () => {
+        const modal = document.getElementById('bulk-delete-modal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    };
+
+    // 実際の削除処理を実行
+    const executeBulkDelete = async () => {
+        try {
+            const selectedRecipeIds = Array.from(selectedRecipes);
+            const selectedCount = selectedRecipeIds.length;
+            console.log('削除対象のレシピID:', selectedRecipeIds);
+
+            // 削除確認モーダルを非表示
+            hideBulkDeleteModal();
+
+            // 関連データも含めて削除
+            const deletePromises = [
+                // お気に入りから削除
+                sb.from('favorites').delete().in('recipe_id', selectedRecipeIds),
+                // 材料データを削除
+                sb.from('recipe_ingredients').delete().in('recipe_id', selectedRecipeIds),
+                // 手順データを削除
+                sb.from('recipe_steps').delete().in('recipe_id', selectedRecipeIds),
+                // レシピ本体を削除
+                sb.from('recipes').delete().in('id', selectedRecipeIds)
+            ];
+
+            await Promise.all(deletePromises);
+            
+            console.log(`${selectedCount}件のレシピを削除しました`);
+            alert(`${selectedCount}件のレシピを削除しました。`);
+
+            // データを再読み込み
+            const [allResult, favResult, transResult] = await Promise.allSettled([
+                fetchAllRecipes(), 
+                fetchFavoriteRecipes(),
+                fetchTranslatedRecipes()
+            ]);
+
+            allRecipes = allResult.status === 'fulfilled' ? allResult.value : [];
+            favoriteRecipes = favResult.status === 'fulfilled' ? favResult.value : [];
+            translatedRecipes = transResult.status === 'fulfilled' ? transResult.value : [];
+
+            // 一括選択モードを終了
+            isBulkMode = false;
+            selectedRecipes.clear();
+            
+            // UIを更新
+            updateStats();
+            updateView();
+            
+        } catch (error) {
+            console.error('一括削除エラー:', error);
+            alert('レシピの削除に失敗しました。');
+        }
     };
 
     // 進行状況管理機能
@@ -1308,9 +1420,40 @@ document.addEventListener('DOMContentLoaded', () => {
             createBookBtn.addEventListener('click', createRecipeBook);
         }
 
+        const bulkDeleteBtn = document.querySelector('.js-bulk-delete');
+        if (bulkDeleteBtn) {
+            bulkDeleteBtn.addEventListener('click', bulkDeleteRecipes);
+        }
+
         const cancelBulkBtn = document.querySelector('.js-cancel-bulk');
         if (cancelBulkBtn) {
             cancelBulkBtn.addEventListener('click', toggleBulkMode);
+        }
+
+        // 削除確認モーダルのイベントリスナー
+        const bulkDeleteModalClose = document.getElementById('bulk-delete-modal-close');
+        if (bulkDeleteModalClose) {
+            bulkDeleteModalClose.addEventListener('click', hideBulkDeleteModal);
+        }
+
+        const bulkDeleteCancel = document.getElementById('bulk-delete-cancel');
+        if (bulkDeleteCancel) {
+            bulkDeleteCancel.addEventListener('click', hideBulkDeleteModal);
+        }
+
+        const bulkDeleteConfirm = document.getElementById('bulk-delete-confirm');
+        if (bulkDeleteConfirm) {
+            bulkDeleteConfirm.addEventListener('click', executeBulkDelete);
+        }
+
+        // モーダル外クリックで閉じる
+        const bulkDeleteModal = document.getElementById('bulk-delete-modal');
+        if (bulkDeleteModal) {
+            bulkDeleteModal.addEventListener('click', (e) => {
+                if (e.target === bulkDeleteModal) {
+                    hideBulkDeleteModal();
+                }
+            });
         }
 
         // レシピカードのクリックイベント（一括選択モード時）

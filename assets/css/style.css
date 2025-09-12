@@ -96,6 +96,124 @@ p, span, div {
     text-overflow: ellipsis;
 }
 
+/* フッタータブボタンは文字をカットしない */
+.modal-footer .btn {
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: unset;
+    min-width: auto;
+    width: auto;
+    font-size: inherit;
+    padding: 0.5rem 1rem;
+    flex-shrink: 0;
+    height: auto;
+    min-height: 2.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.4;
+}
+
+/* レシピ表示ページのヘッダーアクションボタン - 文字切れ防止・折り返し対応 */
+.app-header {
+    overflow: visible !important;
+    flex-wrap: wrap !important;
+}
+
+.app-header .header-actions {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    overflow: visible !important;
+    max-width: 100% !important;
+}
+
+.app-header .header-actions .btn {
+    white-space: nowrap !important;
+    overflow: visible !important;
+    text-overflow: unset !important;
+    min-width: 80px !important;
+    width: auto !important;
+    max-width: 200px !important;
+    font-size: 0.8rem !important;
+    padding: 0.5rem 1rem !important;
+    flex-shrink: 0 !important;
+    height: 2.5rem !important;
+    min-height: 2.5rem !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    line-height: 1.2 !important;
+    word-wrap: normal !important;
+    word-break: normal !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+}
+
+/* 削除ボタンは特別なデザイン */
+.app-header .header-actions .btn.js-delete {
+    background: linear-gradient(135deg, #f44336, #d32f2f) !important;
+    color: white !important;
+    border: 2px solid #d32f2f !important;
+    box-shadow: 0 2px 4px rgba(244, 67, 54, 0.3) !important;
+    font-weight: 600 !important;
+}
+
+.app-header .header-actions .btn.js-delete:hover {
+    background: linear-gradient(135deg, #d32f2f, #b71c1c) !important;
+    border-color: #b71c1c !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px rgba(244, 67, 54, 0.4) !important;
+}
+
+/* フッタータブボタンのレスポンシブ対応 */
+@media (max-width: 768px) {
+    .modal-footer .btn {
+        font-size: 0.875rem;
+        padding: 0.4rem 0.8rem;
+        min-height: 2.25rem;
+    }
+    
+    .app-header .header-actions {
+        gap: 0.4rem !important;
+    }
+    
+    .app-header .header-actions .btn {
+        font-size: 0.75rem !important;
+        padding: 0.4rem 0.8rem !important;
+        min-height: 2.25rem !important;
+        width: auto !important;
+        min-width: 70px !important;
+        max-width: 150px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .modal-footer .btn {
+        font-size: 0.8rem;
+        padding: 0.3rem 0.6rem;
+        min-height: 2rem;
+    }
+    
+    .app-header .header-actions {
+        gap: 0.3rem !important;
+        justify-content: center !important;
+    }
+    
+    .app-header .header-actions .btn {
+        font-size: 0.7rem !important;
+        padding: 0.3rem 0.6rem !important;
+        min-height: 2rem !important;
+        width: auto !important;
+        min-width: 60px !important;
+        max-width: 120px !important;
+    }
+}
+
 /* テーブルのオーバーフロー防止 */
 .table {
     table-layout: fixed;
@@ -2352,3 +2470,4 @@ body {
         flex-shrink: 0;
     }
 }
+
