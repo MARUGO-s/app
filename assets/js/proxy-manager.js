@@ -111,9 +111,8 @@ class ProxyManager {
           mode: 'cors',
           headers: {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'ja,en-US;q=0.7,en;q=0.3',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
+            'Accept-Language': 'ja,en-US;q=0.7,en;q=0.3'
+            // Cache-ControlとPragmaヘッダーを削除（CORSエラーの原因）
           }
         };
 

@@ -930,6 +930,22 @@ window.cleanupTranslationTags = cleanupTranslationTags;
 window.translateRecipeToLanguage = async function(targetLanguage) {
   try {
     debugLog('翻訳開始:', targetLanguage);
+    
+    // 翻訳開始時に「翻訳」カテゴリを自動追加
+    if (typeof selectedCategories !== 'undefined' && Array.isArray(selectedCategories)) {
+      if (!selectedCategories.includes('翻訳')) {
+        selectedCategories.push('翻訳');
+        console.log('✅ 翻訳機能使用により「翻訳」カテゴリを自動追加しました');
+        console.log('現在の選択されたカテゴリ:', selectedCategories);
+        
+        // UIを更新（updateCategorySelect関数が存在する場合）
+        if (typeof updateCategorySelect === 'function') {
+          updateCategorySelect();
+        }
+      } else {
+        console.log('✅ 「翻訳」カテゴリは既に選択されています');
+      }
+    }
 
     // 現在のレシピデータを取得
     const currentRecipeId = window.originalRecipeId || getUrlParam('i');

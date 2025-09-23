@@ -38,26 +38,26 @@ CREATE POLICY "Public read access for categories" ON categories
     FOR SELECT USING (true);
 
 CREATE POLICY "Authenticated users can insert categories" ON categories
-    FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+    FOR INSERT WITH CHECK (auth.role() = 'authenticated' OR auth.role() = 'anon');
 
 CREATE POLICY "Authenticated users can update categories" ON categories
-    FOR UPDATE USING (auth.role() = 'authenticated');
+    FOR UPDATE USING (auth.role() = 'authenticated' OR auth.role() = 'anon');
 
 CREATE POLICY "Authenticated users can delete categories" ON categories
-    FOR DELETE USING (auth.role() = 'authenticated');
+    FOR DELETE USING (auth.role() = 'authenticated' OR auth.role() = 'anon');
 
 -- Tags テーブル: 読み取りは全員、変更は認証済みユーザーのみ
 CREATE POLICY "Public read access for tags" ON tags
     FOR SELECT USING (true);
 
 CREATE POLICY "Authenticated users can insert tags" ON tags
-    FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+    FOR INSERT WITH CHECK (auth.role() = 'authenticated' OR auth.role() = 'anon');
 
 CREATE POLICY "Authenticated users can update tags" ON tags
-    FOR UPDATE USING (auth.role() = 'authenticated');
+    FOR UPDATE USING (auth.role() = 'authenticated' OR auth.role() = 'anon');
 
 CREATE POLICY "Authenticated users can delete tags" ON tags
-    FOR DELETE USING (auth.role() = 'authenticated');
+    FOR DELETE USING (auth.role() = 'authenticated' OR auth.role() = 'anon');
 
 -- Recipes テーブル: 読み取りは全員、作成は認証済みユーザー、編集・削除は作成者のみ
 -- 注意: 現在のアプリは匿名利用のため、created_byフィールドがない場合は全員に編集を許可

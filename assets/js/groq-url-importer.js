@@ -66,7 +66,7 @@ class GroqUrlImporter {
         fields: {
           recipe_id: 'recipe_id',
           ingredient: 'item',
-          amount: 'quantity',
+          quantity: 'quantity',
           unit: 'unit',
           position: 'position',
           created_at: 'created_at'
@@ -311,7 +311,7 @@ class GroqUrlImporter {
         const ingredients = recipeData.ingredients.map((ing, index) => ({
           recipe_id: savedRecipe.id,
           ingredient: ing.item || ing.name || ing.ingredient || "",
-          amount: ing.quantity || ing.amount || ing.qty || "",
+          quantity: ing.quantity || ing.amount || ing.qty || "",
           unit: ing.unit || ing.measure || "",
           position: index,
           created_at: new Date().toISOString()

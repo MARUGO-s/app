@@ -86,6 +86,10 @@ async function initRecipeView() {
 
 // 通常のレシピ表示
 async function displayNormalRecipe(recipe, id) {
+  // グローバル変数にレシピデータを設定
+  window.currentRecipe = recipe;
+  console.log('✅ window.currentRecipeを設定しました:', window.currentRecipe);
+  
   // メタ情報の表示
   const metaEl = getElement('meta');
   if (metaEl) {
@@ -679,6 +683,22 @@ function hideTranslateLoading() {
 async function startTranslation(language) {
   debugLog('翻訳開始:', language);
   
+  // 翻訳開始時に「翻訳」カテゴリを自動追加
+  if (typeof selectedCategories !== 'undefined' && Array.isArray(selectedCategories)) {
+    if (!selectedCategories.includes('翻訳')) {
+      selectedCategories.push('翻訳');
+      console.log('✅ 翻訳機能使用により「翻訳」カテゴリを自動追加しました');
+      console.log('現在の選択されたカテゴリ:', selectedCategories);
+      
+      // UIを更新（updateCategorySelect関数が存在する場合）
+      if (typeof updateCategorySelect === 'function') {
+        updateCategorySelect();
+      }
+    } else {
+      console.log('✅ 「翻訳」カテゴリは既に選択されています');
+    }
+  }
+  
   showTranslateLoading();
   
   try {
@@ -943,6 +963,392 @@ if (typeof module !== 'undefined' && module.exports) {
     createTranslationPrompt,
     invokeGroqAPI,
     parseTranslatedResponse,
-    showTranslatedResult
+    showTranslatedResult,
+    showReadableText,
+    closeReadableTextModal,
+    copyReadableText
+  };
+
+  // 読みやすいテキスト表示機能
+  window.showReadableText = function(recipe) {
+    console.log('📝 読みやすいテキスト表示開始:', recipe);
+    
+    if (!recipe.readable_text) {
+      console.log('📝 読みやすいテキストが保存されていません。動的に生成します。');
+      
+      // 動的に読みやすいテキストを生成
+      const readableTextData = {
+        title: recipe.title,
+        description: recipe.description,
+        servings: recipe.servings,
+        ingredients: recipe.ingredients || [],
+        steps: recipe.steps || [],
+        notes: recipe.notes
+      };
+      
+      const generatedText = window.generateReadableText ? 
+        window.generateReadableText(readableTextData) : 
+        generateReadableTextFallback(readableTextData);
+      
+      console.log('📝 動的に生成された読みやすいテキスト:', generatedText);
+      
+      const modal = document.getElementById('readableTextModal');
+      const content = document.getElementById('readableTextContent');
+      
+      if (modal && content) {
+        content.textContent = generatedText;
+        modal.style.display = 'flex';
+      }
+      return;
+    }
+    
+    const modal = document.getElementById('readableTextModal');
+    const content = document.getElementById('readableTextContent');
+    
+    if (modal && content) {
+      content.textContent = recipe.readable_text;
+      modal.style.display = 'flex';
+    }
+  }
+  
+  // フォールバック用の読みやすいテキスト生成関数
+  function generateReadableTextFallback(recipeData) {
+    let text = `# ${recipeData.title}\n\n`;
+    
+    if (recipeData.description) {
+      text += `## 説明\n${recipeData.description}\n\n`;
+    }
+    
+    if (recipeData.servings) {
+      text += `## 人数\n${recipeData.servings}人分\n\n`;
+    }
+    
+    if (recipeData.ingredients && recipeData.ingredients.length > 0) {
+      text += `## 材料\n`;
+      recipeData.ingredients.forEach(ingredient => {
+        text += `- ${ingredient.item}: ${ingredient.quantity}${ingredient.unit}\n`;
+      });
+      text += `\n`;
+    }
+    
+    if (recipeData.steps && recipeData.steps.length > 0) {
+      text += `## 作り方\n`;
+      recipeData.steps.forEach((step, index) => {
+        text += `### ステップ${index + 1}\n${step.step}\n\n`;
+      });
+    }
+    
+    if (recipeData.notes) {
+      text += `## メモ\n${recipeData.notes}\n`;
+    }
+    
+    return text;
+  }
+
+  window.closeReadableTextModal = function() {
+    const modal = document.getElementById('readableTextModal');
+    if (modal) {
+      modal.style.display = 'none';
+    }
+  };
+
+  window.copyReadableText = function() {
+    const content = document.getElementById('readableTextContent');
+    if (content) {
+      navigator.clipboard.writeText(content.textContent).then(() => {
+        alert('読みやすいテキストをクリップボードにコピーしました！');
+      }).catch(err => {
+        console.error('コピーに失敗しました:', err);
+        alert('コピーに失敗しました。');
+      });
+    }
   };
 }
+
+// グローバル関数を明示的に設定
+window.showReadableText = window.showReadableText || function(recipe) {
+  console.log('📝 読みやすいテキスト表示開始:', recipe);
+  
+  if (!recipe.readable_text) {
+    console.log('📝 読みやすいテキストが保存されていません。動的に生成します。');
+    
+    // 動的に読みやすいテキストを生成
+    const readableTextData = {
+      title: recipe.title,
+      description: recipe.description,
+      servings: recipe.servings,
+      ingredients: recipe.ingredients || [],
+      steps: recipe.steps || [],
+      notes: recipe.notes
+    };
+    
+    const generatedText = window.generateReadableText ? 
+      window.generateReadableText(readableTextData) : 
+      generateReadableTextFallback(readableTextData);
+    
+    console.log('📝 動的に生成された読みやすいテキスト:', generatedText);
+    
+    const modal = document.getElementById('readableTextModal');
+    const content = document.getElementById('readableTextContent');
+    
+    if (modal && content) {
+      content.textContent = generatedText;
+      modal.style.display = 'flex';
+    }
+    return;
+  }
+  
+  const modal = document.getElementById('readableTextModal');
+  const content = document.getElementById('readableTextContent');
+  
+  if (modal && content) {
+    content.textContent = recipe.readable_text;
+    modal.style.display = 'flex';
+  }
+};
+
+window.closeReadableTextModal = window.closeReadableTextModal || function() {
+  const modal = document.getElementById('readableTextModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+};
+
+window.copyReadableText = window.copyReadableText || function() {
+  const content = document.getElementById('readableTextContent');
+  if (content) {
+    navigator.clipboard.writeText(content.textContent).then(() => {
+      alert('読みやすいテキストをクリップボードにコピーしました！');
+    }).catch(err => {
+      console.error('コピーに失敗しました:', err);
+      alert('コピーに失敗しました。');
+    });
+  }
+};
+
+// 編集モードの切り替え
+window.toggleReadableTextEdit = window.toggleReadableTextEdit || function() {
+  const content = document.getElementById('readableTextContent');
+  const editBtn = document.getElementById('readableTextEditBtn');
+  const saveBtn = document.getElementById('readableTextSaveBtn');
+  const cancelBtn = document.getElementById('readableTextCancelBtn');
+  
+  if (content && editBtn && saveBtn && cancelBtn) {
+    // 編集モードに切り替え
+    content.contentEditable = 'true';
+    content.style.border = '2px solid #007bff';
+    content.style.backgroundColor = '#f8f9fa';
+    content.focus();
+    
+    // ボタンの表示切り替え
+    editBtn.style.display = 'none';
+    saveBtn.style.display = 'inline-block';
+    cancelBtn.style.display = 'inline-block';
+    
+    // 元の内容を保存（キャンセル用）
+    window.originalReadableText = content.textContent;
+  }
+};
+
+// 編集を保存
+window.saveReadableText = window.saveReadableText || async function() {
+  const content = document.getElementById('readableTextContent');
+  const editBtn = document.getElementById('readableTextEditBtn');
+  const saveBtn = document.getElementById('readableTextSaveBtn');
+  const cancelBtn = document.getElementById('readableTextCancelBtn');
+  
+  if (!content || !window.currentRecipe) {
+    alert('レシピデータが読み込まれていません。');
+    return;
+  }
+  
+  try {
+    const updatedText = content.textContent.trim();
+    
+    // Supabaseに保存
+    const sb = getSupabaseClient();
+    const { error } = await sb
+      .from('recipes')
+      .update({ readable_text: updatedText })
+      .eq('id', window.currentRecipe.id);
+    
+    if (error) {
+      console.error('保存エラー:', error);
+      alert('保存に失敗しました: ' + error.message);
+      return;
+    }
+    
+    // 現在のレシピデータを更新
+    window.currentRecipe.readable_text = updatedText;
+    
+    // 編集モードを終了
+    content.contentEditable = 'false';
+    content.style.border = '1px solid #e1e8ed';
+    content.style.backgroundColor = '#ffffff';
+    
+    // ボタンの表示切り替え
+    editBtn.style.display = 'inline-block';
+    saveBtn.style.display = 'none';
+    cancelBtn.style.display = 'none';
+    
+    alert('読みやすいテキストを保存しました！');
+    
+  } catch (error) {
+    console.error('保存エラー:', error);
+    alert('保存に失敗しました: ' + error.message);
+  }
+};
+
+// 編集をキャンセル
+window.cancelReadableTextEdit = window.cancelReadableTextEdit || function() {
+  const content = document.getElementById('readableTextContent');
+  const editBtn = document.getElementById('readableTextEditBtn');
+  const saveBtn = document.getElementById('readableTextSaveBtn');
+  const cancelBtn = document.getElementById('readableTextCancelBtn');
+  
+  if (content && editBtn && saveBtn && cancelBtn) {
+    // 元の内容に戻す
+    if (window.originalReadableText !== undefined) {
+      content.textContent = window.originalReadableText;
+    }
+    
+    // 編集モードを終了
+    content.contentEditable = 'false';
+    content.style.border = '1px solid #e1e8ed';
+    content.style.backgroundColor = '#ffffff';
+    
+    // ボタンの表示切り替え
+    editBtn.style.display = 'inline-block';
+    saveBtn.style.display = 'none';
+    cancelBtn.style.display = 'none';
+  }
+};
+
+// フォールバック用の読みやすいテキスト生成関数（Geminiスタイル）
+function generateReadableTextFallback(recipeData) {
+  let text = `${recipeData.title}\n\n`;
+  
+  if (recipeData.description) {
+    text += `${recipeData.description}\n\n`;
+  }
+  
+  if (recipeData.servings) {
+    text += `人数: ${recipeData.servings}人分\n\n`;
+  }
+  
+  if (recipeData.ingredients && recipeData.ingredients.length > 0) {
+    text += `材料:\n`;
+    recipeData.ingredients.forEach(ingredient => {
+      text += `- ${ingredient.item}: ${ingredient.quantity}${ingredient.unit}\n`;
+    });
+    text += `\n`;
+  }
+  
+  if (recipeData.steps && recipeData.steps.length > 0) {
+    recipeData.steps.forEach((step, index) => {
+      text += `ステップ${index + 1}:\n${step.step}\n\n`;
+    });
+  }
+  
+  if (recipeData.notes) {
+    text += `メモ:\n${recipeData.notes}\n`;
+  }
+  
+  return text;
+}
+
+// グローバル関数を明示的に設定
+window.toggleReadableTextEdit = window.toggleReadableTextEdit || function() {
+  const content = document.getElementById('readableTextContent');
+  const editBtn = document.getElementById('readableTextEditBtn');
+  const saveBtn = document.getElementById('readableTextSaveBtn');
+  const cancelBtn = document.getElementById('readableTextCancelBtn');
+  
+  if (content && editBtn && saveBtn && cancelBtn) {
+    // 編集モードに切り替え
+    content.contentEditable = 'true';
+    content.style.border = '2px solid #007bff';
+    content.style.backgroundColor = '#f8f9fa';
+    content.focus();
+    
+    // ボタンの表示切り替え
+    editBtn.style.display = 'none';
+    saveBtn.style.display = 'inline-block';
+    cancelBtn.style.display = 'inline-block';
+    
+    // 元の内容を保存（キャンセル用）
+    window.originalReadableText = content.textContent;
+  }
+};
+
+window.saveReadableText = window.saveReadableText || async function() {
+  const content = document.getElementById('readableTextContent');
+  const editBtn = document.getElementById('readableTextEditBtn');
+  const saveBtn = document.getElementById('readableTextSaveBtn');
+  const cancelBtn = document.getElementById('readableTextCancelBtn');
+  
+  if (!content || !window.currentRecipe) {
+    alert('レシピデータが読み込まれていません。');
+    return;
+  }
+  
+  try {
+    const updatedText = content.textContent.trim();
+    
+    // Supabaseに保存
+    const sb = getSupabaseClient();
+    const { error } = await sb
+      .from('recipes')
+      .update({ readable_text: updatedText })
+      .eq('id', window.currentRecipe.id);
+    
+    if (error) {
+      console.error('保存エラー:', error);
+      alert('保存に失敗しました: ' + error.message);
+      return;
+    }
+    
+    // 現在のレシピデータを更新
+    window.currentRecipe.readable_text = updatedText;
+    
+    // 編集モードを終了
+    content.contentEditable = 'false';
+    content.style.border = '1px solid #e1e8ed';
+    content.style.backgroundColor = '#ffffff';
+    
+    // ボタンの表示切り替え
+    editBtn.style.display = 'inline-block';
+    saveBtn.style.display = 'none';
+    cancelBtn.style.display = 'none';
+    
+    alert('読みやすいテキストを保存しました！');
+    
+  } catch (error) {
+    console.error('保存エラー:', error);
+    alert('保存に失敗しました: ' + error.message);
+  }
+};
+
+window.cancelReadableTextEdit = window.cancelReadableTextEdit || function() {
+  const content = document.getElementById('readableTextContent');
+  const editBtn = document.getElementById('readableTextEditBtn');
+  const saveBtn = document.getElementById('readableTextSaveBtn');
+  const cancelBtn = document.getElementById('readableTextCancelBtn');
+  
+  if (content && editBtn && saveBtn && cancelBtn) {
+    // 元の内容に戻す
+    if (window.originalReadableText !== undefined) {
+      content.textContent = window.originalReadableText;
+    }
+    
+    // 編集モードを終了
+    content.contentEditable = 'false';
+    content.style.border = '1px solid #e1e8ed';
+    content.style.backgroundColor = '#ffffff';
+    
+    // ボタンの表示切り替え
+    editBtn.style.display = 'inline-block';
+    saveBtn.style.display = 'none';
+    cancelBtn.style.display = 'none';
+  }
+};

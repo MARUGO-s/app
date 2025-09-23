@@ -21,7 +21,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const DEFAULT_MODEL = "llama-3.1-70b-versatile";
+const DEFAULT_MODEL = "gemini-1.5-flash";
 
 function buildMessagesFromPayload(payload: RequestPayload): ChatMessage[] {
   if (payload.messages && payload.messages.length > 0) {
@@ -48,9 +48,9 @@ serve(async (req) => {
 
   try {
     const body: RequestPayload = await req.json();
-    const apiKey = Deno.env.get("GROQ_API_KEY");
+    const apiKey = Deno.env.get("GOOGLE_API_KEY");
     if (!apiKey) {
-      throw new Error("GROQ_API_KEY が設定されていません");
+      throw new Error("GOOGLE_API_KEY が設定されていません");
     }
 
     const messages = buildMessagesFromPayload(body);
@@ -59,39 +59,43 @@ serve(async (req) => {
     }
 
     const modelId = body.model || DEFAULT_MODEL;
-    const endpoint = "https://api.groq.com/openai/v1/chat/completions";
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
 
-    const requestPayload = {
-      model: modelId,
-      messages: messages,
-      temperature: body.temperature || 0.7,
-      max_tokens: body.maxTokens || 4096,
-      top_p: body.topP || 1,
-      presence_penalty: body.presencePenalty || 0,
-      frequency_penalty: body.frequencyPenalty || 0,
+    // Gemini API用のリクエスト形式に変換
+    const geminiRequest = {
+      contents: [{
+        parts: [{
+          text: messages.map(msg => `${msg.role}: ${msg.content}`).join('\n\n')
+        }]
+      }],
+      generationConfig: {
+        temperature: body.temperature || 0.7,
+        maxOutputTokens: body.maxTokens || 4096,
+        topP: body.topP || 1,
+      }
     };
 
-    console.log("🚀 Groq API呼び出し開始:", { model: modelId, messages: messages.length });
+    console.log("🚀 Gemini API呼び出し開始:", { model: modelId, messages: messages.length });
 
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
+        "x-goog-api-key": apiKey,
       },
-      body: JSON.stringify(requestPayload),
+      body: JSON.stringify(geminiRequest),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("❌ Groq API error:", response.status, response.statusText, errorText);
-      throw new Error(`Groq API error: ${response.status} ${response.statusText} - ${errorText}`);
+      console.error("❌ Gemini API error:", response.status, response.statusText, errorText);
+      throw new Error(`Gemini API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const result = await response.json();
-    const content = result?.choices?.[0]?.message?.content || "";
+    const content = result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    console.log("✅ Groq API レスポンス取得成功:", content.substring(0, 100) + "...");
+    console.log("✅ Gemini API レスポンス取得成功:", content.substring(0, 100) + "...");
 
     return new Response(
       JSON.stringify({
@@ -105,7 +109,7 @@ serve(async (req) => {
       },
     );
   } catch (error) {
-    console.error("❌ call-groq-api error:", error);
+    console.error("❌ call-gemini-api error:", error);
 
     return new Response(
       JSON.stringify({

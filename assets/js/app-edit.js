@@ -6,10 +6,11 @@ const CONFIG = {
   STORAGE_BUCKET: 'images'
 };
 
-let sb, selectedCategory = '', selectedTags = [], currentRecipeType = 'normal';
+let sb, selectedCategories = [], selectedTags = [], currentRecipeType = 'normal';
 let originalIngredients = [], baseServings = 1, finalRecipeData = null;
 let customCategories = [], customTags = [], allCategories = [], allTags = [];
 let currentSourceUrl = null; // URL取り込み時の元URLを記録
+let originalRecipeData = null; // 海外サイト取り込み時の翻訳前データを保存
 
 // Utility functions
 // escapeHtml関数は utils.js で定義済み
@@ -28,13 +29,28 @@ const saveIngredientsAndSteps = async (recipeId, ingredients, steps) => {
     // 材料を保存
     console.log('💾 材料保存開始:', ingredients.length);
     if (ingredients.length > 0) {
-      const payload = ingredients.map(ing => ({
+      const payload = ingredients.map((ing, index) => {
+        let item = '', quantity = '', unit = '';
+        
+        if (typeof ing === 'string') {
+          const parsed = parseIngredientString(ing);
+          item = parsed.item;
+          quantity = parsed.quantity;
+          unit = parsed.unit;
+        } else if (ing && typeof ing === 'object') {
+          item = ing.item || '';
+          quantity = ing.quantity || '';
+          unit = ing.unit || '';
+        }
+        
+        return {
         recipe_id: recipeId,
-        position: ing.position || 1,
-        item: ing.item || '',
-        quantity: ing.quantity || null,
-        unit: ing.unit || null
-      }));
+          position: index + 1,
+          item: item,
+          quantity: quantity,
+          unit: unit
+        };
+      });
       console.log('💾 Ingredient payload:', payload);
 
       let { error: ingError } = await sb.from('recipe_ingredients').insert(payload);
@@ -102,7 +118,9 @@ const getSettings = () => {
      aiApi: 'groq',
       groqModel: 'gemini-1.5-flash'
     };
-    return stored ? { ...defaultSettings, ...JSON.parse(stored) } : defaultSettings;
+    const result = stored ? { ...defaultSettings, ...JSON.parse(stored) } : defaultSettings;
+    console.log('🔧 レシピ編集画面で設定を読み込み:', result);
+    return result;
   } catch (error) {
     console.error('設定の読み込みエラー:', error);
    return {
@@ -117,6 +135,13 @@ const getCurrentGroqModel = () => {
   const settings = getSettings();
   const model = settings.groqModel || 'gemini-1.5-flash';
   
+  console.log(`🔧 現在のGroqモデル: ${model}`);
+  console.log(`📊 設定詳細:`, {
+    aiApi: settings.aiApi,
+    groqModel: settings.groqModel,
+    aiCreativeApi: settings.aiCreativeApi
+  });
+  
   // 無効なモデルの場合はデフォルトに戻す
   const validModels = ['gemini-1.5-flash', 'gemini-1.5-pro', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'gemma2-9b-it', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
   if (!validModels.includes(model)) {
@@ -128,17 +153,17 @@ const getCurrentGroqModel = () => {
 };
 
 // ChatGPT API呼び出し関数
-async function callChatGPTAPI(prompt) {
+async function callChatGPTAPI(text, url) {
   await sleep(1000); // Rate limiting
   
   console.log('🤖 ChatGPT API呼び出し開始');
-  console.log('📝 プロンプト:', prompt.substring(0, 200) + '...');
+  console.log('📝 プロンプト:', text.substring(0, 200) + '...');
   
   try {
     const { data, error } = await sb.functions.invoke('call-openai-api', {
       body: {
-        prompt,
-        model: 'gpt-4o-mini',
+        text,
+        model: "gpt-3.5-turbo",
         maxTokens: 4000,
         temperature: 0.7
       }
@@ -154,7 +179,7 @@ async function callChatGPTAPI(prompt) {
       throw new Error(data?.error || 'ChatGPT API呼び出しに失敗しました');
     }
 
-    console.log('📝 ChatGPT API レスポンス内容:', data.content?.substring(0, 500) || '');
+    console.log('📝 ChatGPT API レスポンス内容:', data.content?.title || '');
     return data.content;
   } catch (error) {
     console.error('❌ ChatGPT API呼び出しエラー:', error);
@@ -171,7 +196,7 @@ const clearForm = () => {
   // カテゴリーをクリア
   const categoryText = document.getElementById('selectedCategoryText');
   if (categoryText) categoryText.textContent = 'カテゴリーを選択';
-  selectedCategory = '';
+  selectedCategories = [];
   
   // タグをクリア
   const tagsContainer = document.getElementById('customTags');
@@ -267,7 +292,7 @@ const parseIngredientString = (ingredientStr) => {
   if (!ingredientStr) return { item: '', quantity: '', unit: '', price: '' };
   
   const str = ingredientStr.toString().trim();
-  console.log(`🔍 解析開始: "${str}"`);
+  console.log(`🔍 材料解析: "${str}"`);
 
   const extractPrice = (value) => {
     const match = value.match(/(\d+(?:\.\d+)?)円/);
@@ -279,6 +304,7 @@ const parseIngredientString = (ingredientStr) => {
     }
     return { cleaned: value, price: '' };
   };
+  
   
   // 日本語の単位を最初にチェック（大さじ、小さじ、カップ）
   const japaneseUnits = str.match(/^(.+?)\s+(大さじ|小さじ|カップ)([0-9\/\.]+)$/);
@@ -364,6 +390,8 @@ const parseIngredientString = (ingredientStr) => {
   const { cleaned: itemOnly, price } = extractPrice(str);
   const result = { item: itemOnly, quantity: '', unit: '', price };
   console.log(`❌ 解析失敗、材料名のみ:`, result);
+  console.log(`❌ 解析失敗の詳細: 入力="${str}", 長さ=${str.length}, 型=${typeof str}`);
+  console.log(`❌ 解析失敗のパターン: フェリスィム形式=${!!felicimmeFormat}, 日本語単位=${!!japaneseUnits}, スプーン単位=${!!spoonUnits}`);
   return result;
 };
 
@@ -586,6 +614,9 @@ async function callGroqAPI(text, url) {
     /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(url) ||
     /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(text.substring(0, 1000))
   );
+  
+  // グローバル変数として設定（他の関数からアクセス可能にする）
+  window.isJapaneseSite = isJapaneseSite;
 
   console.log('🌍 サイト言語判定:', isJapaneseSite ? '日本語サイト' : '海外サイト');
 
@@ -618,6 +649,44 @@ JSON形式で返す:
 
 重要: titleは日本語表記をそのまま抽出し、フランス語から翻訳しないでください。
 変換: 大さじ1=15ml/g、小さじ1=5ml/g。液体=ml、固体=g。JSONのみ返す。`;
+  } else if (url && url.includes('dancyu.jp')) {
+    // dancyu.jpサイト専用のプロンプト（強化版）
+    console.log('🍳 dancyu.jp専用プロンプトを使用');
+    console.log('🍳 入力テキストの先頭:', text.title);
+    
+    prompt = `dancyu.jpのレシピ記事から料理情報を抽出してください。雑誌系レシピサイトの構造に対応。
+
+URL: ${url}
+テキスト: ${text.substring(0, 4000)}
+
+JSON形式で返す:
+{
+  "title": "料理名（見出しから正確に抽出）",
+  "description": "レシピ説明・コツ・ポイント",
+  "servings": "人数（数字のみ）",
+  "ingredients": [
+    {"item": "材料名", "quantity": "分量", "unit": "単位"}
+  ],
+  "steps": [
+    {"step": "手順（番号付きの手順を個別に抽出）"}
+  ],
+  "notes": "コツ・ポイント・注意事項"
+}
+
+重要: 
+- 手順は番号付きで個別に抽出（例：1. 2. 3. 4. 5. 6. 7.）
+- 手順の抽出パターン：
+  * 「_1_」「_2_」「_3_」などの番号付き見出しから手順を抽出
+  * 「## _1_手順名」の形式で記載されている手順を個別に抽出
+  * 各手順の詳細説明も含める
+  * 手順名と説明文を組み合わせて完全な手順として抽出
+  * 「鶏肉を焼く」「野菜を炒める」「白ワインを加える」などの手順タイトルと説明を組み合わせる
+- 材料は表形式から正確に抽出
+- 料理名は見出しから正確に抽出
+- ミックススパイスの材料も個別に抽出
+- 手順の詳細な説明も含める
+- 手順が見つからない場合は空の配列ではなく、少なくとも1つの手順を含める
+- JSONのみ返す。`;
   } else if (isJapaneseSite) {
     // 日本語サイト用プロンプト（翻訳禁止）
     prompt = `レシピ情報を抽出。ナビ・広告・SNS埋め込み・関連記事を無視し、本文のみ処理。
@@ -639,47 +708,126 @@ JSON形式で返す:
     {"step": "手順"}
   ],
   "notes": "メモ",
-  "image_url": "【レシピのメイン画像URL（wp-content/uploads等の実際の料理画像を優先、見つからない場合は空文字）】"
+  "image_url": "【レシピのメイン画像URL（wp-content/uploads等の実際の料理画像を優先、見つからない場合は空文字）】",
+  "readable_text": "【Geminiスタイルの読みやすいテキスト形式でレシピ全体をまとめる。以下の形式で：\n\n料理名\n\n説明文\n\n人数: X人分\n\n材料:\n- 材料名: 分量単位\n\nステップ1:\n手順の内容\n\nステップ2:\n手順の内容\n\nメモ:\nメモの内容】"
 }
 
 重要: 日本語コンテンツは翻訳せずそのまま抽出してください。
 変換ルール: 大さじ1=15ml/g、小さじ1=5ml/g。液体=ml、固体=g。
+
+★★★日本語サイト専用抽出指示★★★
+- 「材料」「【材料】」セクションから材料を抽出
+- 「手順」「作り方」「調理」セクションから手順を抽出
+- 番号付き手順（1. 2. 3. 4. 5.）を個別に抽出
+- 料理王国サイトの場合：「鹿ロース」「フォワグラ」等の具体的な材料名を正確に抽出
+- 手順が見つからない場合は空の配列ではなく、少なくとも1つの手順を含める
+- 各手順の詳細説明も含める
+- 手順のタイトルと説明を組み合わせて完全な手順として抽出
+
+★★★料理王国サイト専用抽出指示★★★
+- HTMLの<ol><li>タグで囲まれた手順を必ず抽出してください
+- 「【材料】（1人前）」セクションから材料を抽出
+- 「【作り方】」セクションから手順を抽出
+- 材料は「鹿ロース ･･･ 60g」の形式で抽出
+- 手順は<li>タグ内の内容を個別に抽出
+- 必ず具体的な材料名と手順を抽出し、「手動で入力してください」等のプレースホルダーは使用しない
+
+
 出力: JSONのみ返してください。`;
   } else {
-    // 海外サイト用プロンプト（全体翻訳）
-    prompt = `海外レシピサイトから情報を抽出し、すべて日本語に翻訳。ナビ・広告・SNS埋め込み・関連記事を無視し、本文のみ処理。
+    // 包括的な海外サイト用プロンプト
+    const languageNames = {
+      'fr': 'フランス語',
+      'en': '英語', 
+      'de': 'ドイツ語',
+      'es': 'スペイン語',
+      'it': 'イタリア語',
+      'pt': 'ポルトガル語',
+      'zh': '中国語',
+      'ko': '韓国語'
+    };
+    
+    // detectedLanguage変数を再取得
+    const detectedLanguage = originalRecipeData?.original_language || 'unknown';
+    const detectedLanguageName = languageNames[detectedLanguage] || '元の言語';
+    
+    prompt = `海外レシピサイトから情報を抽出し、元の言語と日本語の両方のデータを取得。${detectedLanguageName}のレシピを処理します。
 
-★★★重要: すべての内容を自然な日本語に翻訳してください★★★
-- title: 料理名を日本語に翻訳
-- description: 説明を日本語に翻訳
-- ingredients: 材料名を日本語に翻訳（ingredienti, ingredients）
-- steps: 手順を日本語に翻訳（procedimento, preparation, instructions, method）
+★★★重要: 元の言語データと日本語翻訳データの両方を提供してください★★★
 
-特別指示:
-- イタリア語サイト（giallozafferano等）: procedimento（手順）を必ず抽出
-- 手順は番号付きリストまたは段落として記載
-- 料理の工程を順序立てて抽出
+言語別の抽出指示:
+${detectedLanguage === 'fr' ? '- フランス語: recette, ingrédients, préparation, étapes, temps de cuisson, temps de préparation' : ''}
+${detectedLanguage === 'en' ? '- 英語: recipe, ingredients, instructions, method, preparation' : ''}
+${detectedLanguage === 'de' ? '- ドイツ語: rezept, zutaten, zubereitung, schritte' : ''}
+${detectedLanguage === 'es' ? '- スペイン語: receta, ingredientes, preparación, pasos' : ''}
+${detectedLanguage === 'it' ? '- イタリア語: ricetta, ingredienti, preparazione, procedimento' : ''}
+${detectedLanguage === 'pt' ? '- ポルトガル語: receita, ingredientes, preparo, passos' : ''}
+${detectedLanguage === 'zh' ? '- 中国語: 食谱, 食材, 制作方法, 步骤' : ''}
+${detectedLanguage === 'ko' ? '- 韓国語: 레시피, 재료, 조리법, 단계' : ''}
+
+${detectedLanguage === 'fr' ? 'フランス語サイト特別指示:\n- "Préparation"セクションから手順を抽出\n- 番号付きの手順（1. 2. 3. 4. 5.）を個別に抽出\n- "Temps total", "Préparation", "Cuisson"の時間情報も抽出\n- 各手順の詳細説明も含める\n- 手順が見つからない場合は空の配列ではなく、少なくとも1つの手順を含める' : ''}
 
 URL: ${url || '不明'}
 テキスト: ${text.substring(0, 4000)}
 
 JSON形式で返す:
 {
-  "title": "【料理名を日本語に翻訳】",
-  "description": "【レシピ説明を日本語に翻訳】",
+  "title": "【料理名を${detectedLanguageName}から日本語に翻訳】",
+  "description": "【レシピ説明を${detectedLanguageName}から日本語に翻訳】",
   "servings": "人数（数字のみ）",
   "ingredients": [
-    {"item": "【材料名を日本語に翻訳】", "quantity": "分量", "unit": "【単位を日本語に翻訳（g、ml等）】"}
+    {"item": "【材料名を${detectedLanguageName}から日本語に翻訳】", "quantity": "分量", "unit": "【単位を日本語に翻訳（g、ml等）】"}
   ],
   "steps": [
-    {"step": "【手順を日本語に翻訳】"}
+    {"step": "【手順1を${detectedLanguageName}から日本語に翻訳】"},
+    {"step": "【手順2を${detectedLanguageName}から日本語に翻訳】"},
+    {"step": "【手順3を${detectedLanguageName}から日本語に翻訳】"}
   ],
-  "notes": "【メモを日本語に翻訳】",
-  "image_url": "【レシピのメイン画像URL（wp-content/uploads等の実際の料理画像を優先、見つからない場合は空文字）】"
+  "notes": "【メモを${detectedLanguageName}から日本語に翻訳】",
+  "original_title": "【元の言語の料理名】",
+  "original_description": "【元の言語のレシピ説明】",
+  "original_ingredients": [
+    {"item": "【元の言語の材料名】", "quantity": "分量", "unit": "【元の言語の単位】"}
+  ],
+  "original_steps": [
+    {"step": "【元の言語の手順1】"},
+    {"step": "【元の言語の手順2】"},
+    {"step": "【元の言語の手順3】"}
+  ],
+  "image_url": "【レシピのメイン画像URL（wp-content/uploads等の実際の料理画像を優先、見つからない場合は空文字）】",
+  "readable_text": "【Geminiスタイルの読みやすいテキスト形式でレシピ全体をまとめる。以下の形式で：\n\n料理名\n\n説明文\n\n人数: X人分\n\n材料:\n- 材料名: 分量単位\n\nステップ1:\n手順の内容\n\nステップ2:\n手順の内容\n\nメモ:\nメモの内容】"
 }
 
 変換ルール:
 - 大さじ1=15ml/g、小さじ1=5ml/g、カップ1=200ml
+
+手順の分離指示:
+- 手順は必ず個別のオブジェクトとして分離してください
+- 各手順は{"step": "手順内容"}の形式で配列に格納
+- 手順が複数ある場合は、それぞれを別々のオブジェクトとして抽出
+- 手順の番号や見出しは除去し、手順の内容のみを抽出
+- 手順が見つからない場合は空の配列ではなく、少なくとも1つの手順を含める
+- 例: [{"step": "材料を混ぜる"}, {"step": "オーブンで焼く"}, {"step": "冷ます"}]
+- 手順は1つずつ独立したオブジェクトとして配列に格納
+- 複数の手順を1つのオブジェクトにまとめないでください
+
+★★★番号付き手順の包括的抽出指示★★★
+- 番号付き手順（1. 2. 3. 4. 5. 6. 7. 8. 9. 10.）を個別に抽出
+- 番号付き手順のパターン：
+  * 「1. 手順内容」「2. 手順内容」「3. 手順内容」
+  * 「1) 手順内容」「2) 手順内容」「3) 手順内容」
+  * 「手順1: 内容」「手順2: 内容」「手順3: 内容」
+  * 「Step 1: 内容」「Step 2: 内容」「Step 3: 内容」
+  * 「Étape 1: 内容」「Étape 2: 内容」「Étape 3: 内容」
+  * 「手順1. 内容」「手順2. 内容」「手順3. 内容」
+- 各番号付き手順の詳細説明も含める
+- 手順のタイトルと説明を組み合わせて完全な手順として抽出
+- 番号や記号は除去し、手順の内容のみを抽出
+
+★★★重要: original_stepsとstepsの両方で手順を分離してください★★★
+- original_steps: 元の言語の手順を個別のオブジェクトとして配列に格納
+- steps: 日本語翻訳後の手順を個別のオブジェクトとして配列に格納
+- 両方とも必ず配列形式で、各手順は{"step": "内容"}の形式
 - 液体=ml、固体=g
 - Fahrenheit→Celsius変換
 - インチ→cm変換
@@ -763,15 +911,99 @@ JSON形式で返す:
     }
   }
 
+  // 海外サイトの場合、翻訳前のデータを保存
+  if (!isJapaneseSite) {
+    console.log('🌍 海外サイト検出: 翻訳前データを保存します');
+    
+    // 包括的な言語検出
+    let detectedLanguage = 'unknown';
+    
+    // フランス語の検出
+    if (url.includes('.fr') || url.includes('france') || 
+        text.includes('français') || text.includes('recette') || text.includes('Valrhona') || 
+        text.includes('chocolat') || text.includes('pâtisserie') || text.includes('cuisine') ||
+        text.includes('ingrédients') || text.includes('préparation') || text.includes('étapes')) {
+      detectedLanguage = 'fr';
+    }
+    // 英語の検出
+    else if (url.includes('.com') || url.includes('.co.uk') || url.includes('.ca') || url.includes('.au') ||
+             text.includes('recipe') || text.includes('ingredients') || text.includes('instructions') ||
+             text.includes('cooking') || text.includes('preparation') || text.includes('steps') ||
+             text.includes('serves') || text.includes('prep time') || text.includes('cook time')) {
+      detectedLanguage = 'en';
+    }
+    // ドイツ語の検出
+    else if (url.includes('.de') || url.includes('german') || 
+             text.includes('rezept') || text.includes('zutaten') || text.includes('zubereitung') ||
+             text.includes('kochzeit') || text.includes('vorbereitungszeit') || text.includes('portionen')) {
+      detectedLanguage = 'de';
+    }
+    // スペイン語の検出
+    else if (url.includes('.es') || url.includes('spanish') || 
+             text.includes('receta') || text.includes('ingredientes') || text.includes('preparación') ||
+             text.includes('tiempo de cocción') || text.includes('porciones') || text.includes('pasos')) {
+      detectedLanguage = 'es';
+    }
+    // イタリア語の検出
+    else if (url.includes('.it') || url.includes('italian') || 
+             text.includes('ricetta') || text.includes('ingredienti') || text.includes('preparazione') ||
+             text.includes('tempo di cottura') || text.includes('porzioni') || text.includes('passaggi')) {
+      detectedLanguage = 'it';
+    }
+    // ポルトガル語の検出
+    else if (url.includes('.pt') || url.includes('portuguese') || 
+             text.includes('receita') || text.includes('ingredientes') || text.includes('preparo') ||
+             text.includes('tempo de cozimento') || text.includes('porções') || text.includes('passos')) {
+      detectedLanguage = 'pt';
+    }
+    // 中国語の検出
+    else if (url.includes('.cn') || url.includes('.tw') || url.includes('chinese') || 
+             /[\u4e00-\u9fff]/.test(text.title)) {
+      detectedLanguage = 'zh';
+    }
+    // 韓国語の検出
+    else if (url.includes('.kr') || url.includes('korean') || 
+             /[\uac00-\ud7af]/.test(text.title)) {
+      detectedLanguage = 'ko';
+    }
+    
+    console.log('🌍 検出された言語:', detectedLanguage);
+    
+    originalRecipeData = {
+      original_title: extractedTitle || '',
+      original_description: '',
+      original_ingredients: [],
+      original_steps: [],
+      original_language: detectedLanguage,
+      source_url: url,
+      extraction_date: new Date().toISOString()
+    };
+  }
+
   console.log('📝 使用するプロンプト:', prompt);
   console.log('📄 入力テキストの先頭:', text.substring(0, 200));
   
   try {
-    const { data, error } = await sb.functions.invoke('call-groq-api', {
+    // 選択されたAPIに応じて関数を切り替え
+    console.log('🔍 window.selectedApi:', window.selectedApi);
+    console.log('🔍 現在のAPI選択状況:', {
+      selectedApi: window.selectedApi,
+      isGemini: window.selectedApi === 'gemini',
+      apiFunction: window.selectedApi === 'gemini' ? 'call-gemini-api' : 'call-groq-api'
+    });
+    
+    const apiFunction = window.selectedApi === 'gemini' ? 'call-gemini-api' : 'call-groq-api';
+    const model = window.selectedApi === 'gemini' ? 'gemini-1.5-flash' : getCurrentGroqModel();
+    
+    console.log('🔍 使用するAPI:', apiFunction, 'モデル:', model);
+    
+    const { data, error } = await sb.functions.invoke(apiFunction, {
       body: {
-        prompt,
-        model: getCurrentGroqModel(),
+        text,
+        model: model,
         maxTokens: 4096,
+        model: "gpt-3.5-turbo",
+        maxTokens: 4000,
         temperature: 0.7
       }
     });
@@ -787,7 +1019,7 @@ JSON形式で返す:
     }
 
     const content = data.content;
-    console.log('📝 Groq API レスポンス内容:', content?.substring(0, 500) || '');
+    console.log('📝 Groq API レスポンス内容:', content?.title || '');
 
     // JSONを抽出（複数のパターンを試行）
     let jsonText = content;
@@ -841,12 +1073,26 @@ JSON形式で返す:
       }
       
       // stepsの形式を統一
+      console.log('📝 手順データの詳細解析:', {
+        hasSteps: !!parsedData.steps,
+        isArray: Array.isArray(parsedData.steps),
+        length: parsedData.steps ? parsedData.steps.length : 0,
+        steps: parsedData.steps
+      });
+      
       if (!parsedData.steps || !Array.isArray(parsedData.steps) || parsedData.steps.length === 0) {
         console.warn('⚠️ 手順が見つかりません。デフォルト値を設定します。');
+        console.warn('⚠️ 手順データの状態:', {
+          steps: parsedData.steps,
+          type: typeof parsedData.steps,
+          isArray: Array.isArray(parsedData.steps)
+        });
         parsedData.steps = [{ step: '手順を手動で入力してください' }];
       } else {
+        console.log('✅ 手順データが見つかりました:', parsedData.steps.length, '件');
         // 各手順の形式を統一
         parsedData.steps = parsedData.steps.map((step, index) => {
+          console.log(`📝 手順${index + 1}の処理:`, step, 'タイプ:', typeof step);
           if (typeof step === 'string') {
             return { step: step };
           } else if (step.step) {
@@ -855,6 +1101,7 @@ JSON形式で返す:
             return { step: `手順${index + 1}` };
           }
         });
+        console.log('📝 統一後の手順データ:', parsedData.steps);
       }
       
       if (!parsedData.servings) {
@@ -901,17 +1148,17 @@ JSON形式で返す:
 }
 
 // ChatGPT API呼び出し関数
-async function callChatGPTAPI(prompt) {
+async function callChatGPTAPI(text, url) {
   await sleep(1000); // Rate limiting
   
   console.log('🤖 ChatGPT API呼び出し開始');
-  console.log('📝 プロンプト:', prompt.substring(0, 200) + '...');
+  console.log('📝 プロンプト:', text.substring(0, 200) + '...');
   
   try {
     const { data, error } = await sb.functions.invoke('call-openai-api', {
       body: {
-        prompt,
-        model: 'gpt-4o-mini',
+        text,
+        model: "gpt-3.5-turbo",
         maxTokens: 4000,
         temperature: 0.7
       }
@@ -927,7 +1174,7 @@ async function callChatGPTAPI(prompt) {
       throw new Error(data?.error || 'ChatGPT API呼び出しに失敗しました');
     }
 
-    console.log('📝 ChatGPT API レスポンス内容:', data.content?.substring(0, 500) || '');
+    console.log('📝 ChatGPT API レスポンス内容:', data.content?.title || '');
     return data.content;
   } catch (error) {
     console.error('❌ ChatGPT API呼び出しエラー:', error);
@@ -937,31 +1184,142 @@ async function callChatGPTAPI(prompt) {
 
 // 統一API呼び出し関数
 async function callAIAPI(text, url) {
-  const currentApi = Settings.getCurrentAiApi();
-  console.log(`使用するAPI: ${currentApi}`);
+  // URL取り込み時は window.selectedApi を優先、それ以外は設定値を使用
+  const currentApi = window.selectedApi || Settings.getCurrentAiApi();
+  console.log(`使用するAPI: ${currentApi} (selectedApi: ${window.selectedApi}, settings: ${Settings.getCurrentAiApi()})`);
   
   if (currentApi === 'chatgpt') {
     return await callChatGPTAPI(text, url);
+  } else if (currentApi === 'gemini') {
+    // Gemini API専用の処理
+    console.log('🔍 Gemini API専用処理を実行');
+    return await callGroqAPI(text, url); // callGroqAPI関数内でGemini APIを呼び出し
   } else {
     return await callGroqAPI(text, url);
   }
 }
 
 // HTMLからナビ・広告・SNS埋め込みを除去し、テキストを最適化する関数
-function cleanHTML(html) {
+function cleanHTML(html, url = '') {
   if (!html) return html;
   
   try {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
     
-    // 除去する要素のセレクター
+    // サイト別のクリーニング処理
+    if (url && url.includes('dancyu.jp')) {
+      console.log('🍳 dancyu.jp専用の軽量クリーニングを実行');
+      
+      // 最小限の不要要素のみ除去
+      const minimalSelectorsToRemove = [
+        'script', 'style', 'noscript',
+        '.ad', '.ads', '.advertisement', '.banner', '[class*="ad-"]',
+        'nav', 'header', 'footer',
+        '.social', '.share', '[class*="social"]', '[class*="share"]',
+        '.related', '.recommend', '[class*="related"]', '[class*="recommend"]',
+        '.sidebar', '.side', '.aside', '[class*="sidebar"]', '[class*="side"]',
+        'iframe[src*="ads"]', 'iframe[src*="google"]'
+      ];
+      
+      minimalSelectorsToRemove.forEach(selector => {
+        try {
+          const elements = doc.querySelectorAll(selector);
+          elements.forEach(el => el.remove());
+        } catch (e) {
+          // セレクターが無効な場合はスキップ
+        }
+      });
+    } else if (url && (url.includes('.fr') || url.includes('.com') || url.includes('.de') || url.includes('.es') || url.includes('.it'))) {
+      // 海外サイト専用のクリーニング
+      console.log('🌍 海外サイト専用のクリーニングを実行');
+      
+      const internationalSelectorsToRemove = [
+        'script', 'style', 'noscript',
+        // 広告関連
+        '.ad', '.ads', '.advertisement', '.banner', '[class*="ad-"]', '[class*="banner"]',
+        '[class*="promo"]', '[class*="sponsor"]', '[class*="affiliate"]',
+        // ナビゲーション
+        'nav', 'header', 'footer', '.navigation', '.menu', '.navbar',
+        // ソーシャル・シェア
+        '.social', '.share', '[class*="social"]', '[class*="share"]', '[class*="follow"]',
+        // 関連記事・推奨
+        '.related', '.recommend', '.suggested', '[class*="related"]', '[class*="recommend"]',
+        '[class*="suggested"]', '[class*="similar"]', '[class*="more"]',
+        // サイドバー・サイドコンテンツ
+        '.sidebar', '.side', '.aside', '[class*="sidebar"]', '[class*="side"]',
+        '[class*="widget"]', '[class*="sidebar"]',
+        // コメント・レビュー
+        '.comments', '.reviews', '[class*="comment"]', '[class*="review"]',
+        // 外部埋め込み
+        'iframe[src*="ads"]', 'iframe[src*="google"]', 'iframe[src*="facebook"]',
+        'iframe[src*="twitter"]', 'iframe[src*="instagram"]',
+        // クッキー・プライバシー
+        '.cookie', '.privacy', '[class*="cookie"]', '[class*="privacy"]',
+        // ニュースレター・登録
+        '.newsletter', '.subscribe', '[class*="newsletter"]', '[class*="subscribe"]',
+        // 検索・フィルター
+        '.search', '.filter', '[class*="search"]', '[class*="filter"]',
+        // パンくずリスト
+        '.breadcrumb', '[class*="breadcrumb"]',
+        // タグ・カテゴリ
+        '.tags', '.categories', '[class*="tag"]', '[class*="category"]'
+      ];
+      
+      internationalSelectorsToRemove.forEach(selector => {
+        try {
+          const elements = doc.querySelectorAll(selector);
+          elements.forEach(el => el.remove());
+        } catch (e) {
+          // セレクターが無効な場合はスキップ
+        }
+      });
+      
+      // dancyu.jpの手順情報を保持するため、レシピ関連要素を優先的に抽出
+      const dancyuRecipeSelectors = [
+        'article', '.content', '.main', '.post', '.entry',
+        '[class*="recipe"]', '[id*="recipe"]', '[class*="content"]', '[id*="content"]',
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6', // 見出しを保持
+        'p', 'div', 'span', 'ul', 'ol', 'li', 'table', 'tr', 'td', 'th' // 基本要素を保持
+      ];
+      
+      let mainContent = '';
+      for (const selector of dancyuRecipeSelectors) {
+        try {
+          const element = doc.querySelector(selector);
+          if (element && element.textContent.trim().length > 50) {
+            mainContent = element.textContent.trim();
+            break;
+          }
+        } catch (e) {
+          // セレクターが無効な場合はスキップ
+        }
+      }
+      
+      // メインコンテンツが見つからない場合はbody全体を使用
+      if (!mainContent) {
+        mainContent = doc.body ? doc.body.textContent.trim() : html;
+      }
+      
+      console.log('🧹 dancyu.jp軽量クリーニング完了:', {
+        originalLength: html.length,
+        cleanedLength: mainContent.length,
+        reduction: Math.round((1 - mainContent.length / html.length) * 100) + '%'
+      });
+      
+      return mainContent;
+    }
+    
+    // 通常のクリーニング処理
     const selectorsToRemove = [
       // ナビゲーション
       'nav', 'header', 'footer', '.nav', '.navigation', '.menu', '.navbar',
       // 広告
       '.ad', '.ads', '.advertisement', '.banner', '.promo', '.sponsor',
-      '[class*="ad-"]', '[id*="ad-"]', '[class*="banner"]', '[id*="banner"]',
+      '[class*="ad-"]',
+      // dancyu.jp特有の不要要素
+      '.sidebar', '.related-articles', '.social-share', '.tags',
+      '.author-info', '.publish-date', '.breadcrumb', '[id*="ad-"]', '[class*="banner"]', '[id*="banner"]',
       // SNS埋め込み
       '.social', '.share', '.facebook', '.twitter', '.instagram', '.youtube',
       '[class*="social"]', '[class*="share"]', '[class*="sns"]',
@@ -1130,11 +1488,11 @@ async function fetchHTMLViaProxy(url) {
 
       // DelishKitchenの場合、HTMLの内容をチェック
       if (url.includes('delishkitchen.tv')) {
-        console.log('🔍 DelishKitchen HTML内容をチェック:', html.substring(0, 500));
+        console.log('🔍 DelishKitchen HTML内容をチェック:', html.title);
       }
 
       // HTMLをクリーニング
-      const cleanedHtml = cleanHTML(html);
+      const cleanedHtml = cleanHTML(html, url);
       return cleanedHtml;
     } catch (error) {
       console.error('❌ ProxyManagerが失敗:', error.message);
@@ -1161,6 +1519,7 @@ async function fetchHTMLViaProxy(url) {
         headers: {
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'ja,en-US;q=0.7,en;q=0.3'
+          // Cache-ControlとPragmaヘッダーを削除（CORSエラーの原因）
         }
       });
       
@@ -1174,7 +1533,7 @@ async function fetchHTMLViaProxy(url) {
           console.log('📄 HTML内容の先頭:', html.substring(0, 200));
           
           // HTMLをクリーニング
-          const cleanedHtml = cleanHTML(html);
+          const cleanedHtml = cleanHTML(html, url);
           return cleanedHtml;
         }
       } else {
@@ -1188,13 +1547,254 @@ async function fetchHTMLViaProxy(url) {
   throw new Error('すべてのプロキシサービスが失敗しました');
 }
 
+// API選択ポップアップを表示する関数
+const showApiSelectionModal = (url) => {
+  console.log('🔍 API選択ポップアップを表示:', url);
+  
+  const modal = document.getElementById('apiSelectionModal');
+  if (!modal) {
+    console.error('❌ API選択モーダルが見つかりません');
+    console.error('❌ 利用可能なモーダル:', document.querySelectorAll('[id*="modal"]'));
+    return;
+  }
+  
+  console.log('✅ API選択モーダルを発見:', modal);
+  
+  // モーダルを表示
+  modal.style.display = 'flex';
+  console.log('✅ モーダルを表示しました');
+  
+  // APIの状態をチェック
+  checkApiStatus();
+  
+  // イベントリスナーを設定
+  setupApiSelectionEvents(url);
+  
+  console.log('✅ API選択ポップアップの設定完了');
+};
+
+// APIの状態をチェックする関数
+const checkApiStatus = async () => {
+  const groqStatus = document.getElementById('groq-status');
+  const geminiStatus = document.getElementById('gemini-status');
+  const chatgptStatus = document.getElementById('chatgpt-status');
+  
+  // Groq APIの状態をチェック
+  if (groqStatus) {
+    groqStatus.textContent = '確認中...';
+    groqStatus.className = 'api-status checking';
+    
+    try {
+      // Groq APIのテスト
+      const { data, error } = await sb.functions.invoke('call-groq-api', {
+        body: {
+          prompt: 'test',
+          model: 'llama-3.1-70b-versatile',
+          maxTokens: 10
+        }
+      });
+      
+      if (error || !data?.success) {
+        groqStatus.textContent = '利用不可';
+        groqStatus.className = 'api-status unavailable';
+      } else {
+        groqStatus.textContent = '利用可能';
+        groqStatus.className = 'api-status available';
+      }
+    } catch (error) {
+      console.error('Groq API チェックエラー:', error);
+      groqStatus.textContent = '利用不可';
+      groqStatus.className = 'api-status unavailable';
+    }
+  }
+  
+  // Gemini APIの状態をチェック
+  if (geminiStatus) {
+    geminiStatus.textContent = '確認中...';
+    geminiStatus.className = 'api-status checking';
+    
+    try {
+      // Gemini APIのテスト
+      const { data, error } = await sb.functions.invoke('call-groq-api', {
+        body: {
+          prompt: 'test',
+          model: 'gemini-1.5-flash',
+          maxTokens: 10
+        }
+      });
+      
+      if (error || !data?.success) {
+        geminiStatus.textContent = '利用不可';
+        geminiStatus.className = 'api-status unavailable';
+      } else {
+        geminiStatus.textContent = '利用可能';
+        geminiStatus.className = 'api-status available';
+      }
+    } catch (error) {
+      console.error('Gemini API チェックエラー:', error);
+      geminiStatus.textContent = '利用不可';
+      geminiStatus.className = 'api-status unavailable';
+    }
+  }
+  
+  // ChatGPT APIの状態をチェック
+  if (chatgptStatus) {
+    chatgptStatus.textContent = '確認中...';
+    chatgptStatus.className = 'api-status checking';
+    
+    try {
+      // ChatGPT APIのテスト
+      const { data, error } = await sb.functions.invoke('call-openai-api', {
+        body: {
+          prompt: 'test',
+          model: 'gpt-3.5-turbo',
+          maxTokens: 10
+        }
+      });
+      
+      if (error || !data?.success) {
+        chatgptStatus.textContent = '利用不可';
+        chatgptStatus.className = 'api-status unavailable';
+      } else {
+        chatgptStatus.textContent = '利用可能';
+        chatgptStatus.className = 'api-status available';
+      }
+    } catch (error) {
+      console.error('ChatGPT API チェックエラー:', error);
+      chatgptStatus.textContent = '利用不可';
+      chatgptStatus.className = 'api-status unavailable';
+    }
+  }
+};
+
+// API選択イベントリスナーを設定する関数
+const setupApiSelectionEvents = (url) => {
+  const modal = document.getElementById('apiSelectionModal');
+  const closeBtn = document.getElementById('apiSelectionCloseBtn');
+  const cancelBtn = document.getElementById('apiSelectionCancelBtn');
+  const confirmBtn = document.getElementById('apiSelectionConfirmBtn');
+  
+  // 既存のイベントリスナーを削除（重複防止）
+  const newCloseBtn = closeBtn?.cloneNode(true);
+  const newCancelBtn = cancelBtn?.cloneNode(true);
+  const newConfirmBtn = confirmBtn?.cloneNode(true);
+  
+  if (closeBtn && newCloseBtn) {
+    closeBtn.parentNode?.replaceChild(newCloseBtn, closeBtn);
+  }
+  if (cancelBtn && newCancelBtn) {
+    cancelBtn.parentNode?.replaceChild(newCancelBtn, cancelBtn);
+  }
+  if (confirmBtn && newConfirmBtn) {
+    confirmBtn.parentNode?.replaceChild(newConfirmBtn, confirmBtn);
+  }
+  
+  // 閉じるボタン
+  newCloseBtn?.addEventListener('click', () => {
+    modal.style.display = 'none';
+  });
+  
+  // キャンセルボタン
+  newCancelBtn?.addEventListener('click', () => {
+    modal.style.display = 'none';
+  });
+  
+  // 確認ボタン
+  newConfirmBtn?.addEventListener('click', async () => {
+    const selectedApi = document.querySelector('input[name="api-selection"]:checked')?.value;
+    console.log('🔍 選択されたAPI:', selectedApi);
+    
+    if (!selectedApi) {
+      alert('APIを選択してください');
+      return;
+    }
+    
+    // モーダルを閉じる
+    modal.style.display = 'none';
+    
+    // 選択されたAPIでURL取り込みを実行
+    await runImportWithSelectedApi(url, selectedApi);
+  });
+  
+  // APIオプションのクリックイベント
+  const apiOptions = document.querySelectorAll('.api-option');
+  apiOptions.forEach(option => {
+    // 既存のイベントリスナーを削除
+    const newOption = option.cloneNode(true);
+    option.parentNode?.replaceChild(newOption, option);
+    
+    newOption.addEventListener('click', () => {
+      const radio = newOption.querySelector('input[type="radio"]');
+      if (radio) {
+        radio.checked = true;
+        // 選択状態の視覚的フィードバック
+        document.querySelectorAll('.api-option').forEach(opt => opt.classList.remove('selected'));
+        newOption.classList.add('selected');
+      }
+    });
+  });
+};
+
+// 選択されたAPIでURL取り込みを実行する関数
+const runImportWithSelectedApi = async (url, selectedApi) => {
+  console.log('🚀 URL取り込み開始:', { url, api: selectedApi });
+  
+  const loadingPopup = document.getElementById('urlLoadingPopup');
+  if (loadingPopup) {
+    loadingPopup.style.display = 'flex';
+    const loadingTitle = loadingPopup.querySelector('.loading-title');
+    const loadingMessage = loadingPopup.querySelector('.loading-message');
+    const loadingStatus = loadingPopup.querySelector('.loading-status');
+    
+    if (loadingTitle) loadingTitle.textContent = 'レシピを読み込み中...';
+    if (loadingMessage) loadingMessage.textContent = `${selectedApi === 'groq' ? 'Groq API' : 'Google Gemini API'}でレシピ情報を取得しています`;
+    if (loadingStatus) loadingStatus.textContent = '1回目を試行中...';
+  }
+  
+  try {
+    // 選択されたAPIを設定
+    window.selectedApi = selectedApi;
+    console.log('🔍 window.selectedApiを設定:', window.selectedApi);
+    
+    await window.runImport(url);
+    alert('レシピの読み込みが完了しました！');
+  } catch (error) {
+    console.error('URL取り込み最終エラー:', error);
+    
+    setTimeout(() => {
+      if (loadingPopup) {
+        loadingPopup.style.display = 'none';
+      }
+      alert(`レシピの読み込みに失敗しました: ${error.message}`);
+    }, 3000);
+    
+    return;
+  } finally {
+    setTimeout(() => {
+      if (loadingPopup) {
+        loadingPopup.style.display = 'none';
+      }
+    }, 1000);
+  }
+};
+
 // URL Import Function with retry
 window.runImport = async function(url, retryCount = 0) {
   const maxRetries = 1; // 最大1回リトライ（合計2回実行）
 
+  // API選択が必須
+  if (!window.selectedApi) {
+    console.error('❌ APIが選択されていません。API選択ポップアップを表示します。');
+    showApiSelectionModal(url);
+    return;
+  }
+  
+  console.log('🔍 選択されたAPI:', window.selectedApi);
+
   try {
     console.log(`=== URL取り込み開始 (試行 ${retryCount + 1}/${maxRetries + 1}) ===`);
     console.log('URL:', url);
+    console.log('選択されたAPI:', window.selectedApi);
 
     // DelishKitchenの特定URLかチェック
     if (url.includes('delishkitchen.tv')) {
@@ -1214,18 +1814,133 @@ window.runImport = async function(url, retryCount = 0) {
     console.log('📡 HTML取得を開始...');
     const html = await fetchHTMLViaProxy(url);
     console.log('✅ HTML取得完了:', html ? html.length + '文字' : 'なし');
+    
+    // フランス語サイトの場合、取得されたHTMLの詳細を確認
+    if (url && url.includes('.fr')) {
+      console.log('🇫🇷 フランス語サイト: 取得されたHTMLの詳細確認');
+      console.log('🇫🇷 HTML長さ:', html ? html.length : 0);
+      
+      if (html) {
+        // Préparationセクションの存在確認
+        const hasPreparation = html.includes('Préparation');
+        console.log('🇫🇷 HTMLにPréparationセクションが含まれているか:', hasPreparation);
+        
+        if (hasPreparation) {
+          const preparationIndex = html.indexOf('Préparation');
+          console.log('🇫🇷 Préparationセクションの位置:', preparationIndex);
+          console.log('🇫🇷 Préparation周辺のHTML:', html.substring(preparationIndex, preparationIndex + 500));
+        }
+        
+        // 番号付き手順の存在確認
+        const hasNumberedSteps = /\d+\.\s+[^0-9]/.test(html);
+        console.log('🇫🇷 HTMLに番号付き手順が含まれているか:', hasNumberedSteps);
+        
+        if (hasNumberedSteps) {
+          const stepMatches = html.match(/\d+\.\s+[^0-9][^0-9]*?(?=\d+\.|$)/g);
+          console.log('🇫🇷 HTML内の番号付き手順:', stepMatches ? stepMatches.slice(0, 3) : 'なし');
+        }
+      }
+    }
+    
+    // 日本語サイトの場合、取得されたHTMLの詳細を確認
+    if (url && (url.includes('.jp') || url.includes('cuisine-kingdom.com'))) {
+      console.log('🇯🇵 日本語サイト: 取得されたHTMLの詳細確認');
+      console.log('🇯🇵 HTML長さ:', html ? html.length : 0);
+      
+      if (html) {
+        // 材料セクションの存在確認
+        const hasMaterials = html.includes('材料') || html.includes('【材料】');
+        console.log('🇯🇵 HTMLに材料セクションが含まれているか:', hasMaterials);
+        
+        if (hasMaterials) {
+          const materialIndex = html.indexOf('材料');
+          console.log('🇯🇵 材料セクションの位置:', materialIndex);
+          console.log('🇯🇵 材料周辺のHTML:', html.substring(materialIndex, materialIndex + 500));
+        }
+        
+        // 手順セクションの存在確認
+        const hasSteps = html.includes('手順') || html.includes('作り方') || html.includes('調理');
+        console.log('🇯🇵 HTMLに手順セクションが含まれているか:', hasSteps);
+        
+        if (hasSteps) {
+          const stepIndex = html.indexOf('手順');
+          console.log('🇯🇵 手順セクションの位置:', stepIndex);
+          console.log('🇯🇵 手順周辺のHTML:', html.substring(stepIndex, stepIndex + 500));
+        }
+        
+        // 番号付き手順の存在確認
+        const hasNumberedSteps = /\d+\.\s+[^0-9]/.test(html);
+        console.log('🇯🇵 HTMLに番号付き手順が含まれているか:', hasNumberedSteps);
+        
+        if (hasNumberedSteps) {
+          const stepMatches = html.match(/\d+\.\s+[^0-9][^0-9]*?(?=\d+\.|$)/g);
+          console.log('🇯🇵 HTML内の番号付き手順:', stepMatches ? stepMatches.slice(0, 3) : 'なし');
+        }
+        
+        // 料理王国サイト専用の確認
+        if (url.includes('cuisine-kingdom.com')) {
+          console.log('🍳 料理王国サイト専用デバッグ');
+          const hasRecipeContent = html.includes('レシピ') || html.includes('recipe');
+          console.log('🍳 レシピコンテンツが含まれているか:', hasRecipeContent);
+          
+          const hasIngredients = html.includes('鹿ロース') || html.includes('フォワグラ');
+          console.log('🍳 具体的な材料が含まれているか:', hasIngredients);
+          
+          // HTMLの<li>タグから手順を抽出
+          const liMatches = html.match(/<li[^>]*>([^<]+)<\/li>/g);
+          if (liMatches && liMatches.length > 0) {
+            console.log('🍳 HTMLの<li>タグから手順を発見:', liMatches.slice(0, 5));
+            
+            // 手順の内容を抽出
+            const stepContents = liMatches.map(li => {
+              const match = li.match(/<li[^>]*>([^<]+)<\/li>/);
+              return match ? match[1].trim() : '';
+            }).filter(content => content.length > 0);
+            
+            console.log('🍳 抽出された手順内容:', stepContents.slice(0, 3));
+          }
+        }
+      }
+    }
 
     if (!html || html.length < 100) {
       throw new Error('HTMLの取得に失敗したか、内容が不十分です');
     }
 
     console.log('🤖 AI解析を開始...');
+    
     const recipeData = await callAIAPI(html, url);
     console.log('✅ AI解析完了:', recipeData);
+    
+    // AI解析結果をグローバル変数に保存
+    window.currentRecipeData = recipeData;
+    console.log('📝 AI解析結果をグローバル変数に保存:', window.currentRecipeData);
     
     console.log('取得したレシピデータ:', recipeData);
     console.log('材料データ詳細:', recipeData.ingredients);
     
+    // 海外サイトの場合、翻訳前のデータを保存
+    if (!window.isJapaneseSite && originalRecipeData) {
+      console.log('🌍 翻訳前データを保存中...');
+      
+      // AI解析結果から元の言語データを取得
+      if (recipeData.original_title) {
+        originalRecipeData.original_title = recipeData.original_title;
+      }
+      if (recipeData.original_description) {
+        originalRecipeData.original_description = recipeData.original_description;
+      }
+      if (recipeData.original_ingredients && Array.isArray(recipeData.original_ingredients)) {
+        originalRecipeData.original_ingredients = recipeData.original_ingredients;
+      }
+      if (recipeData.original_steps && Array.isArray(recipeData.original_steps)) {
+        originalRecipeData.original_steps = recipeData.original_steps;
+      }
+      
+      console.log('🌍 翻訳前データ保存完了:', originalRecipeData);
+      console.log('🌍 翻訳後データ:', recipeData);
+    }
+
     // Fill form fields
     if (recipeData.title) document.getElementById('title').value = recipeData.title;
     if (recipeData.description) document.getElementById('notes').value = recipeData.description;
@@ -1237,32 +1952,39 @@ window.runImport = async function(url, retryCount = 0) {
       ingredientsContainer.innerHTML = '';
       const list = Array.isArray(recipeData.ingredients) ? recipeData.ingredients : [];
       if (list.length > 0) {
-        list.forEach(ing => {
+        list.forEach((ing, index) => {
+          console.log(`🍳 材料${index + 1}の生データ:`, ing);
           let parsedIng = { item: '', quantity: '', unit: '' };
           
           // 材料データの形式を確認
           const priceInfo = extractPriceInfo(ing.quantity || '', ing.unit || '');
+          console.log(`🍳 材料${index + 1}の価格情報:`, priceInfo);
 
           if (ing.item && ing.quantity && ing.unit) {
             // 既に分離されている場合
+            console.log(`🍳 材料${index + 1}: 既に分離済みデータ`);
             parsedIng = {
               item: ing.item,
               quantity: priceInfo.quantity || ing.quantity,
               unit: priceInfo.unit || ing.unit,
               price: ing.price || priceInfo.price || ''
             };
+            console.log(`🍳 材料${index + 1}: 分離済み結果:`, parsedIng);
           } else if (ing.item && !ing.quantity && !ing.unit) {
             // 材料名だけの場合、文字列解析を試行
+            console.log(`🍳 材料${index + 1}: 文字列解析を実行`);
             parsedIng = parseIngredientString(ing.item);
             console.log(`🔍 材料解析: "${ing.item}" → ${JSON.stringify(parsedIng)}`);
           } else {
             // その他の場合
+            console.log(`🍳 材料${index + 1}: その他の処理`);
             parsedIng = {
               item: ing.item || '',
               quantity: priceInfo.quantity || ing.quantity || '',
               unit: priceInfo.unit || ing.unit || '',
               price: ing.price || priceInfo.price || ''
             };
+            console.log(`🍳 材料${index + 1}: その他結果:`, parsedIng);
           }
 
           // 単位変換を適用
@@ -1294,22 +2016,134 @@ window.runImport = async function(url, retryCount = 0) {
       stepsContainer.innerHTML = '';
       const steps = Array.isArray(recipeData.steps) ? recipeData.steps : [];
       console.log('📝 手順データ:', steps);
+      console.log('📝 手順データの詳細:', {
+        length: steps.length,
+        type: typeof steps,
+        isArray: Array.isArray(steps),
+        firstStep: steps[0],
+        allSteps: steps
+      });
+      
+      // 手順の分離状況を詳細にログ出力
       if (steps.length > 0) {
+        console.log('📝 手順分離チェック:');
         steps.forEach((step, index) => {
-          console.log(`📝 手順${index + 1}:`, step, 'タイプ:', typeof step);
+          console.log(`📝 手順${index + 1}:`, {
+            step: step,
+            type: typeof step,
+            isObject: typeof step === 'object',
+            hasStep: !!(step && step.step),
+            hasInstruction: !!(step && step.instruction),
+            stepContent: step?.step || step?.instruction || step
+          });
+        });
+      } else {
+        console.log('⚠️ 手順が抽出されていません。番号付き手順の抽出を確認してください。');
+        console.log('🔍 番号付き手順のパターンを検索中...');
+        
+        // 番号付き手順のパターンを検索
+        const numberedPatterns = [
+          /\d+\.\s+[^0-9]/g, // 「1. 手順内容」
+          /\d+\)\s+[^0-9]/g, // 「1) 手順内容」
+          /手順\d+:\s*[^0-9]/g, // 「手順1: 内容」
+          /手順\d+\.\s*[^0-9]/g, // 「手順1. 内容」
+          /Step\s*\d+:\s*[^0-9]/gi, // 「Step 1: 内容」
+          /Étape\s*\d+:\s*[^0-9]/gi, // 「Étape 1: 内容」
+          /[A-Z][a-z]+\s*\d+:\s*[^0-9]/g, // 「Preparation 1:」等
+          /<li[^>]*>([^<]+)<\/li>/g, // HTMLの<li>タグ内の手順
+          /<ol[^>]*>[\s\S]*?<\/ol>/g // HTMLの<ol>タグ全体
+        ];
+        
+        numberedPatterns.forEach((pattern, index) => {
+          const matches = text.match(pattern);
+          if (matches && matches.length > 0) {
+            console.log(`🔍 パターン${index + 1}で番号付き手順を発見:`, matches.slice(0, 3));
+          }
+        });
+        
+        if (url && url.includes('.fr')) {
+          console.log('🇫🇷 フランス語サイト検出: 手順抽出の詳細デバッグを実行');
+          console.log('🇫🇷 元のテキスト内容（最初の2000文字）:', text.substring(0, 2000));
+          
+          // フランス語サイトの手順セクションを検索
+          const preparationMatch = text.match(/Préparation[\s\S]*?(?=\n\n|\n[A-Z]|$)/i);
+          if (preparationMatch) {
+            console.log('🇫🇷 Préparationセクションを発見:', preparationMatch[0].substring(0, 1000));
+          } else {
+            console.log('🇫🇷 Préparationセクションが見つかりません');
+          }
+          
+          // 番号付き手順の具体的な検索
+          const stepMatches = text.match(/\d+\.\s+[^0-9][^0-9]*?(?=\d+\.|$)/g);
+          if (stepMatches && stepMatches.length > 0) {
+            console.log('🇫🇷 番号付き手順を発見:', stepMatches.slice(0, 3));
+          } else {
+            console.log('🇫🇷 番号付き手順が見つかりません');
+          }
+        }
+      }
+      if (steps.length > 0) {
+        console.log('📝 手順処理開始:', steps.length, '件の手順を処理');
+        steps.forEach((step, index) => {
+          console.log(`📝 手順${index + 1}の詳細:`, {
+            step: step,
+            type: typeof step,
+            hasInstruction: !!(step && step.instruction),
+            hasStep: !!(step && step.step),
+            isString: typeof step === 'string'
+          });
+          
           try {
             // 手順データの形式を確認して適切に処理
             if (typeof step === 'string') {
-              addStepRow({ instruction: step });
+              // 番号付き手順の包括的処理
+              let processedStep = step;
+              
+              // 番号付き手順のパターンを包括的に処理
+              processedStep = processedStep
+                .replace(/^\d+\.\s*/, '') // 「1. 手順内容」→「手順内容」
+                .replace(/^\d+\)\s*/, '') // 「1) 手順内容」→「手順内容」
+                .replace(/^手順\d+:\s*/, '') // 「手順1: 内容」→「内容」
+                .replace(/^手順\d+\.\s*/, '') // 「手順1. 内容」→「内容」
+                .replace(/^Step\s*\d+:\s*/i, '') // 「Step 1: 内容」→「内容」
+                .replace(/^Étape\s*\d+:\s*/i, '') // 「Étape 1: 内容」→「内容」
+                .replace(/^[A-Z][a-z]+:\s*/, '') // 手順タイトルを除去
+                .replace(/^[A-Z][a-z]+\s*\d+:\s*/, '') // 「Preparation 1:」等を除去
+                .trim();
+              
+              console.log(`📝 番号付き手順処理: "${step}" → "${processedStep}"`);
+              console.log(`📝 手順${index + 1}を追加中:`, processedStep);
+              addStepRow({ instruction: processedStep });
             } else if (step && typeof step === 'object') {
+              let instructionText = '';
               if (step.instruction) {
-                addStepRow({ instruction: step.instruction });
+                instructionText = step.instruction;
+                console.log(`📝 手順${index + 1} (instruction):`, instructionText);
               } else if (step.step) {
-                addStepRow({ instruction: step.step });
+                instructionText = step.step;
+                console.log(`📝 手順${index + 1} (step):`, instructionText);
               } else {
                 console.warn('⚠️ 手順オブジェクトにinstructionもstepもありません:', step);
-                addStepRow({ instruction: '' });
+                instructionText = '';
               }
+              
+              // オブジェクト形式の手順にも番号付き手順の処理を適用
+              if (instructionText) {
+                instructionText = instructionText
+                  .replace(/^\d+\.\s*/, '') // 「1. 手順内容」→「手順内容」
+                  .replace(/^\d+\)\s*/, '') // 「1) 手順内容」→「手順内容」
+                  .replace(/^手順\d+:\s*/, '') // 「手順1: 内容」→「内容」
+                  .replace(/^手順\d+\.\s*/, '') // 「手順1. 内容」→「内容」
+                  .replace(/^Step\s*\d+:\s*/i, '') // 「Step 1: 内容」→「内容」
+                  .replace(/^Étape\s*\d+:\s*/i, '') // 「Étape 1: 内容」→「内容」
+                  .replace(/^[A-Z][a-z]+:\s*/, '') // 手順タイトルを除去
+                  .replace(/^[A-Z][a-z]+\s*\d+:\s*/, '') // 「Preparation 1:」等を除去
+                  .trim();
+                console.log(`📝 オブジェクト手順の番号付き処理: "${step.instruction || step.step}" → "${instructionText}"`);
+              }
+              
+              console.log(`📝 手順${index + 1}を追加中:`, instructionText);
+              addStepRow({ instruction: instructionText });
             } else {
               console.warn('⚠️ 手順データが予期しない形式です:', step);
               addStepRow({ instruction: '' });
@@ -1321,7 +2155,9 @@ window.runImport = async function(url, retryCount = 0) {
             addStepRow({ instruction: '' });
           }
         });
+        console.log('📝 手順処理完了:', steps.length, '件の手順を処理しました');
       } else {
+        console.warn('⚠️ 手順データが空です。URL:', url);
         addStepRow();
       }
     }
@@ -1345,17 +2181,176 @@ window.runImport = async function(url, retryCount = 0) {
           const meta = doc.querySelector('meta[property="og:image"], meta[name="og:image"]');
           console.log('🖼️ og:image メタタグ:', meta?.getAttribute('content'));
 
-          // 拡張画像セレクターで検索
+          // 包括的な海外サイト対応画像セレクター
           const imageSelectors = [
             'img',
+            // イタリア語サイト
             '.gz-featured-image img', // giallozafferano
+            // 一般的なレシピ画像
             '.recipe-image img',
             '.featured-image img',
             '.post-thumbnail img',
             '.entry-image img',
             'figure img',
             '.hero-image img',
-            '.main-image img'
+            '.main-image img',
+            // シェフごはんサイト対応
+            '.recipe-detail img',
+            '.recipe-content img',
+            '.recipe-main img',
+            '.recipe-photo img',
+            '.recipe-image-container img',
+            '.recipe-header img',
+            '.recipe-body img',
+            // dancyu.jpサイト対応
+            '.recipe img',
+            '.article img',
+            '.content img',
+            '.main-content img',
+            '.article-content img',
+            '.post-content img',
+            // 雑誌系レシピサイト対応
+            '.recipe-step img',
+            '.step img',
+            // 海外サイト用の追加セレクター
+            '.cooking-image img',
+            '.food-image img',
+            '.dish-image img',
+            '.meal-image img',
+            '.cuisine-image img',
+            '.preparation-image img',
+            '.ingredients-image img',
+            '.method-image img',
+            '.procedure-image img',
+            '.technique-image img',
+            '.garnish-image img',
+            '.presentation-image img',
+            '.serving-image img',
+            '.plating-image img',
+            // 海外サイトの構造的セレクター
+            'article img',
+            '.article img',
+            '.post img',
+            '.entry img',
+            '.content img',
+            '.main img',
+            '.primary img',
+            '.secondary img',
+            // 海外サイトの一般的なクラス名
+            '.main-content img',
+            '.content img',
+            '.post-content img',
+            '.entry-content img',
+            '.article-content img',
+            '.recipe-content img',
+            '.cooking-content img',
+            '.food-content img',
+            // 海外サイトのalt属性ベース
+            'img[alt*="recipe"]',
+            'img[alt*="cooking"]',
+            'img[alt*="food"]',
+            'img[alt*="dish"]',
+            'img[alt*="meal"]',
+            'img[alt*="cuisine"]',
+            'img[alt*="preparation"]',
+            'img[alt*="ingredients"]',
+            'img[alt*="step"]',
+            'img[alt*="instruction"]',
+            'img[alt*="method"]',
+            'img[alt*="procedure"]',
+            'img[alt*="process"]',
+            'img[alt*="technique"]',
+            'img[alt*="garnish"]',
+            'img[alt*="presentation"]',
+            'img[alt*="serving"]',
+            'img[alt*="plating"]',
+            // 海外サイトのクラス名ベース
+            'img[class*="recipe"]',
+            'img[class*="cooking"]',
+            'img[class*="food"]',
+            'img[class*="dish"]',
+            'img[class*="meal"]',
+            'img[class*="cuisine"]',
+            'img[class*="preparation"]',
+            'img[class*="ingredients"]',
+            'img[class*="step"]',
+            'img[class*="instruction"]',
+            'img[class*="method"]',
+            'img[class*="procedure"]',
+            'img[class*="process"]',
+            'img[class*="technique"]',
+            'img[class*="garnish"]',
+            'img[class*="presentation"]',
+            'img[class*="serving"]',
+            'img[class*="plating"]',
+            // 海外サイトのID名ベース
+            'img[id*="recipe"]',
+            'img[id*="cooking"]',
+            'img[id*="food"]',
+            'img[id*="dish"]',
+            'img[id*="meal"]',
+            'img[id*="cuisine"]',
+            'img[id*="preparation"]',
+            'img[id*="ingredients"]',
+            'img[id*="step"]',
+            'img[id*="instruction"]',
+            'img[id*="method"]',
+            'img[id*="procedure"]',
+            'img[id*="process"]',
+            'img[id*="technique"]',
+            'img[id*="garnish"]',
+            'img[id*="presentation"]',
+            'img[id*="serving"]',
+            'img[id*="plating"]',
+            // 海外サイトのsrc属性ベース
+            'img[src*="recipe"]',
+            'img[src*="cooking"]',
+            'img[src*="food"]',
+            'img[src*="dish"]',
+            'img[src*="meal"]',
+            'img[src*="cuisine"]',
+            'img[src*="preparation"]',
+            'img[src*="ingredients"]',
+            'img[src*="step"]',
+            'img[src*="instruction"]',
+            'img[src*="method"]',
+            'img[src*="procedure"]',
+            'img[src*="process"]',
+            'img[src*="technique"]',
+            'img[src*="garnish"]',
+            'img[src*="presentation"]',
+            'img[src*="serving"]',
+            'img[src*="plating"]',
+            '.cooking-step img',
+            '.how-to img',
+            // dancyu.jp特有の構造
+            'img[src*="dancyu"]',
+            'img[src*="president"]',
+            'img[alt*="レシピ"]',
+            'img[alt*="料理"]',
+            'img[alt*="スパイシー"]',
+            'img[alt*="ラム"]',
+            'img[alt*="仔羊"]',
+            // 一般的な画像要素
+            'figure img',
+            '.image img',
+            '.photo img',
+            '.picture img',
+            // dancyu.jp特有の詳細セレクター
+            'img[src*=".jpg"]',
+            'img[src*=".jpeg"]',
+            'img[src*=".png"]',
+            'img[src*=".webp"]',
+            // より広範囲な画像検索
+            'img[width]',
+            'img[height]',
+            'img[class*="image"]',
+            'img[class*="photo"]',
+            'img[class*="picture"]',
+            'img[class*="recipe"]',
+            'img[class*="cooking"]',
+            'img[class*="food"]',
+            'img[class*="dish"]'
           ];
 
           let allImages = [];
@@ -1497,10 +2492,70 @@ window.runImport = async function(url, retryCount = 0) {
           // 重複除去
           allImages = [...new Set(allImages)];
           console.log('🖼️ ページ内の画像数（リンク・背景含む）:', allImages.length);
+          
+          // dancyu.jp専用のデバッグログ
+          if (url && url.includes('dancyu.jp')) {
+            console.log('🖼️ dancyu.jp専用デバッグ:');
+            console.log('  - 全画像要素:', allImages.length);
+            allImages.forEach((img, index) => {
+              const src = img.getAttribute('src') || img.getAttribute('data-src');
+              const alt = img.getAttribute('alt') || '';
+              console.log(`  - 画像${index + 1}:`, { src, alt, className: img.className });
+            });
+          }
 
           // 最初の画像を取得
           const firstImg = doc.querySelector('img');
           console.log('🖼️ 最初の画像src:', firstImg?.getAttribute('src'));
+          
+          // dancyu.jp専用の追加画像検索
+          if (url && url.includes('dancyu.jp')) {
+            console.log('🖼️ dancyu.jp専用画像検索を実行');
+            
+            // より広範囲な画像検索
+            const additionalSelectors = [
+              'img',
+              'img[src]',
+              'img[data-src]',
+              'img[data-lazy]',
+              'img[data-original]',
+              'img[loading="lazy"]',
+              'img[loading="eager"]'
+            ];
+            
+            additionalSelectors.forEach(selector => {
+              try {
+                const images = doc.querySelectorAll(selector);
+                images.forEach(img => {
+                  const src = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-lazy') || img.getAttribute('data-original');
+                  if (src && src.length > 10) {
+                    const virtualImg = {
+                      getAttribute: (attr) => {
+                        if (attr === 'src') return src;
+                        if (attr === 'alt') return img.getAttribute('alt') || '';
+                        return '';
+                      },
+                      className: img.className || '',
+                      parentElement: img.parentElement,
+                      width: img.width || 0,
+                      height: img.height || 0,
+                      isVirtual: true,
+                      isDancyuSpecific: true,
+                      originalElement: img
+                    };
+                    allImages.push(virtualImg);
+                    console.log('🖼️ dancyu追加画像:', src);
+                  }
+                });
+              } catch (e) {
+                console.warn('🖼️ dancyu画像検索エラー:', e);
+              }
+            });
+            
+            // 重複除去（再実行）
+            allImages = [...new Set(allImages)];
+            console.log('🖼️ dancyu追加検索後の画像数:', allImages.length);
+          }
 
           // 画像候補を優先順位で選択
           let candidates = [];
@@ -1559,6 +2614,31 @@ window.runImport = async function(url, retryCount = 0) {
                   className.includes('recipe') || className.includes('main') ||
                   parentClass.includes('recipe') || parentClass.includes('main')) {
                 priority = 2;
+              }
+              // シェフごはんサイト特有の画像を優先
+              else if (src.includes('chefgohan.gnavi.co.jp') || 
+                       src.includes('gnavi.co.jp') ||
+                       src.includes('gnst.jp')) {
+                priority = 1; // 最高優先度
+                console.log('🖼️ シェフごはん画像を最優先に設定:', src);
+              }
+              // dancyu.jpサイト特有の画像を優先
+              else if (src.includes('dancyu.jp') || 
+                       src.includes('president.co.jp')) {
+                priority = 1; // 最高優先度
+                console.log('🖼️ dancyu画像を最優先に設定:', src);
+              }
+              // dancyu.jp特有のalt属性キーワードで優先
+              else if (alt.includes('レシピ') || alt.includes('料理') || 
+                       alt.includes('スパイシー') || alt.includes('ラム') || 
+                       alt.includes('仔羊') || alt.includes('ロスト')) {
+                priority = 2; // 高優先度
+                console.log('🖼️ dancyuキーワード画像を優先:', src, alt);
+              }
+              // dancyu.jp専用検索で見つかった画像を優先
+              else if (img.isDancyuSpecific) {
+                priority = 1; // 最高優先度
+                console.log('🖼️ dancyu専用検索画像を最優先:', src);
               }
               // サイト特有の構造に対応
               else if (src.includes('wp-content/uploads') &&
@@ -1633,7 +2713,8 @@ window.runImport = async function(url, retryCount = 0) {
                 imgUrl = new URL(raw, url).href;
               }
               console.log('🖼️ 絶対URL化:', imgUrl);
-            } catch {
+            } catch (error) {
+              console.warn('🖼️ URL正規化エラー:', error, '元URL:', raw);
               imgUrl = raw;
               console.log('🖼️ 相対URL使用:', imgUrl);
             }
@@ -1740,7 +2821,15 @@ window.runImport = async function(url, retryCount = 0) {
 
     // URL取り込み時のカテゴリータグ自動追加
     try {
-      await addUrlImportTags(url, isJapaneseSite);
+      // URLから言語を判定（isJapaneseSite変数の再計算）
+      const isJapaneseSite = url && (
+        url.includes('.jp') ||
+        url.includes('japanese') ||
+        url.includes('japan') ||
+        /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(url) ||
+        /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(html.substring(0, 1000))
+      );
+      await addUrlImportTags(url, window.isJapaneseSite);
     } catch (error) {
       console.warn('⚠️ カテゴリータグ追加でエラー:', error);
       // エラーがあってもレシピ取り込みは続行
@@ -1904,8 +2993,13 @@ const addIngredientRow = (data = {}) => {
 };
 
 const addStepRow = (data = {}) => {
+  console.log('📝 addStepRow呼び出し:', data);
+  
   const container = document.getElementById('stepsEditor');
-  if (!container) return;
+  if (!container) {
+    console.error('❌ stepsEditorコンテナが見つかりません');
+    return;
+  }
   
   // 既存の番号を除去（例：「1. 手順内容」→「手順内容」）
   let instruction = '';
@@ -1914,17 +3008,26 @@ const addStepRow = (data = {}) => {
   if (data && typeof data === 'object') {
     if (data.instruction) {
       instruction = String(data.instruction);
+      console.log('📝 instructionから取得:', instruction);
     } else if (data.step) {
       instruction = String(data.step);
+      console.log('📝 stepから取得:', instruction);
     }
   } else if (typeof data === 'string') {
     instruction = data;
+    console.log('📝 文字列から取得:', instruction);
   }
   
   // 数字とピリオドで始まる番号を除去
   if (instruction && typeof instruction === 'string') {
+    const originalInstruction = instruction;
     instruction = instruction.replace(/^\d+\.\s*/, '');
+    if (originalInstruction !== instruction) {
+      console.log('📝 番号除去:', originalInstruction, '→', instruction);
+    }
   }
+  
+  console.log('📝 最終手順テキスト:', instruction);
   
   const div = document.createElement('div');
   div.className = 'step-row';
@@ -1934,26 +3037,69 @@ const addStepRow = (data = {}) => {
   `;
   container.appendChild(div);
   
-  console.log('手順入力欄を作成しました');
+  console.log('📝 手順行を追加しました:', instruction.substring(0, 50) + (instruction.length > 50 ? '...' : ''));
 };
 
 // Category and Tag Management
 const updateCategorySelect = () => {
   const text = document.getElementById('selectedCategoryText');
-  if (text) text.textContent = selectedCategory || 'カテゴリーを選択';
+  const selectedCategoriesContainer = document.getElementById('selectedCategories');
+  
+  console.log('updateCategorySelect呼び出し:');
+  console.log('- selectedCategories:', selectedCategories);
+  console.log('- selectedCategories.length:', selectedCategories.length);
+  console.log('- selectedCategoriesContainer存在:', !!selectedCategoriesContainer);
+  
+  if (selectedCategories.length === 0) {
+    if (text) text.textContent = 'カテゴリーを選択';
+    if (selectedCategoriesContainer) selectedCategoriesContainer.innerHTML = '';
+  } else {
+    if (text) text.textContent = `${selectedCategories.length}個のカテゴリーを選択中`;
+    if (selectedCategoriesContainer) {
+      const categoryHTML = selectedCategories.map(category => 
+        `<span class="selected-category-tag" style="display: inline-block; margin: 2px 4px; padding: 4px 8px; background: #1976d2; color: white; border-radius: 12px; font-size: 0.8em; font-weight: 500;">${category} <button type="button" class="remove-category-btn" data-category="${category}" style="margin-left: 4px; background: rgba(255,255,255,0.3); border: none; border-radius: 50%; width: 16px; height: 16px; color: white; cursor: pointer; font-size: 12px; line-height: 1;">&times;</button></span>`
+      ).join('');
+      
+      console.log('- 生成されるHTML:', categoryHTML);
+      selectedCategoriesContainer.innerHTML = categoryHTML;
+    }
+  }
   updateRecipeTypeByCategory();
+};
+
+// カテゴリモーダル内の選択状態プレビューを更新
+const updateCategoryModalPreview = () => {
+  const previewContainer = document.getElementById('selected-categories-list');
+  if (!previewContainer) {
+    console.log('プレビューコンテナが見つかりません');
+    return;
+  }
+  
+  console.log('プレビュー更新 - selectedCategories:', selectedCategories);
+  
+  if (selectedCategories.length === 0) {
+    previewContainer.innerHTML = '<div style="color: #666; font-style: italic; text-align: center; padding: 0.5rem;">選択されたカテゴリーはありません</div>';
+  } else {
+    previewContainer.innerHTML = selectedCategories.map(category => 
+      `<span class="selected-category-tag" style="display: inline-block; margin: 2px 4px; padding: 6px 12px; background: #1976d2; color: white; border-radius: 16px; font-size: 0.85em; font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">${category}</span>`
+    ).join('');
+  }
 };
 
 const updateTagSelect = () => {
   const text = document.getElementById('selectedTagsText');
-  if (!text) return;
+  const selectedTagsContainer = document.getElementById('selectedTags');
   
   if (selectedTags.length === 0) {
-    text.textContent = 'タグを選択';
-  } else if (selectedTags.length <= 2) {
-    text.textContent = selectedTags.join('、');
+    if (text) text.textContent = 'タグを選択';
+    if (selectedTagsContainer) selectedTagsContainer.innerHTML = '';
   } else {
-    text.textContent = `${selectedTags[0]} 他${selectedTags.length - 1}個`;
+    if (text) text.textContent = `${selectedTags.length}個のタグを選択中`;
+    if (selectedTagsContainer) {
+      selectedTagsContainer.innerHTML = selectedTags.map(tag => 
+        `<span class="selected-tag-tag" style="display: inline-block; margin: 2px 4px; padding: 4px 8px; background: #1976d2; color: white; border-radius: 12px; font-size: 0.8em; font-weight: 500;">${tag} <button type="button" class="remove-tag-btn" data-tag="${tag}" style="margin-left: 4px; background: rgba(255,255,255,0.3); border: none; border-radius: 50%; width: 16px; height: 16px; color: white; cursor: pointer; font-size: 12px; line-height: 1;">&times;</button></span>`
+      ).join('');
+    }
   }
 };
 
@@ -1967,7 +3113,7 @@ const updateRecipeTypeByCategory = () => {
   
   if (!Object.values(elements).every(el => el)) return;
   
-  const category = selectedCategory.toLowerCase();
+  const category = selectedCategories.length > 0 ? selectedCategories[0].toLowerCase() : '';
   
   if (category.includes('パン') || category.includes('bread')) {
     currentRecipeType = 'bread';
@@ -1997,11 +3143,20 @@ const toggleModal = (modalId, show) => {
 };
 
 const setupModalEvents = () => {
-  // URL Import Modal
-  document.getElementById('urlImportBtn')?.addEventListener('click', () => {
-    toggleModal('url-import-modal', true);
-    document.getElementById('urlInput')?.focus();
-  });
+  // URL Import Modal (料理名の上のボタン - 既存のモーダルを開く)
+  const urlImportBtn = document.getElementById('urlImportBtn');
+  console.log('🔍 URL取り込みボタン要素:', urlImportBtn);
+  
+  if (urlImportBtn) {
+    urlImportBtn.addEventListener('click', () => {
+      console.log('🔍 URL取り込みボタンがクリックされました');
+      toggleModal('url-import-modal', true);
+      document.getElementById('urlInput')?.focus();
+    });
+    console.log('✅ URL取り込みボタンのイベントリスナーを設定しました');
+  } else {
+    console.error('❌ URL取り込みボタンが見つかりません');
+  }
   
   document.getElementById('url-import-modal-close-btn')?.addEventListener('click', () => toggleModal('url-import-modal', false));
   document.getElementById('urlImportCancelBtn')?.addEventListener('click', () => toggleModal('url-import-modal', false));
@@ -2011,60 +3166,47 @@ const setupModalEvents = () => {
     if (!url) return alert('URLを入力してください。');
     if (!url.startsWith('http')) return alert('有効なURLを入力してください。');
     
-    const btn = document.getElementById('urlImportConfirmBtn');
-    const loadingPopup = document.getElementById('urlLoadingPopup');
-    
-    // ボタンを無効化
-    btn.disabled = true;
-    btn.textContent = '読み込み中...';
-    
-    // モーダルを閉じてローディングアニメーション表示
+    // モーダルを閉じる
     toggleModal('url-import-modal', false);
-    if (loadingPopup) {
-      loadingPopup.style.display = 'flex';
-      // ローディングメッセージを更新
-      const loadingTitle = loadingPopup.querySelector('.loading-title');
-      const loadingMessage = loadingPopup.querySelector('.loading-message');
-      const loadingStatus = loadingPopup.querySelector('.loading-status');
-      
-      if (loadingTitle) loadingTitle.textContent = 'レシピを読み込み中...';
-      if (loadingMessage) loadingMessage.textContent = 'URLからレシピ情報を取得しています';
-      if (loadingStatus) loadingStatus.textContent = '1回目を試行中...';
-    }
     
-    try {
-      await window.runImport(url);
-      alert('レシピの読み込みが完了しました！');
-    } catch (error) {
-      console.error('URL取り込み最終エラー:', error);
-      
-      // 失敗時は少し待ってからポップアップを閉じる
-      setTimeout(() => {
-        if (loadingPopup) {
-          loadingPopup.style.display = 'none';
-        }
-        alert(`レシピの読み込みに失敗しました: ${error.message}`);
-      }, 3000); // 3秒間失敗メッセージを表示
-      
-      return; // finallyブロックをスキップ
-    } finally {
-      // ローディングアニメーション非表示
-      if (loadingPopup) {
-        loadingPopup.style.display = 'none';
-      }
-      // ボタン復旧
-      btn.disabled = false;
-      btn.textContent = '読み込み開始';
-      // URLフィールドクリア
-      const urlInput = document.getElementById('urlInput');
-      if (urlInput) urlInput.value = '';
-    }
+    // API選択ポップアップを表示
+    showApiSelectionModal(url);
   });
   
   // Category Modal
   document.getElementById('categorySelectBtn')?.addEventListener('click', async () => {
     toggleModal('category-modal', true);
     await loadCategories(); // モーダル表示時にカテゴリーを読み込み
+    
+    // 既存の選択状態をクリアして、現在のselectedCategoriesを反映
+    document.querySelectorAll('.category-option').forEach(el => {
+      el.classList.remove('selected');
+    });
+    
+    // 現在のselectedCategoriesに基づいて選択状態を復元
+    if (selectedCategories.length > 0) {
+      selectedCategories.forEach(categoryName => {
+        // 基本カテゴリから検索
+        const basicOption = Array.from(document.querySelectorAll('#category-options .category-option')).find(el => 
+          el.textContent.trim() === categoryName
+        );
+        if (basicOption) {
+          basicOption.classList.add('selected');
+        }
+        
+        // カスタムカテゴリから検索
+        const customOption = Array.from(document.querySelectorAll('#custom-category-options .category-option')).find(el => {
+          const span = el.querySelector('span');
+          const text = span ? span.textContent.trim() : el.textContent.trim();
+          return text === categoryName;
+        });
+        if (customOption) {
+          customOption.classList.add('selected');
+        }
+      });
+    }
+    
+    updateCategoryModalPreview(); // 選択状態プレビューを更新
   });
   
   // Tag Modal  
@@ -2261,21 +3403,32 @@ const setupModalEvents = () => {
           categoryDiv.className = 'category-option';
           categoryDiv.textContent = category;
           categoryDiv.addEventListener('click', () => {
-            // 既存の選択を解除
-            document.querySelectorAll('.category-option').forEach(el => {
-              el.classList.remove('selected');
-            });
-            // 新しい選択を追加
-            categoryDiv.classList.add('selected');
+            // 複数選択対応：選択状態をトグル
+            console.log('カテゴリクリック:', categoryDiv.textContent, '現在の選択状態:', categoryDiv.classList.contains('selected'));
+            categoryDiv.classList.toggle('selected');
+            console.log('クリック後の選択状態:', categoryDiv.classList.contains('selected'));
+            
+            // 選択状態をselectedCategoriesに反映
+            const categoryName = categoryDiv.textContent.trim();
+            if (categoryDiv.classList.contains('selected')) {
+              if (!selectedCategories.includes(categoryName)) {
+                selectedCategories.push(categoryName);
+              }
+            } else {
+              selectedCategories = selectedCategories.filter(cat => cat !== categoryName);
+            }
+            console.log('更新後のselectedCategories:', selectedCategories);
+            
+            updateCategoryModalPreview(); // プレビューを更新
           });
           categoryOptionsEl.appendChild(categoryDiv);
         });
 
         console.log('基本カテゴリーを読み込み完了:', basicCategories.length, '件');
 
-        if (window.selectedCategory) {
+        if (selectedCategories.length > 0) {
           Array.from(categoryOptionsEl.children).forEach(option => {
-            if (option.textContent.trim() === window.selectedCategory) {
+            if (selectedCategories.includes(option.textContent.trim())) {
               option.classList.add('selected');
             }
           });
@@ -2325,12 +3478,24 @@ const setupModalEvents = () => {
               categoryDiv.appendChild(categoryText);
               categoryDiv.appendChild(deleteBtn);
               
-              // カテゴリー選択イベント
+              // カテゴリー選択イベント（複数選択対応）
               categoryText.addEventListener('click', () => {
-                document.querySelectorAll('.category-option').forEach(el => {
-                  el.classList.remove('selected');
-                });
-                categoryDiv.classList.add('selected');
+                console.log('カスタムカテゴリクリック:', categoryText.textContent, '現在の選択状態:', categoryDiv.classList.contains('selected'));
+                categoryDiv.classList.toggle('selected');
+                console.log('クリック後の選択状態:', categoryDiv.classList.contains('selected'));
+                
+                // 選択状態をselectedCategoriesに反映
+                const categoryName = categoryText.textContent.trim();
+                if (categoryDiv.classList.contains('selected')) {
+                  if (!selectedCategories.includes(categoryName)) {
+                    selectedCategories.push(categoryName);
+                  }
+                } else {
+                  selectedCategories = selectedCategories.filter(cat => cat !== categoryName);
+                }
+                console.log('更新後のselectedCategories:', selectedCategories);
+                
+                updateCategoryModalPreview(); // プレビューを更新
               });
               
               // カテゴリー削除イベント
@@ -2344,10 +3509,10 @@ const setupModalEvents = () => {
 
             console.log('カスタムカテゴリーを読み込み完了:', customCategories.length, '件');
 
-            if (window.selectedCategory) {
+            if (selectedCategories.length > 0) {
               Array.from(customCategoryOptionsEl.children).forEach(option => {
                 const text = option.querySelector('span')?.textContent || option.textContent;
-                if (text.trim() === window.selectedCategory) {
+                if (selectedCategories.includes(text.trim())) {
                   option.classList.add('selected');
                 }
               });
@@ -2692,8 +3857,59 @@ const setupModalEvents = () => {
     }
   }
 
+  // 読みやすいテキスト形式を生成する関数
+  window.generateReadableText = function(recipeData, isOriginal = false) {
+    let text = '';
+    
+    if (isOriginal && recipeData.original_title) {
+      text += `${recipeData.original_title}\n\n`;
+    } else {
+      text += `${recipeData.title}\n\n`;
+    }
+    
+    if (isOriginal && recipeData.original_description) {
+      text += `${recipeData.original_description}\n\n`;
+    } else if (recipeData.description) {
+      text += `${recipeData.description}\n\n`;
+    }
+    
+    if (recipeData.servings) {
+      text += `人数: ${recipeData.servings}人分\n\n`;
+    }
+    
+    if (isOriginal && recipeData.original_ingredients && recipeData.original_ingredients.length > 0) {
+      text += `材料:\n`;
+      recipeData.original_ingredients.forEach(ingredient => {
+        text += `- ${ingredient.item}: ${ingredient.quantity}${ingredient.unit}\n`;
+      });
+      text += `\n`;
+    } else if (recipeData.ingredients && recipeData.ingredients.length > 0) {
+      text += `材料:\n`;
+      recipeData.ingredients.forEach(ingredient => {
+        text += `- ${ingredient.item}: ${ingredient.quantity}${ingredient.unit}\n`;
+      });
+      text += `\n`;
+    }
+    
+    if (isOriginal && recipeData.original_steps && recipeData.original_steps.length > 0) {
+      recipeData.original_steps.forEach((step, index) => {
+        text += `ステップ${index + 1}:\n${step.step}\n\n`;
+      });
+    } else if (recipeData.steps && recipeData.steps.length > 0) {
+      recipeData.steps.forEach((step, index) => {
+        text += `ステップ${index + 1}:\n${step.step}\n\n`;
+      });
+    }
+    
+    if (recipeData.notes) {
+      text += `メモ:\n${recipeData.notes}\n`;
+    }
+    
+    return text;
+  };
+
   // 未使用カテゴリーの削除関数（recipe_view.htmlと共通）
-  async function cleanupUnusedCategory(categoryName) {
+  window.cleanupUnusedCategory = async function(categoryName) {
     try {
       console.log('カテゴリー使用状況をチェック中:', categoryName);
       
@@ -2746,7 +3962,7 @@ const setupModalEvents = () => {
     } catch (error) {
       console.error('カテゴリークリーンアップエラー:', error);
     }
-  }
+  };
 
   // カスタムカテゴリーの手動削除関数
   async function deleteCustomCategory(categoryName) {
@@ -2935,7 +4151,7 @@ const setupModalEvents = () => {
     // 選択されていたカテゴリーが削除された場合は選択をクリア
     const selectedEl = document.querySelector('.category-option.selected span');
     if (selectedEl && selectedEl.textContent === categoryName) {
-      selectedCategory = null;
+      selectedCategories = [];
       document.getElementById('selectedCategoryText').textContent = 'カテゴリーを選択';
     }
     
@@ -2964,13 +4180,26 @@ const setupModalEvents = () => {
 
   // Category Modal buttons
   document.getElementById('category-ok-btn')?.addEventListener('click', () => {
-    // Handle category selection
-    const selectedCategoryEl = document.querySelector('.category-options .selected');
-    if (selectedCategoryEl) {
-      selectedCategory = selectedCategoryEl.textContent;
-      document.getElementById('selectedCategoryText').textContent = selectedCategory;
-    }
+    // selectedCategoriesは既にクリック時に更新されているので、そのまま使用
+    console.log('OKボタン - 最終的な選択されたカテゴリ:', selectedCategories);
+    updateCategorySelect();
     toggleModal('category-modal', false);
+  });
+
+  // カテゴリ削除ボタンのイベントハンドラー
+  document.addEventListener('click', (e) => {
+    if (e.target.classList.contains('remove-category-btn')) {
+      const categoryToRemove = e.target.getAttribute('data-category');
+      selectedCategories = selectedCategories.filter(cat => cat !== categoryToRemove);
+      updateCategorySelect();
+    }
+    
+    // タグ削除ボタンのイベントハンドラー
+    if (e.target.classList.contains('remove-tag-btn')) {
+      const tagToRemove = e.target.getAttribute('data-tag');
+      selectedTags = selectedTags.filter(tag => tag !== tagToRemove);
+      updateTagSelect();
+    }
   });
 
   document.getElementById('category-cancel-btn')?.addEventListener('click', () => {
@@ -3102,6 +4331,9 @@ const setupModalEvents = () => {
 // Recipe Save Function
 const saveRecipeToDatabase = async () => {
   try {
+    console.log('=== レシピ保存開始 ===');
+    console.log('保存前のselectedCategories:', selectedCategories);
+    
     const params = new URLSearchParams(window.location.search);
     const recipeId = params.get('id');
     
@@ -3233,15 +4465,18 @@ const saveRecipeToDatabase = async () => {
       translationData = await getTranslationData();
       console.log('Translation data with steps:', translationData);
 
-      // 翻訳レシピの場合、カテゴリーを「翻訳」に設定
-      selectedCategory = '翻訳';
-      console.log('✅ 翻訳レシピのカテゴリーを「翻訳」に設定しました');
+      // 翻訳レシピの場合、既存のカテゴリに「翻訳」を追加
+      console.log('翻訳処理前のselectedCategories:', selectedCategories);
+      if (!selectedCategories.includes('翻訳')) {
+        selectedCategories.push('翻訳');
+        console.log('✅ 翻訳レシピのカテゴリーに「翻訳」を追加しました');
+        console.log('現在の選択されたカテゴリ:', selectedCategories);
+      } else {
+        console.log('✅ 「翻訳」カテゴリは既に選択されています');
+      }
 
       // UIにも反映
-      const categoryText = document.getElementById('selectedCategoryText');
-      if (categoryText) {
-        categoryText.textContent = '翻訳';
-      }
+      updateCategorySelect();
     }
     
     // 編集時の元のカテゴリーとタグを記録（未使用削除用）
@@ -3257,15 +4492,62 @@ const saveRecipeToDatabase = async () => {
       }
     }
     
+    console.log('=== 保存前の状態確認 ===');
+    console.log('selectedCategories:', selectedCategories);
+    console.log('selectedCategories.length:', selectedCategories.length);
+    console.log('selectedCategories.join結果:', selectedCategories.join(', '));
+    
+    // selectedCategoriesの配列の整合性をチェック
+    if (!Array.isArray(selectedCategories)) {
+      console.warn('⚠️ selectedCategoriesが配列ではありません。初期化します。');
+      selectedCategories = [];
+    }
+    
+    // 配列の長さが異常な場合は修正
+    if (selectedCategories.length < 0) {
+      console.warn('⚠️ selectedCategoriesの長さが異常です。修正します。');
+      console.warn('⚠️ 異常な配列の内容:', selectedCategories);
+      selectedCategories = [];
+    }
+    
+    // 配列の内容を検証
+    selectedCategories = selectedCategories.filter(item => 
+      item !== null && item !== undefined && typeof item === 'string' && item.trim() !== ''
+    );
+    
+    // 読みやすいテキスト形式を生成（AI解析結果から取得または動的生成）
+    let readableText = null;
+    
+    // AI解析結果にreadable_textが含まれている場合はそれを使用
+    if (window.currentRecipeData && window.currentRecipeData.readable_text) {
+      readableText = window.currentRecipeData.readable_text;
+      console.log('📝 AI解析結果から読みやすいテキストを取得:', readableText);
+    } else {
+      // 動的に生成
+      const readableTextData = {
+        title,
+        description: document.getElementById('description')?.value?.trim() || null,
+        servings: document.getElementById('servings')?.value?.trim() || null,
+        ingredients: ingredients,
+        steps: steps,
+        notes: document.getElementById('notes')?.value?.trim() || null
+      };
+      
+      readableText = window.generateReadableText(readableTextData);
+      console.log('📝 動的に生成された読みやすいテキスト:', readableText);
+    }
+    
     const recipeData = {
       title,
-      category: selectedCategory || null,
+      category: selectedCategories.length > 0 ? selectedCategories.join(', ') : null,
       tags: selectedTags.length > 0 ? selectedTags : null,
       notes: document.getElementById('notes')?.value?.trim() || null,
       image_url: window.currentImageData || null,
       source_url: currentSourceUrl || null,
       is_ai_generated: false, // 通常のレシピはfalse
-      is_groq_generated: window.isGroqGenerated || false // URL取り込み時はtrue
+      is_groq_generated: window.isGroqGenerated || false, // URL取り込み時はtrue
+      original_recipe_data: originalRecipeData ? JSON.stringify(originalRecipeData) : null, // 海外サイト取り込み時の翻訳前データ（JSON文字列として保存）
+      readable_text: readableText // 読みやすいテキスト形式
     };
     
     console.log('=== レシピ保存データ ===');
@@ -3273,6 +4555,8 @@ const saveRecipeToDatabase = async () => {
     console.log('Current source URL:', currentSourceUrl);
     console.log('Ingredients count:', ingredients.length);
     console.log('Steps count:', steps.length);
+    console.log('Original recipe data:', originalRecipeData);
+    console.log('Original recipe data (JSON):', originalRecipeData ? JSON.stringify(originalRecipeData) : null);
     
     if (document.getElementById('servings')?.value) {
       recipeData.servings = parseInt(document.getElementById('servings').value);
@@ -3302,6 +4586,24 @@ const saveRecipeToDatabase = async () => {
     // 翻訳データは既に取得済みなので、hasTranslationsで判定
     const translations = hasTranslations ? translationData : [];
     console.log('保存用翻訳データ:', translations);
+    
+    // 翻訳データの検証
+    if (translations.length > 0) {
+      const validTranslations = translations.filter(translation => 
+        translation.language_code && translation.translated_title
+      );
+      
+      if (validTranslations.length !== translations.length) {
+        console.warn('⚠️ 無効な翻訳データを除外しました:', {
+          original: translations.length,
+          valid: validTranslations.length
+        });
+      }
+      
+      // 有効な翻訳データのみを使用
+      translations.length = 0;
+      translations.push(...validTranslations);
+    }
     
     // 翻訳が削除された場合、既存の翻訳をクリア
     if (window.translationDeleted || translations.length === 0) {
@@ -3344,21 +4646,59 @@ const saveRecipeToDatabase = async () => {
         }
         
         console.log('挿入する翻訳データ:', translationData);
-        const { data: insertData, error: translationError } = await sb.from('recipe_translations').insert(translationData);
         
-        if (translationError) {
-          console.error('翻訳保存エラー:', translationError);
-          if (translationError.code === 'PGRST205') {
-            console.log('recipe_translationsテーブルが存在しません。翻訳機能をスキップします。');
+        // 重複チェックとUPSERT処理
+        for (const translation of translationData) {
+          try {
+            // 既存の翻訳データをチェック
+            const { data: existingData, error: checkError } = await sb
+              .from('recipe_translations')
+              .select('id')
+              .eq('recipe_id', translation.recipe_id)
+              .eq('language_code', translation.language_code)
+              .single();
+            
+            if (checkError && checkError.code !== 'PGRST116') {
+              console.error('翻訳データチェックエラー:', checkError);
+              continue;
+            }
+            
+            if (existingData) {
+              // 既存データを更新
+              console.log(`翻訳データを更新: recipe_id=${translation.recipe_id}, language_code=${translation.language_code}`);
+              const { data: updateData, error: updateError } = await sb
+                .from('recipe_translations')
+                .update(translation)
+                .eq('recipe_id', translation.recipe_id)
+                .eq('language_code', translation.language_code);
+              
+              if (updateError) {
+                console.error('翻訳更新エラー:', updateError);
           } else {
-            alert(`翻訳保存エラー: ${translationError.message}`);
+                console.log('翻訳更新成功:', updateData);
           }
         } else {
-          console.log('翻訳保存成功:', insertData);
+              // 新規挿入
+              console.log(`翻訳データを新規挿入: recipe_id=${translation.recipe_id}, language_code=${translation.language_code}`);
+              const { data: insertData, error: insertError } = await sb
+                .from('recipe_translations')
+                .insert(translation);
+              
+              if (insertError) {
+                console.error('翻訳挿入エラー:', insertError);
+              } else {
+                console.log('翻訳挿入成功:', insertData);
+              }
+            }
+          } catch (error) {
+            console.error('翻訳処理エラー:', error);
+          }
         }
       } catch (translationError) {
         console.error('翻訳保存処理エラー:', translationError);
-        alert(`翻訳保存処理エラー: ${translationError.message}`);
+        // 翻訳保存エラーは警告として表示し、メインの保存処理は継続
+        console.warn('⚠️ 翻訳保存に失敗しましたが、レシピの保存は継続します');
+        alert(`翻訳保存に失敗しました: ${translationError.message}\nレシピの保存は継続されます。`);
       }
     } else if (currentTranslatedName && currentLanguageCode) {
       // AI生成時の翻訳情報を保存（後方互換性）
@@ -3385,9 +4725,9 @@ const saveRecipeToDatabase = async () => {
     // この部分は既に saveIngredientsAndSteps 関数で処理済み
     
     // カテゴリーが変更された場合、元のカテゴリーの使用状況をチェック
-    if (originalCategory && originalCategory !== selectedCategory) {
+    if (originalCategory && originalCategory !== selectedCategories.join(', ')) {
       try {
-        await cleanupUnusedCategory(originalCategory);
+        await window.cleanupUnusedCategory(originalCategory);
       } catch (cleanupError) {
         console.error('カテゴリークリーンアップエラー:', cleanupError);
       }
@@ -3430,7 +4770,7 @@ const generateRecipeSuggestions = async (genre, customRequest = '') => {
   prompt += `\n必ず以下のJSON形式で返してください：
 {"suggestions": [{"name": "メニュー名1", "intent": "メニューの意図1"}, {"name": "メニュー名2", "intent": "メニューの意図2"}]}`;
   
-  const result = await callAIAPI(prompt, '');
+  const result = await callAIAPI(text, '');
   return result;
 };
 
@@ -3458,17 +4798,45 @@ const initializeApp = () => {
   sb = window.sb;
   
   // Setup event listeners
+  console.log('🔍 setupModalEventsを呼び出します');
   setupModalEvents();
+  console.log('✅ setupModalEventsの呼び出し完了');
   
   document.getElementById('addIng')?.addEventListener('click', () => addIngredientRow());
   document.getElementById('addStep')?.addEventListener('click', () => addStepRow());
   document.getElementById('addTranslationBtn')?.addEventListener('click', () => addTranslationRow());
-  // 翻訳行は手動で追加する（自動では追加しない）
-
-  // 翻訳プレビューボタンを追加
+  
+  // 翻訳行を初期化時に自動追加
   setTimeout(() => {
+    console.log('🔍 初期化時に翻訳行を追加します');
+    addTranslationRow();
     addTranslationPreviewButton();
   }, 100);
+
+  // 参考URLフィールドの横のURL取り込みボタンのイベントリスナーを追加
+  const urlImportFromFieldBtn = document.getElementById('urlImportFromFieldBtn');
+  console.log('🔍 参考URLフィールドのURL取り込みボタンを検索:', urlImportFromFieldBtn);
+  
+  if (urlImportFromFieldBtn) {
+    console.log('✅ 参考URLフィールドのURL取り込みボタンが見つかりました');
+    urlImportFromFieldBtn.addEventListener('click', async () => {
+      const url = document.getElementById('sourceUrl')?.value?.trim();
+      if (!url) {
+        alert('URLを入力してください');
+        return;
+      }
+      
+      console.log('🔍 参考URLフィールドのURL取り込みボタンがクリックされました:', url);
+      
+      // API選択ポップアップを表示
+      showApiSelectionModal(url);
+    });
+    console.log('✅ 参考URLフィールドのURL取り込みボタンのイベントリスナーを設定しました');
+  } else {
+    console.error('❌ 参考URLフィールドのURL取り込みボタンが見つかりません');
+    console.error('❌ 利用可能なボタン:', document.querySelectorAll('button[id*="url"]'));
+  }
+
   
   document.querySelector('.js-save')?.addEventListener('click', saveRecipeToDatabase);
   
@@ -3583,14 +4951,61 @@ const loadExistingRecipeData = async (id) => {
     if (error) throw error;
     
     document.getElementById('title').value = recipe.title || '';
-    selectedCategory = recipe.category || '';
+    
+    // 既存の選択されたカテゴリを保持しつつ、レシピのカテゴリを読み込み
+    const existingSelectedCategories = [...selectedCategories];
+    
+    // レシピのカテゴリを分割（タグと同じ処理）
+    let recipeCategories = [];
+    if (recipe.category) {
+      if (typeof recipe.category === 'string') {
+        // カンマ区切りで分割
+        recipeCategories = recipe.category.split(',').map(cat => cat.trim()).filter(cat => cat.length > 0);
+      } else if (Array.isArray(recipe.category)) {
+        // 既に配列の場合はそのまま使用
+        recipeCategories = recipe.category;
+      }
+    }
+    
+    // 既存の選択とレシピのカテゴリをマージ（重複を避ける）
+    const mergedCategories = [...new Set([...existingSelectedCategories, ...recipeCategories])];
+    selectedCategories = mergedCategories;
+    
+    console.log('レシピ読み込み時のカテゴリ処理:');
+    console.log('- 元のレシピカテゴリ:', recipe.category);
+    console.log('- 元のレシピカテゴリの型:', typeof recipe.category);
+    console.log('- 既存の選択:', existingSelectedCategories);
+    console.log('- レシピのカテゴリ（分割後）:', recipeCategories);
+    console.log('- レシピのカテゴリ（分割後）の長さ:', recipeCategories.length);
+    console.log('- マージ後:', selectedCategories);
+    console.log('- マージ後の長さ:', selectedCategories.length);
+    
     selectedTags = Array.isArray(recipe.tags) ? recipe.tags : [];
     currentSourceUrl = recipe.source_url || null; // 既存レシピのsource_urlを読み込み
     
-    // Groq API使用フラグをリセット
-    window.isGroqGenerated = false;
+    // 翻訳前データを復元（海外サイトから取り込んだ場合）
+    if (recipe.original_recipe_data) {
+      try {
+        // JSON文字列として保存されている場合はパース
+        if (typeof recipe.original_recipe_data === 'string') {
+          originalRecipeData = JSON.parse(recipe.original_recipe_data);
+        } else {
+          // 既にオブジェクトの場合はそのまま使用
+          originalRecipeData = recipe.original_recipe_data;
+        }
+        console.log('🌍 翻訳前データを復元:', originalRecipeData);
+      } catch (error) {
+        console.error('❌ 翻訳前データの復元に失敗:', error);
+        originalRecipeData = null;
+      }
+    }
+
+    // カテゴリとタグのUIを更新
     updateCategorySelect();
     updateTagSelect();
+    
+    // Groq API使用フラグをリセット
+    window.isGroqGenerated = false;
     
     if (recipe.servings !== undefined) {
       document.getElementById('servings').value = recipe.servings || '';
@@ -3718,12 +5133,22 @@ const languageOptions = [
 
 // 翻訳行を追加する関数
 const addTranslationRow = (languageCode = '', translatedTitle = '') => {
+  console.log('🔍 翻訳行追加開始:', { languageCode, translatedTitle });
+  
   const tbody = document.getElementById('translationTableBody');
-  if (!tbody) return;
+  if (!tbody) {
+    console.error('❌ 翻訳テーブルボディが見つかりません');
+    return;
+  }
+  
+  console.log('✅ 翻訳テーブルボディを発見:', tbody);
   
   // 最大1つまで制限（初期状態では1つ追加される）
   const existingRows = document.querySelectorAll('.translation-row');
+  console.log('📊 既存の翻訳行数:', existingRows.length);
+  
   if (existingRows.length >= 1) {
+    console.log('⚠️ 翻訳行は既に1つ存在するため、追加をスキップします');
     return; // アラートを表示せずにスキップ
   }
   
@@ -3788,7 +5213,7 @@ const addTranslationRow = (languageCode = '', translatedTitle = '') => {
 
           const { data, error } = await sb.functions.invoke('call-groq-api', {
             body: {
-              prompt,
+              text,
               model: getCurrentGroqModel(),
               maxTokens: 100,
               temperature: 0.3
@@ -3830,9 +5255,11 @@ const addTranslationRow = (languageCode = '', translatedTitle = '') => {
   });
   
   tbody.appendChild(row);
+  console.log('✅ 翻訳行を追加しました:', row);
   
   // 削除ボタンのイベントリスナー
   row.querySelector('.remove-translation-btn').addEventListener('click', () => {
+    console.log('🗑️ 翻訳行を削除します');
     row.remove();
     updateLanguageOptions();
     updateAddButtonVisibility();
@@ -3873,47 +5300,128 @@ const updateLanguageOptions = () => {
 
 // 翻訳データを取得する関数（手順データも含む）
 const getTranslationData = async () => {
+  console.log('🔍 翻訳データ取得開始');
+  
   const translations = [];
   const rows = document.querySelectorAll('.translation-row');
-  console.log('翻訳行の数:', rows.length);
+  console.log('📊 翻訳行の数:', rows.length);
+  console.log('📊 翻訳行の要素:', rows);
+  
+  // 翻訳行のデータを検証
+  rows.forEach((row, index) => {
+    const languageCode = row.querySelector('.translation-language')?.value?.trim();
+    const translatedTitle = row.querySelector('.translation-title')?.value?.trim();
+    
+    console.log(`行${index + 1}のデータ:`, { languageCode, translatedTitle });
+    
+    // 空の翻訳行をスキップ
+    if (!languageCode || !translatedTitle) {
+      console.warn(`⚠️ 行${index + 1}: 言語コードまたはタイトルが空です`);
+      return;
+    }
+    
+    console.log(`✅ 行${index + 1}: 有効な翻訳データ`);
+  });
+
+  // 海外サイトから取り込んだ場合、翻訳前データも追加
+  if (originalRecipeData && originalRecipeData.original_title) {
+    console.log('🌍 翻訳前データを翻訳データに追加:', originalRecipeData);
+    
+    // 言語コードを取得（検出された言語またはデフォルト）
+    const originalLanguage = originalRecipeData.original_language || 'fr';
+    const languageNames = {
+      'fr': 'フランス語',
+      'en': '英語',
+      'de': 'ドイツ語',
+      'es': 'スペイン語',
+      'it': 'イタリア語',
+      'unknown': '元の言語'
+    };
+    
+    translations.push({
+      language_code: originalLanguage,
+      translated_title: originalRecipeData.original_title,
+      translated_description: originalRecipeData.original_description,
+      translated_ingredients: originalRecipeData.original_ingredients,
+      translated_steps: originalRecipeData.original_steps,
+      is_original: true, // 翻訳前データのフラグ
+      html_content: generateTranslationDisplayHTML(originalRecipeData.original_title, originalLanguage)
+    });
+  }
+
+  if (rows.length === 0) {
+    console.warn('⚠️ 翻訳行が見つかりません。翻訳を追加してください。');
+    return translations;
+  }
 
   // 順次処理して翻訳APIの呼び出しを直列化
   for (let index = 0; index < rows.length; index++) {
     const row = rows[index];
-    const languageCode = row.querySelector('.translation-language').value;
-    const translatedTitle = row.querySelector('.translation-title').value.trim();
+    console.log(`🔍 行${index + 1}の処理開始:`, row);
+    
+    const languageSelect = row.querySelector('.translation-language');
+    const titleInput = row.querySelector('.translation-title');
+    
+    console.log('🔍 言語選択要素:', languageSelect);
+    console.log('🔍 タイトル入力要素:', titleInput);
+    
+    if (!languageSelect || !titleInput) {
+      console.warn(`⚠️ 行${index + 1}: 必要な要素が見つかりません`);
+      continue;
+    }
+    
+    const languageCode = languageSelect.value;
+    const translatedTitle = titleInput.value.trim();
 
-    console.log(`行${index + 1}:`, { languageCode, translatedTitle });
+    console.log(`📝 行${index + 1}のデータ:`, { languageCode, translatedTitle });
+    
+    // 空の翻訳データをスキップ
+    if (!languageCode || !translatedTitle) {
+      console.warn(`⚠️ 行${index + 1}: 言語コードまたはタイトルが空です。スキップします。`);
+      continue;
+    }
 
     if (languageCode && translatedTitle) {
+      console.log(`✅ 行${index + 1}: 有効なデータが見つかりました`);
+      
       try {
         // 翻訳された材料データを取得
+        console.log(`🔍 ${languageCode}の材料データを取得中...`);
         const translatedIngredients = getTranslatedIngredients(languageCode);
+        console.log(`📦 ${languageCode}の材料データ:`, translatedIngredients);
+        
         // 翻訳された手順データを取得（非同期）
+        console.log(`🔍 ${languageCode}の手順データを取得中...`);
         const translatedSteps = await getTranslatedSteps(languageCode);
+        console.log(`📝 ${languageCode}の手順データ:`, translatedSteps);
 
-        translations.push({
+        const translationData = {
           language_code: languageCode,
           translated_title: translatedTitle,
           translated_ingredients: translatedIngredients,
           translated_steps: translatedSteps,
           // 表示レイアウトのHTMLコンテンツも保存
           html_content: generateTranslationDisplayHTML(translatedTitle, languageCode)
-        });
-
-        console.log(`✅ Translation data collected for ${languageCode}:`, {
+        };
+        
+        translations.push(translationData);
+        console.log(`✅ ${languageCode}の翻訳データを収集完了:`, {
           ingredients: translatedIngredients.length,
-          steps: translatedSteps.length
+          steps: translatedSteps.length,
+          data: translationData
         });
 
       } catch (error) {
-        console.error(`❌ Error collecting translation data for ${languageCode}:`, error);
+        console.error(`❌ ${languageCode}の翻訳データ収集エラー:`, error);
         // エラーが発生してもスキップして続行
       }
+    } else {
+      console.warn(`⚠️ 行${index + 1}: 言語コードまたはタイトルが空です`);
     }
   }
 
-  console.log('最終的な翻訳データ:', translations);
+  console.log('📊 最終的な翻訳データ:', translations);
+  console.log('📊 翻訳データの数:', translations.length);
   return translations;
 };
 
@@ -4029,7 +5537,7 @@ ${stepsText}
 
     const { data, error } = await sb.functions.invoke('call-groq-api', {
       body: {
-        prompt,
+        text,
         model: getCurrentGroqModel(),
         maxTokens: 2000,
         temperature: 0.3
@@ -4117,60 +5625,121 @@ const generateTranslationDisplayHTML = (translatedTitle, languageCode) => {
 const generateBilingualDisplayHTML = (originalTitle, translations) => {
   if (!translations || translations.length === 0) return '';
 
-  const primaryTranslation = translations[0];
+  // 翻訳前データと翻訳後データを分離
+  const originalData = translations.find(t => t.is_original);
+  const translatedData = translations.find(t => !t.is_original);
 
   return `
     <div class="bilingual-recipe-layout">
-      <!-- 翻訳タイトル（大きく表示） -->
+      <!-- メインタイトルセクション -->
       <div class="main-title-section">
-        <h1 class="translated-main-title">${primaryTranslation.translated_title}</h1>
-        <div class="original-subtitle">（${originalTitle}）</div>
+        ${translatedData ? `
+          <h1 class="translated-main-title">${translatedData.translated_title}</h1>
+          <div class="original-subtitle">（${originalTitle}）</div>
+        ` : `
+          <h1 class="translated-main-title">${originalTitle}</h1>
+        `}
       </div>
 
       <!-- 材料セクション -->
       <div class="ingredients-section">
         <div class="section-header-with-line">
-          <h2 class="section-title">Ingrédients (Ingredients)</h2>
+          <h2 class="section-title">材料 (Ingredients)</h2>
         </div>
 
-        <!-- 翻訳された材料テーブル -->
-        <div class="ingredients-table-container">
-          <table class="ingredients-table translated-ingredients">
-            <thead>
-              <tr>
-                <th>N°</th>
-                <th>Ingrédient</th>
-                <th>Quantité</th>
-                <th>Unité</th>
-              </tr>
-            </thead>
-            <tbody id="translatedIngredientsTable">
-              <!-- 動的に挿入 -->
-            </tbody>
-          </table>
+        ${translatedData ? `
+          <!-- 翻訳された材料テーブル -->
+          <div class="ingredients-table-container">
+            <table class="ingredients-table translated-ingredients">
+              <thead>
+                <tr>
+                  <th>No.</th>
+                  <th>材料名</th>
+                  <th>分量</th>
+                  <th>単位</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${translatedData.translated_ingredients.map((ing, index) => `
+                  <tr>
+                    <td>${index + 1}</td>
+                    <td>${ing.item || ''}</td>
+                    <td>${ing.quantity || ''}</td>
+                    <td>${ing.unit || ''}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : ''}
+
+        ${originalData ? `
+          <!-- 翻訳前材料セクション -->
+          <div class="original-section-header">
+            <h3 class="original-section-title">元の材料 (${originalData.language_code === 'fr' ? 'Français' : originalData.language_code === 'en' ? 'English' : originalData.language_code === 'de' ? 'Deutsch' : originalData.language_code === 'es' ? 'Español' : originalData.language_code === 'it' ? 'Italiano' : 'Original'})</h3>
+          </div>
+
+          <!-- 翻訳前材料テーブル -->
+          <div class="ingredients-table-container">
+            <table class="ingredients-table original-ingredients">
+              <thead>
+                <tr>
+                  <th>No.</th>
+                  <th>材料名</th>
+                  <th>分量</th>
+                  <th>単位</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${originalData.translated_ingredients.map((ing, index) => `
+                  <tr>
+                    <td>${index + 1}</td>
+                    <td>${ing.item || ''}</td>
+                    <td>${ing.quantity || ''}</td>
+                    <td>${ing.unit || ''}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : ''}
+      </div>
+
+      <!-- 手順セクション -->
+      <div class="steps-section">
+        <div class="section-header-with-line">
+          <h2 class="section-title">手順 (Instructions)</h2>
         </div>
 
-        <!-- オリジナル材料セクション -->
-        <div class="original-section-header">
-          <h3 class="original-section-title">Instructions originales</h3>
-        </div>
+        ${translatedData ? `
+          <!-- 翻訳された手順 -->
+          <div class="steps-container">
+            <h3 class="steps-subtitle">翻訳版</h3>
+            <ol class="steps-list">
+              ${translatedData.translated_steps.map((step, index) => `
+                <li class="step-item">
+                  <span class="step-number">${index + 1}</span>
+                  <span class="step-text">${step.step || step.instruction || ''}</span>
+                </li>
+              `).join('')}
+            </ol>
+          </div>
+        ` : ''}
 
-        <!-- オリジナル材料テーブル -->
-        <div class="ingredients-table-container">
-          <table class="ingredients-table original-ingredients">
-            <thead>
-              <tr>
-                <th>N°</th>
-                <th>Ingrédient</th>
-                <th>Quantité</th>
-                <th>Unité</th>
-              </tr>
-            </thead>
-            <tbody id="originalIngredientsTable">
-              <!-- 動的に挿入 -->
-            </tbody>
-          </table>
-        </div>
+        ${originalData ? `
+          <!-- 翻訳前手順 -->
+          <div class="steps-container original-steps">
+            <h3 class="steps-subtitle">元の手順 (${originalData.language_code === 'fr' ? 'Français' : originalData.language_code === 'en' ? 'English' : originalData.language_code === 'de' ? 'Deutsch' : originalData.language_code === 'es' ? 'Español' : originalData.language_code === 'it' ? 'Italiano' : 'Original'})</h3>
+            <ol class="steps-list">
+              ${originalData.translated_steps.map((step, index) => `
+                <li class="step-item">
+                  <span class="step-number">${index + 1}</span>
+                  <span class="step-text">${step.step || step.instruction || ''}</span>
+                </li>
+              `).join('')}
+            </ol>
+          </div>
+        ` : ''}
       </div>
     </div>
   `;
@@ -4178,16 +5747,32 @@ const generateBilingualDisplayHTML = (originalTitle, translations) => {
 
 // 翻訳表示モードと編集モードを切り替える関数 - 2言語同時表示対応
 const toggleTranslationDisplayMode = async (isDisplayMode = true) => {
+  console.log('🔄 翻訳表示モード切り替え開始:', isDisplayMode);
+  
   const translationSection = document.querySelector('.translation-section');
-  if (!translationSection) return;
+  if (!translationSection) {
+    console.error('❌ 翻訳セクションが見つかりません');
+    return;
+  }
+  
+  console.log('✅ 翻訳セクションを発見:', translationSection);
 
   if (isDisplayMode) {
     // 表示モードに切り替え - 2言語同時表示
+    console.log('📖 2言語表示モードに切り替え中...');
+    
     const translations = await getTranslationData();
+    console.log('📚 取得した翻訳データ:', translations);
+    console.log('📚 翻訳データの数:', translations.length);
+    
     const originalTitle = document.getElementById('title')?.value?.trim() || 'レシピタイトル';
+    console.log('📝 元のタイトル:', originalTitle);
 
     if (translations.length > 0) {
+      console.log('✅ 翻訳データが存在します。2言語表示を生成中...');
       const bilingualHTML = generateBilingualDisplayHTML(originalTitle, translations);
+      console.log('🎨 生成されたHTML:', bilingualHTML);
+      
       translationSection.innerHTML = `
         <div class="translation-display-container bilingual-mode">
           <div class="translation-mode-header">
@@ -4199,26 +5784,55 @@ const toggleTranslationDisplayMode = async (isDisplayMode = true) => {
           ${bilingualHTML}
         </div>
       `;
+      console.log('✅ 2言語表示モードに切り替え完了');
+    } else {
+      console.warn('⚠️ 翻訳データがありません。翻訳を追加してください。');
+      translationSection.innerHTML = `
+        <div class="translation-display-container">
+          <div class="translation-mode-header">
+            <span class="mode-label">2言語表示モード</span>
+            <button type="button" class="edit-mode-btn" onclick="toggleTranslationDisplayMode(false)">
+              編集モードに戻る
+            </button>
+          </div>
+          <div class="no-translation-message">
+            <p>翻訳データがありません。</p>
+            <p>翻訳を追加してから2言語表示プレビューを使用してください。</p>
+          </div>
+        </div>
+      `;
     }
   } else {
     // 編集モードに戻る
+    console.log('✏️ 編集モードに戻ります');
     location.reload(); // 簡単な実装として、ページをリロードして編集モードに戻る
   }
 };
 
 // 翻訳プレビューボタンを追加する関数
 const addTranslationPreviewButton = () => {
+  console.log('🔍 翻訳プレビューボタン追加開始');
+  
   const translationSection = document.querySelector('.translation-section');
-  if (!translationSection) return;
+  if (!translationSection) {
+    console.error('❌ 翻訳セクションが見つかりません');
+    return;
+  }
+  
+  console.log('✅ 翻訳セクションを発見:', translationSection);
 
   const previewBtn = document.createElement('button');
   previewBtn.type = 'button';
   previewBtn.className = 'btn secondary small';
   previewBtn.innerHTML = '👁️ 2言語表示プレビュー';
   previewBtn.style.marginTop = '0.5rem';
-  previewBtn.onclick = () => toggleTranslationDisplayMode(true);
+  previewBtn.onclick = () => {
+    console.log('🖱️ 2言語表示プレビューボタンがクリックされました');
+    toggleTranslationDisplayMode(true);
+  };
 
   translationSection.appendChild(previewBtn);
+  console.log('✅ 翻訳プレビューボタンを追加しました:', previewBtn);
 };
 
 // Unit normalization helpers (convert Japanese cooking units to ml/g)
@@ -5320,7 +6934,7 @@ const saveRecipeForAI = async () => {
     // レシピデータの構築
     const recipeData = {
       title,
-      category: selectedCategory || 'その他',
+      category: selectedCategories.length > 0 ? selectedCategories.join(', ') : 'その他',
       tags: selectedTags.length > 0 ? selectedTags : null,
       notes: document.getElementById('notes')?.value?.trim() || null,
       source_url: document.getElementById('sourceUrl')?.value?.trim() || null,

@@ -1225,6 +1225,7 @@
       <button class="btn primary small js-ai-advice">✨ AIアドバイス</button>
       <button class="btn secondary js-export-pdf">📄 PDF出力</button>
       <button class="btn secondary js-export-csv">📊 CSV出力</button>
+      <button class="btn secondary js-show-readable-text">📝 読みやすいテキスト</button>
       <button class="btn js-edit">編集</button>
       <button class="btn ghost js-delete" style="color:#c0392b;border-color:#c0392b;">削除</button>
       <button class="btn js-back">戻る</button>
@@ -1240,6 +1241,26 @@
       <div class="status-text">
         <div class="status-title">処理中...</div>
         <div class="status-message">しばらくお待ちください</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 読みやすいテキスト表示モーダル -->
+  <div id="readableTextModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 800px; max-height: 80vh;">
+      <div class="modal-header">
+        <h2 class="modal-title">読みやすいテキスト形式</h2>
+        <button id="readableTextCloseBtn" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="readableTextContent" style="white-space: pre-wrap; font-family: 'Courier New', monospace; line-height: 1.6; max-height: 60vh; overflow-y: auto; background: #ffffff; color: #2c3e50; padding: 1.5rem; border-radius: 6px; border: 1px solid #e1e8ed; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" contenteditable="true"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="readableTextEditBtn" class="btn secondary">編集</button>
+        <button id="readableTextSaveBtn" class="btn primary" style="display: none;">保存</button>
+        <button id="readableTextCancelBtn" class="btn ghost" style="display: none;">キャンセル</button>
+        <button id="readableTextCopyBtn" class="btn secondary">コピー</button>
+        <button id="readableTextCloseBtn2" class="btn ghost">閉じる</button>
       </div>
     </div>
   </div>
@@ -5018,6 +5039,53 @@ document.addEventListener('DOMContentLoaded', () => {
   const csvBtn = document.querySelector('.js-export-csv');
   if (csvBtn) {
     csvBtn.addEventListener('click', exportToCSV);
+  }
+  
+  // 読みやすいテキスト表示ボタン
+  const readableTextBtn = document.querySelector('.js-show-readable-text');
+  if (readableTextBtn) {
+    readableTextBtn.addEventListener('click', () => {
+      if (window.currentRecipe) {
+        window.showReadableText(window.currentRecipe);
+      } else {
+        alert('レシピデータが読み込まれていません。');
+      }
+    });
+  }
+  
+  // 読みやすいテキストモーダルのイベントリスナー
+  const readableTextModal = document.getElementById('readableTextModal');
+  const readableTextCloseBtn = document.getElementById('readableTextCloseBtn');
+  const readableTextCloseBtn2 = document.getElementById('readableTextCloseBtn2');
+  const readableTextCopyBtn = document.getElementById('readableTextCopyBtn');
+  const readableTextEditBtn = document.getElementById('readableTextEditBtn');
+  const readableTextSaveBtn = document.getElementById('readableTextSaveBtn');
+  const readableTextCancelBtn = document.getElementById('readableTextCancelBtn');
+  
+  if (readableTextCloseBtn) {
+    readableTextCloseBtn.addEventListener('click', window.closeReadableTextModal);
+  }
+  if (readableTextCloseBtn2) {
+    readableTextCloseBtn2.addEventListener('click', window.closeReadableTextModal);
+  }
+  if (readableTextCopyBtn) {
+    readableTextCopyBtn.addEventListener('click', window.copyReadableText);
+  }
+  if (readableTextEditBtn) {
+    readableTextEditBtn.addEventListener('click', window.toggleReadableTextEdit);
+  }
+  if (readableTextSaveBtn) {
+    readableTextSaveBtn.addEventListener('click', window.saveReadableText);
+  }
+  if (readableTextCancelBtn) {
+    readableTextCancelBtn.addEventListener('click', window.cancelReadableTextEdit);
+  }
+  if (readableTextModal) {
+    readableTextModal.addEventListener('click', (e) => {
+      if (e.target === readableTextModal) {
+        window.closeReadableTextModal();
+      }
+    });
   }
   
   // レシピ表示の初期化

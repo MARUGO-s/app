@@ -69,7 +69,9 @@ document.addEventListener('DOMContentLoaded', () => {
         get() {
             try {
                 const stored = localStorage.getItem(this.STORAGE_KEY);
-                return stored ? { ...this.defaultSettings, ...JSON.parse(stored) } : this.defaultSettings;
+                const result = stored ? { ...this.defaultSettings, ...JSON.parse(stored) } : this.defaultSettings;
+                console.log('📊 現在の設定を読み込み:', result);
+                return result;
             } catch (error) {
                 console.error('設定の読み込みエラー:', error);
                 return this.defaultSettings;
@@ -79,9 +81,9 @@ document.addEventListener('DOMContentLoaded', () => {
         set(settings) {
             try {
                 localStorage.setItem(this.STORAGE_KEY, JSON.stringify(settings));
-                console.log('設定を保存しました:', settings);
+                console.log('✅ 設定を保存しました:', settings);
             } catch (error) {
-                console.error('設定の保存エラー:', error);
+                console.error('❌ 設定の保存エラー:', error);
             }
         },
         
@@ -98,56 +100,103 @@ document.addEventListener('DOMContentLoaded', () => {
         const settingsSave = document.getElementById('settings-save');
         const settingsCancel = document.getElementById('settings-cancel');
         
-        if (!settingsBtn || !settingsModal) return;
+        if (!settingsBtn || !settingsModal) {
+            console.error('❌ 設定ボタンまたはモーダルが見つかりません:', {
+                settingsBtn: !!settingsBtn,
+                settingsModal: !!settingsModal
+            });
+            return;
+        }
+        
+        console.log('✅ 設定ボタンとモーダルが見つかりました');
         
         // 設定ボタンクリック
         settingsBtn.addEventListener('click', () => {
+            console.log('🔧 設定ボタンがクリックされました');
             const currentSettings = Settings.get();
+            
+            // 設定の詳細をログ出力
+            console.log('📊 現在の設定詳細:', {
+                aiApi: currentSettings.aiApi,
+                groqModel: currentSettings.groqModel,
+                aiCreativeApi: currentSettings.aiCreativeApi,
+                timestamp: new Date().toISOString()
+            });
             
             // 現在の設定を反映
             const groqRadio = document.querySelector('input[name="ai-api"][value="groq"]');
             const chatgptRadio = document.querySelector('input[name="ai-api"][value="chatgpt"]');
             
+            console.log('🔧 AI API設定を適用中:', currentSettings.aiApi);
             if (currentSettings.aiApi === 'chatgpt') {
                 chatgptRadio.checked = true;
+                console.log('✅ ChatGPT APIが選択されました');
             } else {
                 groqRadio.checked = true;
+                console.log('✅ Groq APIが選択されました');
             }
             
             // Groqモデルの設定を反映
             const groqModelRadios = document.querySelectorAll('input[name="groq-model"]');
+            console.log('🔧 Groqモデル設定を適用中:', currentSettings.groqModel);
             groqModelRadios.forEach(radio => {
                 radio.checked = radio.value === currentSettings.groqModel;
+                if (radio.checked) {
+                    console.log('✅ Groqモデルが選択されました:', radio.value);
+                }
             });
             
             // AI創作APIの設定を反映
             const aiCreativeRadios = document.querySelectorAll('input[name="ai-creative-api"]');
+            console.log('🔧 AI創作API設定を適用中:', currentSettings.aiCreativeApi);
             aiCreativeRadios.forEach(radio => {
                 radio.checked = radio.value === currentSettings.aiCreativeApi;
+                if (radio.checked) {
+                    console.log('✅ AI創作APIが選択されました:', radio.value);
+                }
             });
             
+            console.log('🔧 設定モーダルを表示中...');
             settingsModal.style.display = 'flex';
+            console.log('✅ 設定モーダル表示完了');
         });
         
         // モーダルを閉じる
         const closeModal = () => {
+            console.log('🔧 設定モーダルを閉じます');
             settingsModal.style.display = 'none';
+            console.log('✅ 設定モーダルを閉じました');
         };
         
-        settingsClose.addEventListener('click', closeModal);
-        settingsCancel.addEventListener('click', closeModal);
+        settingsClose.addEventListener('click', () => {
+            console.log('🔧 設定モーダル閉じるボタン（×）がクリックされました');
+            closeModal();
+        });
+        settingsCancel.addEventListener('click', () => {
+            console.log('🔧 設定モーダルキャンセルボタンがクリックされました');
+            closeModal();
+        });
         
         // 保存ボタン
         settingsSave.addEventListener('click', () => {
+            console.log('🔧 設定保存ボタンがクリックされました');
             const selectedApi = document.querySelector('input[name="ai-api"]:checked')?.value || 'groq';
             const selectedGroqModel = document.querySelector('input[name="groq-model"]:checked')?.value || 'gemini-1.5-flash';
             const selectedAiCreativeApi = document.querySelector('input[name="ai-creative-api"]:checked')?.value || 'chatgpt';
+            
+            console.log('📊 選択された設定:', {
+                aiApi: selectedApi,
+                groqModel: selectedGroqModel,
+                aiCreativeApi: selectedAiCreativeApi
+            });
             
             Settings.set({ 
                 aiApi: selectedApi,
                 groqModel: selectedGroqModel,
                 aiCreativeApi: selectedAiCreativeApi
             });
+            
+            console.log('✅ 設定を保存しました');
             
             // 成功メッセージ
             const originalText = settingsSave.innerHTML;
@@ -157,6 +206,16 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => {
                 settingsSave.innerHTML = originalText;
                 settingsSave.disabled = false;
+                
+                // 保存後の設定を確認
+                const savedSettings = Settings.get();
+                console.log('📊 保存後の設定確認:', {
+                    aiApi: savedSettings.aiApi,
+                    groqModel: savedSettings.groqModel,
+                    aiCreativeApi: savedSettings.aiCreativeApi,
+                    timestamp: new Date().toISOString()
+                });
+                
                 closeModal();
             }, 1500);
         });
@@ -164,6 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // モーダル外クリックで閉じる
         settingsModal.addEventListener('click', (e) => {
             if (e.target === settingsModal) {
+                console.log('🔧 設定モーダル外クリックで閉じます');
                 closeModal();
             }
         });
@@ -696,14 +756,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const bulkSelectionUI = document.getElementById('bulk-selection-ui');
         console.log('一括選択UIの現在の状態:', bulkSelectionUI ? bulkSelectionUI.style.display : '要素が見つからない');
 
-        // 削除対象のレシピ情報を取得
+        // 削除対象のレシピ情報を取得（ID型の不一致を吸収）
         const selectedRecipeIds = Array.from(selectedRecipes);
-        const selectedRecipesData = allRecipes.filter(recipe => 
-            selectedRecipeIds.includes(recipe.id)
+        const selectedIdsStr = selectedRecipeIds.map(id => String(id));
+        const selectedRecipesData = allRecipes.filter(recipe =>
+            selectedIdsStr.includes(String(recipe.id))
         );
 
-        // 削除件数を表示
-        countElement.textContent = selectedRecipesData.length;
+        // 削除件数を表示（Setサイズを優先）
+        countElement.textContent = selectedRecipes.size;
 
         // 削除対象レシピ一覧を表示
         recipeListElement.innerHTML = '';
@@ -746,72 +807,7 @@ document.addEventListener('DOMContentLoaded', () => {
             box-sizing: border-box !important;
         `;
         
-        selectedRecipesData.forEach(recipe => {
-            const item = document.createElement('div');
-            item.className = 'delete-recipe-item';
-            
-            // アイテムのスタイルを直接設定
-            item.style.cssText = `
-                display: flex !important;
-                align-items: flex-start !important;
-                padding: 0.75rem !important;
-                background: var(--bg-tertiary) !important;
-                border-radius: var(--radius-sm) !important;
-                border: 1px solid var(--border-light) !important;
-                transition: all 0.2s ease !important;
-                width: 100% !important;
-                min-width: 0 !important;
-                max-width: none !important;
-                box-sizing: border-box !important;
-                min-height: auto !important;
-                overflow: visible !important;
-            `;
-            
-            // アイコン要素
-            const icon = document.createElement('i');
-            icon.className = 'fas fa-utensils';
-            icon.style.cssText = `
-                color: var(--accent-danger) !important;
-                margin-right: 0.75rem !important;
-                width: 16px !important;
-                flex-shrink: 0 !important;
-                margin-top: 0.1rem !important;
-            `;
-            
-            // テキスト要素
-            const span = document.createElement('span');
-            span.textContent = recipe.title;
-            
-            // テキストの折り返しを強制するスタイルを直接設定
-            span.style.cssText = `
-                color: var(--text-primary) !important;
-                font-size: 0.9rem !important;
-                word-wrap: break-word !important;
-                word-break: break-word !important;
-                overflow-wrap: anywhere !important;
-                hyphens: auto !important;
-                white-space: normal !important;
-                line-height: 1.4 !important;
-                flex: 1 !important;
-                min-width: 0 !important;
-                display: block !important;
-                text-overflow: unset !important;
-                overflow: visible !important;
-                max-width: none !important;
-                width: 100% !important;
-                -webkit-line-clamp: unset !important;
-                -webkit-box-orient: unset !important;
-                display: -webkit-box !important;
-                display: block !important;
-            `;
-            
-            // さらに強制的にテキスト省略を無効化
-            span.setAttribute('style', span.getAttribute('style') + '; text-overflow: unset !important; overflow: visible !important; white-space: normal !important;');
-            
-            item.appendChild(icon);
-            item.appendChild(span);
-            recipeListContainer.appendChild(item);
-        });
+        // 重複・未定義要素への追加を避けるため、描画はこの後の処理に一本化
         
         // レシピアイテムをリストに直接追加
         selectedRecipesData.forEach(recipe => {
@@ -1905,10 +1901,24 @@ document.addEventListener('DOMContentLoaded', () => {
      }
 
     // 設定を移行
+    console.log('🔧 設定の初期化を開始');
     Settings.migrateSettings();
     
+    // 初期化後の設定を確認
+    const initialSettings = Settings.get();
+    console.log('📊 初期化後の設定:', {
+        aiApi: initialSettings.aiApi,
+        groqModel: initialSettings.groqModel,
+        aiCreativeApi: initialSettings.aiCreativeApi,
+        timestamp: new Date().toISOString()
+    });
+    
+    console.log('✅ 設定の初期化完了');
+    
     // 設定モーダルを初期化
+    console.log('🔧 設定モーダルの初期化を開始');
     setupSettingsModal();
+    console.log('✅ 設定モーダルの初期化完了');
     
     init();
 });

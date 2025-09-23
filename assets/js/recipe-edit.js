@@ -290,8 +290,26 @@ async function handleSave() {
   }
 }
 
-// 選択されたカテゴリーを取得
+// 選択されたカテゴリーを取得（複数選択対応）
 function getSelectedCategory() {
+  // グローバル変数selectedCategoriesから取得
+  if (typeof selectedCategories !== 'undefined' && Array.isArray(selectedCategories)) {
+    return selectedCategories.length > 0 ? selectedCategories.join(', ') : '';
+  }
+  
+  // フォールバック: 選択されたカテゴリータグから取得
+  const selectedCategoriesContainer = getElement('selectedCategories');
+  if (selectedCategoriesContainer) {
+    const categoryTags = selectedCategoriesContainer.querySelectorAll('.selected-category-tag');
+    const categories = Array.from(categoryTags).map(tag => {
+      const text = tag.textContent.trim();
+      // "カテゴリ名 ×" の形式から "×" を除去
+      return text.replace(/\s*×\s*$/, '');
+    });
+    return categories.length > 0 ? categories.join(', ') : '';
+  }
+  
+  // 最終フォールバック: 従来の方法
   const categoryText = getElement('selectedCategoryText');
   return categoryText ? categoryText.textContent : '';
 }
@@ -329,6 +347,8 @@ function getIngredientsData() {
     const unit = row.querySelector('.ingredient-unit')?.value?.trim();
     const price = row.querySelector('.ingredient-price')?.value?.trim();
     
+    console.log('材料データ取得:', { item, quantity, unit, price });
+    
     if (item) {
       ingredients.push({
         item,
@@ -339,6 +359,7 @@ function getIngredientsData() {
     }
   });
   
+  console.log('取得された材料データ:', ingredients);
   return ingredients;
 }
 

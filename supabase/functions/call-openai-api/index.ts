@@ -23,7 +23,9 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  console.log("call-openai-api function invoked");
   if (req.method === "OPTIONS") {
+    console.log("Handling OPTIONS request");
     return new Response("ok", { headers: corsHeaders });
   }
 
