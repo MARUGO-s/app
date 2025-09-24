@@ -382,6 +382,31 @@
             flex-shrink: 0;
         }
         
+        .batch-item.weighed {
+            background-color: rgba(74, 144, 226, 0.1); /* A light blue highlight */
+            text-decoration: line-through;
+            color: var(--muted);
+        }
+
+        .batch-item.weighed .batch-item-name::before {
+            content: '✔ ';
+            color: var(--accent);
+            font-weight: bold;
+            margin-right: 8px;
+            animation: check-in 0.2s ease-out;
+        }
+
+        @keyframes check-in {
+            from {
+                transform: scale(0.5);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        
         .batch-total {
             text-align: center;
             padding: 16px;
@@ -765,23 +790,46 @@
 
         // 計算結果を表示
         function displayBatchResults(flours, ingredients, totalWeight) {
-            // 粉グループの表示
             const batchFloursDiv = document.getElementById('batchFlours');
-            batchFloursDiv.innerHTML = flours.map(flour => `
-                <div class="batch-item">
-                    <span class="batch-item-name">${flour.name}</span>
-                    <span class="batch-item-amount">${flour.newGrams}g (${flour.percentage}%)</span>
-                </div>
-            `).join('');
-            
-            // 材料の表示
             const batchIngredientsDiv = document.getElementById('batchIngredients');
-            batchIngredientsDiv.innerHTML = ingredients.map(ingredient => `
-                <div class="batch-item">
-                    <span class="batch-item-name">${ingredient.name}</span>
-                    <span class="batch-item-amount">${ingredient.newGrams}g (${ingredient.percentage}%)</span>
-                </div>
-            `).join('');
+
+            // Clear previous results
+            batchFloursDiv.innerHTML = '';
+            batchIngredientsDiv.innerHTML = '';
+
+            // Helper function to create and append items
+            const createItem = (item, isFlour) => {
+                const div = document.createElement('div');
+                div.className = 'batch-item';
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'batch-item-name';
+                nameSpan.textContent = item.name;
+
+                const amountSpan = document.createElement('span');
+                amountSpan.className = 'batch-item-amount';
+                amountSpan.textContent = `${item.newGrams}g (${item.percentage}%)`;
+
+                div.appendChild(nameSpan);
+                div.appendChild(amountSpan);
+
+                // Add click listener to toggle 'weighed' class
+                div.addEventListener('click', () => {
+                    div.classList.toggle('weighed');
+                });
+
+                return div;
+            };
+
+            // Display flours
+            flours.forEach(flour => {
+                batchFloursDiv.appendChild(createItem(flour, true));
+            });
+            
+            // Display ingredients
+            ingredients.forEach(ingredient => {
+                batchIngredientsDiv.appendChild(createItem(ingredient, false));
+            });
             
             // 総重量の表示
             document.getElementById('batchTotalWeight').textContent = totalWeight;
