@@ -286,13 +286,54 @@ document.addEventListener('DOMContentLoaded', () => {
     const baseRecipeColumns = "id,title,category,created_at,tags,is_ai_generated,is_groq_generated,source_url,language_code,original_recipe_id";
 
     const fetchAllRecipes = async () => {
-        const { data, error } = await sb.from("recipes").select(baseRecipeColumns).order("created_at", { ascending: false });
-        if (error) {
-            console.error('Failed to fetch recipes:', error);
+        try {
+            // 通常のレシピデータを取得
+            const { data: recipes, error: recipesError } = await sb
+                .from("recipes")
+                .select(baseRecipeColumns)
+                .order("created_at", { ascending: false });
+            
+            if (recipesError) {
+                console.error('Failed to fetch recipes:', recipesError);
+                throw recipesError;
+            }
+
+            // パン用レシピデータを取得
+            const { data: breadRecipes, error: breadError } = await sb
+                .from("bread_recipes")
+                .select("id,title,flour_total_g,created_at,updated_at,notes")
+                .order("created_at", { ascending: false });
+
+            if (breadError) {
+                console.warn('パン用レシピデータの読み込みに失敗:', breadError);
+            }
+
+            // パン用レシピを通常のレシピ形式に変換
+            const convertedBreadRecipes = breadRecipes ? breadRecipes.map(breadRecipe => ({
+                id: breadRecipe.id,
+                title: breadRecipe.title,
+                category: 'パン',
+                tags: ['パン用レシピ', 'ベーカーズパーセンテージ'],
+                created_at: breadRecipe.created_at,
+                updated_at: breadRecipe.updated_at,
+                is_bread_recipe: true,
+                flour_total_g: breadRecipe.flour_total_g,
+                notes: breadRecipe.notes,
+                description: `パン用レシピ - 総重量: ${breadRecipe.flour_total_g}g`
+            })) : [];
+
+            // 通常のレシピとパン用レシピを結合
+            const allRecipes = [...(recipes || []), ...convertedBreadRecipes];
+            
+            // 作成日時でソート
+            allRecipes.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            console.log(`📚 レシピ読み込み完了: 通常レシピ${recipes?.length || 0}件, パン用レシピ${convertedBreadRecipes.length}件`);
+            return allRecipes;
+        } catch (error) {
+            console.error('レシピデータの読み込みに失敗:', error);
             throw error;
         }
-        console.log(`📚 レシピ読み込み: ${data?.length || 0}件`);
-        return data || [];
     };
 
     const fetchFavoriteRecipes = async () => {
@@ -595,17 +636,28 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const statusIconsHtml = buildStatusIcons(recipe);
 
+        // パン用レシピかどうかを判定
+        const isBreadRecipe = recipe.is_bread_recipe || (recipe.title && (
+            recipe.title.includes('パン') || 
+            recipe.title.includes('ブレッド') || 
+            recipe.title.includes('bread') ||
+            recipe.title.includes('ベーカーズ') ||
+            recipe.title.includes('baker')
+        ));
+
         card.innerHTML = `
             <div class="bulk-checkbox"></div>
             <div class="recipe-header">
                 <h3 class="recipe-title">${escapeHtml(recipe.title)}</h3>
                 <div class="recipe-actions">
                     ${statusIconsHtml}
+                    ${isBreadRecipe ? '<span class="bread-recipe-badge">パン用レシピ</span>' : ''}
                     <button class="favorite-btn ${isFavorite ? 'is-favorite' : ''}" data-recipe-id="${recipe.id}">
                         <i class="fas fa-heart"></i>
                     </button>
                 </div>
             </div>
+            ${isBreadRecipe && recipe.flour_total_g ? `<div class="recipe-meta">総重量: ${recipe.flour_total_g}g</div>` : ''}
         `;
         
         // 一括選択モードの場合は選択状態を設定
@@ -614,6 +666,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isSelected) {
                 card.classList.add('selected');
             }
+        }
+        
+        // パン用レシピの場合はクリック時にパン用レシピ一覧ページに遷移
+        if (isBreadRecipe) {
+            card.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                // パン用レシピのIDをlocalStorageに保存して一覧ページに遷移
+                localStorage.setItem('selectedBreadRecipeId', recipe.id);
+                window.location.href = 'pages/bread_recipe_list.html';
+            });
         }
         
         return card;
@@ -1668,6 +1731,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('click', (e) => {
         if (e.target.classList.contains('js-new-empty') || e.target.classList.contains('js-new')) {
             location.href = 'pages/recipe_edit.html';
+        }
+        if (e.target.classList.contains('js-bread-recipes')) {
+            location.href = 'pages/bread_recipe_list.html';
         }
     });
 

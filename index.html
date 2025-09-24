@@ -142,6 +142,29 @@
       transform: scale(1.05);
       opacity: 1;
     }
+    
+    /* パン用レシピバッジのスタイル */
+    .bread-recipe-badge {
+      background: linear-gradient(135deg, #ff6b35, #f7931e);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      box-shadow: 0 2px 4px rgba(255, 107, 53, 0.3);
+      margin-right: 8px;
+    }
+    
+    /* レシピメタ情報のスタイル */
+    .recipe-meta {
+      font-size: 0.85rem;
+      color: var(--text-secondary, #666);
+      margin-top: 0.5rem;
+      padding: 0.25rem 0;
+      border-top: 1px solid var(--border-light, #eee);
+    }
 
     /* 既存ページのアイコンスタイル（互換性維持） */
     .ai-generated-icon {
@@ -904,6 +927,10 @@
         <button class="btn secondary js-settings">
           <i class="fas fa-cog"></i>
           設定
+        </button>
+        <button class="btn secondary js-bread-recipes">
+          <i class="fas fa-bread-slice"></i>
+          パン用レシピ
         </button>
         <button class="btn primary js-new">
           <i class="fas fa-plus"></i>
