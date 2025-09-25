@@ -4,93 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    // 設定管理
-    const Settings = {
-        STORAGE_KEY: 'recipe-box-settings',
-       defaultSettings: {
-           aiApi: 'groq', // 'groq' または 'chatgpt'
-            groqModel: 'gemini-1.5-flash', // デフォルトでGenerative Language APIを利用
-            aiCreativeApi: 'chatgpt' // 'chatgpt' または 'groq'
-        },
-        
-        // 古い設定をクリアして新しいデフォルトを適用
-        migrateSettings() {
-            try {
-                const stored = localStorage.getItem(this.STORAGE_KEY);
-                if (stored) {
-                    const parsed = JSON.parse(stored);
-                    let needsUpdate = false;
-                    
-                    // 古いgemini設定をgroqに移行
-                    if (parsed.aiApi === 'gemini') {
-                        parsed.aiApi = 'groq';
-                        needsUpdate = true;
-                        console.log('設定をgeminiからgroqに移行しました');
-                    }
-                    // 古いchatgpt設定もgroqに移行（強制的に）
-                    if (parsed.aiApi === 'chatgpt') {
-                        parsed.aiApi = 'groq';
-                        needsUpdate = true;
-                        console.log('設定をchatgptからgroqに移行しました');
-                    }
-                    
-                    // groqModelが設定されていない場合、または古いモデル名の場合はデフォルト値を設定
-                    const validModels = ['gemini-1.5-flash', 'gemini-1.5-pro', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'gemma2-9b-it', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
-                    if (!parsed.groqModel || !validModels.includes(parsed.groqModel)) {
-                        parsed.groqModel = this.defaultSettings.groqModel;
-                        needsUpdate = true;
-                        console.log('Groqモデル設定をデフォルト値に設定しました');
-                    }
-                    
-                    // aiCreativeApiが設定されていない場合はデフォルト値を設定
-                    // AI創作API設定の初期化
-                    if (!parsed.aiCreativeApi) {
-                        parsed.aiCreativeApi = this.defaultSettings.aiCreativeApi;
-                        needsUpdate = true;
-                        console.log('AI創作API設定をデフォルト値に設定しました');
-                    }
-                    
-                    if (needsUpdate) {
-                        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(parsed));
-                    }
-                } else {
-                    // 設定が存在しない場合は、デフォルトでgroqを設定
-                    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.defaultSettings));
-                    console.log('デフォルト設定（groq）を設定しました');
-                }
-            } catch (error) {
-                console.error('設定移行エラー:', error);
-                // エラーが発生した場合は、強制的にデフォルト設定を適用
-                localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.defaultSettings));
-                console.log('エラーによりデフォルト設定（groq）を強制適用しました');
-            }
-        },
-        
-        get() {
-            try {
-                const stored = localStorage.getItem(this.STORAGE_KEY);
-                const result = stored ? { ...this.defaultSettings, ...JSON.parse(stored) } : this.defaultSettings;
-                console.log('📊 現在の設定を読み込み:', result);
-                return result;
-            } catch (error) {
-                console.error('設定の読み込みエラー:', error);
-                return this.defaultSettings;
-            }
-        },
-        
-        set(settings) {
-            try {
-                localStorage.setItem(this.STORAGE_KEY, JSON.stringify(settings));
-                console.log('✅ 設定を保存しました:', settings);
-            } catch (error) {
-                console.error('❌ 設定の保存エラー:', error);
-            }
-        },
-        
-        getCurrentAiApi() {
-            return this.get().aiApi;
-        }
-    };
+    // 設定管理は settings-manager.js にてグローバルな Settings オブジェクトとして提供
 
     // 設定モーダルの管理
     const setupSettingsModal = () => {
@@ -181,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
         settingsSave.addEventListener('click', () => {
             console.log('🔧 設定保存ボタンがクリックされました');
             const selectedApi = document.querySelector('input[name="ai-api"]:checked')?.value || 'groq';
-            const selectedGroqModel = document.querySelector('input[name="groq-model"]:checked')?.value || 'gemini-1.5-flash';
+            const selectedGroqModel = document.querySelector('input[name="groq-model"]:checked')?.value || 'llama-3.1-8b-instant';
             const selectedAiCreativeApi = document.querySelector('input[name="ai-creative-api"]:checked')?.value || 'chatgpt';
             
             console.log('📊 選択された設定:', {
@@ -337,14 +251,52 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const fetchFavoriteRecipes = async () => {
-        const { data, error } = await sb.from("favorites").select(`recipes!inner(${baseRecipeColumns})`).eq("client_id", getClientId()).order("created_at", { ascending: false });
-        if (error) {
-            console.error('Failed to fetch favorites:', error);
-            throw error;
+        const clientId = getClientId();
+
+        // 1. Fetch standard favorites
+        const { data: standardFavData, error: standardError } = await sb
+            .from("favorites")
+            .select(`recipes!inner(${baseRecipeColumns})`)
+            .eq("client_id", clientId);
+
+        if (standardError) {
+            console.error('Failed to fetch standard favorites:', standardError);
+            throw standardError;
         }
-        const favorites = (data || []).map(x => x.recipes);
-        console.log(`❤️ お気に入り: ${favorites.length}件`);
-        return favorites;
+        const standardFavorites = (standardFavData || []).map(x => x.recipes).filter(Boolean);
+
+        // 2. Fetch bread favorites
+        let breadFavorites = [];
+        const { data: breadFavData, error: breadError } = await sb
+            .from("bread_favorites")
+            .select(`bread_recipes!inner(id,title,flour_total_g,created_at,updated_at,notes)`)
+            .eq("client_id", clientId);
+
+        if (breadError) {
+            console.warn('Could not fetch bread favorites. The table might not exist yet.', breadError);
+        } else {
+            const breadFavoritesRaw = (breadFavData || []).map(x => x.bread_recipes).filter(Boolean);
+            // 3. Convert bread favorites to the common recipe card format
+            breadFavorites = breadFavoritesRaw.map(breadRecipe => ({
+                id: breadRecipe.id,
+                title: breadRecipe.title,
+                category: 'パン',
+                tags: ['パン用レシピ', 'ベーカーズパーセンテージ'],
+                created_at: breadRecipe.created_at,
+                updated_at: breadRecipe.updated_at,
+                is_bread_recipe: true,
+                flour_total_g: breadRecipe.flour_total_g,
+                notes: breadRecipe.notes,
+                description: `パン用レシピ - 総重量: ${breadRecipe.flour_total_g}g`
+            }));
+        }
+
+        // 4. Merge and sort
+        const allFavorites = [...standardFavorites, ...breadFavorites];
+        allFavorites.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        console.log(`❤️ お気に入り: ${allFavorites.length}件 (通常: ${standardFavorites.length}, パン: ${breadFavorites.length})`);
+        return allFavorites;
     };
 
     const fetchTranslatedRecipes = async () => {
@@ -667,16 +619,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 card.classList.add('selected');
             }
         }
-        
-        // パン用レシピの場合はクリック時にパン用レシピ一覧ページに遷移
+
+        // パン用レシピの場合は、識別のためのデータ属性を追加
         if (isBreadRecipe) {
-            card.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                // パン用レシピのIDをlocalStorageに保存して一覧ページに遷移
-                localStorage.setItem('selectedBreadRecipeId', recipe.id);
-                window.location.href = 'pages/bread_recipe_list.html';
-            });
+            card.dataset.isBread = 'true';
         }
         
         return card;
@@ -1566,12 +1512,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const setupFavoriteToggle = () => {
         cardListEl.addEventListener('click', async (e) => {
             const favoriteBtn = e.target.closest('.favorite-btn');
-            if (favoriteBtn) {
-                e.stopPropagation();
-                const recipeId = favoriteBtn.dataset.recipeId;
-                const isFavorite = favoriteBtn.classList.contains('is-favorite');
-                
-                try {
+            if (!favoriteBtn) return;
+
+            e.stopPropagation();
+
+            const recipeId = favoriteBtn.dataset.recipeId;
+            const isFavorite = favoriteBtn.classList.contains('is-favorite');
+            const card = favoriteBtn.closest('.recipe-card');
+            const isBread = card.dataset.isBread === 'true';
+
+            try {
+                if (isBread) {
+                    // パン用レシピのお気に入り処理
+                    if (isFavorite) {
+                        await sb.from('bread_favorites').delete()
+                            .eq('bread_recipe_id', recipeId)
+                            .eq('client_id', getClientId());
+                    } else {
+                        await sb.from('bread_favorites').insert({
+                            bread_recipe_id: recipeId,
+                            client_id: getClientId()
+                        });
+                    }
+                } else {
+                    // 通常レシピのお気に入り処理
                     if (isFavorite) {
                         await sb.from('favorites').delete()
                             .eq('recipe_id', recipeId)
@@ -1582,14 +1546,16 @@ document.addEventListener('DOMContentLoaded', () => {
                             client_id: getClientId()
                         });
                     }
-                    
-                    // お気に入りリストを再取得
-                    favoriteRecipes = await fetchFavoriteRecipes();
-                    updateStats();
-                    updateView();
-                } catch (error) {
-                    console.error('Failed to toggle favorite:', error);
                 }
+
+                // UIを更新
+                favoriteRecipes = await fetchFavoriteRecipes();
+                updateStats();
+                updateView();
+
+            } catch (error) {
+                console.error('Failed to toggle favorite:', error);
+                alert('お気に入り登録に失敗しました。データベースに bread_favorites テーブルが存在するか確認してください。');
             }
         });
     };
@@ -1883,20 +1849,32 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // レシピカードのクリックイベント（一括選択モード時）
+        // レシピカードのクリックイベントをリファクタリング
         cardListEl.addEventListener('click', (e) => {
+            const card = e.target.closest('.recipe-card');
+            if (!card) return;
+
+            // お気に入りボタンのクリックは、setupFavoriteToggleに任せる
+            if (e.target.closest('.favorite-btn')) {
+                return;
+            }
+
+            const recipeId = card.dataset.id;
+
             if (isBulkMode) {
-                const card = e.target.closest('.recipe-card');
-                if (card && card.dataset.id) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    toggleRecipeSelection(card.dataset.id);
-                }
+                // 一括選択モード時は、選択/解除を行う
+                e.preventDefault();
+                toggleRecipeSelection(recipeId);
             } else {
-                // 通常モード時はレシピ表示
-                const card = e.target.closest('.recipe-card');
-                if (card && !e.target.closest('.favorite-btn') && !e.target.closest('.bulk-checkbox')) {
-                    location.href = `pages/recipe_view.html?id=${encodeURIComponent(card.dataset.id)}`;
+                // 通常モード時は、レシピ詳細ページへ遷移
+                e.preventDefault();
+                if (card.dataset.isBread === 'true') {
+                    // パン用レシピの場合
+                    localStorage.setItem('selectedBreadRecipeId', recipeId);
+                    window.location.href = 'pages/bread_recipe_list.html';
+                } else {
+                    // 通常のレシピの場合
+                    location.href = `pages/recipe_view.html?id=${encodeURIComponent(recipeId)}`;
                 }
             }
         });

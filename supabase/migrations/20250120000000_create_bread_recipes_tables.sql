@@ -81,3 +81,4 @@ COMMENT ON COLUMN bread_recipe_flours.grams IS '粉の重量（グラム）';
 
 COMMENT ON COLUMN bread_recipe_ingredients.percentage IS '粉総量に対する割合（%）';
 COMMENT ON COLUMN bread_recipe_ingredients.grams IS '材料の重量（グラム）';
+

@@ -1491,66 +1491,6 @@
     </div>
   </div>
 
-  <!-- API選択ポップアップ -->
-  <div id="apiSelectionModal" class="modal-overlay" style="display: none;">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2 class="modal-title">API選択</h2>
-        <button id="apiSelectionCloseBtn" class="modal-close">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p style="margin-bottom: 1.5rem; color: #666;">レシピの解析に使用するAI APIを選択してください。</p>
-        
-        <div class="api-options">
-          <div class="api-option" data-api="groq">
-            <div class="api-option-header">
-              <input type="radio" id="api-groq" name="api-selection" value="groq" />
-              <label for="api-groq">
-                <strong>Groq API</strong>
-                <span class="api-status" id="groq-status">確認中...</span>
-              </label>
-            </div>
-            <div class="api-description">
-              <p>高速で効率的なLLM API（推奨）</p>
-              <small>無料枠: 月14,400リクエスト</small>
-            </div>
-          </div>
-          
-          <div class="api-option" data-api="gemini">
-            <div class="api-option-header">
-              <input type="radio" id="api-gemini" name="api-selection" value="gemini" checked />
-              <label for="api-gemini">
-                <strong>Google Gemini API</strong>
-                <span class="api-status" id="gemini-status">利用可能</span>
-              </label>
-            </div>
-            <div class="api-description">
-              <p>Googleの最新AIモデル</p>
-              <small>無料枠: 月1,500リクエスト</small>
-            </div>
-          </div>
-          
-          <div class="api-option" data-api="chatgpt">
-            <div class="api-option-header">
-              <input type="radio" id="api-chatgpt" name="api-selection" value="chatgpt" />
-              <label for="api-chatgpt">
-                <strong>ChatGPT API</strong>
-                <span class="api-status" id="chatgpt-status">確認中...</span>
-              </label>
-            </div>
-            <div class="api-description">
-              <p>OpenAIの高品質なAIモデル</p>
-              <small>有料: 従量課金制</small>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button id="apiSelectionConfirmBtn" class="btn primary">選択したAPIで続行</button>
-        <button id="apiSelectionCancelBtn" class="btn ghost">キャンセル</button>
-      </div>
-    </div>
-  </div>
 
   <!-- URL読み込み中ポップアップ -->
   <div id="urlLoadingPopup" class="loading-popup" style="display: none;">
@@ -1617,6 +1557,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../config.js"></script>
+  <script src="../assets/js/settings-manager.js"></script>
   
   <!-- 外部JavaScriptファイル -->
   <script src="../assets/js/utils.js?v=20250115"></script>

@@ -10,14 +10,14 @@ const getSettings = () => {
    const stored = localStorage.getItem('recipe-box-settings');
    const defaultSettings = {
      aiApi: 'groq',
-      groqModel: 'gemini-1.5-flash'
+      groqModel: 'llama-3.1-8b-instant'
     };
     return stored ? { ...defaultSettings, ...JSON.parse(stored) } : defaultSettings;
   } catch (error) {
     console.error('設定の読み込みエラー:', error);
    return {
      aiApi: 'groq',
-      groqModel: 'gemini-1.5-flash'
+      groqModel: 'llama-3.1-8b-instant'
     };
   }
 };
@@ -25,13 +25,13 @@ const getSettings = () => {
 // 現在のGroqモデルを取得する関数
 const getCurrentGroqModel = () => {
   const settings = getSettings();
-  const model = settings.groqModel || 'gemini-1.5-flash';
+  const model = settings.groqModel || 'llama-3.1-8b-instant';
   
   // 無効なモデルの場合はデフォルトに戻す
-  const validModels = ['gemini-1.5-flash', 'gemini-1.5-pro', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'gemma2-9b-it', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
+  const validModels = ['llama-3.1-8b-instant', 'llama-3.1-70b-8192', 'mixtral-8x7b-32768', 'gemma2-9b-it'];
   if (!validModels.includes(model)) {
     console.warn('⚠️ 無効なモデルです。Gemini 1.5 Flashに切り替えます。');
-    return 'gemini-1.5-flash';
+    return 'llama-3.1-8b-instant';
   }
   
   return model;

@@ -7,6 +7,9 @@ window.APP_CONFIG = {
   // アプリケーション設定
   APP_NAME: 'Recipe Box',
   APP_VERSION: '1.0.0',
+
+  // ヘッダーのグローバル設定
+  isHeaderGlobal: true,
   
   // 機能フラグ
   FEATURES: {

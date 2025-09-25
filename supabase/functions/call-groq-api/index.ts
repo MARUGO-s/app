@@ -7,6 +7,7 @@ type ChatMessage = {
 
 type RequestPayload = {
   prompt?: string;
+  text?: string;
   messages?: ChatMessage[];
   model?: string;
   temperature?: number;
@@ -21,14 +22,15 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const DEFAULT_MODEL = "llama-3.1-70b-versatile";
+const DEFAULT_MODEL = "llama-3.1-8b-instant";
 
 function buildMessagesFromPayload(payload: RequestPayload): ChatMessage[] {
   if (payload.messages && payload.messages.length > 0) {
     return payload.messages;
   }
 
-  const prompt = payload.prompt?.trim();
+  // textパラメータもpromptパラメータも受け入れる
+  const prompt = payload.prompt?.trim() || payload.text?.trim();
   if (prompt) {
     return [
       {
@@ -47,13 +49,21 @@ serve(async (req) => {
   }
 
   try {
-    const body: RequestPayload = await req.json();
+    const requestBody = await req.json();
+    console.log("📝 受信したリクエストボディ:", JSON.stringify(requestBody, null, 2));
+    
+    // bodyオブジェクト内のパラメータを取得
+    const body: RequestPayload = requestBody.body || requestBody;
+    console.log("📝 処理するボディ:", JSON.stringify(body, null, 2));
+    
     const apiKey = Deno.env.get("GROQ_API_KEY");
     if (!apiKey) {
       throw new Error("GROQ_API_KEY が設定されていません");
     }
 
     const messages = buildMessagesFromPayload(body);
+    console.log("📝 生成されたメッセージ:", JSON.stringify(messages, null, 2));
+    
     if (!messages.length) {
       throw new Error("送信内容が生成できませんでした");
     }

@@ -110,30 +110,12 @@ const saveIngredientsAndSteps = async (recipeId, ingredients, steps) => {
   }
 };
 
-// 設定を読み込む関数
-const getSettings = () => {
-  try {
-   const stored = localStorage.getItem('recipe-box-settings');
-   const defaultSettings = {
-     aiApi: 'groq',
-      groqModel: 'gemini-1.5-flash'
-    };
-    const result = stored ? { ...defaultSettings, ...JSON.parse(stored) } : defaultSettings;
-    console.log('🔧 レシピ編集画面で設定を読み込み:', result);
-    return result;
-  } catch (error) {
-    console.error('設定の読み込みエラー:', error);
-   return {
-     aiApi: 'groq',
-      groqModel: 'gemini-1.5-flash'
-    };
-  }
-};
+// 設定は settings-manager.js のグローバルな Settings オブジェクトから取得します
 
 // 現在のGroqモデルを取得する関数
 const getCurrentGroqModel = () => {
-  const settings = getSettings();
-  const model = settings.groqModel || 'gemini-1.5-flash';
+  const settings = Settings.get();
+  const model = settings.groqModel || 'llama-3.1-8b-instant';
   
   console.log(`🔧 現在のGroqモデル: ${model}`);
   console.log(`📊 設定詳細:`, {
@@ -143,10 +125,10 @@ const getCurrentGroqModel = () => {
   });
   
   // 無効なモデルの場合はデフォルトに戻す
-  const validModels = ['gemini-1.5-flash', 'gemini-1.5-pro', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'gemma2-9b-it', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
+  const validModels = ['llama-3.1-8b-instant', 'llama-3.1-70b-8192', 'mixtral-8x7b-32768', 'gemma2-9b-it'];
   if (!validModels.includes(model)) {
     console.warn('⚠️ 無効なモデルです。Gemini 1.5 Flashに切り替えます。');
-    return 'gemini-1.5-flash';
+    return 'llama-3.1-8b-instant';
   }
   
   return model;
@@ -391,7 +373,7 @@ const parseIngredientString = (ingredientStr) => {
   const result = { item: itemOnly, quantity: '', unit: '', price };
   console.log(`❌ 解析失敗、材料名のみ:`, result);
   console.log(`❌ 解析失敗の詳細: 入力="${str}", 長さ=${str.length}, 型=${typeof str}`);
-  console.log(`❌ 解析失敗のパターン: フェリスィム形式=${!!felicimmeFormat}, 日本語単位=${!!japaneseUnits}, スプーン単位=${!!spoonUnits}`);
+  console.log(`❌ 解析失敗のパターン: 日本語単位=${!!japaneseUnits}, スプーン単位=${!!spoonUnits}`);
   return result;
 };
 
@@ -545,62 +527,7 @@ const convertUnits = (quantity, unit, itemName = '') => {
 };
 
 
-// 設定管理
-const Settings = {
-  STORAGE_KEY: 'recipe-box-settings',
-  defaultSettings: {
-    aiApi: 'groq' // 'groq' または 'chatgpt'
-  },
-  
-  // 古い設定をクリアして新しいデフォルトを適用
-  migrateSettings() {
-    try {
-      const stored = localStorage.getItem(this.STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        // 古いgemini設定をgroqに移行
-        if (parsed.aiApi === 'gemini') {
-          parsed.aiApi = 'groq';
-          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(parsed));
-          console.log('設定をgeminiからgroqに移行しました');
-        }
-        // 古いchatgpt設定もgroqに移行（強制的に）
-        if (parsed.aiApi === 'chatgpt') {
-          parsed.aiApi = 'groq';
-          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(parsed));
-          console.log('設定をchatgptからgroqに移行しました');
-        }
-      } else {
-        // 設定が存在しない場合は、デフォルトでgroqを設定
-        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.defaultSettings));
-        console.log('デフォルト設定（groq）を設定しました');
-      }
-    } catch (error) {
-      console.error('設定移行エラー:', error);
-      // エラーが発生した場合は、強制的にデフォルト設定を適用
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.defaultSettings));
-      console.log('エラーによりデフォルト設定（groq）を強制適用しました');
-    }
-  },
-  
-  get() {
-    try {
-      const stored = localStorage.getItem(this.STORAGE_KEY);
-      const result = stored ? { ...this.defaultSettings, ...JSON.parse(stored) } : this.defaultSettings;
-      console.log('現在の設定:', result);
-      return result;
-    } catch (error) {
-      console.error('設定の読み込みエラー:', error);
-      return this.defaultSettings;
-    }
-  },
-  
-  getCurrentAiApi() {
-    const api = this.get().aiApi;
-    console.log('使用するAPI:', api);
-    return api;
-  }
-};
+// 設定管理は settings-manager.js にてグローバルな Settings オブジェクトとして提供
 
 // API Functions
 async function callGroqAPI(text, url) {
@@ -665,7 +592,7 @@ JSON形式で返す:
   "description": "レシピ説明・コツ・ポイント",
   "servings": "人数（数字のみ）",
   "ingredients": [
-    {"item": "材料名", "quantity": "分量", "unit": "単位"}
+    {"item": "材料名", "quantity": "分量（数字のみ）", "unit": "単位（g、ml、個、枚、本、束、大さじ、小さじ、カップ等）"}
   ],
   "steps": [
     {"step": "手順（番号付きの手順を個別に抽出）"}
@@ -702,7 +629,7 @@ JSON形式で返す:
   "description": "レシピ説明",
   "servings": "人数（数字のみ）",
   "ingredients": [
-    {"item": "材料名", "quantity": "分量", "unit": "単位"}
+    {"item": "材料名", "quantity": "分量（数字のみ）", "unit": "単位（g、ml、個、枚、本、束、大さじ、小さじ、カップ等）"}
   ],
   "steps": [
     {"step": "手順"}
@@ -984,42 +911,10 @@ JSON形式で返す:
   console.log('📄 入力テキストの先頭:', text.substring(0, 200));
   
   try {
-    // 選択されたAPIに応じて関数を切り替え
-    console.log('🔍 window.selectedApi:', window.selectedApi);
-    console.log('🔍 現在のAPI選択状況:', {
-      selectedApi: window.selectedApi,
-      isGemini: window.selectedApi === 'gemini',
-      apiFunction: window.selectedApi === 'gemini' ? 'call-gemini-api' : 'call-groq-api'
-    });
-    
-    const apiFunction = window.selectedApi === 'gemini' ? 'call-gemini-api' : 'call-groq-api';
-    const model = window.selectedApi === 'gemini' ? 'gemini-1.5-flash' : getCurrentGroqModel();
-    
-    console.log('🔍 使用するAPI:', apiFunction, 'モデル:', model);
-    
-    const { data, error } = await sb.functions.invoke(apiFunction, {
-      body: {
-        text,
-        model: model,
-        maxTokens: 4096,
-        model: "gpt-3.5-turbo",
-        maxTokens: 4000,
-        temperature: 0.7
-      }
-    });
-
-    if (error) {
-      console.error('❌ Groq proxy error:', error);
-      throw new Error('Groq API呼び出しに失敗しました');
-    }
-
-    if (!data?.success) {
-      console.error('❌ Groq proxy response:', data);
-      throw new Error(data?.error || 'Groq API呼び出しに失敗しました');
-    }
-
-    const content = data.content;
-    console.log('📝 Groq API レスポンス内容:', content?.title || '');
+    // callAIAPI関数を呼び出してAI解析を実行
+    console.log('🤖 AI解析を開始...');
+    const content = await callAIAPI(prompt, url);
+    console.log('📝 AI解析完了、レスポンス内容（抜粋）:', content?.title || '');
 
     // JSONを抽出（複数のパターンを試行）
     let jsonText = content;
@@ -1050,7 +945,25 @@ JSON形式で返す:
     console.log('🔧 JSON長:', jsonText.length);
     
     try {
-      const parsedData = JSON.parse(jsonText);
+      // JSON解析前にテキストをクリーニング
+      let cleanJsonText = jsonText.trim();
+      
+      // HTMLタグを除去
+      cleanJsonText = cleanJsonText.replace(/<[^>]*>/g, '');
+      
+      // 不正な文字を除去
+      cleanJsonText = cleanJsonText.replace(/[^\x20-\x7E\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '');
+      
+      // 最初の{から最後の}までを抽出
+      const firstBrace = cleanJsonText.indexOf('{');
+      const lastBrace = cleanJsonText.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        cleanJsonText = cleanJsonText.substring(firstBrace, lastBrace + 1);
+      }
+      
+      console.log('🔧 クリーニング後のJSON:', cleanJsonText);
+      
+      const parsedData = JSON.parse(cleanJsonText);
       console.log('✅ パースされたデータ:', parsedData);
       
       // データの検証と修正
@@ -1064,12 +977,27 @@ JSON形式で返す:
         console.warn('⚠️ 材料が見つかりません。デフォルト値を設定します。');
         parsedData.ingredients = [{ item: '材料を手動で入力してください', quantity: '', unit: '' }];
       } else {
-        // 各材料の形式を統一
-        parsedData.ingredients = parsedData.ingredients.map(ing => ({
-          item: ing.item || '',
-          quantity: ing.quantity || '',
-          unit: ing.unit || ''
-        }));
+        // 各材料の形式を統一し、分量と単位を分離
+        parsedData.ingredients = parsedData.ingredients.map(ing => {
+          let quantity = ing.quantity || '';
+          let unit = ing.unit || '';
+          
+          // 分量と単位が結合されている場合の分離処理
+          if (quantity && !unit && typeof quantity === 'string') {
+            // 数字と単位を分離（例：「200g」→ quantity: "200", unit: "g"）
+            const match = quantity.match(/^(\d+(?:\.\d+)?(?:\/\d+)?)\s*([a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+)$/);
+            if (match) {
+              quantity = match[1];
+              unit = match[2];
+            }
+          }
+          
+          return {
+            item: ing.item || '',
+            quantity: quantity,
+            unit: unit
+          };
+        });
       }
       
       // stepsの形式を統一
@@ -1182,6 +1110,318 @@ async function callChatGPTAPI(text, url) {
   }
 }
 
+// Groq API直接呼び出し関数
+async function callGroqAPIDirect(text, url) {
+  console.log('🤖 Groq API直接呼び出し開始');
+  
+  // URLと内容から言語を判定
+  const isJapaneseSite = url && (
+    url.includes('.jp') ||
+    url.includes('japanese') ||
+    url.includes('japan') ||
+    /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(url) ||
+    /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(text.substring(0, 1000))
+  );
+  
+  // グローバル変数として設定
+  window.isJapaneseSite = isJapaneseSite;
+  console.log('🌍 サイト言語判定:', isJapaneseSite ? '日本語サイト' : '海外サイト');
+
+  // プロンプトを生成
+  let prompt = '';
+  if (isJapaneseSite) {
+    prompt = `レシピ情報を抽出。ナビ・広告・SNS埋め込み・関連記事を無視し、本文のみ処理。
+
+★★★CRITICAL: titleフィールドには元ページの料理名を一字一句そのままコピーしてください。絶対に翻訳、変更、解釈しないでください★★★
+
+URL: ${url || '不明'}
+テキスト: ${text.substring(0, 4000)}
+
+JSON形式で返す:
+{
+  "title": "【ここに元ページの料理名をそのままコピペ】",
+  "description": "レシピ説明",
+  "servings": "人数（数字のみ）",
+  "ingredients": [
+    {"item": "材料名", "quantity": "分量（数字のみ）", "unit": "単位（g、ml、個、枚、本、束、大さじ、小さじ、カップ等）"}
+  ],
+  "steps": [
+    {"step": "手順"}
+  ],
+  "notes": "メモ",
+  "image_url": "【レシピのメイン画像URL（wp-content/uploads等の実際の料理画像を優先、見つからない場合は空文字）】",
+  "readable_text": "【Geminiスタイルの読みやすいテキスト形式でレシピ全体をまとめる。以下の形式で：\n\n料理名\n\n説明文\n\n人数: X人分\n\n材料:\n- 材料名: 分量単位\n\nステップ1:\n手順の内容\n\nステップ2:\n手順の内容\n\nメモ:\nメモの内容】"
+}
+
+重要: 日本語コンテンツは翻訳せずそのまま抽出してください。
+変換ルール: 大さじ1=15ml/g、小さじ1=5ml/g。液体=ml、固体=g。
+
+★★★日本語サイト専用抽出指示★★★
+- 「材料」「【材料】」セクションから材料を抽出
+- 「手順」「作り方」「調理」セクションから手順を抽出
+- 番号付き手順（1. 2. 3. 4. 5.）を個別に抽出
+- 料理王国サイトの場合：「鹿ロース」「フォワグラ」等の具体的な材料名を正確に抽出
+- 手順は番号付きで個別に抽出（例：1. 2. 3. 4. 5. 6. 7.）
+- 手順の抽出パターン：
+  * 「_1_」「_2_」「_3_」などの番号付き見出しから手順を抽出
+  * 「## _1_手順名」の形式で記載されている手順を個別に抽出
+  * 各手順の詳細説明も含める
+  * 手順名と説明文を組み合わせて完全な手順として抽出
+  * 「鶏肉を焼く」「野菜を炒める」「白ワインを加える」などの手順タイトルと説明を組み合わせる
+- 材料は表形式から正確に抽出
+- 料理名は見出しから正確に抽出
+- ミックススパイスの材料も個別に抽出
+- 手順の詳細な説明も含める
+- 手順が見つからない場合は空の配列ではなく、少なくとも1つの手順を含める
+
+★★★手順抽出の重要指標★★★
+- 手順は必ず番号で始まっている（1. 2. 3. 4. 5. 6. 7. 8. 9. 10. など）
+- 番号の後に手順の内容が続く
+- 番号のパターン：1. 2. 3. 4. 5. 6. 7. 8. 9. 10. 11. 12. 13. 14. 15. 16. 17. 18. 19. 20.
+- 番号の前後には空白や改行がある
+- 番号の後に手順のタイトルや説明が続く
+- 番号を見つけたら、その番号から次の番号までを1つの手順として抽出
+- 番号が連続している場合は、すべての番号付き手順を抽出
+- 番号が飛んでいる場合（1. 3. 5. など）も抽出対象
+- 番号の後に手順の内容がない場合は、その番号をスキップ
+- 番号の後に手順の内容がある場合は、その番号と内容を1つの手順として抽出
+
+★★★分量・単位抽出の重要指示★★★
+- 分量は必ず数字で抽出（例：200、1.5、1/2、0.5）
+- 単位は必ず具体的に抽出（例：g、ml、個、枚、本、束、大さじ、小さじ、カップ、杯、片、房）
+- 「200g」→ quantity: "200", unit: "g"
+- 「大さじ1」→ quantity: "1", unit: "大さじ"
+- 「1/2カップ」→ quantity: "1/2", unit: "カップ"
+- 「適量」→ quantity: "適量", unit: ""
+- 「少々」→ quantity: "少々", unit: ""
+- 分量と単位を必ず分離して抽出すること
+- JSONのみ返す。`;
+  } else {
+    prompt = `レシピ情報を抽出。ナビ・広告・SNS埋め込み・関連記事を無視し、本文のみ処理。
+
+★★★CRITICAL: titleフィールドには元ページの料理名を一字一句そのままコピーしてください。絶対に翻訳、変更、解釈しないでください★★★
+
+URL: ${url || '不明'}
+テキスト: ${text.substring(0, 4000)}
+
+JSON形式で返す:
+{
+  "title": "【料理名を日本語に翻訳】",
+  "description": "【レシピ説明を日本語に翻訳】",
+  "servings": "人数（数字のみ）",
+  "ingredients": [
+    {"item": "【材料名を日本語に翻訳】", "quantity": "分量", "unit": "【単位を日本語に翻訳（g、ml等）】"}
+  ],
+  "steps": [
+    {"step": "【手順1を日本語に翻訳】"},
+    {"step": "【手順2を日本語に翻訳】"},
+    {"step": "【手順3を日本語に翻訳】"}
+  ],
+  "notes": "【メモを日本語に翻訳】",
+  "image_url": "【レシピのメイン画像URL（wp-content/uploads等の実際の料理画像を優先、見つからない場合は空文字）】",
+  "readable_text": "【Geminiスタイルの読みやすいテキスト形式でレシピ全体をまとめる。以下の形式で：\n\n料理名\n\n説明文\n\n人数: X人分\n\n材料:\n- 材料名: 分量単位\n\nステップ1:\n手順の内容\n\nステップ2:\n手順の内容\n\nメモ:\nメモの内容】"
+}
+
+重要: 海外サイトのコンテンツは必ず日本語に翻訳してください。
+変換ルール: 大さじ1=15ml/g、小さじ1=5ml/g。液体=ml、固体=g。
+
+★★★海外サイト専用抽出指示★★★
+- 「Ingredients」「Materials」セクションから材料を抽出
+- 「Instructions」「Steps」「Preparation」セクションから手順を抽出
+- 番号付き手順（1. 2. 3. 4. 5.）を個別に抽出
+- 手順は番号付きで個別に抽出（例：1. 2. 3. 4. 5. 6. 7.）
+- 手順の抽出パターン：
+  * 「_1_」「_2_」「_3_」などの番号付き見出しから手順を抽出
+  * 「## _1_手順名」の形式で記載されている手順を個別に抽出
+  * 各手順の詳細説明も含める
+  * 手順名と説明文を組み合わせて完全な手順として抽出
+  * 「鶏肉を焼く」「野菜を炒める」「白ワインを加える」などの手順タイトルと説明を組み合わせる
+- 材料は表形式から正確に抽出
+- 料理名は見出しから正確に抽出
+- ミックススパイスの材料も個別に抽出
+- 手順の詳細な説明も含める
+- 手順が見つからない場合は空の配列ではなく、少なくとも1つの手順を含める
+
+★★★手順抽出の重要指標★★★
+- 手順は必ず番号で始まっている（1. 2. 3. 4. 5. 6. 7. 8. 9. 10. など）
+- 番号の後に手順の内容が続く
+- 番号のパターン：1. 2. 3. 4. 5. 6. 7. 8. 9. 10. 11. 12. 13. 14. 15. 16. 17. 18. 19. 20.
+- 番号の前後には空白や改行がある
+- 番号の後に手順のタイトルや説明が続く
+- 番号を見つけたら、その番号から次の番号までを1つの手順として抽出
+- 番号が連続している場合は、すべての番号付き手順を抽出
+- 番号が飛んでいる場合（1. 3. 5. など）も抽出対象
+- 番号の後に手順の内容がない場合は、その番号をスキップ
+- 番号の後に手順の内容がある場合は、その番号と内容を1つの手順として抽出
+
+★★★分量・単位抽出の重要指示★★★
+- 分量は必ず数字で抽出（例：200、1.5、1/2、0.5）
+- 単位は必ず具体的に抽出（例：g、ml、個、枚、本、束、大さじ、小さじ、カップ、杯、片、房）
+- 「200g」→ quantity: "200", unit: "g"
+- 「大さじ1」→ quantity: "1", unit: "大さじ"
+- 「1/2カップ」→ quantity: "1/2", unit: "カップ"
+- 「適量」→ quantity: "適量", unit: ""
+- 「少々」→ quantity: "少々", unit: ""
+- 分量と単位を必ず分離して抽出すること
+- JSONのみ返す。`;
+  }
+
+  console.log('📝 使用するプロンプト:', prompt);
+  console.log('📄 入力テキストの先頭:', text.substring(0, 200));
+  
+  try {
+    // Groq APIを直接呼び出し
+    const apiFunction = 'call-groq-api';
+    const model = getCurrentGroqModel();
+    
+    console.log('🔍 使用するAPI:', apiFunction, 'モデル:', model);
+    
+    const { data, error } = await sb.functions.invoke(apiFunction, {
+      body: {
+        text: prompt,
+        model: model,
+        maxTokens: 4096,
+        temperature: 0.7
+      }
+    });
+
+    if (error) {
+      console.error('❌ API 呼び出しエラー:', error);
+      throw new Error('API呼び出しに失敗しました');
+    }
+
+    if (!data?.success) {
+      console.error('❌ API レスポンス異常:', data);
+      throw new Error(data?.error || 'API呼び出しに失敗しました');
+    }
+
+    const content = data.content;
+    console.log('📝 API レスポンス内容（抜粋）:', content?.title || '');
+
+    // JSONを抽出（複数のパターンを試行）
+    let jsonText = content;
+    
+    // パターン1: ```json と ``` の間
+    let jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
+    if (jsonMatch) {
+      jsonText = jsonMatch[1];
+    } else {
+      // パターン2: 最初の { から最後の } まで
+      const firstBrace = content.indexOf('{');
+      const lastBrace = content.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        jsonText = content.substring(firstBrace, lastBrace + 1);
+      }
+    }
+    
+    console.log('🔧 抽出されたJSON:', jsonText);
+    console.log('🔧 JSON長:', jsonText.length);
+    
+    try {
+      // JSON解析前にテキストをクリーニング
+      let cleanJsonText = jsonText.trim();
+      
+      // HTMLタグを除去
+      cleanJsonText = cleanJsonText.replace(/<[^>]*>/g, '');
+      
+      // 不正な文字を除去
+      cleanJsonText = cleanJsonText.replace(/[^\x20-\x7E\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '');
+      
+      // 最初の{から最後の}までを抽出
+      const firstBrace = cleanJsonText.indexOf('{');
+      const lastBrace = cleanJsonText.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        cleanJsonText = cleanJsonText.substring(firstBrace, lastBrace + 1);
+      }
+      
+      console.log('🔧 クリーニング後のJSON:', cleanJsonText);
+      
+      const parsedData = JSON.parse(cleanJsonText);
+      console.log('✅ パースされたデータ:', parsedData);
+      
+      // データの検証と修正
+      if (!parsedData.title || parsedData.title === '不明なレシピ') {
+        console.warn('⚠️ タイトルが不明です。デフォルト値を設定します。');
+        parsedData.title = 'レシピ（URLから抽出）';
+      }
+      
+      // ingredientsの形式を統一
+      if (!parsedData.ingredients || !Array.isArray(parsedData.ingredients) || parsedData.ingredients.length === 0) {
+        console.warn('⚠️ 材料が見つかりません。デフォルト値を設定します。');
+        parsedData.ingredients = [{ item: '材料を手動で入力してください', quantity: '', unit: '' }];
+      } else {
+        // 各材料の形式を統一し、分量と単位を分離
+        parsedData.ingredients = parsedData.ingredients.map(ing => {
+          let quantity = ing.quantity || '';
+          let unit = ing.unit || '';
+          
+          // 分量と単位が結合されている場合の分離処理
+          if (quantity && !unit && typeof quantity === 'string') {
+            // 数字と単位を分離（例：「200g」→ quantity: "200", unit: "g"）
+            const match = quantity.match(/^(\d+(?:\.\d+)?(?:\/\d+)?)\s*([a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+)$/);
+            if (match) {
+              quantity = match[1];
+              unit = match[2];
+            }
+          }
+          
+          return {
+            item: ing.item || '',
+            quantity: quantity,
+            unit: unit
+          };
+        });
+      }
+      
+      // stepsの形式を統一
+      if (!parsedData.steps || !Array.isArray(parsedData.steps) || parsedData.steps.length === 0) {
+        console.warn('⚠️ 手順が見つかりません。デフォルト値を設定します。');
+        parsedData.steps = [{ step: '手順を手動で入力してください' }];
+      } else {
+        // 各手順の形式を統一
+        parsedData.steps = parsedData.steps.map(step => ({
+          step: step.step || step || ''
+        }));
+      }
+      
+      // その他のフィールドのデフォルト値設定
+      parsedData.description = parsedData.description || '';
+      parsedData.servings = parsedData.servings || '4';
+      parsedData.notes = parsedData.notes || '';
+      parsedData.image_url = parsedData.image_url || '';
+      parsedData.readable_text = parsedData.readable_text || '';
+      
+      console.log('✅ 最終的なレシピデータ:', parsedData);
+      return parsedData;
+      
+    } catch (parseError) {
+      console.error('❌ JSON解析エラー:', parseError);
+      console.log('🔧 解析対象テキスト:', jsonText);
+      
+      // フォールバック: デフォルトのレシピデータを返す
+      console.warn('⚠️ JSON解析に失敗したため、デフォルトのレシピデータを返します');
+      const fallbackData = {
+        title: 'レシピ（URLから抽出）',
+        description: 'レシピの詳細を手動で入力してください',
+        servings: '4',
+        ingredients: [
+          { item: '材料を手動で入力してください', quantity: '', unit: '' }
+        ],
+        steps: [
+          { step: '手順を手動で入力してください' }
+        ],
+        notes: 'URLから自動抽出できませんでした'
+      };
+      
+      return fallbackData;
+    }
+    
+  } catch (error) {
+    console.error('❌ Groq API呼び出しエラー:', error);
+    throw error;
+  }
+}
+
 // 統一API呼び出し関数
 async function callAIAPI(text, url) {
   // URL取り込み時は window.selectedApi を優先、それ以外は設定値を使用
@@ -1195,7 +1435,9 @@ async function callAIAPI(text, url) {
     console.log('🔍 Gemini API専用処理を実行');
     return await callGroqAPI(text, url); // callGroqAPI関数内でGemini APIを呼び出し
   } else {
-    return await callGroqAPI(text, url);
+    // Groq APIを直接呼び出し
+    console.log('🤖 Groq APIを直接呼び出し');
+    return await callGroqAPIDirect(text, url);
   }
 }
 
@@ -1547,30 +1789,13 @@ async function fetchHTMLViaProxy(url) {
   throw new Error('すべてのプロキシサービスが失敗しました');
 }
 
-// API選択ポップアップを表示する関数
+// URL取り込みをGroqで直接実行する関数
 const showApiSelectionModal = (url) => {
-  console.log('🔍 API選択ポップアップを表示:', url);
+  console.log('🔍 URL取り込みをGroqで直接実行:', url);
   
-  const modal = document.getElementById('apiSelectionModal');
-  if (!modal) {
-    console.error('❌ API選択モーダルが見つかりません');
-    console.error('❌ 利用可能なモーダル:', document.querySelectorAll('[id*="modal"]'));
-    return;
-  }
-  
-  console.log('✅ API選択モーダルを発見:', modal);
-  
-  // モーダルを表示
-  modal.style.display = 'flex';
-  console.log('✅ モーダルを表示しました');
-  
-  // APIの状態をチェック
-  checkApiStatus();
-  
-  // イベントリスナーを設定
-  setupApiSelectionEvents(url);
-  
-  console.log('✅ API選択ポップアップの設定完了');
+  // 直接GroqでURL取り込みを実行
+  window.selectedApi = 'groq';
+  runImportWithSelectedApi(url, 'groq');
 };
 
 // APIの状態をチェックする関数
@@ -1589,7 +1814,7 @@ const checkApiStatus = async () => {
       const { data, error } = await sb.functions.invoke('call-groq-api', {
         body: {
           prompt: 'test',
-          model: 'llama-3.1-70b-versatile',
+          model: 'llama-3.1-8b-instant',
           maxTokens: 10
         }
       });
@@ -1608,33 +1833,10 @@ const checkApiStatus = async () => {
     }
   }
   
-  // Gemini APIの状態をチェック
+  // Gemini APIの状態をチェック（現状は未対応のため判定のみ）
   if (geminiStatus) {
-    geminiStatus.textContent = '確認中...';
-    geminiStatus.className = 'api-status checking';
-    
-    try {
-      // Gemini APIのテスト
-      const { data, error } = await sb.functions.invoke('call-groq-api', {
-        body: {
-          prompt: 'test',
-          model: 'gemini-1.5-flash',
-          maxTokens: 10
-        }
-      });
-      
-      if (error || !data?.success) {
-        geminiStatus.textContent = '利用不可';
-        geminiStatus.className = 'api-status unavailable';
-      } else {
-        geminiStatus.textContent = '利用可能';
-        geminiStatus.className = 'api-status available';
-      }
-    } catch (error) {
-      console.error('Gemini API チェックエラー:', error);
-      geminiStatus.textContent = '利用不可';
-      geminiStatus.className = 'api-status unavailable';
-    }
+    geminiStatus.textContent = '未対応';
+    geminiStatus.className = 'api-status unavailable';
   }
   
   // ChatGPT APIの状態をチェック
@@ -1747,7 +1949,9 @@ const runImportWithSelectedApi = async (url, selectedApi) => {
     const loadingStatus = loadingPopup.querySelector('.loading-status');
     
     if (loadingTitle) loadingTitle.textContent = 'レシピを読み込み中...';
-    if (loadingMessage) loadingMessage.textContent = `${selectedApi === 'groq' ? 'Groq API' : 'Google Gemini API'}でレシピ情報を取得しています`;
+    if (loadingMessage) {
+      loadingMessage.textContent = 'Groq APIでレシピ情報を取得しています';
+    }
     if (loadingStatus) loadingStatus.textContent = '1回目を試行中...';
   }
   
@@ -1782,12 +1986,8 @@ const runImportWithSelectedApi = async (url, selectedApi) => {
 window.runImport = async function(url, retryCount = 0) {
   const maxRetries = 1; // 最大1回リトライ（合計2回実行）
 
-  // API選択が必須
-  if (!window.selectedApi) {
-    console.error('❌ APIが選択されていません。API選択ポップアップを表示します。');
-    showApiSelectionModal(url);
-    return;
-  }
+  // URL取り込みはGroqのみ使用
+  window.selectedApi = 'groq';
   
   console.log('🔍 選択されたAPI:', window.selectedApi);
 
@@ -1804,8 +2004,8 @@ window.runImport = async function(url, retryCount = 0) {
     // 取り込み元URLを記録
     currentSourceUrl = url;
     
-    // Groq API使用フラグを設定（URL取り込み時はGroq APIを使用）
-    window.isGroqGenerated = true;
+    // Groq API使用フラグはGroq選択時のみtrue
+    window.isGroqGenerated = window.selectedApi === 'groq';
     
     // URLフィールドに表示
     const sourceUrlEl = document.getElementById('sourceUrl');
@@ -1909,7 +2109,9 @@ window.runImport = async function(url, retryCount = 0) {
 
     console.log('🤖 AI解析を開始...');
     
-    const recipeData = await callAIAPI(html, url);
+    // HTMLをテキストに変換してAI解析を実行
+    const text = cleanHTML(html, url);
+    const recipeData = await callAIAPI(text, url);
     console.log('✅ AI解析完了:', recipeData);
     
     // AI解析結果をグローバル変数に保存
