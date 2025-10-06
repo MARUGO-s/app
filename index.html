@@ -8,6 +8,27 @@
   <link rel="stylesheet" href="assets/css/style.css?v=20250116ai">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- GitHub Pages用設定（直接埋め込み） -->
+  <script>
+    window.APP_CONFIG = {
+      // Supabase設定（本番環境）
+      SUPABASE_URL: 'https://ctxyawinblwcbkovfsyj.supabase.co',
+      SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q',
+      
+      // API設定
+      API_BASE_URL: 'https://ctxyawinblwcbkovfsyj.supabase.co/functions/v1',
+      
+      // アプリ設定
+      APP_NAME: 'Recipe Keeper',
+      VERSION: '1.0.0',
+      
+      // GitHub Pages用設定
+      IS_GITHUB_PAGES: true,
+      BASE_PATH: '/recipes'
+    };
+    
+    console.log('✅ GitHub Pages設定ロード完了:', window.APP_CONFIG);
+  </script>
   <style>
     /* 一括選択UI用のスタイル */
     .bulk-selection-ui {
@@ -913,6 +934,15 @@
   </style>
 </head>
 <body>
+  <!-- ショートカット：レシピ取り込みテストへ -->
+  <div style="position: sticky; top: 0; z-index: 100; background: var(--bg-secondary, #f8f9fa); border-bottom: 1px solid var(--border-medium, #dee2e6);">
+    <div style="max-width: 1200px; margin: 0 auto; padding: 0.5rem 1rem; display: flex; justify-content: flex-end; gap: 0.5rem;">
+      <a href="pages/recipe_import_test.html" class="btn primary" style="display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+        <i class="fa-solid fa-wand-magic-sparkles"></i>
+        レシピ取り込み（テスト）
+      </a>
+    </div>
+  </div>
 
   <header class="app-header">
     <div class="header-content">
@@ -1032,8 +1062,8 @@
         <button class="category-btn" data-category="AI-Groq解析">
           AI-Groq解析
         </button>
-        <button class="category-btn" data-category="AI-Gemini解析">
-          AI-Gemini解析
+        <button class="category-btn" data-category="AI-ChatGPT解析">
+          AI-ChatGPT解析
         </button>
         <button class="category-btn" data-category="その他">
           その他
