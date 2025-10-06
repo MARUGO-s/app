@@ -1,6 +1,6 @@
 /**
  * AI設定管理モジュール
- * Vision APIの後の文字解析でGroqまたはGeminiを選択可能
+ * Azure OCRの後の文字解析でGroqまたはChatGPTを選択可能
  */
 
 class AIConfig {
@@ -15,14 +15,14 @@ class AIConfig {
         endpoint: 'call-groq-api',
         strengths: ['高速処理', '材料解析', 'コスト効率']
       },
-      gemini: {
-        name: 'Gemini',
-        description: '高精度な解析、複雑なレシピに最適化',
-        model: 'gemini-1.5-flash',
+      chatgpt: {
+        name: 'ChatGPT',
+        description: '柔軟な解析、OpenAIの最新モデルを使用',
+        model: 'gpt-4o-mini',
         maxTokens: 4096,
         temperature: 0.2,
-        endpoint: 'call-vision-api',
-        strengths: ['高精度', '複雑な構造', '多言語対応']
+        endpoint: 'call-openai-api',
+        strengths: ['柔軟な応答', '安定した精度', '多言語対応']
       }
     };
     
@@ -35,7 +35,11 @@ class AIConfig {
    */
   getStoredProvider() {
     try {
-      return localStorage.getItem('ai_provider') || this.defaultProvider;
+      const stored = localStorage.getItem('ai_provider');
+      if (stored && this.providers[stored]) {
+        return stored;
+      }
+      return this.defaultProvider;
     } catch (e) {
       return this.defaultProvider;
     }
@@ -87,7 +91,7 @@ class AIConfig {
     container.innerHTML = `
       <div class="ai-provider-header">
         <h3>AI解析プロバイダー選択</h3>
-        <p>Vision APIで抽出したテキストをどのAIで解析するか選択してください</p>
+        <p>Azure Document Intelligenceで抽出したテキストをどのAIで構造化するか選択してください</p>
       </div>
       <div class="ai-provider-options">
         ${this.getAvailableProviders().map(provider => `

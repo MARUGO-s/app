@@ -186,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let isBulkMode = false;
     let selectedRecipes = new Set();
 
-1    // escapeHtml関数は utils.js で定義済み
+    // escapeHtml関数は utils.js で定義済み
     
     const getClientId = () => {
         let clientId = localStorage.getItem("client_id");
@@ -553,12 +553,12 @@ document.addEventListener('DOMContentLoaded', () => {
             icons.push(createStatusIcon('URL-groq.svg', '画像解析（Groq）'));
         }
 
-        const hasGeminiImageAnalysis = hasCategory('AI-Gemini解析') || tags.includes('AI-Gemini解析');
-        if (hasGeminiImageAnalysis) {
-            icons.push(createStatusIcon('URL-gemini.svg', '画像解析（Gemini）'));
+        const hasChatGPTImageAnalysis = hasCategory('AI-ChatGPT解析') || tags.includes('AI-ChatGPT解析');
+        if (hasChatGPTImageAnalysis) {
+            icons.push(createStatusIcon('openai.svg', '画像解析（ChatGPT）'));
         }
 
-        if (!hasGroqImageAnalysis && !hasGeminiImageAnalysis) {
+        if (!hasGroqImageAnalysis && !hasChatGPTImageAnalysis) {
             const imageCategoryNames = ['画像解析', '画像分析', '画像AI', '画像抽出'];
             const isImageAnalysis = imageCategoryNames.some(name => hasCategory(name)) || tags.includes('画像解析');
             if (isImageAnalysis) {
@@ -1874,7 +1874,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     window.location.href = 'pages/bread_recipe_list.html';
                 } else {
                     // 通常のレシピの場合
-                    location.href = `pages/recipe_view.html?id=${encodeURIComponent(recipeId)}`;
+                    location.href = `pages/recipe_detail.html?id=${encodeURIComponent(recipeId)}`;
                 }
             }
         });

@@ -22,16 +22,16 @@ const getSettings = () => {
   }
 };
 
-// 現在のGroqモデルを取得する関数
+// 現在のGroqモデルを取得する関数（URL取り込み・レシピ編集用）
 const getCurrentGroqModel = () => {
   const settings = getSettings();
-  const model = settings.groqModel || 'llama-3.1-8b-instant';
+  const model = settings.groqModel || 'meta-llama/llama-4-scout-17b-16e-instruct';
   
   // 無効なモデルの場合はデフォルトに戻す
-  const validModels = ['llama-3.1-8b-instant', 'llama-3.1-70b-8192', 'mixtral-8x7b-32768', 'gemma2-9b-it'];
+  const validModels = ['llama-3.1-8b-instant', 'llama-3.1-70b-8192', 'mixtral-8x7b-32768', 'gemma2-9b-it', 'meta-llama/llama-4-scout-17b-16e-instruct'];
   if (!validModels.includes(model)) {
-    console.warn('⚠️ 無効なモデルです。Gemini 1.5 Flashに切り替えます。');
-    return 'llama-3.1-8b-instant';
+    console.warn('⚠️ 無効なモデルです。meta-llama/llama-4-scout-17b-16e-instructに切り替えます。');
+    return 'meta-llama/llama-4-scout-17b-16e-instruct';
   }
   
   return model;
@@ -265,7 +265,188 @@ class GroqUrlImporter {
     }
 
     console.log('✅ Groq API抽出完了:', result.data);
-    return result.data;
+
+    // 追加後処理: Cookpad等での分量補完 + ChatGPTフォールバック
+    let data = result.data || {};
+
+    // 1) Cookpadヒューリスティックで分量/単位を補完
+    try {
+      data = this.enhanceIngredientsWithDom(html, url, data);
+    } catch (e) {
+      console.warn('⚠️ DOM補完に失敗しました:', e.message);
+    }
+
+    // 2) 分量の欠損が多い場合はChatGPTに自動フォールバック
+    try {
+      const filled = Array.isArray(data?.ingredients)
+        ? data.ingredients.filter(ing => (ing?.quantity && String(ing.quantity).trim()) || (ing?.unit && String(ing.unit).trim())).length
+        : 0;
+      const total = Array.isArray(data?.ingredients) ? data.ingredients.length : 0;
+      const ratio = total > 0 ? filled / total : 0;
+
+      console.log('📊 分量充足率チェック:', { filled, total, ratio });
+
+      if (total > 0 && ratio < 0.4) {
+        console.log('🔄 分量充足率が低いためChatGPTにフォールバックします');
+        const chatgptData = await this.extractRecipeWithChatGPT(html, url, options);
+        const cFilled = Array.isArray(chatgptData?.ingredients)
+          ? chatgptData.ingredients.filter(ing => (ing?.quantity && String(ing.quantity).trim()) || (ing?.unit && String(ing.unit).trim())).length
+          : 0;
+        const cTotal = Array.isArray(chatgptData?.ingredients) ? chatgptData.ingredients.length : 0;
+        const cRatio = cTotal > 0 ? cFilled / cTotal : 0;
+        console.log('📊 ChatGPT 抽出の分量充足率:', { cFilled, cTotal, cRatio });
+        if (cRatio > ratio) {
+          chatgptData.extracted_by = 'chatgpt_fallback';
+          return chatgptData;
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ ChatGPTフォールバックでエラー:', e.message);
+    }
+
+    return data;
+  }
+
+  /**
+   * Cookpad等 日本語サイト向け: HTMLから分量・単位を補完
+   */
+  enhanceIngredientsWithDom(html, url, data) {
+    if (!html || !data) return data;
+    const isCookpad = typeof url === 'string' && url.includes('cookpad.com');
+    if (!isCookpad) return data; // まずはCookpadのみ
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+
+    // 汎用的な候補セレクタ（Cookpadのレイアウト変動に対応するために複数）
+    const liCandidates = Array.from(doc.querySelectorAll('section, ul, ol, li, .ingredient, .ingredientItem, .ingredients__item'))
+      .filter(el => el.tagName.toLowerCase() === 'li' || /材料|ingredient/i.test(el.textContent || ''));
+    const rows = [];
+    const unitPattern = /(g|ml|kg|l|ｇ|ｍｌ|ｋｇ|ｌ|%|％|大さじ|小さじ|カップ|個|枚|本|束|適量|少々|ひとつまみ)/;
+
+    liCandidates.forEach(li => {
+      const text = (li.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!text) return;
+      // 例: "小麦粉 100 g" / "卵 1 個" / "砂糖 適量"
+      const match = text.match(/^(.{1,60}?)\s+([0-9０-９]+(?:[\.．][0-9０-９]+)?|適量|少々|ひとつまみ)?\s*([a-zA-Zａ-ｚＡ-Ｚ一-龥ぁ-んァ-ン%％ｇｍｌｋｇｌ]+)?$/);
+      if (match) {
+        const item = (match[1] || '').replace(/[：:・-]+$/,'').trim();
+        const qRaw = (match[2] || '').trim();
+        const uRaw = (match[3] || '').trim();
+        if (item && (qRaw || (uRaw && unitPattern.test(uRaw)))) {
+          rows.push({ item, quantity: this.normalizeNumber(qRaw), unit: uRaw });
+        }
+      }
+    });
+
+    if (rows.length === 0) return data;
+
+    const byName = new Map();
+    rows.forEach(r => {
+      const key = r.item.replace(/\s+/g, '').toLowerCase();
+      if (!byName.has(key)) byName.set(key, r);
+    });
+
+    if (!Array.isArray(data.ingredients) || data.ingredients.length === 0) {
+      // Groq側が空ならDOM結果をそのまま採用
+      data.ingredients = rows;
+      return data;
+    }
+
+    // 既存材料へできるだけマージ（名前一致 or あいまい一致）
+    let matched = 0;
+    data.ingredients = data.ingredients.map((ing, idx) => {
+      const raw = (ing.item || ing.name || '').trim();
+      const name = raw.replace(/[\s・・:：()（）-]/g, '').toLowerCase();
+      let hit = byName.get(name);
+      if (!hit) {
+        // あいまい一致: 部分一致 or 順序で補完
+        hit = rows.find(r => {
+          const rkey = r.item.replace(/[\s・・:：()（）-]/g, '').toLowerCase();
+          return rkey.includes(name) || name.includes(rkey);
+        }) || rows[idx];
+      }
+      if (hit) {
+        matched += 1;
+        return {
+          ...ing,
+          item: ing.item || hit.item,
+          quantity: ing.quantity || hit.quantity || '',
+          unit: ing.unit || hit.unit || ''
+        };
+      }
+      return ing;
+    });
+
+    const total = data.ingredients.length;
+    const matchRatio = total > 0 ? matched / total : 0;
+    console.log('🔗 DOMマージ結果:', { matched, total, matchRatio });
+
+    // マッチ率が低い場合はDOM結果を優先
+    if (matchRatio < 0.5 && rows.length > 0) {
+      console.log('🔁 マッチ率が低いためDOM抽出結果に置き換えます');
+      data.ingredients = rows;
+    }
+
+    return data;
+  }
+
+  normalizeNumber(value) {
+    if (!value) return value;
+    // 全角数値→半角、全角小数点対応
+    const z2h = value.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 65248))
+                    .replace(/[．]/g, '.');
+    return z2h;
+  }
+
+  /**
+   * ChatGPTでの抽出（フォールバック用）
+   */
+  async extractRecipeWithChatGPT(html, url, options = {}) {
+    const {
+      temperature = 0.2,
+      maxTokens = 4096,
+      model = 'gpt-4o-mini'
+    } = options;
+
+    const prompt = `以下のレシピHTMLから、厳密なJSONでレシピを抽出。日本語サイト（特にCookpad）を想定し、材料の分量と単位を正確に分離してください。\n\nURL: ${url}\n\n出力はJSONのみ:\n{\n  "title": "",
+  "description": "",
+  "servings": "",
+  "ingredients": [
+    {"item": "材料名", "quantity": "分量（数字/分数/適量/少々/ひとつまみ）", "unit": "単位（g,ml,個,枚,本,大さじ,小さじ,カップ 等）"}
+  ],
+  "steps": ["手順1", "手順2"]
+}`;
+
+    const response = await fetch(`${this.supabaseUrl}/functions/v1/call-openai-api`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.supabaseKey}`
+      },
+      body: JSON.stringify({
+        prompt,
+        model,
+        temperature,
+        maxTokens,
+        responseFormat: { type: 'json_object' },
+        htmlSnippet: html.substring(0, 9000)
+      })
+    });
+
+    if (!response.ok) {
+      const t = await response.text();
+      throw new Error(`ChatGPT API error: ${response.status} ${t}`);
+    }
+
+    const res = await response.json();
+    const content = typeof res?.content === 'string' ? res.content : (res?.raw?.choices?.[0]?.message?.content || '');
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    const jsonText = jsonMatch ? jsonMatch[0] : content;
+    let data;
+    try { data = JSON.parse(jsonText); } catch(e) { data = {}; }
+    if (!Array.isArray(data.ingredients)) data.ingredients = [];
+    return data;
   }
 
 

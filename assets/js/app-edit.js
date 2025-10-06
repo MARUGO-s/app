@@ -12,6 +12,229 @@ let customCategories = [], customTags = [], allCategories = [], allTags = [];
 let currentSourceUrl = null; // URL取り込み時の元URLを記録
 let originalRecipeData = null; // 海外サイト取り込み時の翻訳前データを保存
 
+// API使用回数管理
+const ApiUsageManager = {
+  STORAGE_KEY: 'api-usage-v1',
+  LEGACY_AZURE_KEY: 'azure-api-usage',
+  PROVIDERS: {
+    azure: { label: 'Azure Document Intelligence', shortLabel: 'Azure', limit: 500 },
+    groq: { label: 'Groq', shortLabel: 'Groq', limit: null },
+    chatgpt: { label: 'ChatGPT', shortLabel: 'ChatGPT', limit: null }
+  },
+
+  _loadRawData() {
+    try {
+      return localStorage.getItem(this.STORAGE_KEY);
+    } catch (error) {
+      console.warn('⚠️ API使用状況の読み込みに失敗しました:', error);
+      return null;
+    }
+  },
+
+  _saveRawData(data) {
+    try {
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
+    } catch (error) {
+      console.warn('⚠️ API使用状況の保存に失敗しました:', error);
+    }
+  },
+
+  getData() {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    let raw = this._loadRawData();
+    let data = null;
+    let mutated = false;
+
+    if (raw) {
+      try {
+        data = JSON.parse(raw);
+      } catch (error) {
+        console.warn('⚠️ API使用状況データの解析に失敗しました。リセットします。', error);
+        data = null;
+      }
+    }
+
+    if (!data) {
+      try {
+        const legacyRaw = localStorage.getItem(this.LEGACY_AZURE_KEY);
+        if (legacyRaw) {
+          const legacy = JSON.parse(legacyRaw);
+          data = {
+            month: legacy.month ?? currentMonth,
+            year: legacy.year ?? currentYear,
+            counts: {
+              azure: legacy.count ?? 0,
+              groq: 0,
+              chatgpt: 0
+            },
+            lastUsed: {
+              azure: legacy.lastUsed || null,
+              groq: null,
+              chatgpt: null
+            }
+          };
+          localStorage.removeItem(this.LEGACY_AZURE_KEY);
+          mutated = true;
+        }
+      } catch (error) {
+        console.warn('⚠️ レガシーAzure使用状況の移行に失敗しました:', error);
+      }
+    }
+
+    if (!data || typeof data !== 'object') {
+      data = null;
+    }
+
+    if (!data) {
+      data = {
+        month: currentMonth,
+        year: currentYear,
+        counts: {},
+        lastUsed: {}
+      };
+      mutated = true;
+    }
+
+    if (data.month !== currentMonth || data.year !== currentYear) {
+      data.month = currentMonth;
+      data.year = currentYear;
+      data.counts = {};
+      data.lastUsed = {};
+      mutated = true;
+    }
+
+    if (!data.counts || typeof data.counts !== 'object') {
+      data.counts = {};
+      mutated = true;
+    }
+
+    if (!data.lastUsed || typeof data.lastUsed !== 'object') {
+      data.lastUsed = {};
+      mutated = true;
+    }
+
+    for (const key of Object.keys(this.PROVIDERS)) {
+      if (typeof data.counts[key] !== 'number') {
+        data.counts[key] = 0;
+        mutated = true;
+      }
+      if (!Object.prototype.hasOwnProperty.call(data.lastUsed, key)) {
+        data.lastUsed[key] = null;
+        mutated = true;
+      }
+    }
+
+    if (mutated) {
+      this._saveRawData(data);
+    }
+
+    return data;
+  },
+
+  getUsage(provider) {
+    const data = this.getData();
+    return data.counts[provider] || 0;
+  },
+
+  getCurrentUsage(provider) {
+    const data = this.getData();
+    return {
+      count: data.counts[provider] || 0,
+      month: data.month,
+      year: data.year,
+      lastUsed: data.lastUsed[provider] || null
+    };
+  },
+
+  increment(provider) {
+    if (!this.PROVIDERS[provider]) {
+      console.warn('⚠️ 未対応のプロバイダーです:', provider);
+      return 0;
+    }
+    const data = this.getData();
+    data.counts[provider] = (data.counts[provider] || 0) + 1;
+    data.lastUsed[provider] = new Date().toISOString();
+    this._saveRawData(data);
+    this.updateDisplay();
+    return data.counts[provider];
+  },
+
+  reset(provider) {
+    const data = this.getData();
+    if (provider && this.PROVIDERS[provider]) {
+      data.counts[provider] = 0;
+      data.lastUsed[provider] = null;
+    } else {
+      for (const key of Object.keys(this.PROVIDERS)) {
+        data.counts[key] = 0;
+        data.lastUsed[key] = null;
+      }
+    }
+    this._saveRawData(data);
+    this.updateDisplay();
+  },
+
+  updateDisplay() {
+    try {
+      const data = this.getData();
+      const displayElement = document.getElementById('azure-usage-display');
+      if (!displayElement) {
+        return;
+      }
+
+      const lines = [];
+      for (const [key, info] of Object.entries(this.PROVIDERS)) {
+        const count = data.counts[key] || 0;
+        if (info.limit && info.limit > 0) {
+          const remaining = Math.max(info.limit - count, 0);
+          lines.push(`${info.shortLabel}: 残り ${remaining}/${info.limit}`);
+        } else {
+          lines.push(`${info.shortLabel}: ${count}回`);
+        }
+      }
+
+      const nextReset = new Date(data.year, data.month + 1, 1);
+      lines.push(`次回リセット: ${nextReset.getMonth() + 1}/${nextReset.getDate()}`);
+
+      displayElement.innerHTML = `<small>${lines.join('<br>')}</small>`;
+    } catch (error) {
+      console.warn('⚠️ API使用状況表示の更新に失敗しました:', error);
+    }
+  }
+};
+
+const AzureUsageBridge = {
+  getCurrentUsage() {
+    const usage = ApiUsageManager.getCurrentUsage('azure');
+    return {
+      count: usage.count,
+      month: usage.month,
+      year: usage.year
+    };
+  },
+  incrementUsage() {
+    return ApiUsageManager.increment('azure');
+  },
+  resetUsage() {
+    return ApiUsageManager.reset('azure');
+  },
+  updateDisplay() {
+    return ApiUsageManager.updateDisplay();
+  }
+};
+
+// グローバルアクセス用に公開
+if (typeof window !== 'undefined') {
+  window.ApiUsageManager = ApiUsageManager;
+  window.AzureUsageManager = AzureUsageBridge;
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('DOMContentLoaded', () => ApiUsageManager.updateDisplay());
+  }
+}
+
 // Utility functions
 // escapeHtml関数は utils.js で定義済み
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -127,7 +350,7 @@ const getCurrentGroqModel = () => {
   // 無効なモデルの場合はデフォルトに戻す
   const validModels = ['llama-3.1-8b-instant', 'llama-3.1-70b-8192', 'mixtral-8x7b-32768', 'gemma2-9b-it'];
   if (!validModels.includes(model)) {
-    console.warn('⚠️ 無効なモデルです。Gemini 1.5 Flashに切り替えます。');
+    console.warn('⚠️ 無効なモデルです。llama-3.1-8b-instantに切り替えます。');
     return 'llama-3.1-8b-instant';
   }
   
@@ -377,6 +600,73 @@ const parseIngredientString = (ingredientStr) => {
   return result;
 };
 
+// ===== 翻訳後データの正規化ヘルパー =====
+const normalizeStepTextValue = (stepText) => {
+  if (typeof stepText !== 'string') {
+    return stepText || '';
+  }
+  return stepText
+    .replace(/^\s*(?:第?\s*)?(?:手順|ステップ|Step)\s*[0-9０-９]+[\s：:\.:\-\)]*/, '')
+    .trim();
+};
+
+const normalizeTranslatedStep = (step, fallback = {}) => {
+  if (!step) {
+    return { step: fallback.step || '' };
+  }
+  if (typeof step === 'string') {
+    return { step: normalizeStepTextValue(step) };
+  }
+  const textValue = step.step || step.instruction || step.text || step.content || '';
+  const normalized = normalizeStepTextValue(textValue);
+  return { step: normalized || fallback.step || '' };
+};
+
+const normalizeTranslatedIngredient = (ingredient, fallback = {}) => {
+  if (!ingredient) {
+    return {
+      item: fallback.item || '',
+      quantity: fallback.quantity || '',
+      unit: fallback.unit || '',
+      price: fallback.price || ''
+    };
+  }
+
+  if (typeof ingredient === 'string') {
+    const parsed = parseIngredientString(ingredient);
+    return {
+      item: parsed.item || fallback.item || '',
+      quantity: parsed.quantity || fallback.quantity || '',
+      unit: parsed.unit || fallback.unit || '',
+      price: parsed.price || fallback.price || ''
+    };
+  }
+
+  const candidateStrings = [
+    ingredient.item,
+    ingredient.name,
+    ingredient.ingredient,
+    ingredient.translated_item,
+    ingredient.original_item,
+    ingredient.text
+  ];
+
+  const baseString = candidateStrings.find(value => typeof value === 'string' && value.trim().length > 0) || '';
+  const quantityValue = ingredient.quantity || ingredient.amount || ingredient.qty || '';
+  const unitValue = ingredient.unit || ingredient.measure || ingredient.uom || '';
+  const priceValue = ingredient.price || fallback.price || '';
+
+  const combined = [baseString, quantityValue, unitValue].filter(Boolean).join(' ').trim();
+  const parsed = parseIngredientString(combined || baseString);
+
+  return {
+    item: parsed.item || baseString || fallback.item || '',
+    quantity: parsed.quantity || quantityValue || fallback.quantity || '',
+    unit: parsed.unit || unitValue || fallback.unit || '',
+    price: parsed.price || priceValue || ''
+  };
+};
+
 // Unit conversion utility
 const convertUnits = (quantity, unit, itemName = '') => {
   if (!quantity || !unit) return { quantity, unit };
@@ -528,6 +818,8 @@ const convertUnits = (quantity, unit, itemName = '') => {
 
 
 // 設定管理は settings-manager.js にてグローバルな Settings オブジェクトとして提供
+
+// getCurrentGroqModel function is already defined above at line 116
 
 // API Functions
 async function callGroqAPI(text, url) {
@@ -3439,6 +3731,131 @@ const setupModalEvents = () => {
     document.getElementById('cameraInput')?.click();
   });
 
+  // --- Multi-image upload and Drag & Drop ---
+  window.currentImageFiles = []; // Holds all uploaded files
+
+  const handleImageFiles = (files) => {
+      console.log('--- handleImageFiles called ---');
+      const previewArea = document.getElementById('previewArea');
+      const imageMessageArea = document.getElementById('imageMessageArea');
+      const uploadArea = document.getElementById('uploadArea');
+      const analyzeButton = document.getElementById('analyzeButton');
+
+      if (!window.currentImageFiles) {
+          console.log('Initializing window.currentImageFiles = []');
+          window.currentImageFiles = [];
+      }
+      console.log(`Before adding: ${window.currentImageFiles.length} files stored.`);
+
+      const newFiles = Array.from(files).filter(newFile => 
+        !window.currentImageFiles.some(existingFile => 
+            existingFile.name === newFile.name && existingFile.size === newFile.size
+        )
+      );
+      console.log(`Received ${files.length} files, ${newFiles.length} are new and unique.`);
+
+      if (newFiles.length === 0) {
+          console.log('No new files to add. Exiting.');
+          return;
+      }
+
+      window.currentImageFiles.push(...newFiles);
+      window.__ocrCurrentFile = window.currentImageFiles[0] || null;
+      console.log(`After adding: ${window.currentImageFiles.length} files stored.`);
+
+      let multiPreviewContainer = document.getElementById('multiPreviewContainer');
+      if (!multiPreviewContainer) {
+          multiPreviewContainer = document.createElement('div');
+          multiPreviewContainer.id = 'multiPreviewContainer';
+          multiPreviewContainer.style.display = 'flex';
+          multiPreviewContainer.style.flexWrap = 'wrap';
+          multiPreviewContainer.style.gap = '10px';
+          multiPreviewContainer.style.marginTop = '10px';
+          previewArea.insertBefore(multiPreviewContainer, analyzeButton.parentElement);
+      }
+      
+      multiPreviewContainer.innerHTML = ''; 
+      console.log('Cleared multi-preview container.');
+
+      console.log(`Rendering ${window.currentImageFiles.length} total previews.`);
+      for (const file of window.currentImageFiles) {
+          if (!file.type.startsWith('image/')){ continue; }
+
+          const img = document.createElement('img');
+          img.classList.add('image-preview');
+          img.style.maxWidth = '150px';
+          img.style.maxHeight = '150px';
+          multiPreviewContainer.appendChild(img);
+
+          const reader = new FileReader();
+          reader.onload = (e) => { img.src = e.target.result; };
+          reader.readAsDataURL(file);
+      }
+
+      const hasFiles = window.currentImageFiles.length > 0;
+      uploadArea.style.display = 'block';
+      previewArea.style.display = hasFiles ? 'block' : 'none';
+      if (analyzeButton) analyzeButton.disabled = !hasFiles;
+      
+      const singlePreviewImg = document.getElementById('previewImage');
+      if(singlePreviewImg) singlePreviewImg.style.display = 'none';
+      console.log('--- handleImageFiles finished ---');
+  };
+
+  const imageInput = document.getElementById('imageInput');
+  if (imageInput) {
+      imageInput.addEventListener('change', (e) => handleImageFiles(e.target.files));
+  }
+  const cameraInput = document.getElementById('cameraInput');
+  if (cameraInput) {
+      cameraInput.addEventListener('change', (e) => handleImageFiles(e.target.files));
+  }
+  
+  const uploadArea = document.getElementById('uploadArea');
+  if (uploadArea) {
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+          uploadArea.addEventListener(eventName, (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+          }, false);
+      });
+      ['dragenter', 'dragover'].forEach(eventName => {
+          uploadArea.addEventListener(eventName, () => uploadArea.classList.add('dragover'), false);
+      });
+      ['dragleave', 'drop'].forEach(eventName => {
+          uploadArea.addEventListener(eventName, () => uploadArea.classList.remove('dragover'), false);
+      });
+      uploadArea.addEventListener('drop', (e) => {
+          handleImageFiles(e.dataTransfer.files);
+      }, false);
+  }
+
+  const clearImageButton = document.getElementById('clearImageButton');
+  if (clearImageButton) {
+    clearImageButton.addEventListener('click', () => {
+        window.currentImageFiles = [];
+        const multiPreviewContainer = document.getElementById('multiPreviewContainer');
+        if (multiPreviewContainer) multiPreviewContainer.innerHTML = '';
+        
+        const previewArea = document.getElementById('previewArea');
+        if(previewArea) previewArea.style.display = 'none';
+
+        const uploadArea = document.getElementById('uploadArea');
+        if(uploadArea) uploadArea.style.display = 'block';
+
+        const analyzeButton = document.getElementById('analyzeButton');
+        if (analyzeButton) analyzeButton.disabled = true;
+
+        window.__ocrCurrentFile = null;
+
+        const singlePreviewImg = document.getElementById('previewImage');
+        if(singlePreviewImg) {
+          singlePreviewImg.src = '';
+          singlePreviewImg.style.display = 'block'; // Reset single previewer
+        }
+    });
+  }
+
   // Simple image upload to Supabase Storage (robust: dynamic input to avoid stale state)
   const imageUploadBtn = document.getElementById('imageUploadBtn');
   const imageFileInput = document.getElementById('recipeImageFile');
@@ -3557,12 +3974,7 @@ const setupModalEvents = () => {
     });
   }
   
-  document.getElementById('analyzeButton')?.addEventListener('click', () => {
-    // Call the analyzeImage function from recipe_edit.html
-    if (typeof analyzeImage === 'function') {
-      analyzeImage();
-    }
-  });
+
   
   document.getElementById('clearImageButton')?.addEventListener('click', () => {
     // Call the clearImage function from recipe_edit.html  
@@ -3593,7 +4005,7 @@ const setupModalEvents = () => {
       const basicCategories = [
         'すべて', 'アミューズ', '前菜', 'ソース', 'スープ', 'パスタ',
         '魚料理', '肉料理', 'メイン', 'デザート', 'パン', '翻訳',
-        'AI-Groq解析', 'AI-Gemini解析', 'その他'
+        'AI-Groq解析', 'AI-ChatGPT解析', 'その他'
       ];
       
       const categoryOptionsEl = document.getElementById('category-options');
@@ -4998,7 +5410,15 @@ const initializeApp = () => {
     });
   }
   sb = window.sb;
-  
+
+  if (typeof window.setupApiUsageHooks === 'function') {
+    try {
+      window.setupApiUsageHooks();
+    } catch (hookError) {
+      console.warn('⚠️ API使用状況フックの設定に失敗しました:', hookError);
+    }
+  }
+
   // Setup event listeners
   console.log('🔍 setupModalEventsを呼び出します');
   setupModalEvents();
@@ -5040,7 +5460,14 @@ const initializeApp = () => {
   }
 
   
+  // ヘッダーの保存ボタン
   document.querySelector('.js-save')?.addEventListener('click', saveRecipeToDatabase);
+  
+  // フォーム下部の保存ボタン
+  document.querySelector('.js-save-bottom')?.addEventListener('click', saveRecipeToDatabase);
+  
+  // フローティング保存ボタン（右下固定）
+  document.querySelector('.js-save-floating')?.addEventListener('click', saveRecipeToDatabase);
   
   // AI創作完了ボタンのイベントリスナー
   document.querySelector('.js-ai-save-options')?.addEventListener('click', () => {
@@ -5323,6 +5750,35 @@ let aiGeneratedRecipe = null;
 window.aiGeneratedRecipe = null;
 
 // Translation Management
+function buildCurrentRecipeData() {
+  const title = document.getElementById('title')?.value?.trim() || '';
+  const description = document.getElementById('notes')?.value?.trim() || '';
+  const servings = document.getElementById('servings')?.value?.trim() || '';
+
+  const ingredients = Array.from(document.querySelectorAll('.ingredient-row')).map((row, index) => {
+    const item = row.querySelector('.ingredient-item')?.value?.trim() || '';
+    const quantity = row.querySelector('.ingredient-quantity')?.value?.trim() || '';
+    const unit = row.querySelector('.ingredient-unit')?.value?.trim() || '';
+    const price = row.querySelector('.ingredient-price')?.value?.trim() || '';
+    return { item, quantity, unit, price, position: index + 1 };
+  }).filter(ing => ing.item || ing.quantity || ing.unit || ing.price);
+
+  const steps = Array.from(document.querySelectorAll('.step-row .step-text'))
+    .map((textarea, index) => {
+      const instruction = textarea.value?.trim();
+      return instruction ? { step_number: index + 1, position: index + 1, instruction } : null;
+    })
+    .filter(Boolean);
+
+  return {
+    title,
+    description,
+    servings,
+    ingredients,
+    steps
+  };
+}
+
 const languageOptions = [
   { code: 'fr', name: 'フランス語' },
   { code: 'it', name: 'イタリア語' },
@@ -5405,50 +5861,140 @@ const addTranslationRow = (languageCode = '', translatedTitle = '') => {
             'de': 'ドイツ語',
             'en': '英語'
           };
+          const languageNamesEn = {
+            'fr': 'French',
+            'it': 'Italian',
+            'ja': 'Japanese',
+            'zh': 'Chinese',
+            'es': 'Spanish',
+            'de': 'German',
+            'en': 'English'
+          };
           
           const languageName = languageNames[selectedLanguage] || selectedLanguage;
+          const languageNameEn = languageNamesEn[selectedLanguage] || selectedLanguage;
           const prompt = `以下の料理名を${languageName}に翻訳してください。料理名として自然で適切な翻訳を提供してください。
 
 料理名: ${recipeTitle}
 
 翻訳のみを返してください。説明や追加のテキストは不要です。`;
 
+          // Supabaseクライアントの状態確認
+          if (!sb) {
+            console.error('❌ Supabaseクライアントが初期化されていません');
+            titleInput.value = '';
+            alert('Supabaseクライアントが初期化されていません。ページを再読み込みしてください。');
+            return;
+          }
+          
+          // 認証状態の確認（オプション - Edge Functionsが認証を必要とする場合）
+          try {
+            const { data: session } = await sb.auth.getSession();
+            console.log('🔍 認証状態:', session?.session ? 'ログイン済み' : '未ログイン');
+          } catch (authError) {
+            console.warn('⚠️ 認証状態確認エラー:', authError);
+          }
+
+          console.log('🔄 翻訳API呼び出し開始:', {
+            mode: 'recipe_translation',
+            targetLanguage: selectedLanguage,
+            targetLanguageName: languageNameEn,
+            recipeTitle: recipeTitle
+          });
+
           const { data, error } = await sb.functions.invoke('call-groq-api', {
             body: {
-              text,
+              mode: 'recipe_translation',
+              recipeData: buildCurrentRecipeData(),
+              targetLanguage: selectedLanguage,
+              targetLanguageName: languageNameEn,
               model: getCurrentGroqModel(),
-              maxTokens: 100,
               temperature: 0.3
             }
           });
 
           if (error) {
-            console.error('翻訳APIエラー:', error);
+            console.error('翻訳APIエラー詳細:', error);
             titleInput.value = '';
-            alert('翻訳に失敗しました: APIエラー');
+            
+            // 詳細なエラー情報を表示
+            let errorMessage = '翻訳APIエラー: ';
+            if (error.message) {
+              errorMessage += error.message;
+            } else if (typeof error === 'string') {
+              errorMessage += error;
+            } else {
+              errorMessage += JSON.stringify(error);
+            }
+            
+            // 認証エラーの特別な処理
+            if (error.message && error.message.includes('JWT')) {
+              errorMessage += '\n\n認証の問題である可能性があります。ログインしてからもう一度お試しください。';
+            }
+            
+            alert(errorMessage);
             return;
           }
 
+          console.log('📡 翻訳API呼び出し完了');
+          
           if (data?.success) {
-            console.log('翻訳レスポンス:', data);
-            const translatedText = data.content?.trim();
+            console.log('✅ 翻訳成功 - レスポンス:', data);
+            const translationResult = data.data || {};
+            const translatedText = translationResult.title?.trim() || data.content?.trim() || '';
+            
+            console.log('🔍 抽出されたタイトル:', translatedText);
+
             if (translatedText) {
               titleInput.value = translatedText;
-              // 翻訳成功時にカテゴリータグを追加
+              row.dataset.translatedRecipe = JSON.stringify(translationResult);
+              console.log('✅ 翻訳結果をUIに反映しました');
               await addTranslationTag();
+              console.log('✅ 翻訳タグを追加しました');
             } else {
               titleInput.value = '';
-              console.error('翻訳結果が取得できませんでした:', data);
+              delete row.dataset.translatedRecipe;
+              console.error('❌ 翻訳結果が空です:', data);
+              alert('翻訳結果が取得できませんでした。もう一度お試しください。');
             }
           } else {
-            console.error('翻訳API エラー:', data);
+            console.error('❌ 翻訳API失敗:', data);
             titleInput.value = '';
-            alert('翻訳に失敗しました: ' + (data?.error || '不明なエラー'));
+            delete row.dataset.translatedRecipe;
+            
+            let errorDetails = '';
+            if (data?.error) {
+              errorDetails = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+            } else {
+              errorDetails = JSON.stringify(data);
+            }
+            
+            alert('翻訳に失敗しました: ' + errorDetails);
           }
         } catch (error) {
-          console.error('翻訳エラー:', error);
+          console.error('翻訳エラー詳細:', error);
           titleInput.value = '';
-          alert(`翻訳エラー: ${error.message}`);
+          delete row.dataset.translatedRecipe;
+          
+          let errorMessage = '翻訳処理中にエラーが発生しました: ';
+          if (error.message) {
+            errorMessage += error.message;
+          } else {
+            errorMessage += String(error);
+          }
+          
+          // ネットワークエラーの特別な処理
+          if (error.message && error.message.includes('fetch')) {
+            errorMessage += '\n\nネットワーク接続を確認してください。';
+          }
+          
+          // Supabaseクライアントエラーの特別な処理
+          if (error.message && error.message.includes('supabase')) {
+            errorMessage += '\n\nSupabaseクライアントの初期化に問題がある可能性があります。';
+          }
+          
+          alert(errorMessage);
+          console.error('翻訳エラースタック:', error.stack);
         } finally {
           titleInput.disabled = false;
         }
@@ -5526,6 +6072,7 @@ const getTranslationData = async () => {
   });
 
   // 海外サイトから取り込んだ場合、翻訳前データも追加
+  let originalEntry = null;
   if (originalRecipeData && originalRecipeData.original_title) {
     console.log('🌍 翻訳前データを翻訳データに追加:', originalRecipeData);
     
@@ -5540,7 +6087,7 @@ const getTranslationData = async () => {
       'unknown': '元の言語'
     };
     
-    translations.push({
+    originalEntry = {
       language_code: originalLanguage,
       translated_title: originalRecipeData.original_title,
       translated_description: originalRecipeData.original_description,
@@ -5548,11 +6095,53 @@ const getTranslationData = async () => {
       translated_steps: originalRecipeData.original_steps,
       is_original: true, // 翻訳前データのフラグ
       html_content: generateTranslationDisplayHTML(originalRecipeData.original_title, originalLanguage)
-    });
+    };
+  } else {
+    // 翻訳前データが存在しない場合は、現在の入力内容から元のデータを生成
+    const currentRecipe = buildCurrentRecipeData();
+    const hasOriginalContent = !!(
+      currentRecipe.title ||
+      currentRecipe.description ||
+      (currentRecipe.ingredients && currentRecipe.ingredients.length > 0) ||
+      (currentRecipe.steps && currentRecipe.steps.length > 0)
+    );
+
+    if (hasOriginalContent) {
+      const normalizedIngredients = (currentRecipe.ingredients || []).map((ing, index) => ({
+        position: ing.position || index + 1,
+        item: ing.item || '',
+        quantity: ing.quantity || '',
+        unit: ing.unit || '',
+        price: ing.price || ''
+      }));
+
+      const normalizedSteps = (currentRecipe.steps || []).map((step, index) => {
+        const instruction = step.instruction || step.step || '';
+        return {
+          step_number: step.step_number || index + 1,
+          position: step.position || index + 1,
+          instruction,
+          step: instruction
+        };
+      });
+
+      originalEntry = {
+        language_code: 'ja',
+        translated_title: currentRecipe.title || 'レシピタイトル',
+        translated_description: currentRecipe.description || '',
+        translated_ingredients: normalizedIngredients,
+        translated_steps: normalizedSteps,
+        is_original: true,
+        html_content: generateTranslationDisplayHTML(currentRecipe.title || 'レシピタイトル', 'ja')
+      };
+    }
   }
 
   if (rows.length === 0) {
     console.warn('⚠️ 翻訳行が見つかりません。翻訳を追加してください。');
+    if (originalEntry) {
+      translations.push(originalEntry);
+    }
     return translations;
   }
 
@@ -5574,52 +6163,78 @@ const getTranslationData = async () => {
     
     const languageCode = languageSelect.value;
     const translatedTitle = titleInput.value.trim();
+    let storedTranslation = null;
+    if (row.dataset.translatedRecipe) {
+      try {
+        storedTranslation = JSON.parse(row.dataset.translatedRecipe);
+      } catch (parseError) {
+        console.warn('⚠️ 保存された翻訳データの解析に失敗:', parseError);
+      }
+    }
 
-    console.log(`📝 行${index + 1}のデータ:`, { languageCode, translatedTitle });
+    console.log(`📝 行${index + 1}のデータ:`, { languageCode, translatedTitle, storedTranslation });
     
-    // 空の翻訳データをスキップ
     if (!languageCode || !translatedTitle) {
       console.warn(`⚠️ 行${index + 1}: 言語コードまたはタイトルが空です。スキップします。`);
       continue;
     }
 
-    if (languageCode && translatedTitle) {
-      console.log(`✅ 行${index + 1}: 有効なデータが見つかりました`);
-      
-      try {
-        // 翻訳された材料データを取得
-        console.log(`🔍 ${languageCode}の材料データを取得中...`);
-        const translatedIngredients = getTranslatedIngredients(languageCode);
-        console.log(`📦 ${languageCode}の材料データ:`, translatedIngredients);
-        
-        // 翻訳された手順データを取得（非同期）
-        console.log(`🔍 ${languageCode}の手順データを取得中...`);
-        const translatedSteps = await getTranslatedSteps(languageCode);
-        console.log(`📝 ${languageCode}の手順データ:`, translatedSteps);
+    try {
+      const translatedIngredients = storedTranslation?.ingredients
+        ? storedTranslation.ingredients.map((ing, ingIndex) => ({
+            position: ingIndex + 1,
+            item: ing?.item || '',
+            quantity: ing?.quantity || '',
+            unit: ing?.unit || '',
+            price: ing?.price || ''
+          }))
+        : getTranslatedIngredients(languageCode);
+      console.log(`📦 ${languageCode}の材料データ:`, translatedIngredients);
 
-        const translationData = {
-          language_code: languageCode,
-          translated_title: translatedTitle,
-          translated_ingredients: translatedIngredients,
-          translated_steps: translatedSteps,
-          // 表示レイアウトのHTMLコンテンツも保存
-          html_content: generateTranslationDisplayHTML(translatedTitle, languageCode)
-        };
-        
-        translations.push(translationData);
-        console.log(`✅ ${languageCode}の翻訳データを収集完了:`, {
-          ingredients: translatedIngredients.length,
-          steps: translatedSteps.length,
-          data: translationData
-        });
-
-      } catch (error) {
-        console.error(`❌ ${languageCode}の翻訳データ収集エラー:`, error);
-        // エラーが発生してもスキップして続行
+      let translatedSteps = [];
+      if (storedTranslation?.steps) {
+        translatedSteps = storedTranslation.steps
+          .map((step, stepIndex) => {
+            const instruction = typeof step === 'string' ? step : (step?.instruction || step?.text || '');
+            return instruction ? {
+              step_number: stepIndex + 1,
+              position: stepIndex + 1,
+              instruction
+            } : null;
+          })
+          .filter(Boolean);
       }
-    } else {
-      console.warn(`⚠️ 行${index + 1}: 言語コードまたはタイトルが空です`);
+
+      if (!translatedSteps.length) {
+        console.log(`🔍 ${languageCode}の手順データを取得中...`);
+        translatedSteps = await getTranslatedSteps(languageCode);
+      }
+      console.log(`📝 ${languageCode}の手順データ:`, translatedSteps);
+
+      const translationData = {
+        language_code: languageCode,
+        translated_title: translatedTitle,
+        translated_description: storedTranslation?.description || '',
+        translated_servings: storedTranslation?.servings || '',
+        translated_ingredients: translatedIngredients,
+        translated_steps: translatedSteps,
+        html_content: generateTranslationDisplayHTML(translatedTitle, languageCode)
+      };
+      
+      translations.push(translationData);
+      console.log(`✅ ${languageCode}の翻訳データを収集完了:`, {
+        ingredients: translatedIngredients.length,
+        steps: translatedSteps.length,
+        data: translationData
+      });
+
+    } catch (error) {
+      console.error(`❌ ${languageCode}の翻訳データ収集エラー:`, error);
     }
+  }
+
+  if (originalEntry) {
+    translations.unshift(originalEntry);
   }
 
   console.log('📊 最終的な翻訳データ:', translations);
@@ -5739,7 +6354,7 @@ ${stepsText}
 
     const { data, error } = await sb.functions.invoke('call-groq-api', {
       body: {
-        text,
+        text: prompt,
         model: getCurrentGroqModel(),
         maxTokens: 2000,
         temperature: 0.3
@@ -5970,7 +6585,9 @@ const toggleTranslationDisplayMode = async (isDisplayMode = true) => {
     const originalTitle = document.getElementById('title')?.value?.trim() || 'レシピタイトル';
     console.log('📝 元のタイトル:', originalTitle);
 
-    if (translations.length > 0) {
+    const hasTranslatedData = translations.some(t => !t.is_original);
+
+    if (hasTranslatedData) {
       console.log('✅ 翻訳データが存在します。2言語表示を生成中...');
       const bilingualHTML = generateBilingualDisplayHTML(originalTitle, translations);
       console.log('🎨 生成されたHTML:', bilingualHTML);

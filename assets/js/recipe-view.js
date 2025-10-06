@@ -21,13 +21,13 @@ const getSettings = () => {
 // 現在のGroqモデルを取得する関数
 const getCurrentGroqModel = () => {
   const settings = getSettings();
-  const model = settings.groqModel || 'llama-3.1-8b-instant';
+  const model = settings.groqModel || 'meta-llama/llama-4-scout-17b-16e-instruct';
   
   // 無効なモデルの場合はデフォルトに戻す
-  const validModels = ['llama-3.1-8b-instant', 'llama-3.1-70b-8192', 'mixtral-8x7b-32768', 'gemma2-9b-it'];
+  const validModels = ['llama-3.1-8b-instant', 'llama-3.1-70b-8192', 'mixtral-8x7b-32768', 'gemma2-9b-it', 'meta-llama/llama-4-scout-17b-16e-instruct'];
   if (!validModels.includes(model)) {
-    console.warn('⚠️ 無効なモデルです。Llama 3.1 8B Instantに切り替えます。');
-    return 'llama-3.1-8b-instant';
+    console.warn('⚠️ 無効なモデルです。meta-llama/llama-4-scout-17b-16e-instructに切り替えます。');
+    return 'meta-llama/llama-4-scout-17b-16e-instruct';
   }
   
   return model;

@@ -34,11 +34,11 @@ class GroqAnalyzer {
         throw new Error(`Groq API エラー: ${error.message}`);
       }
 
-      if (!result?.success) {
-        throw new Error(`Groq API レスポンスエラー: ${result?.error || 'Unknown error'}`);
+      const generatedText = this.extractContentFromGroq(result);
+      if (!generatedText) {
+        throw new Error('Groq API から有効なテキストを取得できませんでした');
       }
 
-      const generatedText = result.content || '';
       console.log('📄 Groq生成テキスト:', generatedText.substring(0, 200) + '...');
 
       return this.parseGroqResponse(generatedText, extractedText);
@@ -47,6 +47,34 @@ class GroqAnalyzer {
       console.error('❌ Groq解析エラー:', error);
       throw error;
     }
+  }
+
+  /**
+   * Groqレスポンスからテキストを抽出
+   */
+  extractContentFromGroq(result) {
+    if (!result) {
+      return '';
+    }
+
+    if (typeof result.content === 'string' && result.content.trim()) {
+      return result.content;
+    }
+
+    const choice = result?.choices?.[0];
+    if (choice?.message?.content) {
+      return choice.message.content;
+    }
+
+    if (typeof choice?.text === 'string') {
+      return choice.text;
+    }
+
+    if (Array.isArray(result?.data) && result.data[0]?.content) {
+      return result.data[0].content;
+    }
+
+    return '';
   }
 
   /**

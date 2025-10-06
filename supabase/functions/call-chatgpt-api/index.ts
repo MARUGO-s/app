@@ -16,11 +16,30 @@ serve(async (req) => {
   console.log('🔐 認証ヘッダー:', authHeader ? '存在' : 'なし')
   
   try {
-    const { text, url } = await req.json()
-    console.log('📝 リクエスト受信:', { textLength: text?.length, url })
+    console.log('📝 リクエスト開始:', {
+      method: req.method,
+      url: req.url,
+      headers: Object.fromEntries(req.headers.entries())
+    })
+    
+    const requestBody = await req.json()
+    console.log('📝 リクエストボディ受信:', {
+      keys: Object.keys(requestBody),
+      hasText: !!requestBody.text,
+      textLength: requestBody.text?.length || 0,
+      url: requestBody.url
+    })
+    
+    const { text, url } = requestBody
     
     if (!text) {
+      console.error('❌ テキストが提供されていません:', requestBody)
       throw new Error('テキストが提供されていません')
+    }
+    
+    if (typeof text !== 'string') {
+      console.error('❌ テキストが文字列ではありません:', typeof text, text)
+      throw new Error('テキストは文字列である必要があります')
     }
 
     console.log('📄 ChatGPT API分析開始')
@@ -47,20 +66,26 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('❌ Error:', error)
+    console.error('❌ ChatGPT API Error:', error)
+    console.error('❌ Error Stack:', error.stack)
+    console.error('❌ Error Details:', {
+      name: error.name,
+      message: error.message,
+      cause: error.cause
+    })
     
     return new Response(
       JSON.stringify({
         ok: false,
-        error: error.message,
-        details: {
-          name: error.name,
-          message: error.message
-        }
+        error: error.message || 'Unknown error',
+        errorType: error.name || 'Error',
+        stack: error.stack,
+        timestamp: new Date().toISOString(),
+        function: 'call-chatgpt-api'
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
+        status: 500, // 500エラーに変更してサーバーエラーであることを明確にする
       }
     )
   }

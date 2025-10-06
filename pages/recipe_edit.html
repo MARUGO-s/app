@@ -437,6 +437,62 @@
       margin: 10px 0;
     }
 
+    .ai-provider-selector.ai-provider-selector--compact {
+      margin-top: 1rem;
+      padding: 1rem;
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-md);
+      background: var(--bg-secondary);
+    }
+
+    .ai-provider-selector--compact .ai-provider-toggle {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .ai-provider-selector--compact .ai-provider-btn {
+      flex: 1 1 140px;
+      min-width: 120px;
+      border: 2px solid var(--border-light);
+      border-radius: var(--radius-md);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.15rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .ai-provider-selector--compact .ai-provider-btn.selected {
+      border-color: var(--accent-primary);
+      background: rgba(255, 107, 53, 0.08);
+      box-shadow: 0 0 0 2px rgba(255, 107, 53, 0.1);
+    }
+
+    .ai-provider-selector--compact .ai-provider-btn:hover {
+      border-color: var(--accent-primary);
+    }
+
+    .ai-provider-selector--compact .ai-provider-name {
+      font-weight: 600;
+    }
+
+    .ai-provider-selector--compact .ai-provider-meta {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .ai-provider-selector--compact .ai-provider-hint {
+      margin-top: 0.75rem;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
     .image-message-with-icon {
       display: flex;
       align-items: center;
@@ -528,6 +584,34 @@
       background: #f8f9fa;
       color: #333;
     }
+
+    .app-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      position: relative;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .azure-usage-display {
+      font-size: 0.75rem;
+      color: #fff;
+      text-align: right;
+      line-height: 1.3;
+      min-width: 150px;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    }
+
+    .azure-usage-display small {
+      color: inherit;
+      font-size: 0.75rem;
+    }
   </style>
 </head>
 <body>
@@ -535,6 +619,7 @@
   <header class="app-header">
     <h1 class="brand">レシピ編集</h1>
     <div class="header-actions">
+      <div id="azure-usage-display" class="azure-usage-display"></div>
       <a href="../index.html" class="btn ghost">ホーム</a>
       <button class="btn secondary js-ai-save-options" style="display: none;">AI創作完了</button>
       <button class="btn primary js-save">保存する</button>
@@ -652,8 +737,113 @@
         <div id="stepsEditor"></div>
         <button type="button" class="btn ghost small" id="addStep" style="margin-top: 1rem;">＋ 手順を追加</button>
       </div>
+      
+      <!-- フォーム下部の保存ボタン -->
+      <div class="field" style="margin-top: 2rem; padding-top: 2rem; border-top: 2px solid var(--border-medium);">
+        <div style="display: flex; gap: 1rem; justify-content: center; align-items: center;">
+          <a href="../index.html" class="btn ghost" style="min-width: 150px;">
+            <i class="fas fa-arrow-left"></i> キャンセル
+          </a>
+          <button type="button" class="btn primary js-save-bottom" style="min-width: 200px; font-size: 1.1rem; padding: 0.75rem 2rem;">
+            <i class="fas fa-save"></i> 保存する
+          </button>
+        </div>
+      </div>
     </form>
   </main>
+  
+  <!-- フローティング保存ボタン（常に表示） -->
+  <button type="button" class="floating-save-btn js-save-floating" title="レシピを保存">
+    <i class="fas fa-save"></i>
+    <span>保存</span>
+  </button>
+  
+  <style>
+    /* フローティング保存ボタン */
+    .floating-save-btn {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      background: linear-gradient(135deg, #ff6b35, #ff5722);
+      color: white;
+      border: none;
+      border-radius: 50px;
+      padding: 15px 30px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      box-shadow: 0 4px 20px rgba(255, 107, 53, 0.5);
+      cursor: pointer;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.3s ease;
+      animation: pulse 2s infinite;
+    }
+    
+    .floating-save-btn:hover {
+      background: linear-gradient(135deg, #ff5722, #f4511e);
+      transform: translateY(-3px);
+      box-shadow: 0 6px 25px rgba(255, 107, 53, 0.7);
+    }
+    
+    .floating-save-btn:active {
+      transform: translateY(-1px);
+    }
+    
+    .floating-save-btn i {
+      font-size: 1.3rem;
+    }
+    
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 4px 20px rgba(255, 107, 53, 0.5);
+      }
+      50% {
+        box-shadow: 0 4px 30px rgba(255, 107, 53, 0.8);
+      }
+    }
+    
+    /* レスポンシブ対応 */
+    @media (max-width: 768px) {
+      .floating-save-btn {
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        font-size: 0.95rem;
+      }
+      
+      .floating-save-btn i {
+        font-size: 1.1rem;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      .floating-save-btn {
+        bottom: 15px;
+        right: 15px;
+        padding: 10px 15px;
+        font-size: 0.9rem;
+      }
+      
+      .floating-save-btn span {
+        display: none;
+      }
+      
+      .floating-save-btn {
+        border-radius: 50%;
+        width: 60px;
+        height: 60px;
+        padding: 0;
+        justify-content: center;
+      }
+      
+      .floating-save-btn i {
+        font-size: 1.5rem;
+        margin: 0;
+      }
+    }
+  </style>
   
   <!-- URL読み込みモーダル -->
   <div id="url-import-modal" class="modal-overlay" style="display: none;">
@@ -1567,14 +1757,80 @@
     <script src="../assets/js/recipe-edit.js?v=20250115"></script>
     <script src="../assets/js/ai-config.js?v=20250923"></script>
     <script src="../assets/js/groq-analyzer.js?v=20250923"></script>
-    <script src="../assets/js/gemini-analyzer.js?v=20250923"></script>
+    <script src="../assets/js/chatgpt-analyzer.js?v=20250930"></script>
     <script src="../assets/js/ai-analyzer-manager.js?v=20250923"></script>
+    <script src="../assets/js/translation.js?v=20250116dual"></script>
     <script src="../assets/js/app-edit.js?v=20250917save-fix" defer></script>
 
   <script>
 
+  function setupApiUsageHooks() {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (typeof window.__apiUsageInvokeInProgress === 'undefined') {
+      window.__apiUsageInvokeInProgress = false;
+    }
+
+    if (window.sb?.functions?.invoke && !window.__apiUsageInvokePatched) {
+      const originalInvoke = window.sb.functions.invoke.bind(window.sb.functions);
+      window.sb.functions.invoke = async function(functionName, invokeOptions) {
+        const previousFlag = window.__apiUsageInvokeInProgress;
+        window.__apiUsageInvokeInProgress = true;
+        try {
+          const result = await originalInvoke(functionName, invokeOptions);
+          if (!result?.error) {
+            if (functionName === 'call-groq-api') {
+              window.ApiUsageManager?.increment('groq');
+            } else if (functionName === 'call-openai-api') {
+              window.ApiUsageManager?.increment('chatgpt');
+            }
+          }
+          return result;
+        } finally {
+          window.__apiUsageInvokeInProgress = previousFlag;
+        }
+      };
+      window.__apiUsageInvokePatched = true;
+    }
+
+    if (!window.__apiUsageFetchPatched && typeof window.fetch === 'function') {
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const response = await originalFetch(...args);
+        try {
+          if (!window.__apiUsageInvokeInProgress && response && response.ok) {
+            const request = args[0];
+            const url = typeof request === 'string' ? request : request?.url || '';
+            if (url.includes('/functions/v1/call-groq-api')) {
+              window.ApiUsageManager?.increment('groq');
+            } else if (url.includes('/functions/v1/call-openai-api')) {
+              window.ApiUsageManager?.increment('chatgpt');
+            }
+          }
+        } catch (hookError) {
+          console.warn('⚠️ API使用数の追跡に失敗しました:', hookError);
+        }
+        return response;
+      };
+      window.__apiUsageFetchPatched = true;
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.setupApiUsageHooks = setupApiUsageHooks;
+  }
+
   // 画像解析機能を独立して実行
   document.addEventListener('DOMContentLoaded', function() {
+    if (window.AzureUsageManager && typeof window.AzureUsageManager.updateDisplay === 'function') {
+      try {
+        window.AzureUsageManager.updateDisplay();
+      } catch (usageInitError) {
+        console.warn('⚠️ Azure使用状況の初期化に失敗しました:', usageInitError);
+      }
+    }
     // AI解析プロバイダー選択UIを初期化
     if (window.aiConfig) {
       console.log('🔧 AI解析システムを初期化');
@@ -1604,6 +1860,8 @@
       });
     }
     const sb = window.sb;
+
+    setupApiUsageHooks();
 
 
     async function runImport(url) {
@@ -1858,7 +2116,7 @@
         const providerKey = (r.aiProvider || r.ai_provider || '').toString().toLowerCase();
         const providerCategoryMap = {
           groq: 'AI-Groq解析',
-          gemini: 'AI-Gemini解析'
+          chatgpt: 'AI-ChatGPT解析'
         };
 
         if (providerKey && providerCategoryMap[providerKey]) {
@@ -2051,6 +2309,10 @@
 
     // ===== 画像解析機能 =====
     let currentFile = null;
+    window.__ocrCurrentFile = window.__ocrCurrentFile || null;
+    if (!Array.isArray(window.currentImageFiles)) {
+      window.currentImageFiles = [];
+    }
 
     // 画像解析ボタンのイベントリスナー
     const imageImportBtn = document.getElementById('imageImportBtn');
@@ -2305,6 +2567,8 @@
       });
 
       currentFile = file;
+      window.__ocrCurrentFile = file;
+      window.currentImageFiles = [file];
       console.log('📁 currentFile set:', currentFile);
       
       // プレビュー表示（JPEGでも稀にFileReaderが発火しないSafari対策でフォールバックあり）
@@ -2401,8 +2665,39 @@
         return;
       }
 
-      const selector = window.aiConfig.createProviderSelector();
-      selector.style.marginTop = '1rem';
+      const renderProviderSelector = (root) => {
+        const providers = window.aiConfig.getAvailableProviders();
+        const currentProvider = window.aiConfig.getCurrentProvider();
+        const current = currentProvider?.key || 'groq';
+        window.latestAIProvider = current;
+        window.latestAIProviderModel = currentProvider?.model || null;
+        root.innerHTML = `
+          <div class="ai-provider-toggle">
+            ${providers.map(p => `
+              <button type="button" class="ai-provider-btn ${p.key === current ? 'selected' : ''}" data-provider="${p.key}">
+                <span class="ai-provider-name">${p.name}</span>
+                <span class="ai-provider-meta">${p.model}</span>
+              </button>
+            `).join('')}
+          </div>
+          <p class="ai-provider-hint">OCR後のレシピ構造化に利用するAIを選択してください。</p>
+        `;
+
+        root.querySelectorAll('.ai-provider-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const provider = btn.dataset.provider;
+            window.aiConfig.setProvider(provider);
+            renderProviderSelector(root);
+            window.latestAIProvider = provider;
+            window.latestAIProviderModel = window.aiConfig.getCurrentProvider()?.model || null;
+            showImageMessage(`${window.aiConfig.providers[provider].name} を選択しました。`, 'info');
+          });
+        });
+      };
+
+      const selector = document.createElement('div');
+      selector.className = 'ai-provider-selector ai-provider-selector--compact';
+      renderProviderSelector(selector);
 
       if (uploadArea && uploadArea.nextElementSibling) {
         container.insertBefore(selector, uploadArea.nextElementSibling);
@@ -2500,216 +2795,449 @@
     // フォームのEnter送信を抑止（解析モーダル操作中の誤送信防止）
     document.getElementById('editForm')?.addEventListener('submit', function(e){ e.preventDefault(); });
 
-    async function analyzeImage() {
-      console.log('🔍 analyzeImage function called');
-      console.log('📁 currentFile status:', currentFile);
-      console.log('🔧 APP_CONFIG check:', {
-        hasAPP_CONFIG: !!window.APP_CONFIG,
-        hasSUPABASE_URL: !!(window.APP_CONFIG?.SUPABASE_URL),
-        hasSUPABASE_ANON_KEY: !!(window.APP_CONFIG?.SUPABASE_ANON_KEY),
-        supabaseUrl: window.APP_CONFIG?.SUPABASE_URL || 'NOT_FOUND',
-        anonKeyLength: window.APP_CONFIG?.SUPABASE_ANON_KEY?.length || 0,
-        visionApiEndpoint: `${window.APP_CONFIG?.SUPABASE_URL}/functions/v1/call-vision-api`,
-        structureApiEndpoint: `${window.APP_CONFIG?.SUPABASE_URL}/functions/v1/ocr-recipe-extraction`
+    function getActiveOcrFile() {
+      if (currentFile instanceof File) {
+        return currentFile;
+      }
+      if (window.__ocrCurrentFile instanceof File) {
+        return window.__ocrCurrentFile;
+      }
+      if (Array.isArray(window.currentImageFiles) && window.currentImageFiles.length > 0) {
+        const candidate = window.currentImageFiles.find(f => f instanceof File);
+        if (candidate) {
+          window.__ocrCurrentFile = candidate;
+          currentFile = candidate;
+          return candidate;
+        }
+      }
+      return null;
+    }
+
+    async function analyzeWithAzureDocumentIntelligence(base64Payload, selectedProvider, providerInfo) {
+      console.log('🛰️ Azure Document Intelligence呼び出し準備', { selectedProvider });
+
+      const { data: docResult, error: docError } = await sb.functions.invoke('call-document-intelligence', {
+        body: {
+          image: base64Payload,
+          processorType: 'RECIPE_PROCESSOR',
+          aiProvider: selectedProvider
+        }
+      });
+      try {
+        if (window.AzureUsageManager && typeof window.AzureUsageManager.incrementUsage === 'function') {
+          window.AzureUsageManager.incrementUsage();
+        }
+        if (window.ApiUsageManager && typeof window.ApiUsageManager.increment === 'function') {
+          const providerKey = (selectedProvider || '').toLowerCase();
+          if (providerKey === 'groq' || providerKey === 'chatgpt') {
+            window.ApiUsageManager.increment(providerKey);
+          }
+        }
+      } catch (usageError) {
+        console.warn('⚠️ API使用回数の更新に失敗しました:', usageError);
+      }
+
+      if (docError) {
+        console.error('❌ call-document-intelligence error:', docError);
+        if (docError?.context?.response) {
+          try {
+            const clone = docError.context.response.clone();
+            const errorText = await clone.text();
+            console.error('❌ Edge function response body:', errorText);
+            throw new Error(errorText || docError.message || 'Azure Document Intelligence呼び出しに失敗しました');
+          } catch (parseErr) {
+            console.warn('⚠️ Failed to read error response body:', parseErr);
+          }
+        }
+        throw new Error(docError.message || docError.error || 'Azure Document Intelligence呼び出しに失敗しました');
+      }
+
+      if (!docResult?.success) {
+        console.error('❌ call-document-intelligence response error:', docResult);
+        throw new Error(docResult?.error || '画像解析に失敗しました');
+      }
+
+      try {
+        if (window.ApiUsageManager && typeof window.ApiUsageManager.increment === 'function') {
+          window.ApiUsageManager.increment(selectedProvider);
+        }
+      } catch (providerUsageError) {
+        console.warn('⚠️ AI使用回数の更新に失敗しました:', providerUsageError);
+      }
+
+      const recipeData = docResult.data;
+      if (!recipeData || typeof recipeData !== 'object') {
+        throw new Error('レシピデータが取得できませんでした');
+      }
+
+      recipeData.aiProvider = selectedProvider;
+      recipeData.aiProviderModel = providerInfo?.model || null;
+
+      console.log('📄 Azure + AI解析結果:', recipeData);
+      return recipeData;
+    }
+
+    async function ensureAzureCompatibleImage(file) {
+      const limits = {
+        minDimension: 50,
+        maxDimension: 4200,
+        maxPixels: 4200 * 4200,
+        maxFileSize: 4 * 1024 * 1024
+      };
+
+      const isWithinLimits = (w, h, size) => {
+        const pixels = w * h;
+        return (
+          w >= limits.minDimension &&
+          h >= limits.minDimension &&
+          w <= limits.maxDimension &&
+          h <= limits.maxDimension &&
+          pixels <= limits.maxPixels &&
+          size <= limits.maxFileSize
+        );
+      };
+
+      const readAsDataURL = (f) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('画像データの読み込みに失敗しました'));
+        reader.readAsDataURL(f);
       });
 
-      if (!currentFile) {
+      const createImage = (src) => new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('画像の解析に失敗しました'));
+        img.src = src;
+      });
+
+      const canvasToSizedBlob = async (canvas, preferredType, maxSize) => {
+        const toBlob = (type, quality) => new Promise((resolve) => {
+          canvas.toBlob((blob) => resolve(blob), type, quality);
+        });
+
+        let mimeType = preferredType === 'image/png' || preferredType === 'image/jpeg'
+          ? preferredType
+          : 'image/jpeg';
+
+        // まずは元の形式で試す（PNGはqualityを指定できない）
+        let blob = await toBlob(mimeType, 0.92);
+        if (blob && blob.size <= maxSize) {
+          return blob;
+        }
+
+        // PNGなどでサイズが大きい場合はJPEGにフォールバック
+        if (mimeType !== 'image/jpeg') {
+          mimeType = 'image/jpeg';
+        }
+
+        let quality = 0.92;
+        while (quality >= 0.5) {
+          blob = await toBlob(mimeType, quality);
+          if (blob && blob.size <= maxSize) {
+            return blob;
+          }
+          quality -= 0.1;
+        }
+
+        // 最終手段でさらに圧縮
+        blob = await toBlob(mimeType, 0.4);
+        return blob || new Blob();
+      };
+
+      try {
+        const dataUrl = await readAsDataURL(file);
+        const image = await createImage(dataUrl);
+        const originalWidth = image.naturalWidth || image.width;
+        const originalHeight = image.naturalHeight || image.height;
+
+        if (isWithinLimits(originalWidth, originalHeight, file.size)) {
+          return { file, resized: false, width: originalWidth, height: originalHeight };
+        }
+
+        let targetWidth = originalWidth;
+        let targetHeight = originalHeight;
+        let scale = 1;
+
+        const needDownscale = (
+          originalWidth > limits.maxDimension ||
+          originalHeight > limits.maxDimension ||
+          (originalWidth * originalHeight) > limits.maxPixels
+        );
+
+        const needUpscale = (
+          originalWidth < limits.minDimension ||
+          originalHeight < limits.minDimension
+        );
+
+        if (needDownscale) {
+          const scaleToMax = Math.min(
+            limits.maxDimension / originalWidth,
+            limits.maxDimension / originalHeight,
+            Math.sqrt(limits.maxPixels / (originalWidth * originalHeight))
+          );
+          scale = Math.min(1, scaleToMax);
+        } else if (needUpscale) {
+          const scaleToMin = Math.max(
+            limits.minDimension / originalWidth,
+            limits.minDimension / originalHeight
+          );
+          scale = Math.max(1, scaleToMin);
+        }
+
+        targetWidth = Math.max(1, Math.round(originalWidth * scale));
+        targetHeight = Math.max(1, Math.round(originalHeight * scale));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          throw new Error('画像のリサイズ用コンテキストを確保できませんでした');
+        }
+        ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+        const outputBlob = await canvasToSizedBlob(canvas, file.type || 'image/png', limits.maxFileSize);
+        if (!outputBlob || outputBlob.size === 0) {
+          throw new Error('画像のリサイズに失敗しました');
+        }
+
+        const normalizedFile = new File([outputBlob], file.name.replace(/\.(\w+)$/, '') + '-azure.' + (outputBlob.type === 'image/png' ? 'png' : 'jpg'), {
+          type: outputBlob.type,
+          lastModified: Date.now()
+        });
+
+        return {
+          file: normalizedFile,
+          resized: true,
+          width: targetWidth,
+          height: targetHeight,
+          originalWidth,
+          originalHeight
+        };
+      } catch (resizeError) {
+        console.error('❌ Azure互換リサイズ失敗:', resizeError);
+        throw resizeError;
+      }
+    }
+
+    async function analyzeWithVisionFallback(base64Payload, fileType, selectedProvider, providerInfo) {
+      const analyzerManager = window.aiAnalyzerManager;
+      if (!analyzerManager) {
+        throw new Error('AI解析マネージャーが初期化されていません');
+      }
+
+      if (selectedProvider) {
+        try {
+          if (analyzerManager.currentAnalyzer?.provider !== selectedProvider) {
+            analyzerManager.setAnalyzer(selectedProvider);
+          }
+        } catch (switchError) {
+          console.warn('⚠️ 解析器の切り替えに失敗しました:', switchError);
+        }
+      }
+
+      const mimeType = fileType || 'image/png';
+      console.log('🛰️ Gemini Visionフォールバック開始', { selectedProvider, mimeType });
+
+      const { data: visionResult, error: visionError } = await sb.functions.invoke('call-vision-api', {
+        body: {
+          contents: [{
+            parts: [
+              {
+                text: 'Extract all text from this recipe image. Preserve Japanese characters, numbers, and line breaks as they appear.'
+              },
+              {
+                inline_data: {
+                  mime_type: mimeType,
+                  data: base64Payload
+                }
+              }
+            ]
+          }]
+        }
+      });
+
+      if (visionError) {
+        console.error('❌ call-vision-api error:', visionError);
+        if (visionError?.context?.response) {
+          try {
+            const clone = visionError.context.response.clone();
+            const errorText = await clone.text();
+            console.error('❌ Vision function response body:', errorText);
+            throw new Error(errorText || visionError.message || 'Gemini Vision呼び出しに失敗しました');
+          } catch (parseErr) {
+            console.warn('⚠️ Failed to read vision error body:', parseErr);
+          }
+        }
+        throw new Error(visionError.message || visionError.error || 'Gemini Vision呼び出しに失敗しました');
+      }
+
+      const extractedTextParts = visionResult?.candidates?.[0]?.content?.parts || [];
+      const extractedText = extractedTextParts
+        .map(part => part?.text || '')
+        .filter(Boolean)
+        .join('\n')
+        .trim();
+
+      if (!extractedText) {
+        console.error('❌ Gemini Visionから有効なテキストが取得できませんでした:', visionResult);
+        throw new Error('Gemini Visionからテキストを取得できませんでした');
+      }
+
+      console.log('📝 Gemini Vision抽出テキスト(冒頭):', extractedText.substring(0, 200));
+
+      try {
+        const recipeData = await analyzerManager.analyzeRecipe(extractedText, sb);
+        if (!recipeData || typeof recipeData !== 'object') {
+          throw new Error('AI解析結果が無効です');
+        }
+        recipeData.aiProvider = recipeData.aiProvider || selectedProvider;
+        recipeData.aiProviderModel = recipeData.aiProviderModel || providerInfo?.model || null;
+        console.log('✅ Gemini Vision + AI解析成功:', {
+          provider: recipeData.aiProvider,
+          ingredients: recipeData.ingredients?.length || 0,
+          steps: recipeData.steps?.length || 0
+        });
+        return recipeData;
+      } catch (analysisError) {
+        console.error('❌ Gemini Visionフォールバック解析エラー:', analysisError);
+        throw analysisError;
+      }
+    }
+
+    async function analyzeImage() {
+      console.log('🔍 analyzeImage function called');
+      const activeFile = getActiveOcrFile();
+      if (activeFile) {
+        currentFile = activeFile;
+        window.__ocrCurrentFile = activeFile;
+      }
+      console.log('📁 activeFile status:', activeFile);
+
+      if (!activeFile) {
         console.error('❌ No currentFile available');
         showImageMessage('画像を選択してください', 'error');
         return;
       }
 
-      if (!window.APP_CONFIG?.SUPABASE_URL) {
-        console.error('❌ APP_CONFIG or SUPABASE_URL not available');
-        showImageMessage('設定が正しく読み込まれていません', 'error');
-        return;
-      }
-
-      if (!window.APP_CONFIG?.SUPABASE_ANON_KEY) {
-        console.error('❌ SUPABASE_ANON_KEY not available');
-        showImageMessage('認証キーが設定されていません', 'error');
-        return;
-      }
-
-      console.log('✅ currentFile available:', {
-        name: currentFile.name,
-        type: currentFile.type,
-        size: currentFile.size
-      });
-
-      // ローディングポップアップを表示
       const loadingPopup = document.getElementById('loadingPopup');
       if (loadingPopup) {
         loadingPopup.style.display = 'flex';
       }
 
-      showImageMessage('画像を解析中...', 'loading');
-      
-      // ステータス表示開始
+      showImageMessage('AzureでOCR解析を開始しました...', 'loading');
       if (typeof showStatusPopup === 'function') {
-        showStatusPopup('画像解析中...', 'AIが画像からレシピを抽出しています', 'loading');
+        showStatusPopup('画像解析中...', 'Azure Document IntelligenceでOCR、AIで構造化しています', 'loading');
+      }
+
+      if (analyzeButton) {
+        analyzeButton.disabled = true;
       }
 
       try {
-        console.log('🔄 Starting image analysis with Google Vision API (Gemini 1.5 Pro Vision)...');
-
-        // Base64変換
-        console.log('🔄 Starting Base64 conversion...');
-        const base64 = await fileToBase64(currentFile);
-        console.log('✅ Base64 conversion completed, size:', base64.length);
-
-        const base64Data = base64.split(',')[1];
-        console.log('✅ Base64 data extracted, size:', base64Data.length);
-
-        // 先にStorageへアップロード（Safariでも確実に送信されるよう同期的に実施）
+        let azureReadyFile = activeFile;
         try {
-          if (!window.sb) {
-            console.warn('⚠️ Supabaseクライアントが初期化されていません');
-          } else {
-            const f = currentFile;
+          const normalization = await ensureAzureCompatibleImage(activeFile);
+          azureReadyFile = normalization.file;
+          const before = `${normalization.originalWidth || activeFile.width || '?'}x${normalization.originalHeight || activeFile.height || '?'}`;
+          const after = `${normalization.width}x${normalization.height}`;
+          if (normalization.resized) {
+            showImageMessage(`Azure制限に合わせて画像をリサイズしました (${before} → ${after})`, 'info');
+          }
+          window.__ocrCurrentFile = azureReadyFile;
+          currentFile = azureReadyFile;
+        } catch (resizeError) {
+          console.warn('⚠️ Azure互換リサイズをスキップします:', resizeError);
+          showImageMessage('Azure用の画像調整に失敗したため、元の画像で解析を試みます。', 'error');
+        }
+
+        const base64 = await fileToBase64(azureReadyFile);
+        console.log('✅ Base64 conversion completed, size:', base64.length);
+        const base64Payload = base64.includes(',') ? base64.split(',')[1] : base64;
+
+        // オプション: 画像をストレージに保存して後で参照できるようにする
+        try {
+          if (window.sb) {
+            const f = azureReadyFile;
             const ext = (f.name?.split('.')?.pop() || 'jpg').toLowerCase();
             const name = `${(crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now()}.${ext}`;
             const path = `ocr/${name}`;
-            
+
             console.log('🔄 ストレージアップロードを開始:', { path, size: f.size, type: f.type });
-            
-            const { error } = await window.sb.storage.from('images').upload(path, f, {
+
+            const { error: uploadError } = await window.sb.storage.from('images').upload(path, f, {
               upsert: true,
               cacheControl: '3600',
               contentType: f.type || 'image/jpeg'
             });
-            
-            if (error) {
-              console.error('❌ ストレージアップロードエラー:', error);
-              showImageMessage('画像の送信に失敗しました（解析は続行します）: ' + (error.message || error), 'error');
+
+            if (uploadError) {
+              console.warn('⚠️ ストレージアップロードエラー:', uploadError);
+              showImageMessage('画像の送信に失敗しました（解析は続行します）', 'error');
             } else {
               const { data } = window.sb.storage.from('images').getPublicUrl(path);
-              const url = data?.publicUrl;
-              if (url) {
-                window.currentImageData = url;
-                console.log('✅ ストレージアップロード成功:', url);
-                showImageMessage('画像を送信しました（解析を続行します）', 'success');
+              if (data?.publicUrl) {
+                window.currentImageData = data.publicUrl;
+                console.log('✅ ストレージアップロード成功:', data.publicUrl);
               }
             }
           }
-        } catch (upErr) {
-          console.error('❌ ストレージアップロード例外:', upErr);
-          showImageMessage('画像送信処理でエラー（解析は続行します）', 'error');
+        } catch (storageError) {
+          console.warn('⚠️ ストレージアップロード例外:', storageError);
         }
+        const providerInfo = window.aiConfig?.getCurrentProvider();
+        const selectedProvider = providerInfo?.key || 'groq';
+        console.log('🤖 Selected AI provider:', selectedProvider);
 
-        // Vision APIを使用してOCRテキストを抽出
-        showImageMessage('画像をVision APIで解析中...', 'loading');
-
-        // Vision API用のプロンプトとペイロードを準備
-        const prompt = "この画像からテキストを抽出してください。レシピの画像の場合は、材料、分量、手順などの情報を正確に読み取ってください。";
-        
-        const payload = {
-          contents: [{
-            parts: [
-              { text: prompt },
-              { inline_data: { mime_type: currentFile.type, data: base64Data } }
-            ]
-          }]
-        };
-
-        const { data: visionResult, error: visionError } = await sb.functions.invoke('call-vision-api', {
-          body: payload
-        });
-
-        if (visionError) {
-          throw new Error(`Vision API呼び出しエラー: ${visionError.message}`);
-        }
-
-        console.log('Raw Vision API response:', visionResult);
-
-        // Gemini Vision APIのレスポンス形式に合わせてテキストを抽出
-        let extractedText = '';
-        if (visionResult && visionResult.candidates && visionResult.candidates[0] && visionResult.candidates[0].content) {
-          extractedText = visionResult.candidates[0].content.parts[0].text || '';
-        }
-
-        console.log('Extracted text from Vision API:', extractedText);
-        
         let recipeData = null;
-        
-        // 抽出したテキストを構造化
-        if (extractedText && extractedText.trim()) {
-          console.log('🔄 AI解析システムを使用してテキストを解析');
-          
+        let analysisSource = '';
+
+        try {
+          showImageMessage(`AzureでOCR後、${selectedProvider.toUpperCase()}で解析中...`, 'loading');
+          recipeData = await analyzeWithAzureDocumentIntelligence(base64Payload, selectedProvider, providerInfo);
+          analysisSource = `Azure Document Intelligence + ${selectedProvider.toUpperCase()}`;
+        } catch (azureError) {
+          console.warn('⚠️ Azure Document Intelligence解析に失敗しました。Gemini Visionフォールバックを試みます。', azureError);
+          showImageMessage('Azure解析に失敗したため、Gemini Visionに切り替えています...', 'info');
+          if (typeof updateStatusPopup === 'function') {
+            updateStatusPopup('再解析中', 'Gemini Visionで再解析しています...', 'loading');
+          }
+
           try {
-            // AI解析マネージャーを使用
-            recipeData = await window.aiAnalyzerManager.analyzeRecipe(extractedText, sb);
-            console.log('📄 AI解析結果:', recipeData);
-          } catch (error) {
-            console.error('❌ AI解析エラー:', error);
-            console.log('🔄 フォールバック処理に移行');
-            recipeData = parseTextToRecipe(extractedText);
-            console.log('📄 フォールバック結果:', recipeData);
+            recipeData = await analyzeWithVisionFallback(base64Payload, activeFile.type, selectedProvider, providerInfo);
+            analysisSource = `Gemini Vision + ${selectedProvider.toUpperCase()}`;
+          } catch (fallbackError) {
+            console.error('❌ Gemini Visionフォールバックも失敗しました', fallbackError);
+            if (azureError && fallbackError && typeof fallbackError === 'object') {
+              fallbackError.originalError = azureError;
+            }
+            throw fallbackError;
           }
         }
 
-
-        // 既存の applyRecipeData 関数を使用してフォームに反映
-        if (recipeData) {
-          console.log('🔄 Applying recipe data to form...');
-          console.log('📄 Final recipe data:', recipeData);
-          await applyRecipeData(recipeData);
-          console.log('✅ Recipe data applied successfully');
-          showImageMessage('画像解析が完了しました！', 'success');
-          
-          // ローディングポップアップを非表示
-          const loadingPopup = document.getElementById('loadingPopup');
-          if (loadingPopup) {
-            loadingPopup.style.display = 'none';
-          }
-          
-          // ステータス表示完了
-          if (typeof updateStatusPopup === 'function') {
-            updateStatusPopup('完了', '画像解析が完了しました！', 'success');
-            setTimeout(() => {
-              if (typeof hideStatusPopup === 'function') {
-                hideStatusPopup();
-              }
-            }, 2000);
-          }
-          
-          // モーダルを閉じる
-          closeImageModal();
-        } else {
-          // テキストが抽出できなかった場合のエラーメッセージ
-          if (!extractedText || extractedText.trim() === '') {
-            showImageMessage('画像からテキストを抽出できませんでした。画像の品質を確認してください。', 'error');
-          } else {
-            showImageMessage('レシピデータの構造化に失敗しました。手動で入力してください。', 'error');
-          }
-          
-          // ローディングポップアップを非表示
-          const loadingPopup = document.getElementById('loadingPopup');
-          if (loadingPopup) {
-            loadingPopup.style.display = 'none';
-          }
-          
-          // ステータス表示エラー
-          if (typeof updateStatusPopup === 'function') {
-            updateStatusPopup('エラー', 'レシピデータの抽出に失敗しました', 'error');
-            setTimeout(() => {
-              if (typeof hideStatusPopup === 'function') {
-                hideStatusPopup();
-              }
-            }, 3000);
-          }
+        if (!recipeData || typeof recipeData !== 'object') {
+          throw new Error('レシピデータが取得できませんでした');
         }
-        
+
+        console.log(`📄 解析結果 (${analysisSource}):`, recipeData);
+        await applyRecipeData(recipeData);
+        showImageMessage('画像解析が完了しました！', 'success');
+
+        if (typeof updateStatusPopup === 'function') {
+          updateStatusPopup('完了', '画像解析が完了しました！', 'success');
+          setTimeout(() => {
+            if (typeof hideStatusPopup === 'function') {
+              hideStatusPopup();
+            }
+          }, 2000);
+        }
+
+        closeImageModal();
       } catch (error) {
-        showImageMessage('画像解析に失敗しました: ' + error.message, 'error');
-        
-        // ローディングポップアップを非表示
-        const loadingPopup = document.getElementById('loadingPopup');
-        if (loadingPopup) {
-          loadingPopup.style.display = 'none';
-        }
-        
-        // ステータス表示エラー
+        console.error('❌ 画像解析エラー:', error);
+        showImageMessage('画像解析に失敗しました: ' + (error.message || error), 'error');
+
         if (typeof updateStatusPopup === 'function') {
           updateStatusPopup('エラー', '画像解析に失敗しました', 'error');
           setTimeout(() => {
@@ -2717,6 +3245,13 @@
               hideStatusPopup();
             }
           }, 3000);
+        }
+      } finally {
+        if (loadingPopup) {
+          loadingPopup.style.display = 'none';
+        }
+        if (analyzeButton) {
+          analyzeButton.disabled = !currentFile;
         }
       }
     }
@@ -2955,6 +3490,10 @@
 
     function clearImage() {
       currentFile = null;
+      window.__ocrCurrentFile = null;
+      if (Array.isArray(window.currentImageFiles)) {
+        window.currentImageFiles = [];
+      }
       const previewArea = document.getElementById('previewArea');
       const imageInput = document.getElementById('imageInput');
       const cameraInput = document.getElementById('cameraInput');
@@ -2977,7 +3516,7 @@
       const provider = (window.latestAIProvider || '').toString().toLowerCase();
       const providerIconMap = {
         groq: '../assets/icons/URL-groq.svg',
-        gemini: '../assets/icons/URL-gemini.svg'
+        chatgpt: '../assets/icons/openai.svg'
       };
 
       let contentHtml = `<div class="${className}">${message}</div>`;

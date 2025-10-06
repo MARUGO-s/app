@@ -1,13 +1,13 @@
 /**
  * AI解析マネージャー
- * Vision APIの後の文字解析でGroqまたはGeminiを選択・実行
+ * Azure Document Intelligence後のテキストをGroqまたはChatGPTで解析
  */
 
 class AIAnalyzerManager {
   constructor() {
     this.analyzers = {
       groq: new GroqAnalyzer(),
-      gemini: new GeminiAnalyzer()
+      chatgpt: new ChatGPTAnalyzer()
     };
     
     this.currentAnalyzer = null;

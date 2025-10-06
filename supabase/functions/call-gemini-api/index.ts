@@ -97,10 +97,26 @@ serve(async (req) => {
 
     console.log("✅ Gemini API レスポンス取得成功:", content.substring(0, 100) + "...");
 
+    // contentをJSONとして解析してrecipeDataとして返す
+    let recipeData;
+    try {
+      recipeData = JSON.parse(content);
+    } catch (parseError) {
+      console.log("⚠️ JSON解析失敗、生のコンテンツを返します:", parseError.message);
+      recipeData = {
+        title: "解析エラー",
+        description: "Gemini APIからの応答を解析できませんでした",
+        servings: "1",
+        ingredients: [],
+        steps: [],
+        notes: content
+      };
+    }
+
     return new Response(
       JSON.stringify({
-        success: true,
-        content,
+        ok: true,
+        recipeData: recipeData,
         raw: result,
       }),
       {
@@ -113,7 +129,7 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        success: false,
+        ok: false,
         error: error instanceof Error ? error.message : String(error),
       }),
       {
