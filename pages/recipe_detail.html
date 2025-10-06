@@ -143,7 +143,7 @@
     
     /* レシピヘッダー */
     .recipe-hero {
-      background: linear-gradient(135deg, rgba(255, 245, 235, 0.95), rgba(225, 239, 255, 0.95));
+      background: linear-gradient(135deg, rgba(255, 245, 235, 0.98), rgba(225, 239, 255, 0.95));
       border-radius: 24px;
       padding: clamp(2rem, 5vw, 3rem);
       margin-bottom: 2rem;
@@ -151,36 +151,62 @@
       position: relative;
       overflow: hidden;
       border: 1px solid rgba(226, 232, 240, 0.85);
+      text-align: center;
     }
 
     .recipe-hero::before {
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(160deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.3) 35%, rgba(255, 255, 255, 0.05) 100%);
+      background: linear-gradient(150deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.35) 45%, rgba(255, 255, 255, 0.08) 100%);
       pointer-events: none;
     }
 
     .recipe-hero-inner {
       position: relative;
       z-index: 1;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      gap: clamp(1.5rem, 4vw, 2.75rem);
-      align-items: stretch;
-    }
-
-    .recipe-hero-inner.has-media {
-      grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
-    }
-    
-    .recipe-hero-content {
-      position: relative;
-      z-index: 1;
       display: flex;
       flex-direction: column;
-      justify-content: center;
-      gap: 1.75rem;
+      align-items: center;
+      gap: clamp(1.5rem, 4vw, 2.75rem);
+      width: 100%;
+    }
+
+    .recipe-hero-top {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: clamp(0.75rem, 2vw, 1.25rem);
+    }
+
+    .recipe-hero-media {
+      position: relative;
+      border-radius: 18px;
+      overflow: hidden;
+      display: none;
+      background: rgba(255, 255, 255, 0.85);
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      box-shadow: 0 22px 45px rgba(148, 163, 184, 0.25);
+      isolation: isolate;
+      width: min(560px, 100%);
+      margin: 0 auto;
+    }
+
+    .recipe-hero-info {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.9rem;
+    }
+
+    .recipe-hero-inner.has-media .recipe-hero-media {
+      display: block;
+    }
+
+    .recipe-hero-inner.has-media .recipe-hero-info {
+      align-items: center;
     }
 
     .recipe-hero-media {
@@ -225,25 +251,27 @@
     
     .recipe-title {
       font-family: var(--font-serif);
-      font-size: clamp(2.25rem, 5vw, 3.6rem);
+      font-size: clamp(1.8rem, 4vw, 3.2rem);
       font-weight: 700;
       color: #1f2937;
-      margin-bottom: 1rem;
-      line-height: 1.2;
+      margin: 0;
+      line-height: 1.1;
       word-wrap: break-word;
       word-break: break-word;
       overflow-wrap: break-word;
       hyphens: auto;
+      text-align: center;
     }
     
     .recipe-meta {
       display: flex;
       align-items: center;
-      gap: 2rem;
+      justify-content: center;
+      gap: 0.75rem;
       flex-wrap: wrap;
-      margin-top: 1.5rem;
+      margin-top: 0.75rem;
     }
-    
+
     .meta-item {
       display: flex;
       align-items: center;
@@ -260,14 +288,15 @@
     .meta-item i {
       font-size: 1.1rem;
     }
-    
+
     .recipe-tags {
       display: flex;
+      justify-content: center;
       gap: 0.5rem;
       flex-wrap: wrap;
-      margin-top: 1rem;
+      margin-top: 0.5rem;
     }
-    
+
     .tag {
       background: rgba(99, 102, 241, 0.12);
       color: var(--accent);
@@ -570,27 +599,12 @@
         margin-bottom: 1rem;
       }
 
-      .recipe-hero-inner {
-        grid-template-columns: 1fr;
-        gap: 1.5rem;
-      }
-
       .recipe-hero-media {
         height: clamp(220px, 55vw, 360px);
       }
 
       .recipe-title {
-        font-size: 2rem;
-        margin-bottom: 0.75rem;
-      }
-      
-      .recipe-meta {
-        gap: 0.75rem;
-        margin-top: 1rem;
-      }
-
-      .ingredient-section {
-        padding: 1rem;
+        font-size: 1.9rem;
       }
 
       .meta-item {
@@ -599,9 +613,9 @@
       }
 
       .meta-item i {
-        font-size: 0.9rem;
+        font-size: 0.95rem;
       }
-      
+
       .card {
         padding: 1.25rem;
         margin-bottom: 1rem;
@@ -750,9 +764,15 @@
       <!-- レシピヘッダー -->
       <div class="recipe-hero">
         <div class="recipe-hero-inner">
-          <div class="recipe-hero-content">
+          <div class="recipe-hero-top">
             <h1 class="recipe-title" id="recipeTitle">レシピタイトル</h1>
-            
+          </div>
+          <figure class="recipe-hero-media" id="recipeHeroMedia" style="display: none;">
+            <img id="recipeHeroImage" class="recipe-hero-image" src="" alt="レシピ画像" loading="lazy">
+            <span class="recipe-hero-media__glow"></span>
+            <span class="recipe-hero-media__overlay"></span>
+          </figure>
+          <div class="recipe-hero-info">
             <div class="recipe-meta">
               <div class="meta-item" id="servingsMeta" style="display: none;">
                 <i class="fas fa-users"></i>
@@ -767,14 +787,8 @@
                 <span id="dateText">-</span>
               </div>
             </div>
-            
             <div class="recipe-tags" id="recipeTags"></div>
           </div>
-          <figure class="recipe-hero-media" id="recipeHeroMedia" style="display: none;">
-            <img id="recipeHeroImage" class="recipe-hero-image" src="" alt="レシピ画像" loading="lazy">
-            <span class="recipe-hero-media__glow"></span>
-            <span class="recipe-hero-media__overlay"></span>
-          </figure>
         </div>
       </div>
 
