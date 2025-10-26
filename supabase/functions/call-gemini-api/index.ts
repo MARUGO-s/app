@@ -63,11 +63,10 @@ serve(async (req) => {
 
     // Gemini API用のリクエスト形式に変換
     const geminiRequest = {
-      contents: [{
-        parts: [{
-          text: messages.map(msg => `${msg.role}: ${msg.content}`).join('\n\n')
-        }]
-      }],
+      contents: messages.map(msg => ({
+        role: msg.role === 'assistant' ? 'model' : msg.role,
+        parts: [{ text: msg.content }]
+      })),
       generationConfig: {
         temperature: body.temperature || 0.7,
         maxOutputTokens: body.maxTokens || 4096,
