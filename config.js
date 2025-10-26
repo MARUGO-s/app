@@ -4,12 +4,12 @@
  */
 
 window.APP_CONFIG = {
-  // Supabase設定（本番環境）
-  SUPABASE_URL: 'https://ctxyawinblwcbkovfsyj.supabase.co',
-  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q',
+  // Supabase設定（Recipe Keeper用）
+  SUPABASE_URL: 'https://nnbdzwrndqtsfzobknmj.supabase.co',
+  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uYmR6d3JuZHF0c2Z6b2Jrbm1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAyMTkxNTQsImV4cCI6MjA3NTc5NTE1NH0.srlNmVFzw4w2d1tnp6gwZsBtXMJurpGDpFLe0bD0IYs',
   
   // API設定
-  API_BASE_URL: 'https://ctxyawinblwcbkovfsyj.supabase.co/functions/v1',
+  API_BASE_URL: 'https://nnbdzwrndqtsfzobknmj.supabase.co/functions/v1',
   
   // アプリ設定
   APP_NAME: 'Recipe Keeper',
