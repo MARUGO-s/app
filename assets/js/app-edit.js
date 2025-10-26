@@ -5172,8 +5172,12 @@ const saveRecipeToDatabase = async () => {
     console.log('Original recipe data:', originalRecipeData);
     console.log('Original recipe data (JSON):', originalRecipeData ? JSON.stringify(originalRecipeData) : null);
     
-    if (document.getElementById('servings')?.value) {
-      recipeData.servings = parseInt(document.getElementById('servings').value);
+    // servingsの処理（空の場合はデフォルト値4を設定）
+    const servingsInput = document.getElementById('servings')?.value;
+    if (servingsInput && servingsInput.trim() !== '') {
+      recipeData.servings = parseInt(servingsInput);
+    } else {
+      recipeData.servings = 4; // デフォルト値
     }
     
     let result;
@@ -7761,8 +7765,12 @@ const saveRecipeForAI = async () => {
       is_groq_generated: false // AI創作レシピはChatGPTを使用するためfalse
     };
     
-    if (document.getElementById('servings')?.value) {
-      recipeData.servings = parseInt(document.getElementById('servings').value);
+    // servingsの処理（空の場合はデフォルト値4を設定）
+    const servingsInput = document.getElementById('servings')?.value;
+    if (servingsInput && servingsInput.trim() !== '') {
+      recipeData.servings = parseInt(servingsInput);
+    } else {
+      recipeData.servings = 4; // デフォルト値
     }
     
     // レシピの保存
