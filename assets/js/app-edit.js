@@ -359,7 +359,7 @@ const getCurrentGroqModel = () => {
 
 // ChatGPT API呼び出し関数
 async function callChatGPTAPI(text, url) {
-  await sleep(1000); // Rate limiting
+  await sleep(2000); // Rate limiting - 2秒待機に延長
   
   console.log('🤖 ChatGPT API呼び出し開始');
   console.log('📝 プロンプト:', text.substring(0, 200) + '...');
@@ -823,7 +823,7 @@ const convertUnits = (quantity, unit, itemName = '') => {
 
 // API Functions
 async function callGroqAPI(text, url) {
-  await sleep(1000); // Rate limiting
+  await sleep(2000); // Rate limiting - 2秒待機に延長
   
   // URLと内容から言語を判定
   const isJapaneseSite = url && (
@@ -1369,7 +1369,7 @@ JSON形式で返す:
 
 // ChatGPT API呼び出し関数
 async function callChatGPTAPI(text, url) {
-  await sleep(1000); // Rate limiting
+  await sleep(2000); // Rate limiting - 2秒待機に延長
   
   console.log('🤖 ChatGPT API呼び出し開始');
   console.log('📝 プロンプト:', text.substring(0, 200) + '...');
