@@ -129,26 +129,28 @@ window.FALLBACK_DATA = {
     { id: 11, name: 'その他', created_at: '2025-01-15T09:00:00Z' }
   ],
 
-  recipe_ingredients: [
-    { id: 1, recipe_id: 'sample-001', position: 1, item: 'パスタ', quantity: '200', unit: 'g', created_at: '2025-01-15T09:00:00Z' },
-    { id: 2, recipe_id: 'sample-001', position: 2, item: 'トマト缶', quantity: '1', unit: '缶', created_at: '2025-01-15T09:00:00Z' },
-    { id: 3, recipe_id: 'sample-001', position: 3, item: 'にんにく', quantity: '2', unit: '片', created_at: '2025-01-15T09:00:00Z' },
-    { id: 4, recipe_id: 'sample-001', position: 4, item: 'オリーブオイル', quantity: '大さじ2', unit: '', created_at: '2025-01-15T09:00:00Z' },
-    { id: 5, recipe_id: 'sample-002', position: 1, item: 'チョコレート', quantity: '200', unit: 'g', created_at: '2025-01-15T09:00:00Z' },
-    { id: 6, recipe_id: 'sample-002', position: 2, item: 'バター', quantity: '100', unit: 'g', created_at: '2025-01-15T09:00:00Z' },
-    { id: 7, recipe_id: 'sample-002', position: 3, item: '卵', quantity: '3', unit: '個', created_at: '2025-01-15T09:00:00Z' },
-    { id: 8, recipe_id: 'sample-002', position: 4, item: '薄力粉', quantity: '80', unit: 'g', created_at: '2025-01-15T09:00:00Z' }
+  // フォールバック用の材料データ（JSONB形式）
+  fallback_ingredients: [
+    { item: 'パスタ', quantity: '200', unit: 'g' },
+    { item: 'トマト缶', quantity: '1', unit: '缶' },
+    { item: 'にんにく', quantity: '2', unit: '片' },
+    { item: 'オリーブオイル', quantity: '大さじ2', unit: '' },
+    { item: 'チョコレート', quantity: '200', unit: 'g' },
+    { item: 'バター', quantity: '100', unit: 'g' },
+    { item: '卵', quantity: '3', unit: '個' },
+    { item: '薄力粉', quantity: '80', unit: 'g' }
   ],
 
-  recipe_steps: [
-    { id: 1, recipe_id: 'sample-001', position: 1, instruction: 'パスタを茹でる準備をします。大きな鍋にたっぷりの湯を沸かし、塩を加えます。', created_at: '2025-01-15T09:00:00Z' },
-    { id: 2, recipe_id: 'sample-001', position: 2, instruction: 'にんにくをみじん切りにし、オリーブオイルで炒めます。', created_at: '2025-01-15T09:00:00Z' },
-    { id: 3, recipe_id: 'sample-001', position: 3, instruction: 'トマト缶を加えて煮込み、塩胡椒で味を調えます。', created_at: '2025-01-15T09:00:00Z' },
-    { id: 4, recipe_id: 'sample-001', position: 4, instruction: '茹でたパスタとソースを和えて完成です。', created_at: '2025-01-15T09:00:00Z' },
-    { id: 5, recipe_id: 'sample-002', position: 1, instruction: 'チョコレートとバターを湯煎で溶かします。', created_at: '2025-01-15T09:00:00Z' },
-    { id: 6, recipe_id: 'sample-002', position: 2, instruction: '卵を一つずつ加えてよく混ぜます。', created_at: '2025-01-15T09:00:00Z' },
-    { id: 7, recipe_id: 'sample-002', position: 3, instruction: '薄力粉をふるって加え、さっくりと混ぜます。', created_at: '2025-01-15T09:00:00Z' },
-    { id: 8, recipe_id: 'sample-002', position: 4, instruction: '型に流し入れ、180度のオーブンで45分焼きます。', created_at: '2025-01-15T09:00:00Z' }
+  // フォールバック用の手順データ（JSONB形式）
+  fallback_steps: [
+    { step: 'パスタを茹でる準備をします。大きな鍋にたっぷりの湯を沸かし、塩を加えます。' },
+    { step: 'にんにくをみじん切りにし、オリーブオイルで炒めます。' },
+    { step: 'トマト缶を加えて煮込み、塩胡椒で味を調えます。' },
+    { step: '茹でたパスタとソースを和えて完成です。' },
+    { step: 'チョコレートとバターを湯煎で溶かします。' },
+    { step: '卵を一つずつ加えてよく混ぜます。' },
+    { step: '薄力粉をふるって加え、さっくりと混ぜます。' },
+    { step: '型に流し入れ、180度のオーブンで45分焼きます。' }
   ],
 
   favorites: [

@@ -894,13 +894,21 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../config.js"></script>
+  <script src="../config.local.js"></script>
   <script>
     // Supabase初期化
+    console.log('🔧 設定確認:', {
+      hasAppConfig: !!window.APP_CONFIG,
+      appConfigUrl: window.APP_CONFIG?.SUPABASE_URL,
+      appConfigKey: window.APP_CONFIG?.SUPABASE_ANON_KEY?.substring(0, 20) + '...'
+    });
+    
     let sb;
     if (window.APP_CONFIG) {
       sb = supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_ANON_KEY);
-    } else if (typeof CONFIG !== 'undefined') {
-      sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+      console.log('✅ APP_CONFIGを使用してSupabaseクライアントを初期化');
+    } else {
+      console.error('❌ Supabase設定が見つかりません');
     }
 
     // URLからレシピIDを取得
@@ -1176,24 +1184,24 @@
           .eq('id', normalizedRecipeId)
           .single();
 
-        if (recipeError) throw recipeError;
+        if (recipeError) {
+          console.error('レシピ取得エラー詳細:', {
+            error: recipeError,
+            message: recipeError.message,
+            details: recipeError.details,
+            hint: recipeError.hint,
+            code: recipeError.code,
+            recipeId: normalizedRecipeId
+          });
+          throw recipeError;
+        }
 
-        // 材料を取得
-        const { data: ingredients, error: ingredientsError } = await sb
-          .from('recipe_ingredients')
-          .select('*')
-          .eq('recipe_id', normalizedRecipeId)
-          .order('position');
-
-        // 手順を取得
-        const { data: steps, error: stepsError } = await sb
-          .from('recipe_steps')
-          .select('*')
-          .eq('recipe_id', normalizedRecipeId)
-          .order('position');
+        // 材料と手順はJSONB形式でrecipesテーブルに保存されている
+        const ingredients = recipe.ingredients || [];
+        const steps = recipe.steps || [];
 
         // 保存
-        originalData = { recipe, ingredients: ingredients || [], steps: steps || [] };
+        originalData = { recipe, ingredients, steps };
 
         // 翻訳データ（最新1件）を取得
         const { data: translations } = await sb
@@ -1205,17 +1213,10 @@
 
         if (translations && translations.length > 0) {
           const tr = translations[0];
-          const { data: tri } = await sb
-            .from('translation_recipe_ingredients')
-            .select('*')
-            .eq('translation_recipe_id', tr.id)
-            .order('position');
-          const { data: trs } = await sb
-            .from('translation_recipe_steps')
-            .select('*')
-            .eq('translation_recipe_id', tr.id)
-            .order('position');
-          translationData = { recipe: tr, ingredients: tri || [], steps: trs || [] };
+          // 翻訳データはJSONB形式でtranslation_recipesテーブルに保存されている
+          const translatedIngredients = tr.translated_ingredients || [];
+          const translatedSteps = tr.translated_steps || [];
+          translationData = { recipe: tr, ingredients: translatedIngredients, steps: translatedSteps };
         } else {
           translationData = { recipe: null, ingredients: [], steps: [] };
         }
@@ -1298,7 +1299,7 @@
         stepsList.innerHTML = steps.map((step, index) => `
           <div class="step-item">
             <div class="step-number">${index + 1}</div>
-            <div class="step-content">${step.instruction || '-'}</div>
+            <div class="step-content">${step.step || step.text || step.instruction || '-'}</div>
           </div>
         `).join('');
       } else {
@@ -1401,10 +1402,10 @@
       // 材料
       const ingredientsList = document.getElementById('ingredientsList');
       const translatedIngredients = (translationData.ingredients || []).map(ing => ({
-        item: ing.translated_item || ing.original_item || '',
-        quantity: ing.quantity,
-        unit: ing.unit,
-        sectionTitle: ing.sectionTitle || ing.section_title || ''
+        item: ing.item || '',
+        quantity: ing.quantity || '',
+        unit: ing.unit || '',
+        sectionTitle: ing.sectionTitle || ''
       }));
 
       if (translatedIngredients.length > 0) {
@@ -1421,7 +1422,7 @@
         stepsList.innerHTML = translatedSteps.map((step, index) => `
           <div class="step-item">
             <div class="step-number">${index + 1}</div>
-            <div class="step-content">${step.translated_instruction || step.original_instruction || '-'}</div>
+            <div class="step-content">${step.step || step.text || step.instruction || '-'}</div>
           </div>
         `).join('');
       } else {
@@ -1456,9 +1457,9 @@
       const originalDecorated = decorateIngredientsWithSections(originalData.ingredients || [], originalAssignments);
       const originalSectionsMarkup = renderIngredientColumns(originalDecorated);
       const translatedNormalized = (translationData.ingredients || []).map(ing => ({
-        item: ing.translated_item || ing.original_item || '',
-        quantity: ing.quantity,
-        unit: ing.unit,
+        item: ing.item || ing.translated_item || ing.original_item || '',
+        quantity: ing.quantity || '',
+        unit: ing.unit || '',
         sectionTitle: ing.sectionTitle || ing.section_title || ''
       }));
       const translatedDecorated = decorateIngredientsWithSections(translatedNormalized, translatedAssignments);
@@ -1485,13 +1486,13 @@
       const leftSteps = (originalData.steps || []).map((step, index) => `
         <div class=\"step-item\">
           <div class=\"step-number\">${index + 1}</div>
-          <div class=\"step-content\">${step.instruction || '-'}</div>
+          <div class=\"step-content\">${step.step || step.instruction || step.text || '-'}</div>
         </div>
       `).join('');
       const rightSteps = (translationData.steps || []).map((step, index) => `
         <div class=\"step-item\">
           <div class=\"step-number\">${index + 1}</div>
-          <div class=\"step-content\">${step.translated_instruction || step.original_instruction || '-'}</div>
+          <div class=\"step-content\">${step.step || step.translated_instruction || step.original_instruction || '-'}</div>
         </div>
       `).join('');
       stepsList.innerHTML = `

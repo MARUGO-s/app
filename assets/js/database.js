@@ -15,34 +15,34 @@ async function getRecipe(id) {
   }
 }
 
-// レシピ材料の取得
+// レシピ材料の取得（JSONB形式）
 async function getRecipeIngredients(recipeId) {
   try {
     const sb = getSupabaseClient();
     const { data, error } = await sb
-      .from('recipe_ingredients')
-      .select('*')
-      .eq('recipe_id', recipeId)
-      .order('position', { ascending: true });
+      .from('recipes')
+      .select('ingredients')
+      .eq('id', recipeId)
+      .single();
     if (error) throw error;
-    return data || [];
+    return data?.ingredients || [];
   } catch (error) {
     errorLog('材料取得エラー:', error);
     return [];
   }
 }
 
-// レシピ手順の取得
+// レシピ手順の取得（JSONB形式）
 async function getRecipeSteps(recipeId) {
   try {
     const sb = getSupabaseClient();
     const { data, error } = await sb
-      .from('recipe_steps')
-      .select('*')
-      .eq('recipe_id', recipeId)
-      .order('position', { ascending: true });
+      .from('recipes')
+      .select('steps')
+      .eq('id', recipeId)
+      .single();
     if (error) throw error;
-    return data || [];
+    return data?.steps || [];
   } catch (error) {
     errorLog('手順取得エラー:', error);
     return [];
@@ -148,22 +148,14 @@ async function updateRecipe(id, updateData) {
   }
 }
 
-// 材料の保存
+// 材料の保存（JSONB形式でrecipesテーブルに保存）
 async function saveIngredients(recipeId, ingredients) {
   try {
-    const ingredientsData = ingredients.map((ing, index) => ({
-      recipe_id: recipeId,
-      position: index + 1,
-      item: ing.item || '',
-      quantity: ing.quantity || '',
-      unit: ing.unit || '',
-      price: ing.price || ''
-    }));
-    
     const sb = getSupabaseClient();
     const { error } = await sb
-      .from('recipe_ingredients')
-      .insert(ingredientsData);
+      .from('recipes')
+      .update({ ingredients: ingredients })
+      .eq('id', recipeId);
     if (error) throw error;
     return true;
   } catch (error) {
@@ -172,46 +164,21 @@ async function saveIngredients(recipeId, ingredients) {
   }
 }
 
-// 手順の保存
+// 手順の保存（JSONB形式でrecipesテーブルに保存）
 async function saveSteps(recipeId, steps) {
   try {
     console.log('📋 saveSteps呼び出し:', { recipeId, stepsCount: steps.length, steps });
     
     // 空の手順配列の場合はデフォルト手順を追加
     if (!steps || steps.length === 0) {
-      steps = [{ instruction: '手順を入力してください' }];
+      steps = [{ step: '手順を入力してください' }];
     }
-    
-    const stepsData = steps.map((step, index) => {
-      const instructionText = step.instruction || step.step || step.description || step.body || '';
-      // より確実にnullを防ぐ
-      const descriptionText = instructionText || `手順${index + 1}の説明`;
-      
-      console.log(`📋 手順${index + 1}保存データ:`, {
-        instruction: instructionText,
-        description: descriptionText,
-        originalStep: step
-      });
-      
-      // 一時的にdescriptionフィールドを除外してテスト
-      const stepData = {
-        recipe_id: recipeId,
-        position: index + 1,
-        step_number: index + 1,
-        instruction: String(instructionText || `手順${index + 1}`)
-        // description: String(descriptionText || `手順${index + 1}`) // 一時的にコメントアウト
-      };
-      
-      console.log(`📋 最終stepData ${index + 1}:`, stepData);
-      return stepData;
-    });
-    
-    console.log('📋 データベース送信直前のstepsData:', JSON.stringify(stepsData, null, 2));
     
     const sb = getSupabaseClient();
     const { error } = await sb
-      .from('recipe_steps')
-      .insert(stepsData);
+      .from('recipes')
+      .update({ steps: steps })
+      .eq('id', recipeId);
     if (error) {
       console.error('📋 手順保存Supabaseエラー詳細:', {
         error: error,
@@ -248,14 +215,14 @@ async function deleteRecipe(id) {
   }
 }
 
-// 材料の削除
+// 材料の削除（JSONB形式のため、空配列で更新）
 async function deleteIngredients(recipeId) {
   try {
     const sb = getSupabaseClient();
     const { error } = await sb
-      .from('recipe_ingredients')
-      .delete()
-      .eq('recipe_id', recipeId);
+      .from('recipes')
+      .update({ ingredients: [] })
+      .eq('id', recipeId);
     if (error) throw error;
     return true;
   } catch (error) {
@@ -264,14 +231,14 @@ async function deleteIngredients(recipeId) {
   }
 }
 
-// 手順の削除
+// 手順の削除（JSONB形式のため、空配列で更新）
 async function deleteSteps(recipeId) {
   try {
     const sb = getSupabaseClient();
     const { error } = await sb
-      .from('recipe_steps')
-      .delete()
-      .eq('recipe_id', recipeId);
+      .from('recipes')
+      .update({ steps: [] })
+      .eq('id', recipeId);
     if (error) throw error;
     return true;
   } catch (error) {

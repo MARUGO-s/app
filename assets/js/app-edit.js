@@ -244,12 +244,10 @@ const saveIngredientsAndSteps = async (recipeId, ingredients, steps) => {
   try {
     console.log('🔄 材料・手順の削除と再挿入を開始...');
 
-    // 既存の材料・手順を削除
-    await sb.from('recipe_ingredients').delete().eq('recipe_id', recipeId);
-    await sb.from('recipe_steps').delete().eq('recipe_id', recipeId);
-    console.log('✅ 既存データ削除完了');
+    // 材料と手順はJSONB形式でrecipesテーブルに保存されるため、削除は不要
+    console.log('✅ 既存データ削除スキップ（JSONB形式のため）');
 
-    // 材料を保存
+    // 材料をJSONB形式でrecipesテーブルに保存
     console.log('💾 材料保存開始:', ingredients.length);
     if (ingredients.length > 0) {
       const payload = ingredients.map((ing, index) => {
@@ -267,8 +265,6 @@ const saveIngredientsAndSteps = async (recipeId, ingredients, steps) => {
         }
         
         return {
-        recipe_id: recipeId,
-          position: index + 1,
           item: item,
           quantity: quantity,
           unit: unit
@@ -276,53 +272,37 @@ const saveIngredientsAndSteps = async (recipeId, ingredients, steps) => {
       });
       console.log('💾 Ingredient payload:', payload);
 
-      let { error: ingError } = await sb.from('recipe_ingredients').insert(payload);
+      const { error: ingError } = await sb
+        .from('recipes')
+        .update({ ingredients: payload })
+        .eq('id', recipeId);
+        
       if (ingError) {
         console.error('材料保存失敗:', ingError);
-        // 最小限のカラムで再試行
-        console.log('🔄 最小限フォーマットで再試行...');
-        const minimal = ingredients.map((ing, index) => ({
-          recipe_id: recipeId,
-          position: index + 1,
-          item: ing.item
-        }));
-        const { error: retryErr } = await sb.from('recipe_ingredients').insert(minimal);
-        if (retryErr) {
-          throw new Error(`材料保存失敗: ${retryErr.message}`);
-        }
-        console.log('✅ 材料保存成功（minimal format）');
+        throw new Error(`材料保存失敗: ${ingError.message}`);
       } else {
-        console.log('✅ 材料保存成功（normal format）');
+        console.log('✅ 材料保存成功（JSONB形式）');
       }
     }
 
-    // 手順を保存
+    // 手順をJSONB形式でrecipesテーブルに保存
     console.log('💾 手順保存開始:', steps.length);
     if (steps.length > 0) {
       const stepPayload = steps.map((step, index) => ({
-        recipe_id: recipeId,
-        step_number: step.step_number || (index + 1),
-        instruction: step.instruction || ''
+        step: step.instruction || step.step || step.text || ''
       }));
       console.log('💾 Step payload:', stepPayload);
 
-      const { error: stepError } = await sb.from('recipe_steps').insert(stepPayload);
+      const { error: stepError } = await sb
+        .from('recipes')
+        .update({ steps: stepPayload })
+        .eq('id', recipeId);
+        
       if (stepError) {
         console.error('手順保存失敗:', stepError);
-        // 最小限のデータで再試行
-        console.log('🔄 手順最小限フォーマットで再試行...');
-        const minimal = steps.map((step, index) => ({
-          recipe_id: recipeId,
-          step_number: index + 1,
-          instruction: step.instruction || ''
-        }));
-        const { error: retryErr } = await sb.from('recipe_steps').insert(minimal);
-        if (retryErr) {
-          throw new Error(`手順保存失敗: ${retryErr.message}`);
-        }
-        console.log('✅ 手順保存成功（minimal format）');
+        throw new Error(`手順保存失敗: ${stepError.message}`);
       } else {
-        console.log('✅ 手順保存成功（normal format）');
+        console.log('✅ 手順保存成功（JSONB形式）');
       }
     }
 
@@ -5707,8 +5687,8 @@ const loadExistingRecipeData = async (id) => {
       if (inlineContainer) inlineContainer.style.display = 'inline-block';
     }
     
-    // Load ingredients
-    const { data: ingredients } = await sb.from('recipe_ingredients').select('*').eq('recipe_id', id).order('position');
+    // Load ingredients from JSONB column
+    const ingredients = recipeData.ingredients || [];
     document.getElementById('ingredientsEditor').innerHTML = '';
     if (ingredients?.length > 0) {
       ingredients.forEach(ing => addIngredientRow(ing));
@@ -5716,11 +5696,11 @@ const loadExistingRecipeData = async (id) => {
       addIngredientRow();
     }
     
-    // Load steps
-    const { data: steps } = await sb.from('recipe_steps').select('*').eq('recipe_id', id).order('position');
+    // Load steps from JSONB column
+    const steps = recipeData.steps || [];
     document.getElementById('stepsEditor').innerHTML = '';
     if (steps?.length > 0) {
-      steps.forEach(step => addStepRow({ instruction: step.instruction || '' }));
+      steps.forEach(step => addStepRow({ instruction: step.step || step.text || step.instruction || '' }));
     } else {
       addStepRow();
     }
@@ -7789,20 +7769,18 @@ const saveRecipeForAI = async () => {
     const savedId = result.data.id;
     console.log('AI創作レシピ保存成功. ID:', savedId);
     
-    // 材料と手順の保存
-    await sb.from('recipe_ingredients').delete().eq('recipe_id', savedId);
-    await sb.from('recipe_steps').delete().eq('recipe_id', savedId);
-    
+    // 材料と手順をJSONB形式でrecipesテーブルに保存
     if (ingredients.length > 0) {
       const payload = ingredients.map(ing => ({
-        recipe_id: savedId,
-        position: ing.position,
         item: ing.item,
         quantity: ing.quantity,
         unit: ing.unit,
         price: ing.price
       }));
-      const { error: ingredientError } = await sb.from('recipe_ingredients').insert(payload);
+      const { error: ingredientError } = await sb
+        .from('recipes')
+        .update({ ingredients: payload })
+        .eq('id', savedId);
       if (ingredientError) {
         console.error('Insert ingredients failed:', ingredientError);
         throw ingredientError;
@@ -7812,34 +7790,20 @@ const saveRecipeForAI = async () => {
     console.log('💾 About to save steps:', steps.length);
     if (steps.length > 0) {
       const stepPayload = steps.map((step, index) => ({
-        recipe_id: savedId,
-        step_number: step.step_number || (index + 1),
-        instruction: step.instruction || ''
+        step: step.instruction || step.step || step.text || ''
       }));
       console.log('💾 Step payload:', stepPayload);
 
-      const { error: stepError } = await sb.from('recipe_steps').insert(stepPayload);
+      const { error: stepError } = await sb
+        .from('recipes')
+        .update({ steps: stepPayload })
+        .eq('id', savedId);
+        
       if (stepError) {
         console.error('❌ 手順保存エラー:', stepError);
-
-        // 最小限のデータで再試行
-        console.log('🔄 Retrying steps with minimal format...');
-        const minimal = steps.map((step, index) => ({
-          recipe_id: savedId,
-          step_number: index + 1,
-          instruction: step.instruction || ''
-        }));
-        console.log('🔄 Minimal step payload:', minimal);
-
-        const { error: retryErr } = await sb.from('recipe_steps').insert(minimal);
-        if (retryErr) {
-          console.error('❌ Minimal step insert also failed:', retryErr);
-          alert('手順の保存に失敗しました: ' + retryErr.message);
-        } else {
-          console.log('✅ 手順保存成功（minimal format）');
-        }
+        throw new Error(`手順保存失敗: ${stepError.message}`);
       } else {
-        console.log('✅ 手順保存成功（normal format）');
+        console.log('✅ 手順保存成功（JSONB形式）');
       }
     }
     

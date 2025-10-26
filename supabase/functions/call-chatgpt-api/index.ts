@@ -1,95 +1,198 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+type ChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
+type RequestPayload = {
+  prompt?: string;
+  messages?: ChatMessage[];
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
+  presencePenalty?: number;
+  frequencyPenalty?: number;
+  text?: string;
+  url?: string;
+  mode?: string;
+  siteLanguage?: string;
+  isJapaneseSite?: boolean;
+};
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const DEFAULT_MODEL = "gpt-3.5-turbo";
+
+function buildMessagesFromPayload(payload: RequestPayload): ChatMessage[] {
+  if (payload.messages && payload.messages.length > 0) {
+    return payload.messages;
+  }
+
+  const prompt = payload.prompt?.trim() || payload.text?.trim();
+  if (prompt) {
+    return [
+      {
+        role: "user",
+        content: prompt,
+      },
+    ];
+  }
+
+  throw new Error("有効なプロンプトが提供されていません");
 }
 
 serve(async (req) => {
-  // CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
   }
 
-  // 認証ヘッダーの確認
-  const authHeader = req.headers.get('authorization')
-  console.log('🔐 認証ヘッダー:', authHeader ? '存在' : 'なし')
-  
   try {
-    console.log('📝 リクエスト開始:', {
-      method: req.method,
-      url: req.url,
-      headers: Object.fromEntries(req.headers.entries())
-    })
-    
-    const requestBody = await req.json()
-    console.log('📝 リクエストボディ受信:', {
-      keys: Object.keys(requestBody),
-      hasText: !!requestBody.text,
-      textLength: requestBody.text?.length || 0,
-      url: requestBody.url
-    })
-    
-    const { text, url } = requestBody
-    
-    if (!text) {
-      console.error('❌ テキストが提供されていません:', requestBody)
-      throw new Error('テキストが提供されていません')
-    }
-    
-    if (typeof text !== 'string') {
-      console.error('❌ テキストが文字列ではありません:', typeof text, text)
-      throw new Error('テキストは文字列である必要があります')
+    const body: RequestPayload = await req.json();
+    const apiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!apiKey) {
+      throw new Error("OPENAI_API_KEY が設定されていません");
     }
 
-    console.log('📄 ChatGPT API分析開始')
-    console.log('URL:', url)
-    console.log('テキスト長:', text.length)
+    const messages = buildMessagesFromPayload(body);
+    if (!messages.length) {
+      throw new Error("送信内容が生成できませんでした");
+    }
 
-    // ChatGPT APIでレシピ解析
-    const recipeData = await analyzeRecipeWithChatGPT(text, url)
-    console.log('📄 ChatGPT API分析完了')
+    const modelId = body.model || DEFAULT_MODEL;
+    const endpoint = "https://api.openai.com/v1/chat/completions";
+
+    // レシピ解析用のプロンプトを追加
+    if (body.mode === "recipe_extraction" && body.text) {
+      const recipePrompt = buildRecipeExtractionPrompt(body.text, body.url, body.siteLanguage, body.isJapaneseSite);
+      messages.unshift({
+        role: "system",
+        content: "あなたはレシピ解析の専門家です。与えられたテキストからレシピ情報を正確に抽出し、指定されたJSON形式で返してください。"
+      });
+      messages.push({
+        role: "user",
+        content: recipePrompt
+      });
+    }
+
+    console.log("🚀 ChatGPT API呼び出し開始:", { model: modelId, messages: messages.length });
+
+    const requestPayload = {
+      model: modelId,
+      messages: messages,
+      temperature: body.temperature || 0.1,
+      max_tokens: body.maxTokens || 2000,
+      top_p: body.topP || 1,
+      presence_penalty: body.presencePenalty || 0,
+      frequency_penalty: body.frequencyPenalty || 0,
+    };
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(requestPayload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("❌ ChatGPT API error:", response.status, response.statusText, errorText);
+      throw new Error(`ChatGPT API error: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    const content = result?.choices?.[0]?.message?.content || "";
+
+    console.log("✅ ChatGPT API レスポンス取得成功:", content.substring(0, 100) + "...");
+
+    // contentをJSONとして解析してrecipeDataとして返す
+    let recipeData;
+    try {
+      recipeData = JSON.parse(content);
+    } catch (parseError) {
+      console.log("⚠️ JSON解析失敗、生のコンテンツを返します:", parseError.message);
+      recipeData = {
+        title: "解析エラー",
+        description: "ChatGPT APIからの応答を解析できませんでした",
+        servings: "1",
+        ingredients: [],
+        steps: [],
+        notes: content
+      };
+    }
 
     return new Response(
       JSON.stringify({
         ok: true,
         recipeData: recipeData,
-        debug: {
-          textLength: text.length,
-          textPreview: text.substring(0, 500)
-        }
+        raw: result,
       }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
-      }
-    )
-
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (error) {
-    console.error('❌ ChatGPT API Error:', error)
-    console.error('❌ Error Stack:', error.stack)
-    console.error('❌ Error Details:', {
-      name: error.name,
-      message: error.message,
-      cause: error.cause
-    })
-    
+    console.error("❌ call-chatgpt-api error:", error);
+
     return new Response(
       JSON.stringify({
         ok: false,
-        error: error.message || 'Unknown error',
-        errorType: error.name || 'Error',
-        stack: error.stack,
-        timestamp: new Date().toISOString(),
-        function: 'call-chatgpt-api'
+        error: error instanceof Error ? error.message : String(error),
       }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500, // 500エラーに変更してサーバーエラーであることを明確にする
-      }
-    )
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 })
+
+function buildRecipeExtractionPrompt(text: string, url?: string, siteLanguage?: string, isJapaneseSite?: boolean): string {
+  return `
+以下のテキストからレシピ情報を抽出してください。JSON形式で返してください。
+
+URL: ${url || '不明'}
+サイト言語: ${siteLanguage || 'ja'}
+日本語サイト: ${isJapaneseSite ? 'はい' : 'いいえ'}
+
+テキスト:
+${text}
+
+【出力形式】
+{
+  "title": "元ページの料理名を原文のまま記載",
+  "description": "説明文。無ければ空文字",
+  "servings": "人数のみを数字で記載。なければ空文字",
+  "ingredients": [
+    {"item": "材料名（カッコ内の補足も含む）", "quantity": "換算後の数値、範囲、または空文字", "unit": "単位"}
+  ],
+  "steps": [
+    {"step": "手順の原文そのまま"}
+  ],
+  "notes": "メモ。無ければ空文字",
+  "image_url": "メイン画像URL。無ければ空文字"
+}
+
+【換算基準（必ず遵守）】
+- 大さじ1 = 液体 15ml / 固形・粉末 15g
+- 小さじ1 = 液体 5ml / 固形・粉末 5g
+- 1カップ = 液体 200ml / 小麦粉など粉類 120g / 砂糖 200g
+- 分数表記は換算後に小数へ（例: 大さじ1と1/2 → 液体なら 22.5ml）
+- 小数は四捨五入せず計算値を保持（最大で小数第一位まで）
+
+【重要】
+- JSONのみを返し、解説や注釈は禁止
+- すべてのフィールドを出力し、欠損データは空文字または空配列
+- 手順や材料が見つからなくても新しい内容を作らず、該当配列を空のまま返す
+`;
+}
 
 async function analyzeRecipeWithChatGPT(text: string, url?: string): Promise<any> {
   try {

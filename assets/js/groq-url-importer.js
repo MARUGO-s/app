@@ -485,50 +485,35 @@ class GroqUrlImporter {
         console.log('✅ recipesテーブル保存完了:', savedRecipe.id);
       }
 
-      // 2. recipe_ingredientsテーブルに保存
+      // 2. ingredientsをJSONB形式でrecipesテーブルに保存
       if (this.tableConfig.recipe_ingredients.enabled && savedRecipe) {
-        console.log('📝 recipe_ingredientsテーブルに保存中...');
+        console.log('📝 ingredientsをJSONB形式で保存中...');
         
-        const ingredients = recipeData.ingredients.map((ing, index) => ({
-          recipe_id: savedRecipe.id,
-          ingredient: ing.item || ing.name || ing.ingredient || "",
-          quantity: ing.quantity || ing.amount || ing.qty || "",
-          unit: ing.unit || ing.measure || "",
-          position: index,
-          created_at: new Date().toISOString()
-        }));
-
         const { error: ingredientsError } = await sb
-          .from('recipe_ingredients')
-          .insert(ingredients);
+          .from('recipes')
+          .update({ ingredients: recipeData.ingredients })
+          .eq('id', savedRecipe.id);
 
         if (ingredientsError) {
-          console.warn('⚠️ recipe_ingredientsテーブル保存エラー:', ingredientsError.message);
+          console.warn('⚠️ ingredients保存エラー:', ingredientsError.message);
         } else {
-          console.log('✅ recipe_ingredientsテーブル保存完了:', ingredients.length, '件');
+          console.log('✅ ingredients保存完了:', recipeData.ingredients.length, '件');
         }
       }
 
-      // 3. recipe_stepsテーブルに保存
+      // 3. stepsをJSONB形式でrecipesテーブルに保存
       if (this.tableConfig.recipe_steps.enabled && savedRecipe) {
-        console.log('📝 recipe_stepsテーブルに保存中...');
+        console.log('📝 stepsをJSONB形式で保存中...');
         
-        const steps = recipeData.steps.map((step, index) => ({
-          recipe_id: savedRecipe.id,
-          step_number: step.step_number || step.number || index + 1,
-          instruction: step.step || step.instruction || step.text || step,
-          position: index,
-          created_at: new Date().toISOString()
-        }));
-
         const { error: stepsError } = await sb
-          .from('recipe_steps')
-          .insert(steps);
+          .from('recipes')
+          .update({ steps: recipeData.steps })
+          .eq('id', savedRecipe.id);
 
         if (stepsError) {
-          console.warn('⚠️ recipe_stepsテーブル保存エラー:', stepsError.message);
+          console.warn('⚠️ steps保存エラー:', stepsError.message);
         } else {
-          console.log('✅ recipe_stepsテーブル保存完了:', steps.length, '件');
+          console.log('✅ steps保存完了:', recipeData.steps.length, '件');
         }
       }
 

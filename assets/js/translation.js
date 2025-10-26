@@ -410,9 +410,11 @@ async function saveCombinedRecipe(translatedData, language) {
       console.log('🧪 保存する材料データ（全件）:', ingredientsData);
       console.log('🧪 材料データの件数:', ingredientsData.length);
 
+      // 材料をJSONB形式でrecipesテーブルに保存
       const { error: ingredientsError } = await sb
-        .from('recipe_ingredients')
-        .insert(ingredientsData);
+        .from('recipes')
+        .update({ ingredients: ingredientsData })
+        .eq('id', newRecipeId);
 
       if (ingredientsError) {
         console.warn('翻訳材料保存エラー:', ingredientsError);
@@ -452,9 +454,11 @@ async function saveCombinedRecipe(translatedData, language) {
       console.log('🧪 保存する手順データ（全件）:', stepsData);
       console.log('🧪 手順データの件数:', stepsData.length);
 
+      // 手順をJSONB形式でrecipesテーブルに保存
       const { error: stepsError } = await sb
-        .from('recipe_steps')
-        .insert(stepsData);
+        .from('recipes')
+        .update({ steps: stepsData })
+        .eq('id', newRecipeId);
 
       if (stepsError) {
         console.error('❌ 翻訳手順保存エラー:', stepsError);
@@ -486,8 +490,9 @@ async function saveCombinedRecipe(translatedData, language) {
           console.log('🔄 フォールバック手順データ:', fallbackStepsData);
           
           const { error: fallbackError } = await sb
-            .from('recipe_steps')
-            .insert(fallbackStepsData);
+            .from('recipes')
+            .update({ steps: fallbackStepsData })
+            .eq('id', newRecipeId);
           
           if (fallbackError) {
             console.error('❌ フォールバック手順保存もエラー:', fallbackError);
@@ -650,22 +655,13 @@ async function autoTranslateRecipe(targetLanguage) {
     const translationRecipe = translationRecipes[0];
     debugLog('翻訳データを発見:', translationRecipe);
     
-    // 翻訳材料と手順データを取得
-    const { data: translationIngredients } = await sb
-      .from('translation_recipe_ingredients')
-      .select('*')
-      .eq('translation_recipe_id', translationRecipe.id)
-      .order('position', { ascending: true });
+    // 翻訳データはJSONB形式でtranslation_recipesテーブルに保存されている
+    const translationIngredients = translationRecipe.translated_ingredients || [];
+    const translationSteps = translationRecipe.translated_steps || [];
     
-    const { data: translationSteps } = await sb
-      .from('translation_recipe_steps')
-      .select('*')
-      .eq('translation_recipe_id', translationRecipe.id)
-      .order('position', { ascending: true });
-    
-    // 翻訳データを統合
-    translationRecipe.translation_recipe_ingredients = translationIngredients || [];
-    translationRecipe.translation_recipe_steps = translationSteps || [];
+    // 翻訳データを統合（JSONB形式）
+    translationRecipe.translated_ingredients = translationIngredients || [];
+    translationRecipe.translated_steps = translationSteps || [];
     
     // 翻訳表示を実行
     await displayTranslatedRecipe(translationRecipe);
@@ -713,12 +709,13 @@ async function displayTranslatedRecipe(translationRecipe) {
   const ingredientsEl = getElement('ingredients');
   if (ingredientsEl) {
     try {
-      // 翻訳済み材料データを取得
-      const { data: translatedIngredients } = await sb
-        .from('recipe_ingredients')
-        .select('*')
-        .eq('recipe_id', window.originalRecipeId)
-        .order('position', { ascending: true });
+      // 翻訳済み材料データを取得（JSONB形式）
+      const { data: originalRecipe } = await sb
+        .from('recipes')
+        .select('ingredients')
+        .eq('id', window.originalRecipeId)
+        .single();
+      const translatedIngredients = originalRecipe?.ingredients || [];
 
       console.log('🧪 翻訳材料表示データ:', translatedIngredients);
 
@@ -806,12 +803,13 @@ async function displayTranslatedRecipe(translationRecipe) {
   const stepsEl = getElement('steps');
   if (stepsEl) {
     try {
-      // 翻訳済み手順データを取得
-      const { data: translatedSteps } = await sb
-        .from('recipe_steps')
-        .select('*')
-        .eq('recipe_id', window.originalRecipeId)
-        .order('position', { ascending: true });
+      // 翻訳済み手順データを取得（JSONB形式）
+      const { data: originalRecipe } = await sb
+        .from('recipes')
+        .select('steps')
+        .eq('id', window.originalRecipeId)
+        .single();
+      const translatedSteps = originalRecipe?.steps || [];
 
       console.log('🧪 翻訳手順表示データ:', translatedSteps);
 
@@ -962,19 +960,15 @@ window.translateRecipeToLanguage = async function(targetLanguage) {
       throw new Error(`元のレシピ取得エラー: ${recipeError.message}`);
     }
 
-    // 材料データを取得
-    const { data: ingredients } = await sb
-      .from('recipe_ingredients')
-      .select('*')
-      .eq('recipe_id', currentRecipeId)
-      .order('position', { ascending: true });
-
-    // 手順データを取得
-    const { data: steps } = await sb
-      .from('recipe_steps')
-      .select('*')
-      .eq('recipe_id', currentRecipeId)
-      .order('position', { ascending: true });
+    // 材料と手順データを取得（JSONB形式）
+    const { data: recipe } = await sb
+      .from('recipes')
+      .select('ingredients, steps')
+      .eq('id', currentRecipeId)
+      .single();
+    
+    const ingredients = recipe?.ingredients || [];
+    const steps = recipe?.steps || [];
 
     // レシピデータを整形
     const recipeData = {

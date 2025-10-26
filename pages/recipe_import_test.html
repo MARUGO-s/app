@@ -1960,7 +1960,12 @@
         resultsGrid.classList.add('with-translation');
         translationSection.style.display = 'block';
         // 翻訳後に保存モードを有効化
-        try { showSaveButtons(); } catch (e) { console.debug('showSaveButtons not ready'); }
+        try { 
+          showSaveButtons(); 
+          // 翻訳オプションを有効化
+          enableTranslationOptions();
+          console.log('✅ 翻訳オプションを有効化しました');
+        } catch (e) { console.debug('showSaveButtons not ready'); }
         console.log('🎨 レイアウト変更完了');
         
         const selectedLanguage = activeLanguage;
@@ -2271,7 +2276,7 @@
       
       switch (apiType) {
         case 'groq':
-          functionName = 'call-groq-api-fixed';
+          functionName = 'call-groq-api';
           requestBody = {
             text: generateRecipeExtractionPrompt(cleanedHtml, url, siteLanguage),
             mode: 'recipe_extraction',
@@ -2308,87 +2313,20 @@
 
       // Groq APIの場合のレスポンス処理
       if (apiType === 'groq') {
-        if (!data.success) {
+        if (!data.ok) {
           throw new Error(data.error || 'Groq API呼び出しに失敗しました');
         }
         
-        // Groq APIのcontentからJSONを抽出（改良版）
-        const content = data.content || '';
-        console.log('🔍 Groq APIコンテンツ（全体）:', content);
-        console.log('🔍 Groq APIコンテンツ（プレビュー）:', content.substring(0, 500) + '...');
+        // Groq APIのrecipeDataを直接使用
+        const recipeData = data.recipeData;
+        console.log('🔍 Groq API recipeData:', recipeData);
         
-        try {
-          // 複数のJSON抽出パターンを試行
-          let recipeData = null;
-          
-          // パターン1: 完全なJSONオブジェクト
-          try {
-            const fullJsonMatch = content.match(/\{[\s\S]*\}/);
-            if (fullJsonMatch) {
-              console.log('🔍 パターン1: 完全JSON抽出試行');
-              const jsonString = fullJsonMatch[0];
-              console.log('📝 抽出されたJSON:', jsonString.substring(0, 300) + '...');
-              
-              // JSON修正を適用
-              const fixedJson = fixMalformedJson(jsonString);
-              recipeData = JSON.parse(fixedJson);
-              console.log('✅ パターン1成功:', recipeData.title);
-            }
-          } catch (e) {
-            console.log('❌ パターン1失敗:', e.message);
-          }
-          
-          // パターン2: ```json```ブロック
-          if (!recipeData) {
-            try {
-              const codeBlockMatch = content.match(/```json\s*([\s\S]*?)\s*```/i);
-              if (codeBlockMatch) {
-                console.log('🔍 パターン2: コードブロック抽出試行');
-                const fixedJson = fixMalformedJson(codeBlockMatch[1]);
-                recipeData = JSON.parse(fixedJson);
-                console.log('✅ パターン2成功:', recipeData.title);
-              }
-            } catch (e) {
-              console.log('❌ パターン2失敗:', e.message);
-            }
-          }
-          
-          // パターン3: 行ごとの解析
-          if (!recipeData) {
-            try {
-              console.log('🔍 パターン3: 行ごと解析試行');
-              const lines = content.split('\n');
-              const jsonLines = lines.filter(line => 
-                line.trim().startsWith('{') || 
-                line.includes('"title"') || 
-                line.includes('"ingredients"') ||
-                line.includes('"steps"')
-              );
-              
-              if (jsonLines.length > 0) {
-                const jsonString = jsonLines.join('\n');
-                const fixedJson = fixMalformedJson(jsonString);
-                recipeData = JSON.parse(fixedJson);
-                console.log('✅ パターン3成功:', recipeData.title);
-              }
-            } catch (e) {
-              console.log('❌ パターン3失敗:', e.message);
-            }
-          }
-          
-          if (recipeData) {
-            console.log('✅ レシピデータ解析成功:', recipeData);
-            // Recipe Keeper.app風のデータ正規化
-            return normalizeRecipeData(recipeData);
-          } else {
-            console.log('🔄 フォールバック解析を開始');
-            return fallbackAnalysis(content, url);
-          }
-        } catch (parseError) {
-          console.error('❌ JSON解析エラー:', parseError);
-          console.log('📝 生のコンテンツ（全体）:', content);
-          throw new Error(`レシピデータの解析に失敗しました: ${parseError.message}`);
+        if (!recipeData) {
+          throw new Error('レシピデータが取得できませんでした');
         }
+        
+        // Recipe Keeper.app風のデータ正規化
+        return normalizeRecipeData(recipeData);
       }
 
       // ChatGPT/Gemini APIの場合
@@ -2777,10 +2715,10 @@
         ? '\n- Maintain the original ingredient sections exactly as provided via the "sectionTitle" field. Include those sectionTitle values in the translated JSON.'
         : '';
 
-      const { data, error } = await sb.functions.invoke('call-groq-api-fixed', {
+      const { data, error } = await sb.functions.invoke('call-groq-api', {
         body: {
           mode: 'recipe_translation',
-          recipeData: recipeData,
+          recipe: recipeData,  // recipeDataをrecipeに変更
           targetLanguage: selectedLanguage,
           targetLanguageName: targetLanguageName,
           targetLanguageLabel,
@@ -2795,7 +2733,7 @@
         throw new Error(`翻訳API呼び出しエラー: ${error.message}`);
       }
 
-      if (!data.success) {
+      if (!data.ok) {
         throw new Error(data.error || '翻訳に失敗しました');
       }
 
@@ -5442,6 +5380,30 @@ IMPORTANT:
       }
     }
 
+    // 翻訳オプションを有効化する関数
+    function enableTranslationOptions() {
+      const saveModeBothLabel = document.getElementById('saveModeBothLabel');
+      const saveModeTranslatedLabel = document.getElementById('saveModeTranslatedLabel');
+      const saveModeHint = document.getElementById('saveModeHint');
+      
+      if (saveModeBothLabel && saveModeTranslatedLabel) {
+        const bothRadio = saveModeBothLabel.querySelector('input[type="radio"]');
+        const transRadio = saveModeTranslatedLabel.querySelector('input[type="radio"]');
+        
+        // 翻訳オプションを有効化
+        saveModeBothLabel.style.opacity = '1';
+        saveModeTranslatedLabel.style.opacity = '1';
+        bothRadio.disabled = false;
+        transRadio.disabled = false;
+        
+        if (saveModeHint) {
+          saveModeHint.textContent = '翻訳完了！「原語＋翻訳」または「翻訳のみ」を選択できます。';
+        }
+        
+        console.log('✅ 翻訳オプションを有効化しました');
+      }
+    }
+
     // レシピをデータベースに保存する関数
     async function saveRecipeToDatabase(recipeData, isTranslated = false) {
       if (!sb) {
@@ -5513,9 +5475,11 @@ IMPORTANT:
 
           console.log('保存する材料データ:', ingredientsToSave);
 
+          // 材料をJSONB形式でrecipesテーブルに保存
           const { error: ingredientsError } = await sb
-            .from('recipe_ingredients')
-            .insert(ingredientsToSave);
+            .from('recipes')
+            .update({ ingredients: ingredientsToSave })
+            .eq('id', savedOriginalRecipe.id);
 
           if (ingredientsError) {
             console.error('材料保存エラー:', ingredientsError);
@@ -5533,9 +5497,11 @@ IMPORTANT:
             step_number: index + 1
           }));
 
+          // 手順をJSONB形式でrecipesテーブルに保存
           const { error: stepsError } = await sb
-            .from('recipe_steps')
-            .insert(stepsToSave);
+            .from('recipes')
+            .update({ steps: stepsToSave })
+            .eq('id', savedOriginalRecipe.id);
 
           if (stepsError) {
             console.error('手順保存エラー:', stepsError);
@@ -5652,29 +5618,23 @@ IMPORTANT:
 
         const originalRecipeId = savedOriginalRecipe.id;
 
-        // 材料
+        // 材料をJSONB形式で保存
         if (originalSaveData.ingredients && originalSaveData.ingredients.length > 0) {
           const ingredientsToSave = originalSaveData.ingredients.map((ing, index) => ({
-            recipe_id: originalRecipeId,
-            position: index + 1,
             item: ing.item || ing.name || '',
-            quantity: ing.quantity || null,
-            unit: ing.unit || null,
-            price: null
+            quantity: ing.quantity || '',
+            unit: ing.unit || ''
           }));
-          const { error: ingredientsError } = await sb.from('recipe_ingredients').insert(ingredientsToSave);
+          const { error: ingredientsError } = await sb.from('recipes').update({ ingredients: ingredientsToSave }).eq('id', savedOriginalRecipe.id);
           if (ingredientsError) console.error('材料保存エラー:', ingredientsError);
         }
 
-        // 手順
+        // 手順をJSONB形式で保存
         if (originalSaveData.steps && originalSaveData.steps.length > 0) {
           const stepsToSave = originalSaveData.steps.map((step, index) => ({
-            recipe_id: originalRecipeId,
-            position: index + 1,
-            instruction: typeof step === 'string' ? step : step.instruction || step.text || '',
-            step_number: index + 1
+            step: typeof step === 'string' ? step : step.instruction || step.text || step.step || ''
           }));
-          const { error: stepsError } = await sb.from('recipe_steps').insert(stepsToSave);
+          const { error: stepsError } = await sb.from('recipes').update({ steps: stepsToSave }).eq('id', savedOriginalRecipe.id);
           if (stepsError) console.error('手順保存エラー:', stepsError);
         }
 
@@ -5739,22 +5699,20 @@ IMPORTANT:
 
         // 翻訳された材料を保存
         if (translatedData.ingredients && translatedData.ingredients.length > 0) {
+          // JSONB形式用のシンプルなデータ構造に変換
           const translatedIngredientsToSave = translatedData.ingredients.map((ing, index) => {
-            const originalIng = originalData.ingredients?.[index] || {};
             return {
-              translation_recipe_id: translationRecipeId,
-              position: index + 1,
-              original_item: originalIng.item || originalIng.name || null,
-              translated_item: ing.item || ing.name || null,
-              quantity: ing.quantity || null,
-              unit: ing.unit || null,
-              price: null
+              item: ing.item || ing.name || '',
+              quantity: ing.quantity || '',
+              unit: ing.unit || ''
             };
           });
 
+          // 翻訳材料をJSONB形式でtranslation_recipesテーブルに保存
           const { error: ingredientsError } = await sb
-            .from('translation_recipe_ingredients')
-            .insert(translatedIngredientsToSave);
+            .from('translation_recipes')
+            .update({ translated_ingredients: translatedIngredientsToSave })
+            .eq('id', translationRecipeId);
 
           if (ingredientsError) {
             console.error('翻訳材料保存エラー:', ingredientsError);
@@ -5765,22 +5723,19 @@ IMPORTANT:
 
         // 翻訳された手順を保存
         if (translatedData.steps && translatedData.steps.length > 0) {
+          // JSONB形式用のシンプルなデータ構造に変換
           const translatedStepsToSave = translatedData.steps.map((step, index) => {
-            const originalStep = originalData.steps?.[index] || '';
             const translatedInstruction = typeof step === 'string' ? step : step.instruction || step.text || '';
-            const originalInstruction = typeof originalStep === 'string' ? originalStep : originalStep.instruction || originalStep.text || '';
-
             return {
-              translation_recipe_id: translationRecipeId,
-              position: index + 1,
-              original_instruction: originalInstruction || null,
-              translated_instruction: translatedInstruction || null
+              step: translatedInstruction
             };
           });
 
+          // 翻訳手順をJSONB形式でtranslation_recipesテーブルに保存
           const { error: stepsError } = await sb
-            .from('translation_recipe_steps')
-            .insert(translatedStepsToSave);
+            .from('translation_recipes')
+            .update({ translated_steps: translatedStepsToSave })
+            .eq('id', translationRecipeId);
 
           if (stepsError) {
             console.error('翻訳手順保存エラー:', stepsError);
@@ -5858,9 +5813,11 @@ IMPORTANT:
             price: null
           }));
 
+          // 材料をJSONB形式でrecipesテーブルに保存
           const { error: ingredientsError } = await sb
-            .from('recipe_ingredients')
-            .insert(ingredientsToSave);
+            .from('recipes')
+            .update({ ingredients: ingredientsToSave })
+            .eq('id', savedOriginalRecipe.id);
 
           if (ingredientsError) {
             console.error('材料保存エラー:', ingredientsError);
@@ -5876,9 +5833,11 @@ IMPORTANT:
             step_number: index + 1
           }));
 
+          // 手順をJSONB形式でrecipesテーブルに保存
           const { error: stepsError } = await sb
-            .from('recipe_steps')
-            .insert(stepsToSave);
+            .from('recipes')
+            .update({ steps: stepsToSave })
+            .eq('id', savedOriginalRecipe.id);
 
           if (stepsError) {
             console.error('手順保存エラー:', stepsError);

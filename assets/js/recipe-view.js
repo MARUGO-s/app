@@ -265,11 +265,12 @@ async function displayDualLanguageSteps(recipe) {
 // 翻訳手順データの取得
 async function getTranslatedSteps(recipeId) {
   try {
-    const { data: steps, error } = await sb
-      .from('recipe_steps')
-      .select('*')
-      .eq('recipe_id', recipeId)
-      .order('step_number', { ascending: true });
+    const { data: recipe, error } = await sb
+      .from('recipes')
+      .select('steps')
+      .eq('id', recipeId)
+      .single();
+    const steps = recipe?.steps || [];
     
     if (error) {
       console.error('翻訳手順データ取得エラー:', error);
@@ -286,11 +287,12 @@ async function getTranslatedSteps(recipeId) {
 // 元の手順データの取得
 async function getOriginalSteps(originalRecipeId) {
   try {
-    const { data: steps, error } = await sb
-      .from('recipe_steps')
-      .select('*')
-      .eq('recipe_id', originalRecipeId)
-      .order('step_number', { ascending: true });
+    const { data: recipe, error } = await sb
+      .from('recipes')
+      .select('steps')
+      .eq('id', originalRecipeId)
+      .single();
+    const steps = recipe?.steps || [];
     
     if (error) {
       console.error('元の手順データ取得エラー:', error);

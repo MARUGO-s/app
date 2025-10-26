@@ -940,11 +940,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const deletePromises = [
                 // お気に入りから削除
                 sb.from('favorites').delete().in('recipe_id', selectedRecipeIds),
-                // 材料データを削除
-                sb.from('recipe_ingredients').delete().in('recipe_id', selectedRecipeIds),
-                // 手順データを削除
-                sb.from('recipe_steps').delete().in('recipe_id', selectedRecipeIds),
-                // レシピ本体を削除
+                // レシピ本体を削除（材料と手順はJSONB形式で一緒に削除される）
                 sb.from('recipes').delete().in('id', selectedRecipeIds)
             ];
 
@@ -1107,12 +1103,8 @@ document.addEventListener('DOMContentLoaded', () => {
             updateProgressBar(10);
             
             const [recipesResult, ingredientsResult, stepsResult] = await Promise.allSettled([
-                // レシピ基本データ
-                sb.from('recipes').select('*').in('id', selectedRecipeIds),
-                // 材料データ
-                sb.from('recipe_ingredients').select('*').in('recipe_id', selectedRecipeIds).order('position'),
-                // 手順データ
-                sb.from('recipe_steps').select('*').in('recipe_id', selectedRecipeIds).order('position')
+                // レシピ基本データ（材料と手順はJSONB形式で含まれる）
+                sb.from('recipes').select('*').in('id', selectedRecipeIds)
             ]);
 
             if (recipesResult.status === 'rejected') {

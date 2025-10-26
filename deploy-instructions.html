@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Edge Functions Deployment Guide</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 20px auto; padding: 20px; }
+        h1 { color: #333; }
+        .function-section { border: 2px solid #ddd; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        .copy-button { background: #4CAF50; color: white; padding: 10px 20px; border: none; cursor: pointer; border-radius: 4px; font-size: 16px; }
+        .copy-button:hover { background: #45a049; }
+        pre { background: #f4f4f4; padding: 15px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; }
+        .success { color: green; display: none; margin-left: 10px; }
+        .instructions { background: #e7f3ff; padding: 15px; border-left: 4px solid #2196F3; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Edge Functions Deployment Guide</h1>
+    
+    <div class="instructions">
+        <h3>手順：</h3>
+        <ol>
+            <li>以下の「Copy Code」ボタンをクリックしてコードをコピー</li>
+            <li>Supabaseダッシュボードを開く: <a href="https://supabase.com/dashboard/project/nnbdzwrndqtsfzobknmj/functions" target="_blank">Functions</a></li>
+            <li>「New Function」をクリック</li>
+            <li>Function名を入力（下記参照）</li>
+            <li>コードエディタに貼り付け</li>
+            <li>「Deploy」をクリック</li>
+        </ol>
+    </div>
+
+    <div class="function-section">
+        <h2>1. call-groq-api (優先度：高)</h2>
+        <p><strong>Function Name:</strong> call-groq-api</p>
+        <button class="copy-button" onclick="copyCode('groq-code')">📋 Copy Code</button>
+        <span class="success" id="groq-success">✅ Copied!</span>
+        <pre id="groq-code">Loading...</pre>
+    </div>
+
+    <div class="function-section">
+        <h2>2. call-chatgpt-api</h2>
+        <p><strong>Function Name:</strong> call-chatgpt-api</p>
+        <button class="copy-button" onclick="copyCode('chatgpt-code')">📋 Copy Code</button>
+        <span class="success" id="chatgpt-success">✅ Copied!</span>
+        <pre id="chatgpt-code">Loading...</pre>
+    </div>
+
+    <script>
+        async function loadCode() {
+            try {
+                const groqResponse = await fetch('/supabase/functions/call-groq-api/index.ts');
+                const groqCode = await groqResponse.text();
+                document.getElementById('groq-code').textContent = groqCode;
+
+                const chatgptResponse = await fetch('/supabase/functions/call-chatgpt-api/index.ts');
+                const chatgptCode = await chatgptResponse.text();
+                document.getElementById('chatgpt-code').textContent = chatgptCode;
+            } catch (error) {
+                console.error('Failed to load code:', error);
+            }
+        }
+
+        function copyCode(elementId) {
+            const code = document.getElementById(elementId).textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                const successId = elementId.replace('-code', '-success');
+                const successEl = document.getElementById(successId);
+                successEl.style.display = 'inline';
+                setTimeout(() => {
+                    successEl.style.display = 'none';
+                }, 2000);
+            });
+        }
+
+        loadCode();
+    </script>
+</body>
+</html>
