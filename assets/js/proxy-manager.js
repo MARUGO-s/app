@@ -61,7 +61,7 @@ class ProxyManager {
         name: 'Supabase Proxy',
         url: (targetUrl) => {
           // Supabase Edge Functionを使用したプロキシ
-          const supabaseUrl = 'https://ctxyawinblwcbkovfsyj.supabase.co';
+          const supabaseUrl = 'https://nnbdzwrndqtsfzobknmj.supabase.co';
           return `${supabaseUrl}/functions/v1/fetch-url-content`;
         },
         parser: async (response) => {
