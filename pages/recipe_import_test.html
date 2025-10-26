@@ -2206,7 +2206,7 @@
         case 'gemini':
           functionName = apiType === 'chatgpt' ? 'call-chatgpt-api' : 'call-gemini-api';
           requestBody = {
-            text: generateRecipeExtractionPrompt(cleanedHtml, url, siteLanguage),
+            prompt: generateRecipeExtractionPrompt(cleanedHtml, url, siteLanguage),
             url: url,
             mode: 'recipe_extraction',
             siteLanguage: siteLanguage.code,
