@@ -21,7 +21,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const DEFAULT_MODEL = "gemini-1.5-flash";
+const DEFAULT_MODEL = "gemini-2.0-flash-exp";
 
 function buildMessagesFromPayload(payload: RequestPayload): ChatMessage[] {
   if (payload.messages && payload.messages.length > 0) {

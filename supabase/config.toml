@@ -154,3 +154,33 @@ verify_jwt = false
 import_map = "functions/simple-ocr/import_map.json"
 # Verify JWT tokens for the function.
 verify_jwt = false
+
+[functions."call-gemini-api"]
+verify_jwt = false
+
+[functions."call-groq-api"]
+verify_jwt = false
+
+[functions."call-chatgpt-api"]
+verify_jwt = false
+
+[functions."call-openai-api"]
+verify_jwt = false
+
+[functions."call-vision-api"]
+verify_jwt = false
+
+[functions."call-document-intelligence"]
+verify_jwt = false
+
+[functions."debug-env"]
+verify_jwt = false
+
+[functions."fetch-url-content"]
+verify_jwt = false
+
+[functions."fetch-image"]
+verify_jwt = false
+
+[functions."get-api-keys"]
+verify_jwt = false

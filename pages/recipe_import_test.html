@@ -10,6 +10,8 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- GitHub Pages用設定 -->
   <script src="../config.js"></script>
+  <!-- ローカル開発用設定（存在する場合は上書き） -->
+  <script src="../config.local.js" onerror="console.log('ℹ️ config.local.js not found, using production config')"></script>
   <script src="../assets/js/utils.js"></script>
   <script src="../assets/js/proxy-manager.js"></script>
   <style>
@@ -2010,9 +2012,24 @@
         const startTime = Date.now();
         console.log('🚀 レシピ取得開始:', { url, selectedApi });
         
-        // ステップ1: HTMLを取得
+        // ステップ1: HTMLを取得（フォールバック機能付き）
         setStatus('Webサイトからコンテンツを取得中...', 'info', 'fa-spinner fa-spin');
-        const htmlData = await fetchHtmlFromUrl(url);
+        let htmlData;
+        
+        try {
+          htmlData = await fetchHtmlFromUrl(url);
+        } catch (fetchError) {
+          console.warn('⚠️ 通常の取得に失敗、フォールバックを試行:', fetchError.message);
+          
+          // フォールバック1: プロキシ経由で再試行
+          setStatus('フォールバック方法でコンテンツを取得中...', 'warning', 'fa-spinner fa-spin');
+          try {
+            htmlData = await fetchHtmlWithFallback(url);
+          } catch (fallbackError) {
+            console.error('❌ フォールバックも失敗:', fallbackError.message);
+            throw new Error(`コンテンツ取得に失敗しました。\n\n通常取得: ${fetchError.message}\nフォールバック: ${fallbackError.message}\n\n別のURLを試すか、しばらく時間をおいてから再試行してください。`);
+          }
+        }
         
         if (!htmlData || !htmlData.html) {
           throw new Error('Webサイトのコンテンツを取得できませんでした');
@@ -2163,21 +2180,81 @@
       });
     }
 
-    // HTMLを取得する関数
+    // HTMLを取得する関数（改良版）
     async function fetchHtmlFromUrl(url) {
-      const { data, error } = await sb.functions.invoke('fetch-url-content', {
-        body: { url }
-      });
+      console.log('🌐 URL取得開始:', url);
+      
+      try {
+        // タイムアウトを設定（60秒）
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('URL取得がタイムアウトしました（60秒）')), 60000);
+        });
+        
+        const fetchPromise = sb.functions.invoke('fetch-url-content', {
+          body: { url }
+        });
+        
+        const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
-      if (error) {
-        throw new Error(`HTML取得エラー: ${error.message}`);
+        if (error) {
+          console.error('❌ Supabase関数エラー:', error);
+          throw new Error(`HTML取得エラー: ${error.message}`);
+        }
+
+        if (!data.success) {
+          console.error('❌ データ取得失敗:', data.error);
+          throw new Error(data.error || 'HTML取得に失敗しました');
+        }
+
+        console.log('✅ HTML取得成功:', data.contentLength, '文字');
+        return data;
+        
+      } catch (err) {
+        console.error('❌ fetchHtmlFromUrl エラー:', err);
+        
+        // より詳細なエラーメッセージを提供
+        if (err.message.includes('timeout') || err.message.includes('タイムアウト')) {
+          throw new Error(`サイトの応答が遅すぎます。別のURLを試すか、しばらく時間をおいてから再試行してください。\n\nエラー詳細: ${err.message}`);
+        } else if (err.message.includes('CORS') || err.message.includes('cors')) {
+          throw new Error(`このサイトはCORSポリシーによりアクセスが制限されています。別のレシピサイトを試してください。\n\nエラー詳細: ${err.message}`);
+        } else if (err.message.includes('404') || err.message.includes('Not Found')) {
+          throw new Error(`指定されたURLが見つかりません。URLが正しいか確認してください。\n\nエラー詳細: ${err.message}`);
+        } else if (err.message.includes('403') || err.message.includes('Forbidden')) {
+          throw new Error(`このサイトへのアクセスが拒否されました。別のレシピサイトを試してください。\n\nエラー詳細: ${err.message}`);
+        } else {
+          throw new Error(`URL取得中にエラーが発生しました: ${err.message}`);
+        }
       }
+    }
 
-      if (!data.success) {
-        throw new Error(data.error || 'HTML取得に失敗しました');
+    // フォールバック用HTML取得関数
+    async function fetchHtmlWithFallback(url) {
+      console.log('🔄 フォールバック取得開始:', url);
+      
+      try {
+        // 方法1: 異なるUser-Agentで再試行
+        const { data, error } = await sb.functions.invoke('fetch-url-content', {
+          body: { 
+            url,
+            userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
+        });
+
+        if (error) {
+          throw new Error(`フォールバック取得エラー: ${error.message}`);
+        }
+
+        if (!data.success) {
+          throw new Error(data.error || 'フォールバック取得に失敗しました');
+        }
+
+        console.log('✅ フォールバック取得成功:', data.contentLength, '文字');
+        return data;
+        
+      } catch (err) {
+        console.error('❌ フォールバック取得エラー:', err);
+        throw err;
       }
-
-      return data;
     }
 
     // AIでレシピを解析する関数

@@ -1,0 +1,15 @@
+# 環境変数ファイル（APIキーなど機密情報を含むため絶対にコミットしない）
+.env
+.env.local
+.env*.local
+supabase/.env.local
+supabase/functions/.env
+
+# ローカル開発用設定ファイル
+config.local.js
+
+# Mac
+.DS_Store
+
+# その他
+*.log
