@@ -8,27 +8,8 @@
   <link rel="stylesheet" href="../assets/css/style.css?v=20250116ai">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- GitHub Pages用設定（直接埋め込み） -->
-  <script>
-    window.APP_CONFIG = {
-      // Supabase設定（本番環境）
-      SUPABASE_URL: 'https://nnbdzwrndqtsfzobknmj.supabase.co',
-      SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0eHlhd2luYmx3Y2Jrb3Zmc3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5NzE3MzIsImV4cCI6MjA3MDU0NzczMn0.HMMoDl_LPz8uICruD_tzn75eUpU7rp3RZx_N8CEfO1Q',
-      
-      // API設定
-      API_BASE_URL: 'https://nnbdzwrndqtsfzobknmj.supabase.co/functions/v1',
-      
-      // アプリ設定
-      APP_NAME: 'Recipe Keeper',
-      VERSION: '1.0.0',
-      
-      // GitHub Pages用設定
-      IS_GITHUB_PAGES: true,
-      BASE_PATH: '/recipes'
-    };
-    
-    console.log('✅ GitHub Pages設定ロード完了:', window.APP_CONFIG);
-  </script>
+  <!-- GitHub Pages用設定 -->
+  <script src="../config.js"></script>
   <script src="../assets/js/utils.js"></script>
   <script src="../assets/js/proxy-manager.js"></script>
   <style>
@@ -2719,7 +2700,7 @@
         ? '\n- Maintain the original ingredient sections exactly as provided via the "sectionTitle" field. Include those sectionTitle values in the translated JSON.'
         : '';
 
-      const { data, error } = await sb.functions.invoke('call-groq-api', {
+      const { data, error } = await sb.functions.invoke('call-groq-api-fixed', {
         body: {
           mode: 'recipe_translation',
           recipeData: recipeData,
