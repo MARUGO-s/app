@@ -10,24 +10,66 @@
   
   <style>
     :root {
-      /* カラーパレット - 明るく柔らかな色 */
-      --primary: #ff6b35;
-      --primary-dark: #ff5722;
-      --secondary: #4a5568;
-      --accent: #5a67d8;
-      --success: #38a169;
-      --bg-main: #f5f7fb;
-      --bg-card: #ffffff;
-      --bg-light: #eef2ff;
-      --text-primary: #1f2937;
-      --text-secondary: #4b5563;
-      --text-muted: #64748b;
-      --border: #d9e2f2;
-      --shadow: rgba(148, 163, 184, 0.22);
+      color-scheme: light dark;
+      /* ライトモード */
+      --bg-primary: #f6f8fa;
+      --bg-surface: #ffffff;
+      --text-primary: #1f2933;
+      --text-secondary: #64748b;
+      --border-color: rgba(148, 163, 184, 0.25);
+      --accent-primary: #6366f1;
+      --success-color: #059669;
+      --warning-color: #d97706;
+      --error-color: #dc2626;
+      
+      /* 互換性のためのエイリアス */
+      --primary: var(--accent-primary);
+      --primary-dark: #4f46e5;
+      --secondary: var(--text-secondary);
+      --accent: var(--accent-primary);
+      --success: var(--success-color);
+      --bg-main: var(--bg-primary);
+      --bg-card: var(--bg-surface);
+      --bg-light: #f1f5f9;
+      --text-primary: var(--text-primary);
+      --text-secondary: var(--text-secondary);
+      --text-muted: #94a3b8;
+      --border: var(--border-color);
+      --shadow: rgba(15, 23, 42, 0.12);
 
       /* タイポグラフィ */
       --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       --font-serif: 'Crimson Pro', Georgia, serif;
+    }
+    
+    @media (prefers-color-scheme: dark) {
+      :root {
+        /* ダークモード */
+        --bg-primary: #0f172a;
+        --bg-surface: #1e293b;
+        --text-primary: #f8fafc;
+        --text-secondary: #94a3b8;
+        --border-color: rgba(148, 163, 184, 0.2);
+        --accent-primary: #818cf8;
+        --success-color: #10b981;
+        --warning-color: #f59e0b;
+        --error-color: #ef4444;
+        
+        /* 互換性のためのエイリアス */
+        --primary: var(--accent-primary);
+        --primary-dark: #6366f1;
+        --secondary: var(--text-secondary);
+        --accent: var(--accent-primary);
+        --success: var(--success-color);
+        --bg-main: var(--bg-primary);
+        --bg-card: var(--bg-surface);
+        --bg-light: #334155;
+        --text-primary: var(--text-primary);
+        --text-secondary: var(--text-secondary);
+        --text-muted: #64748b;
+        --border: var(--border-color);
+        --shadow: rgba(0, 0, 0, 0.3);
+      }
     }
     
     * {
@@ -49,13 +91,13 @@
     
     /* ヘッダー */
     .header {
-      background: rgba(255, 255, 255, 0.9);
-      border-bottom: 1px solid var(--border);
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-color);
       position: sticky;
       top: 0;
       z-index: 100;
       backdrop-filter: blur(12px);
-      box-shadow: 0 4px 20px rgba(148, 163, 184, 0.18);
+      box-shadow: 0 4px 20px var(--shadow);
     }
     
     .header-content {
@@ -74,19 +116,19 @@
       align-items: center;
       gap: 0.5rem;
       padding: 0.75rem 1.25rem;
-      background: rgba(255, 255, 255, 0.75);
-      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
       border-radius: 12px;
-      color: var(--secondary);
+      color: var(--text-secondary);
       text-decoration: none;
       font-weight: 500;
       transition: all 0.3s ease;
     }
 
     .back-btn:hover {
-      background: rgba(255, 255, 255, 0.95);
-      border-color: var(--primary);
-      color: var(--primary);
+      background: var(--bg-light);
+      border-color: var(--accent-primary);
+      color: var(--accent-primary);
       transform: translateX(-3px);
     }
     
@@ -113,25 +155,25 @@
     }
     
     .btn-primary {
-      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      background: linear-gradient(135deg, var(--accent-primary), var(--primary-dark));
       color: white;
-      box-shadow: 0 4px 15px rgba(255, 107, 53, 0.3);
+      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
     }
     
     .btn-primary:hover {
       transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(255, 107, 53, 0.4);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
     }
     
     .btn-secondary {
       background: var(--bg-light);
       color: var(--text-primary);
-      border: 1px solid var(--border);
+      border: 1px solid var(--border-color);
     }
     
     .btn-secondary:hover {
-      background: var(--bg-card);
-      border-color: var(--accent);
+      background: var(--bg-surface);
+      border-color: var(--accent-primary);
     }
     
     /* メインコンテンツ */
@@ -143,15 +185,20 @@
     
     /* レシピヘッダー */
     .recipe-hero {
-      background: linear-gradient(135deg, rgba(255, 245, 235, 0.98), rgba(225, 239, 255, 0.95));
+      background: var(--bg-surface);
       border-radius: 24px;
       padding: clamp(2rem, 5vw, 3rem);
       margin-bottom: 2rem;
-      box-shadow: 0 24px 45px rgba(148, 163, 184, 0.25);
+      box-shadow: 0 20px 45px var(--shadow);
       position: relative;
       overflow: hidden;
-      border: 1px solid rgba(226, 232, 240, 0.85);
+      border: 1px solid var(--border-color);
       text-align: center;
+      transition: box-shadow 0.3s ease;
+    }
+    
+    .recipe-hero:hover {
+      box-shadow: 0 25px 55px var(--shadow);
     }
 
     .recipe-hero::before {
@@ -185,9 +232,9 @@
       border-radius: 18px;
       overflow: hidden;
       display: none;
-      background: rgba(255, 255, 255, 0.85);
-      border: 1px solid rgba(226, 232, 240, 0.8);
-      box-shadow: 0 22px 45px rgba(148, 163, 184, 0.25);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 22px 45px var(--shadow);
       isolation: isolate;
       width: min(560px, 100%);
       margin: 0 auto;
@@ -278,11 +325,11 @@
       gap: 0.5rem;
       color: var(--text-secondary);
       font-weight: 600;
-      background: rgba(255, 255, 255, 0.65);
+      background: var(--bg-light);
       padding: 0.5rem 1rem;
       border-radius: 12px;
-      border: 1px solid rgba(203, 213, 225, 0.6);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 1px 3px var(--shadow);
     }
     
     .meta-item i {
@@ -299,7 +346,7 @@
 
     .tag {
       background: rgba(99, 102, 241, 0.12);
-      color: var(--accent);
+      color: var(--accent-primary);
       padding: 0.35rem 0.85rem;
       border-radius: 20px;
       font-size: 0.85rem;
@@ -309,13 +356,18 @@
     
     /* カード */
     .card {
-      background: var(--bg-card);
+      background: var(--bg-surface);
       border-radius: 20px;
       padding: 1.75rem;
       margin-bottom: 1.5rem;
-      border: 1px solid var(--border);
-      box-shadow: 0 12px 30px rgba(148, 163, 184, 0.18);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 20px 45px var(--shadow);
       color: var(--text-primary);
+      transition: box-shadow 0.3s ease;
+    }
+    
+    .card:hover {
+      box-shadow: 0 25px 55px var(--shadow);
     }
 
     .ingredient-sections {
@@ -324,11 +376,11 @@
     }
 
     .ingredient-section {
-      background: rgba(255, 255, 255, 0.85);
+      background: var(--bg-surface);
       border-radius: 16px;
-      border: 1px solid rgba(226, 232, 240, 0.9);
+      border: 1px solid var(--border-color);
       padding: 1.25rem;
-      box-shadow: 0 1px 3px rgba(148, 163, 184, 0.18);
+      box-shadow: 0 1px 3px var(--shadow);
     }
 
     .ingredient-section--plain {
@@ -409,14 +461,14 @@
     .view-toggle .toggle-btn {
       background: var(--bg-light);
       color: var(--text-primary);
-      border: 1px solid var(--border);
+      border: 1px solid var(--border-color);
       padding: 0.4rem 0.9rem;
       border-radius: 999px;
       font-weight: 600;
       cursor: pointer;
     }
     .view-toggle .toggle-btn.active {
-      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      background: linear-gradient(135deg, var(--accent-primary), var(--primary-dark));
       color: #fff;
       border-color: transparent;
     }
@@ -443,10 +495,10 @@
       gap: 1rem;
       align-items: center;
       padding: 0.75rem 1rem;
-      background: rgba(240, 244, 255, 0.88);
+      background: var(--bg-light);
       border-radius: 10px;
       transition: all 0.3s ease;
-      border: 1px solid rgba(208, 218, 239, 0.6);
+      border: 1px solid var(--border-color);
     }
 
     .ingredient-item:hover {
@@ -512,7 +564,7 @@
     }
 
     .step-content {
-      background: rgba(255, 255, 255, 0.92);
+      background: var(--bg-surface);
       padding: 1rem;
       border-radius: 12px;
       color: var(--text-secondary);
@@ -521,23 +573,23 @@
       word-break: break-word;
       overflow-wrap: break-word;
       hyphens: auto;
-      border: 1px solid rgba(226, 232, 240, 0.6);
-      box-shadow: 0 6px 16px rgba(148, 163, 184, 0.15);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 6px 16px var(--shadow);
     }
     
     /* メモセクション */
     .notes-box {
-      background: linear-gradient(135deg, rgba(255, 243, 213, 0.95), rgba(254, 219, 171, 0.95));
+      background: var(--bg-light);
       border-radius: 12px;
       padding: 1.25rem;
-      color: #7c3e05;
+      color: var(--text-primary);
       line-height: 1.6;
       word-wrap: break-word;
       word-break: break-word;
       overflow-wrap: break-word;
       hyphens: auto;
-      border: 1px solid rgba(251, 188, 70, 0.4);
-      box-shadow: 0 10px 22px rgba(251, 191, 36, 0.15);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 10px 22px var(--shadow);
     }
     
     .notes-box strong {
