@@ -2190,9 +2190,9 @@
       console.log('🌐 URL取得開始:', url);
       
       try {
-        // タイムアウトを設定（60秒）
+        // タイムアウトを設定（20秒）
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('URL取得がタイムアウトしました（60秒）')), 60000);
+          setTimeout(() => reject(new Error('URL取得がタイムアウトしました（20秒）')), 20000);
         });
         
         const fetchPromise = sb.functions.invoke('fetch-url-content', {
