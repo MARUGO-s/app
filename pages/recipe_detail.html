@@ -1204,20 +1204,31 @@
         originalData = { recipe, ingredients, steps };
 
         // 翻訳データ（最新1件）を取得
-        const { data: translations } = await sb
+        console.log('🔍 翻訳データを取得中... レシピID:', normalizedRecipeId);
+        const { data: translations, error: translationError } = await sb
           .from('translation_recipes')
           .select('*')
           .eq('original_recipe_id', normalizedRecipeId)
           .order('created_at', { ascending: false })
           .limit(1);
 
+        console.log('🔍 翻訳データ取得結果:', { 
+          translations, 
+          translationError,
+          count: translations?.length || 0 
+        });
+
         if (translations && translations.length > 0) {
           const tr = translations[0];
+          console.log('✅ 翻訳データが見つかりました:', tr);
           // 翻訳データはJSONB形式でtranslation_recipesテーブルに保存されている
           const translatedIngredients = tr.translated_ingredients || [];
           const translatedSteps = tr.translated_steps || [];
+          console.log('📋 翻訳材料:', translatedIngredients);
+          console.log('📋 翻訳手順:', translatedSteps);
           translationData = { recipe: tr, ingredients: translatedIngredients, steps: translatedSteps };
         } else {
+          console.log('❌ 翻訳データが見つかりませんでした');
           translationData = { recipe: null, ingredients: [], steps: [] };
         }
 
@@ -1338,11 +1349,17 @@
       viewToggle.style.display = 'flex';
 
       const hasTranslation = !!translationData.recipe;
+      console.log('🔄 翻訳データの有無:', hasTranslation);
+      console.log('🔄 翻訳データ詳細:', translationData);
+      
       const toggleTranslated = document.getElementById('toggleTranslated');
       const toggleBoth = document.getElementById('toggleBoth');
       if (hasTranslation) {
+        console.log('✅ 翻訳ボタンを表示します');
         if (toggleTranslated) toggleTranslated.style.display = 'inline-block';
         if (toggleBoth) toggleBoth.style.display = 'inline-block';
+      } else {
+        console.log('❌ 翻訳データがないため、翻訳ボタンを非表示にします');
       }
 
       viewToggle.querySelectorAll('.toggle-btn').forEach(btn => {
@@ -1377,6 +1394,9 @@
 
     function renderTranslated() {
       const tr = translationData.recipe;
+      console.log('🔄 翻訳表示モード:', tr);
+      console.log('🔄 翻訳材料データ:', translationData.ingredients);
+      console.log('🔄 翻訳手順データ:', translationData.steps);
       resetDescription();
       resetNotes();
 
