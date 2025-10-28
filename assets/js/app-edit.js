@@ -5916,6 +5916,16 @@ const addTranslationRow = (languageCode = '', translatedTitle = '') => {
               errorMessage += '\n\n認証の問題である可能性があります。ログインしてからもう一度お試しください。';
             }
             
+            // 404エラーの特別な処理
+            if (error.message && error.message.includes('404')) {
+              errorMessage += '\n\ncall-groq-api Edge Functionがデプロイされていない可能性があります。';
+            }
+            
+            // レート制限エラーの特別な処理
+            if (error.message && (error.message.includes('rate limit') || error.message.includes('429'))) {
+              errorMessage += '\n\nレート制限に達しました。しばらく待ってから再試行してください。';
+            }
+            
             alert(errorMessage);
             return;
           }
