@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>全画面キャプチャテスト — Recipe Box</title>
+  <link rel="icon" type="image/x-icon" href="../favicon.ico">
+  <link rel="stylesheet" href="../assets/css/style.css?v=20250116ai">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../config.js"></script>
+  <script src="../assets/js/utils.js"></script>
+  <style>
+    :root {
+      color-scheme: light dark;
+      /* ライトモード */
+      --bg-primary: #f6f8fa;
+      --bg-surface: #ffffff;
+      --text-primary: #1f2933;
+      --text-secondary: #64748b;
+      --border-color: rgba(148, 163, 184, 0.25);
+      --accent-primary: #6366f1;
+    }
+    
+    @media (prefers-color-scheme: dark) {
+      :root {
+        /* ダークモード */
+        --bg-primary: #0f172a;
+        --bg-surface: #1e293b;
+        --text-primary: #f8fafc;
+        --text-secondary: #94a3b8;
+        --border-color: rgba(148, 163, 184, 0.2);
+        --accent-primary: #818cf8;
+      }
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    main {
+      flex: 1;
+      display: grid;
+      place-items: center;
+      padding: 2rem 1.5rem 3rem;
+    }
+    .capture-card {
+      width: min(960px, 100%);
+      background: var(--bg-surface);
+      border-radius: 16px;
+      box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);
+      padding: clamp(1.5rem, 3vw, 2.5rem);
+      border: 1px solid var(--border-color);
+    }
+    .capture-card header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      margin-bottom: 1.5rem;
+    }
+    .capture-card h1 {
+      font-size: clamp(1.4rem, 3.4vw, 1.9rem);
+      margin: 0;
+    }
+    .capture-card p {
+      margin: 0;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+    form {
+      display: grid;
+      gap: 1rem;
+    }
+    label {
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      font-size: 0.95rem;
+    }
+    input[type="url"],
+    input[type="number"] {
+      width: 100%;
+      padding: 0.75rem 0.85rem;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      font-size: 0.95rem;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    input[type="url"]:focus,
+    input[type="number"]:focus {
+      outline: none;
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+    }
+    .dimension-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.75rem;
+    }
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+    }
+    .checkbox-row input {
+      width: 1.1rem;
+      height: 1.1rem;
+    }
+    button {
+      appearance: none;
+      border: none;
+      border-radius: 999px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0.85rem 1.6rem;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: transform 0.15s ease, box-shadow 0.2s ease;
+    }
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 15px 35px rgba(99, 102, 241, 0.25);
+    }
+    button:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+      min-height: 1.2rem;
+    }
+    .status i {
+      color: var(--accent-primary);
+    }
+    .result-section {
+      margin-top: 2rem;
+      display: grid;
+      gap: 1.25rem;
+    }
+    .screenshot-preview {
+      width: 100%;
+      max-height: 640px;
+      border-radius: 14px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.15);
+      display: block;
+      object-fit: contain;
+      background: var(--bg-primary);
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+    }
+    .link-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      border-radius: 999px;
+      padding: 0.65rem 1.3rem;
+      background: var(--border-color);
+      text-decoration: none;
+      color: var(--text-primary);
+      font-weight: 600;
+      transition: background 0.2s ease;
+    }
+    .link-button:hover {
+      background: var(--accent-primary);
+      color: white;
+    }
+    pre {
+      font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', monospace;
+      font-size: 0.85rem;
+      padding: 1rem;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+    footer {
+      padding: 1rem 1.5rem 1.5rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      text-align: center;
+    }
+    @media (max-width: 640px) {
+      .capture-card {
+        border-radius: 12px;
+        padding: 1.25rem;
+      }
+      .screenshot-preview {
+        max-height: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="capture-card">
+      <header>
+        <h1><i class="fa-solid fa-camera-retro"></i> 指定サイトの全画面キャプチャテスト</h1>
+        <p>URLを入力して実行すると、Supabase Edge Function を経由して Puppeteer がページ全体のスクリーンショットを撮影し、結果をプレビューします。</p>
+      </header>
+
+      <form id="captureForm">
+        <label>
+          キャプチャ対象URL
+          <input type="url" id="urlInput" name="url" placeholder="https://example.com" required>
+          <small style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 0.25rem;">
+            例: https://cookpad.com/recipe/123456, https://www.kurashiru.com/recipes/123456
+          </small>
+        </label>
+
+        <div class="dimension-grid">
+          <label>
+            ビューポート幅 (px)
+            <input type="number" id="widthInput" name="width" min="320" max="7680" value="1280">
+          </label>
+          <label>
+            ビューポート高さ (px)
+            <input type="number" id="heightInput" name="height" min="320" max="4320" value="720">
+          </label>
+        </div>
+
+        <label class="checkbox-row">
+          <input type="checkbox" id="fullPageToggle" name="fullPage" checked>
+          ページ全体をキャプチャ (fullPage)
+        </label>
+
+        <button type="submit" id="captureButton">
+          <i class="fa-solid fa-bolt"></i> 全画面キャプチャを実行
+        </button>
+      </form>
+
+      <div class="status" id="statusRow"></div>
+
+      <div class="result-section" id="resultSection" hidden>
+        <img id="screenshotImage" class="screenshot-preview" alt="スクリーンショットプレビュー">
+        <div class="actions">
+          <a id="openLink" class="link-button" href="#" target="_blank" rel="noopener">
+            <i class="fa-solid fa-up-right-from-square"></i> 元URLを開く
+          </a>
+          <a id="downloadLink" class="link-button" href="#" download="screenshot.jpg">
+            <i class="fa-solid fa-download"></i> 画像をダウンロード
+          </a>
+        </div>
+        <pre id="metadata"></pre>
+      </div>
+    </section>
+  </main>
+  <footer>
+    Supabase Edge Functions + Puppeteer を利用したスクリーンショットテストページです。
+  </footer>
+
+  <script>
+    const statusRow = document.getElementById('statusRow');
+    const resultSection = document.getElementById('resultSection');
+    const screenshotImage = document.getElementById('screenshotImage');
+    const metadata = document.getElementById('metadata');
+    const downloadLink = document.getElementById('downloadLink');
+    const openLink = document.getElementById('openLink');
+    const captureButton = document.getElementById('captureButton');
+
+    let sb;
+    
+    // Supabaseクライアントを初期化
+    const initSupabase = () => {
+      try {
+        if (typeof supabase !== 'undefined' && window.APP_CONFIG) {
+          sb = supabase.createClient(
+            window.APP_CONFIG.SUPABASE_URL,
+            window.APP_CONFIG.SUPABASE_ANON_KEY
+          );
+          console.log('✅ Supabaseクライアント初期化成功');
+          return true;
+        } else {
+          console.error('❌ Supabase または APP_CONFIG が利用できません');
+          return false;
+        }
+      } catch (error) {
+        console.error('❌ Supabaseクライアント初期化エラー:', error);
+        return false;
+      }
+    };
+
+    const setStatus = (message, icon = 'fa-spinner fa-spin', color) => {
+      if (!message) {
+        statusRow.textContent = '';
+        return;
+      }
+      const colorStyle = color ? ` style="color:${color}"` : '';
+      statusRow.innerHTML = `<i class="fa-solid ${icon}"${colorStyle}></i><span>${message}</span>`;
+    };
+
+    // ページ読み込み時にSupabaseを初期化
+    window.addEventListener('load', () => {
+      if (!initSupabase()) {
+        setStatus('Supabaseクライアントの初期化に失敗しました', 'fa-triangle-exclamation', '#dc2626');
+      }
+    });
+
+    document.getElementById('captureForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      // Supabaseクライアントが初期化されているかチェック
+      if (!sb) {
+        if (!initSupabase()) {
+          setStatus('Supabaseクライアントが利用できません', 'fa-triangle-exclamation', '#dc2626');
+          return;
+        }
+      }
+
+      const url = document.getElementById('urlInput').value.trim();
+      const viewportWidth = Number(document.getElementById('widthInput').value) || 1280;
+      const viewportHeight = Number(document.getElementById('heightInput').value) || 720;
+      const fullPage = document.getElementById('fullPageToggle').checked;
+
+      if (!url) {
+        setStatus('URL を入力してください。', 'fa-circle-exclamation', '#dc2626');
+        return;
+      }
+
+      // URLの妥当性をチェック
+      try {
+        new URL(url);
+      } catch (urlError) {
+        setStatus('有効なURLを入力してください。', 'fa-circle-exclamation', '#dc2626');
+        return;
+      }
+
+      resultSection.hidden = true;
+      setStatus('スクリーンショットを撮影中です…', 'fa-spinner fa-spin');
+      captureButton.disabled = true;
+
+      try {
+        console.log('📸 Screenshot request:', { url, fullPage, viewportWidth, viewportHeight });
+        
+        const { data, error } = await sb.functions.invoke('screenshot-recipe', {
+          body: {
+            url,
+            fullPage,
+            viewportWidth,
+            viewportHeight
+          }
+        });
+
+        console.log('📸 Screenshot response:', { data, error });
+        
+        // デバッグ: スクリーンショットデータの詳細を確認
+        if (data && data.screenshot) {
+          console.log('🖼️ Screenshot data type:', typeof data.screenshot);
+          console.log('🖼️ Screenshot data length:', data.screenshot.length);
+          console.log('🖼️ Screenshot data preview:', data.screenshot.substring(0, 100) + '...');
+        }
+
+        if (error) {
+          console.error('Edge Function error:', error);
+          throw new Error(error.message || 'Edge Function エラーが発生しました');
+        }
+
+        if (!data) {
+          throw new Error('レスポンスデータが空です');
+        }
+
+        if (!data.ok) {
+          throw new Error(data.error || 'スクリーンショットの取得に失敗しました');
+        }
+
+        if (!data.screenshot) {
+          throw new Error('スクリーンショットデータが含まれていません');
+        }
+
+        // 画像の読み込みエラーハンドリングを追加
+        screenshotImage.onload = () => {
+          console.log('✅ Screenshot image loaded successfully');
+        };
+        screenshotImage.onerror = (error) => {
+          console.error('❌ Screenshot image failed to load:', error);
+          setStatus('画像の読み込みに失敗しました', 'fa-triangle-exclamation', '#dc2626');
+        };
+        
+        screenshotImage.src = data.screenshot;
+        openLink.href = url;
+        downloadLink.href = data.screenshot;
+
+        let hostname = 'capture';
+        try {
+          hostname = new URL(url).hostname || hostname;
+        } catch (parseError) {
+          console.warn('URL parsing failed, fallback filename will be used.', parseError);
+        }
+
+        // 画像形式に応じて適切な拡張子を設定
+        let fileExtension = '.jpg';
+        if (data.screenshot.startsWith('data:image/svg+xml')) {
+          fileExtension = '.svg';
+        } else if (data.screenshot.startsWith('data:image/png')) {
+          fileExtension = '.png';
+        } else if (data.screenshot.startsWith('data:image/jpeg') || data.screenshot.startsWith('data:image/jpg')) {
+          fileExtension = '.jpg';
+        }
+
+        downloadLink.download = `screenshot-${hostname}${fileExtension}`;
+        
+        console.log('🔍 ファイル形式検出:', {
+          dataType: data.screenshot.substring(0, 30) + '...',
+          extension: fileExtension,
+          filename: `screenshot-${hostname}${fileExtension}`
+        });
+
+        metadata.textContent = JSON.stringify({
+          capturedUrl: url,
+          capturedAt: new Date().toISOString(),
+          fullPage,
+          viewport: { width: viewportWidth, height: viewportHeight },
+          ocrSummary: data.data || null,
+          extractedText: data.text || null
+        }, null, 2);
+
+        resultSection.hidden = false;
+        setStatus('スクリーンショットの取得が完了しました。', 'fa-circle-check', '#059669');
+        
+      } catch (err) {
+        console.error('Screenshot capture failed:', err);
+        let errorMessage = 'スクリーンショットの取得に失敗しました';
+        
+        if (err.message) {
+          errorMessage = err.message;
+        }
+        
+        setStatus(`エラー: ${errorMessage}`, 'fa-triangle-exclamation', '#dc2626');
+      } finally {
+        captureButton.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
