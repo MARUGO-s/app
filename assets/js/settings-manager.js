@@ -25,7 +25,12 @@ window.Settings = {
                 }
                 
                 const validModels = ['llama-3.1-8b-instant', 'llama-3.1-70b-8192', 'llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it', 'meta-llama/llama-4-scout-17b-16e-instruct'];
-                if (!parsed.groqModel || !validModels.includes(parsed.groqModel)) {
+                // 古いデフォルトモデル（llama-3.1-8b-instant）が保存されている場合は新しいデフォルトに更新
+                if (parsed.groqModel === 'llama-3.1-8b-instant' && !parsed.groqModelManuallySet) {
+                    parsed.groqModel = this.defaultSettings.groqModel;
+                    needsUpdate = true;
+                    console.log('Groqモデルを古いデフォルト（llama-3.1-8b-instant）から新しいデフォルト（llama-3.3-70b-versatile）に更新しました');
+                } else if (!parsed.groqModel || !validModels.includes(parsed.groqModel)) {
                     parsed.groqModel = this.defaultSettings.groqModel;
                     needsUpdate = true;
                     console.log('Groqモデル設定をデフォルト値に設定しました');
