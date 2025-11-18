@@ -1744,7 +1744,7 @@ function cleanHTML(html, url = '') {
           // セレクターが無効な場合はスキップ
         }
       });
-    } else if (url && (url.includes('.fr') || url.includes('.com') || url.includes('.de') || url.includes('.es') || url.includes('.it'))) {
+    } else if (url && (url.includes('.fr') || url.includes('.com') || url.includes('.de') || url.includes('.es') || url.includes('.it') || url.includes('oliveoilsfromspain'))) {
       // 海外サイト専用のクリーニング
       console.log('🌍 海外サイト専用のクリーニングを実行');
       
@@ -1813,6 +1813,17 @@ function cleanHTML(html, url = '') {
       // メインコンテンツが見つからない場合はbody全体を使用
       if (!mainContent) {
         mainContent = doc.body ? doc.body.textContent.trim() : html;
+      }
+      
+      // テキストの最適化（ただし、結果が短すぎる場合は元のテキストを保持）
+      const optimizedContent = optimizeText(mainContent);
+      
+      // 最適化後のテキストが短すぎる場合は元のテキストを使用
+      if (optimizedContent.length < Math.max(50, mainContent.length * 0.05)) {
+        console.warn('⚠️ 最適化後のテキストが短すぎるため、クリーニング後のテキストを使用');
+        // 最適化前のテキストを使用
+      } else {
+        mainContent = optimizedContent;
       }
       
       console.log('🧹 dancyu.jp軽量クリーニング完了:', {
@@ -1888,8 +1899,22 @@ function cleanHTML(html, url = '') {
       mainContent = doc.body ? doc.body.textContent.trim() : html;
     }
     
-    // テキストの最適化
-    mainContent = optimizeText(mainContent);
+    // テキストの最適化（ただし、結果が短すぎる場合は元のテキストを保持）
+    const optimizedContent = optimizeText(mainContent);
+    
+    // 最適化後のテキストが短すぎる場合は元のテキストを使用
+    // 元のテキストの5%未満、または50文字未満の場合は元のテキストを使用
+    if (optimizedContent.length < Math.max(50, mainContent.length * 0.05)) {
+      console.warn('⚠️ 最適化後のテキストが短すぎるため、クリーニング後のテキストを使用:', {
+        originalLength: html.length,
+        cleanedLength: mainContent.length,
+        optimizedLength: optimizedContent.length,
+        threshold: Math.max(50, mainContent.length * 0.05)
+      });
+      mainContent = mainContent; // 最適化前のテキストを使用
+    } else {
+      mainContent = optimizedContent;
+    }
     
     console.log('🧹 HTMLクリーニング完了:', {
       originalLength: html.length,
@@ -1952,20 +1977,34 @@ function optimizeText(text) {
       'calore', 'temperatura', 'minuto', 'ora', 'medio', 'alto', 'basso'
     ];
     
-    // レシピ関連の内容を優先的に抽出
+    // レシピ関連の内容を優先的に抽出（条件を緩和）
     const lines = optimized.split('\n').filter(line => {
       const trimmed = line.trim();
-      if (trimmed.length < 10) return false;
+      // 短すぎる行は除外（3文字未満）
+      if (trimmed.length < 3) return false;
       
-      // レシピ関連のキーワードが含まれている行を優先
+      // レシピ関連のキーワードが含まれている行は常に保持
       const hasRecipeKeyword = recipeKeywords.some(keyword => 
-        trimmed.includes(keyword)
+        trimmed.toLowerCase().includes(keyword.toLowerCase())
       );
       
-      return hasRecipeKeyword || trimmed.length > 20;
+      // キーワードがある行、または長い行（15文字以上）は保持
+      // これにより、キーワードがなくても意味のあるコンテンツは保持される
+      return hasRecipeKeyword || trimmed.length > 15;
     });
     
     optimized = lines.join('\n').trim();
+    
+    // 最適化後のテキストが短すぎる場合は元のテキストを返す
+    // 元のテキストの10%未満、または100文字未満の場合は元のテキストを使用
+    if (optimized.length < Math.max(100, text.length * 0.1)) {
+      console.warn('⚠️ 最適化後のテキストが短すぎるため、元のテキストを使用:', {
+        originalLength: text.length,
+        optimizedLength: optimized.length,
+        threshold: Math.max(100, text.length * 0.1)
+      });
+      return text;
+    }
     
     console.log('📝 テキスト最適化完了:', {
       originalLength: text.length,
