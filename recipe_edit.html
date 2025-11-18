@@ -926,12 +926,12 @@
             AI API選択
           </label>
           <div class="api-selector">
-            <div class="api-option" data-api="groq">
-              <input type="radio" name="api" value="groq">
+            <div class="api-option selected" data-api="groq">
+              <input type="radio" name="api" value="groq" checked>
               <span>Groq</span>
             </div>
-            <div class="api-option selected" data-api="chatgpt">
-              <input type="radio" name="api" value="chatgpt" checked>
+            <div class="api-option" data-api="chatgpt">
+              <input type="radio" name="api" value="chatgpt">
               <span>ChatGPT (推奨)</span>
             </div>
             <div class="api-option" data-api="gemini">
@@ -3249,7 +3249,7 @@
         }
 
         // モーダル内で選択されたAPIを取得
-        const selectedApi = document.querySelector('input[name="api"]:checked')?.value || 'chatgpt';
+        const selectedApi = document.querySelector('input[name="api"]:checked')?.value || 'groq';
         const providerInfo = { key: selectedApi };
         const selectedProvider = selectedApi;
         console.log('🤖 Selected AI provider:', selectedProvider);
