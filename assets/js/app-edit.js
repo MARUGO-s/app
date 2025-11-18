@@ -1543,18 +1543,27 @@ JSON形式で返す:
   console.log('📄 入力テキストの先頭:', text.substring(0, 200));
   
   try {
-    // Groq APIを直接呼び出し
+    // recipe_import_test.htmlと同じ実装: mode: 'recipe_extraction'を使用
     const apiFunction = 'call-groq-api';
     const model = getCurrentGroqModel();
+    
+    // サイトの言語を判定
+    const isJapaneseSite = url && (
+      url.includes('.jp') ||
+      url.includes('japanese') ||
+      /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(url) ||
+      /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(text.substring(0, 1000))
+    );
     
     console.log('🔍 使用するAPI:', apiFunction, 'モデル:', model);
     
     const { data, error } = await sb.functions.invoke(apiFunction, {
       body: {
         text: prompt,
-        model: model,
-        maxTokens: 4096,
-        temperature: 0.7
+        mode: 'recipe_extraction',
+        siteLanguage: isJapaneseSite ? 'ja' : 'en',
+        isJapaneseSite: isJapaneseSite,
+        model: model
       }
     });
 
@@ -1563,131 +1572,22 @@ JSON形式で返す:
       throw new Error('API呼び出しに失敗しました');
     }
 
-    if (!data?.success) {
+    // recipe_import_test.htmlと同じ: data.okとdata.recipeDataをチェック
+    if (!data.ok) {
       console.error('❌ API レスポンス異常:', data);
-      throw new Error(data?.error || 'API呼び出しに失敗しました');
-    }
-
-    const content = data.content;
-    console.log('📝 API レスポンス内容（抜粋）:', content?.title || '');
-
-    // JSONを抽出（複数のパターンを試行）
-    let jsonText = content;
-    
-    // パターン1: ```json と ``` の間
-    let jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
-    if (jsonMatch) {
-      jsonText = jsonMatch[1];
-    } else {
-      // パターン2: 最初の { から最後の } まで
-      const firstBrace = content.indexOf('{');
-      const lastBrace = content.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        jsonText = content.substring(firstBrace, lastBrace + 1);
-      }
+      throw new Error(data.error || 'Groq API呼び出しに失敗しました');
     }
     
-    console.log('🔧 抽出されたJSON:', jsonText);
-    console.log('🔧 JSON長:', jsonText.length);
+    // Groq APIのrecipeDataを直接使用（recipe_import_test.htmlと同じ）
+    const recipeData = data.recipeData;
+    console.log('🔍 Groq API recipeData:', recipeData);
     
-    try {
-      // JSON解析前にテキストをクリーニング
-      let cleanJsonText = jsonText.trim();
-      
-      // HTMLタグを除去
-      cleanJsonText = cleanJsonText.replace(/<[^>]*>/g, '');
-      
-      // 不正な文字を除去
-      cleanJsonText = cleanJsonText.replace(/[^\x20-\x7E\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '');
-      
-      // 最初の{から最後の}までを抽出
-      const firstBrace = cleanJsonText.indexOf('{');
-      const lastBrace = cleanJsonText.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        cleanJsonText = cleanJsonText.substring(firstBrace, lastBrace + 1);
-      }
-      
-      console.log('🔧 クリーニング後のJSON:', cleanJsonText);
-      
-      const parsedData = JSON.parse(cleanJsonText);
-      console.log('✅ パースされたデータ:', parsedData);
-      
-      // データの検証と修正
-      if (!parsedData.title || parsedData.title === '不明なレシピ') {
-        console.warn('⚠️ タイトルが不明です。デフォルト値を設定します。');
-        parsedData.title = 'レシピ（URLから抽出）';
-      }
-      
-      // ingredientsの形式を統一
-      if (!parsedData.ingredients || !Array.isArray(parsedData.ingredients) || parsedData.ingredients.length === 0) {
-        console.warn('⚠️ 材料が見つかりません。デフォルト値を設定します。');
-        parsedData.ingredients = [{ item: '材料を手動で入力してください', quantity: '', unit: '' }];
-      } else {
-        // 各材料の形式を統一し、分量と単位を分離
-        parsedData.ingredients = parsedData.ingredients.map(ing => {
-          let quantity = ing.quantity || '';
-          let unit = ing.unit || '';
-          
-          // 分量と単位が結合されている場合の分離処理
-          if (quantity && !unit && typeof quantity === 'string') {
-            // 数字と単位を分離（例：「200g」→ quantity: "200", unit: "g"）
-            const match = quantity.match(/^(\d+(?:\.\d+)?(?:\/\d+)?)\s*([a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+)$/);
-            if (match) {
-              quantity = match[1];
-              unit = match[2];
-            }
-          }
-          
-          return {
-            item: ing.item || '',
-            quantity: quantity,
-            unit: unit
-          };
-        });
-      }
-      
-      // stepsの形式を統一
-      if (!parsedData.steps || !Array.isArray(parsedData.steps) || parsedData.steps.length === 0) {
-        console.warn('⚠️ 手順が見つかりません。デフォルト値を設定します。');
-        parsedData.steps = [{ step: '手順を手動で入力してください' }];
-      } else {
-        // 各手順の形式を統一
-        parsedData.steps = parsedData.steps.map(step => ({
-          step: step.step || step || ''
-        }));
-      }
-      
-      // その他のフィールドのデフォルト値設定
-      parsedData.description = parsedData.description || '';
-      parsedData.servings = parsedData.servings || '4';
-      parsedData.notes = parsedData.notes || '';
-      parsedData.image_url = parsedData.image_url || '';
-      parsedData.readable_text = parsedData.readable_text || '';
-      
-      console.log('✅ 最終的なレシピデータ:', parsedData);
-      return parsedData;
-      
-    } catch (parseError) {
-      console.error('❌ JSON解析エラー:', parseError);
-      console.log('🔧 解析対象テキスト:', jsonText);
-      
-      // フォールバック: デフォルトのレシピデータを返す
-      console.warn('⚠️ JSON解析に失敗したため、デフォルトのレシピデータを返します');
-      const fallbackData = {
-        title: 'レシピ（URLから抽出）',
-        description: 'レシピの詳細を手動で入力してください',
-        servings: '4',
-        ingredients: [
-          { item: '材料を手動で入力してください', quantity: '', unit: '' }
-        ],
-        steps: [
-          { step: '手順を手動で入力してください' }
-        ],
-        notes: 'URLから自動抽出できませんでした'
-      };
-      
-      return fallbackData;
+    if (!recipeData) {
+      throw new Error('レシピデータが取得できませんでした');
     }
+    
+    // recipeDataをそのまま返す（recipe_import_test.htmlと同じ）
+    return recipeData;
     
   } catch (error) {
     console.error('❌ Groq API呼び出しエラー:', error);
@@ -2423,7 +2323,9 @@ window.runImport = async function(url, retryCount = 0) {
     
     // HTMLをテキストに変換してAI解析を実行
     const text = cleanHTML(html, url);
-    const recipeData = await callAIAPI(text, url);
+    
+    // recipe_import_test.htmlと同じ実装を使用
+    const recipeData = await callGroqAPI(text, url);
     console.log('✅ AI解析完了:', recipeData);
     
     // AI解析結果をグローバル変数に保存
