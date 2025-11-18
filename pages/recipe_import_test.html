@@ -4110,36 +4110,50 @@
 
     // 材料オブジェクトを正規化する関数
     function normalizeIngredientObject(ingredient) {
-      if (typeof ingredient === 'string') {
-        const match = ingredient.match(/^(.+?)\s*[-–]\s*(.+)$/);
-        if (match) {
-          const item = match[1].trim();
-          const quantityUnit = match[2].trim();
-          // 日本語の定性的な分量（適量・少々・ひとつまみ・お好みで）を特別扱い
-          const qualitativeMatch = quantityUnit.match(/^(適量|少々|ひとつまみ|お好みで)$/);
-          if (qualitativeMatch) {
-            return {
-              item: item,
-              quantity: '',
-              unit: qualitativeMatch[1]
-            };
+      try {
+        if (typeof ingredient === 'string') {
+          const match = ingredient.match(/^(.+?)\s*[-–]\s*(.+)$/);
+          if (match) {
+            const item = match[1].trim();
+            const quantityUnit = match[2].trim();
+            // 日本語の定性的な分量（適量・少々・ひとつまみ・お好みで）を特別扱い
+            const qualitativeMatch = quantityUnit.match(/^(適量|少々|ひとつまみ|お好みで)$/);
+            if (qualitativeMatch) {
+              return {
+                item: item,
+                quantity: '',
+                unit: qualitativeMatch[1]
+              };
+            }
+            const quantityMatch = quantityUnit.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z%]+)$/);
+            if (quantityMatch) {
+              return {
+                item: item,
+                quantity: quantityMatch[1],
+                unit: normalizeUnit(quantityMatch[2])
+              };
+            }
           }
-          const quantityMatch = quantityUnit.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z%]+)$/);
-          if (quantityMatch) {
-            return {
-              item: item,
-              quantity: quantityMatch[1],
-              unit: normalizeUnit(quantityMatch[2])
-            };
-          }
+          return { item: ingredient, quantity: '', unit: '' };
+        } else {
+          return {
+            item: ingredient?.item || ingredient?.name || '',
+            quantity: ingredient?.quantity || ingredient?.amount || '',
+            unit: normalizeUnit(ingredient?.unit || '')
+          };
         }
-        return { item: ingredient, quantity: '', unit: '' };
-      } else {
-        return {
-          item: ingredient.item || ingredient.name || '',
-          quantity: ingredient.quantity || ingredient.amount || '',
-          unit: normalizeUnit(ingredient.unit || '')
-        };
+      } catch (error) {
+        console.warn('⚠️ normalizeIngredientObjectエラー:', error, ingredient);
+        // エラーが発生した場合でも、可能な限りのデータを返す
+        if (typeof ingredient === 'string') {
+          return { item: ingredient, quantity: '', unit: '' };
+        } else {
+          return {
+            item: ingredient?.item || ingredient?.name || '',
+            quantity: ingredient?.quantity || ingredient?.amount || '',
+            unit: ingredient?.unit || ''
+          };
+        }
       }
     }
 
@@ -5175,38 +5189,87 @@ IMPORTANT:
 
     // Recipe Keeper.app風のデータ正規化関数
     function normalizeRecipeData(recipeData) {
-      console.log('🔧 レシピデータ正規化開始');
-      
-      const normalized = {
-        title: recipeData.title || 'タイトル不明',
-        description: recipeData.description || '',
-        servings: recipeData.servings || '',
-        ingredients: [],
-        steps: [],
-        notes: recipeData.notes || ''
-      };
-      
-      // 材料の正規化
-      if (recipeData.ingredients && Array.isArray(recipeData.ingredients)) {
-        normalized.ingredients = recipeData.ingredients.map(ingredient => {
-          return normalizeIngredientObject(ingredient);
-        });
-      }
-      
-      // 手順の正規化
-      if (recipeData.steps && Array.isArray(recipeData.steps)) {
-        normalized.steps = recipeData.steps.map((step, index) => {
-          if (typeof step === 'string') {
-            return step;
-          } else if (step && typeof step === 'object') {
-            return step.instruction || step.step || step.text || `手順${index + 1}`;
+      try {
+        console.log('🔧 レシピデータ正規化開始');
+        
+        if (!recipeData || typeof recipeData !== 'object') {
+          console.warn('⚠️ 無効なレシピデータ:', recipeData);
+          return {
+            title: 'タイトル不明',
+            description: '',
+            servings: '',
+            ingredients: [],
+            steps: [],
+            notes: ''
+          };
+        }
+        
+        const normalized = {
+          title: recipeData.title || 'タイトル不明',
+          description: recipeData.description || '',
+          servings: recipeData.servings || '',
+          ingredients: [],
+          steps: [],
+          notes: recipeData.notes || ''
+        };
+        
+        // 材料の正規化
+        if (recipeData.ingredients && Array.isArray(recipeData.ingredients)) {
+          try {
+            normalized.ingredients = recipeData.ingredients.map((ingredient, index) => {
+              try {
+                return normalizeIngredientObject(ingredient);
+              } catch (ingError) {
+                console.warn(`⚠️ 材料${index + 1}の正規化エラー:`, ingError, ingredient);
+                return {
+                  item: typeof ingredient === 'string' ? ingredient : (ingredient?.item || ingredient?.name || ''),
+                  quantity: ingredient?.quantity || ingredient?.amount || '',
+                  unit: ingredient?.unit || ''
+                };
+              }
+            });
+          } catch (ingredientsError) {
+            console.error('❌ 材料正規化エラー:', ingredientsError);
+            normalized.ingredients = [];
           }
-          return `手順${index + 1}`;
-        });
+        }
+        
+        // 手順の正規化
+        if (recipeData.steps && Array.isArray(recipeData.steps)) {
+          try {
+            normalized.steps = recipeData.steps.map((step, index) => {
+              try {
+                if (typeof step === 'string') {
+                  return step;
+                } else if (step && typeof step === 'object') {
+                  return step.instruction || step.step || step.text || `手順${index + 1}`;
+                }
+                return `手順${index + 1}`;
+              } catch (stepError) {
+                console.warn(`⚠️ 手順${index + 1}の正規化エラー:`, stepError, step);
+                return `手順${index + 1}`;
+              }
+            });
+          } catch (stepsError) {
+            console.error('❌ 手順正規化エラー:', stepsError);
+            normalized.steps = [];
+          }
+        }
+        
+        console.log('✅ データ正規化完了:', normalized);
+        return normalized;
+      } catch (error) {
+        console.error('❌ レシピデータ正規化エラー:', error);
+        // エラーが発生した場合でも、可能な限りのデータを返す
+        return {
+          title: recipeData?.title || 'タイトル不明',
+          description: recipeData?.description || '',
+          servings: recipeData?.servings || '',
+          ingredients: recipeData?.ingredients || [],
+          steps: recipeData?.steps || [],
+          notes: recipeData?.notes || ''
+        };
       }
-      
-      console.log('✅ データ正規化完了:', normalized);
-      return normalized;
     }
 
     // Recipe Keeper.app風のフォールバック解析関数
