@@ -318,7 +318,8 @@ const saveIngredientsAndSteps = async (recipeId, ingredients, steps) => {
 // 現在のGroqモデルを取得する関数
 const getCurrentGroqModel = () => {
   const settings = Settings.get();
-  const model = settings.groqModel || 'llama-3.1-8b-instant';
+  // デフォルトをllama-3.3-70b-versatileに変更（Supabase Edge Functionのデフォルトと一致）
+  const model = settings.groqModel || 'llama-3.3-70b-versatile';
   
   console.log(`🔧 現在のGroqモデル: ${model}`);
   console.log(`📊 設定詳細:`, {
@@ -328,10 +329,10 @@ const getCurrentGroqModel = () => {
   });
   
   // 無効なモデルの場合はデフォルトに戻す
-  const validModels = ['llama-3.1-8b-instant', 'llama-3.1-70b-8192', 'mixtral-8x7b-32768', 'gemma2-9b-it'];
+  const validModels = ['llama-3.1-8b-instant', 'llama-3.1-70b-8192', 'llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it', 'meta-llama/llama-4-scout-17b-16e-instruct'];
   if (!validModels.includes(model)) {
-    console.warn('⚠️ 無効なモデルです。llama-3.1-8b-instantに切り替えます。');
-    return 'llama-3.1-8b-instant';
+    console.warn('⚠️ 無効なモデルです。llama-3.3-70b-versatileに切り替えます。');
+    return 'llama-3.3-70b-versatile';
   }
   
   return model;
@@ -2125,7 +2126,7 @@ const checkApiStatus = async () => {
       const { data, error } = await sb.functions.invoke('call-groq-api', {
         body: {
           prompt: 'test',
-          model: 'llama-3.1-8b-instant',
+          model: getCurrentGroqModel(),
           maxTokens: 10
         }
       });
