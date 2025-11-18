@@ -2,7 +2,7 @@ window.Settings = {
     STORAGE_KEY: 'recipe-box-settings',
     defaultSettings: {
         aiApi: 'groq', // 'groq' または 'chatgpt'
-        groqModel: 'meta-llama/llama-4-scout-17b-16e-instruct', // デフォルトでmeta-llama/llama-4-scout-17b-16e-instructを利用
+        groqModel: 'llama-3.3-70b-versatile', // デフォルトでllama-3.3-70b-versatileを利用（Supabase Edge Functionのデフォルトと一致）
         aiCreativeApi: 'chatgpt' // 'chatgpt' または 'groq'
     },
     
@@ -24,7 +24,7 @@ window.Settings = {
                     console.log('設定をchatgptからgroqに移行しました');
                 }
                 
-                const validModels = ['llama-3.1-8b-instant', 'llama-3.1-70b-8192', 'mixtral-8x7b-32768', 'gemma2-9b-it', 'meta-llama/llama-4-scout-17b-16e-instruct'];
+                const validModels = ['llama-3.1-8b-instant', 'llama-3.1-70b-8192', 'llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it', 'meta-llama/llama-4-scout-17b-16e-instruct'];
                 if (!parsed.groqModel || !validModels.includes(parsed.groqModel)) {
                     parsed.groqModel = this.defaultSettings.groqModel;
                     needsUpdate = true;

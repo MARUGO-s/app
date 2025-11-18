@@ -10,14 +10,14 @@ const getSettings = () => {
    const stored = localStorage.getItem('recipe-box-settings');
    const defaultSettings = {
      aiApi: 'groq',
-      groqModel: 'llama-3.1-8b-instant'
+      groqModel: 'llama-3.3-70b-versatile'
     };
     return stored ? { ...defaultSettings, ...JSON.parse(stored) } : defaultSettings;
   } catch (error) {
     console.error('設定の読み込みエラー:', error);
    return {
      aiApi: 'groq',
-      groqModel: 'llama-3.1-8b-instant'
+      groqModel: 'llama-3.3-70b-versatile'
     };
   }
 };
@@ -25,13 +25,13 @@ const getSettings = () => {
 // 現在のGroqモデルを取得する関数（URL取り込み・レシピ編集用）
 const getCurrentGroqModel = () => {
   const settings = getSettings();
-  const model = settings.groqModel || 'meta-llama/llama-4-scout-17b-16e-instruct';
+  const model = settings.groqModel || 'llama-3.3-70b-versatile';
   
   // 無効なモデルの場合はデフォルトに戻す
-  const validModels = ['llama-3.1-8b-instant', 'llama-3.1-70b-8192', 'mixtral-8x7b-32768', 'gemma2-9b-it', 'meta-llama/llama-4-scout-17b-16e-instruct'];
+  const validModels = ['llama-3.1-8b-instant', 'llama-3.1-70b-8192', 'llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it', 'meta-llama/llama-4-scout-17b-16e-instruct'];
   if (!validModels.includes(model)) {
-    console.warn('⚠️ 無効なモデルです。meta-llama/llama-4-scout-17b-16e-instructに切り替えます。');
-    return 'meta-llama/llama-4-scout-17b-16e-instruct';
+    console.warn('⚠️ 無効なモデルです。llama-3.3-70b-versatileに切り替えます。');
+    return 'llama-3.3-70b-versatile';
   }
   
   return model;
