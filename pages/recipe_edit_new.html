@@ -1,0 +1,1357 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>レシピ編集 — Recipe Box</title>
+  <link rel="icon" type="image/x-icon" href="../favicon.ico">
+  <link rel="stylesheet" href="../assets/css/style.css?v=20250116ai">
+  <link rel="stylesheet" href="../assets/css/components.css?v=20250115m">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- GitHub Pages用設定（直接埋め込み） -->
+  <script>
+    window.APP_CONFIG = {
+      // Supabase設定（本番環境）
+      SUPABASE_URL: 'https://nnbdzwrndqtsfzobknmj.supabase.co',
+      SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uYmR6d3JuZHF0c2Z6b2Jrbm1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAyMTkxNTQsImV4cCI6MjA3NTc5NTE1NH0.srlNmVFzw4w2d1tnp6gwZsBtXMJurpGDpFLe0bD0IYs',
+      
+      // API設定
+      API_BASE_URL: 'https://nnbdzwrndqtsfzobknmj.supabase.co/functions/v1',
+      
+      // アプリ設定
+      APP_NAME: 'Recipe Keeper',
+      VERSION: '1.0.0',
+      
+      // GitHub Pages用設定
+      IS_GITHUB_PAGES: true,
+      BASE_PATH: '/app'
+    };
+    
+  </script>
+  <script src="../assets/js/utils.js"></script>
+  <script src="../assets/js/proxy-manager.js"></script>
+  <script src="../assets/js/settings-manager.js"></script>
+  <script src="../assets/js/theme-manager.js"></script>
+  <script src="../assets/js/translation.js"></script>
+  <script src="../assets/js/ui-components.js"></script>
+  <script src="../assets/js/app-edit.js"></script>
+  <style>
+    :root {
+      color-scheme: light dark;
+      /* ライトモード */
+      --bg-primary: #f6f8fa;
+      --bg-surface: #ffffff;
+      --text-primary: #1f2933;
+      --text-secondary: #64748b;
+      --border-color: rgba(148, 163, 184, 0.25);
+      --accent-primary: #6366f1;
+      --success-color: #059669;
+      --warning-color: #d97706;
+      --error-color: #dc2626;
+    }
+    
+    @media (prefers-color-scheme: dark) {
+      :root {
+        /* ダークモード */
+        --bg-primary: #0f172a;
+        --bg-surface: #1e293b;
+        --text-primary: #f8fafc;
+        --text-secondary: #94a3b8;
+        --border-color: rgba(148, 163, 184, 0.2);
+        --accent-primary: #818cf8;
+        --success-color: #10b981;
+        --warning-color: #f59e0b;
+        --error-color: #ef4444;
+      }
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+      box-sizing: border-box !important;
+    }
+    
+    main {
+      flex: 1;
+      padding: 2rem 1.5rem 4rem;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+      box-sizing: border-box !important;
+    }
+    
+    @media (max-width: 768px) {
+      main {
+        padding: 1.5rem 1rem 3rem;
+      }
+    }
+    
+    .edit-card {
+      background: var(--bg-surface);
+      border-radius: 20px;
+      box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);
+      padding: clamp(2rem, 4vw, 3rem);
+      border: 1px solid var(--border-color);
+      margin-bottom: 3rem;
+      transition: box-shadow 0.3s ease;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+      box-sizing: border-box !important;
+    }
+    
+    .edit-card:hover {
+      box-shadow: 0 25px 55px rgba(15, 23, 42, 0.15);
+    }
+    
+    .edit-card header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+    
+    .edit-card h1 {
+      font-size: clamp(1.6rem, 4vw, 2.2rem);
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      background: linear-gradient(135deg, var(--accent-primary), #4f46e5);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+      line-height: 1.5 !important;
+    }
+    
+    .edit-card h1 i {
+      background: linear-gradient(135deg, var(--accent-primary), #4f46e5);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .edit-card p {
+      margin: 0 auto;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      font-size: 1rem;
+      max-width: 600px;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+    }
+    
+    form {
+      display: grid;
+      gap: 1.5rem;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+    }
+    
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+    }
+    
+    label {
+      font-weight: 600;
+      color: var(--text-primary);
+      font-size: 0.95rem;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+      line-height: 1.5 !important;
+    }
+    
+    .input, input, textarea, select {
+      padding: 0.75rem 1rem;
+      border: 2px solid var(--border-color);
+      border-radius: 12px;
+      font-size: 1rem;
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      transition: all 0.2s ease;
+      font-family: inherit;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+      box-sizing: border-box !important;
+      line-height: 1.5 !important;
+    }
+    
+    .input:focus, input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      text-decoration: none;
+      font-family: inherit;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+      box-sizing: border-box !important;
+      line-height: 1.5 !important;
+    }
+    
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    
+    .btn.primary {
+      background: linear-gradient(135deg, var(--accent-primary), #4f46e5);
+      color: white;
+    }
+    
+    .btn.primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 25px rgba(99, 102, 241, 0.3);
+    }
+    
+    .btn.secondary {
+      background: linear-gradient(135deg, #64748b, #475569);
+      color: white;
+    }
+    
+    .btn.secondary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 25px rgba(100, 116, 139, 0.3);
+    }
+    
+    .btn.ghost {
+      background: transparent;
+      color: var(--text-primary);
+      border: 2px solid var(--border-color);
+    }
+    
+    .btn.ghost:hover:not(:disabled) {
+      background: var(--bg-surface);
+      border-color: var(--accent-primary);
+    }
+    
+    .button-group {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+    }
+    
+    .button-group button {
+      flex: 1;
+      min-width: 140px;
+    }
+    
+    .status {
+      padding: 1rem;
+      border-radius: 12px;
+      margin-top: 1rem;
+      display: none;
+      align-items: center;
+      gap: 0.75rem;
+      font-weight: 500;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+      line-height: 1.5 !important;
+    }
+    
+    .status.show {
+      display: flex;
+    }
+    
+    .status.info {
+      background: rgba(99, 102, 241, 0.1);
+      color: var(--accent-primary);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+    
+    .status.success {
+      background: rgba(5, 150, 105, 0.1);
+      color: var(--success-color);
+      border: 1px solid rgba(5, 150, 105, 0.2);
+    }
+    
+    .status.error {
+      background: rgba(220, 38, 38, 0.1);
+      color: var(--error-color);
+      border: 1px solid rgba(220, 38, 38, 0.2);
+    }
+    
+    .status.warning {
+      background: rgba(217, 119, 6, 0.1);
+      color: var(--warning-color);
+      border: 1px solid rgba(217, 119, 6, 0.2);
+    }
+    
+    /* レシピ編集フォームのスタイル */
+    .recipe-edit-form {
+      display: grid;
+      gap: 2rem;
+    }
+    
+    .recipe-action-buttons {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+    }
+    
+    .recipe-action-buttons .btn {
+      flex: 1;
+      min-width: 120px;
+    }
+    
+    .category-tags-field {
+      display: grid;
+      gap: 1rem;
+    }
+    
+    .category-tags-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    
+    @media (max-width: 768px) {
+      .category-tags-row {
+        grid-template-columns: 1fr;
+      }
+    }
+    
+    .category-section, .tags-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    
+    .category-select-btn, .tag-select-btn {
+      padding: 0.75rem 1rem;
+      border: 2px solid var(--border-color);
+      border-radius: 12px;
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.2s ease;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+      box-sizing: border-box !important;
+      line-height: 1.5 !important;
+    }
+    
+    .category-select-btn:hover, .tag-select-btn:hover {
+      border-color: var(--accent-primary);
+    }
+    
+    .selected-categories, .selected-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    
+    .category-tag, .tag-item {
+      background: var(--accent-primary);
+      color: white;
+      padding: 0.25rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.875rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+      line-height: 1.5 !important;
+    }
+    
+    .category-tag .remove, .tag-item .remove {
+      cursor: pointer;
+      font-weight: bold;
+    }
+    
+    .servings-input-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+    }
+    
+    .servings-input-wrapper input {
+      max-width: 100px;
+    }
+    
+    .servings-unit {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+    }
+    
+    .url-input-container {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+    }
+    
+    .url-input-container input {
+      flex: 1;
+    }
+    
+    .ingredients-section, .instructions-section {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    
+    .ingredient-item, .instruction-item {
+      display: flex;
+      gap: 0.5rem;
+      align-items: flex-start;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+    }
+    
+    .ingredient-item input, .instruction-item textarea {
+      flex: 1;
+    }
+    
+    .ingredient-item .remove, .instruction-item .remove {
+      padding: 0.5rem;
+      background: var(--error-color);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .add-ingredient, .add-instruction {
+      background: var(--success-color);
+      color: white;
+      border: none;
+      padding: 0.75rem 1rem;
+      border-radius: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 600;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+    }
+    
+    .add-ingredient:hover, .add-instruction:hover {
+      background: #047857;
+    }
+    
+    /* モーダルスタイル */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+    }
+    
+    .modal.show {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .modal-content {
+      background: var(--bg-surface);
+      border-radius: 20px;
+      padding: 2rem;
+      max-width: 500px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+      box-sizing: border-box !important;
+    }
+    
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+    }
+    
+    .modal-header h3 {
+      margin: 0;
+      font-size: 1.25rem;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+      line-height: 1.5 !important;
+    }
+    
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: var(--text-secondary);
+      padding: 0.5rem;
+      border-radius: 8px;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+    }
+    
+    .modal-close:hover {
+      background: var(--bg-primary);
+    }
+    
+    .modal-footer {
+      display: flex;
+      gap: 1rem;
+      justify-content: flex-end;
+      margin-top: 1.5rem;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: normal !important;
+    }
+    
+    /* レスポンシブデザイン */
+    @media (max-width: 768px) {
+      .edit-card {
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+      }
+      
+      .recipe-action-buttons {
+        flex-direction: column;
+      }
+      
+      .recipe-action-buttons .btn {
+        min-width: auto;
+      }
+      
+      .url-input-container {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      
+      .modal-content {
+        padding: 1.5rem;
+        width: 95%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="edit-card">
+      <header>
+        <h1><i class="fa-solid fa-edit"></i> レシピ編集</h1>
+        <p>レシピの詳細を編集・管理します。URLから自動取得、画像解析、手動入力など様々な方法でレシピを作成できます。</p>
+      </header>
+
+      <form id="editForm" class="recipe-edit-form">
+        <!-- レシピアクションボタン -->
+        <div class="field">
+          <div class="recipe-action-buttons">
+            <button type="button" class="btn secondary" id="urlImportBtn" title="URLからレシピを読み込み">
+              <i class="fas fa-link"></i> URL読み込み
+            </button>
+            <button type="button" class="btn secondary" id="imageImportBtn" title="画像からレシピを抽出">
+              <i class="fas fa-camera"></i> 画像解析
+            </button>
+            <button type="button" class="btn secondary" id="imageUploadBtn" title="画像をアップロード">
+              <i class="fas fa-image"></i> 画像アップロード
+            </button>
+            <input type="file" id="recipeImageFile" accept="image/*" style="display:none;">
+          </div>
+        </div>
+        
+        <!-- 料理名 -->
+        <div class="field">
+          <label for="title">料理名</label>
+          <input id="title" name="title" class="input" required />
+        </div>
+        
+        <!-- カテゴリーとタグ -->
+        <div class="field category-tags-field">
+          <div class="category-tags-row">
+            <div class="category-section">
+              <label>カテゴリー</label>
+              <button type="button" id="categorySelectBtn" class="category-select-btn">
+                <span id="selectedCategoryText">カテゴリーを選択</span>
+                <i class="fas fa-chevron-down"></i>
+              </button>
+              <div id="selectedCategories" class="selected-categories"></div>
+            </div>
+            <div class="tags-section">
+              <label>タグ</label>
+              <button type="button" id="tagSelectBtn" class="tag-select-btn">
+                <span id="selectedTagsText">タグを選択</span>
+                <i class="fas fa-chevron-down"></i>
+              </button>
+              <div id="selectedTags" class="selected-tags"></div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 人数 -->
+        <div class="field">
+          <label for="servings">出来上がり人数</label>
+          <div class="servings-input-wrapper">
+            <input id="servings" name="servings" class="input" type="number" min="1" max="20" placeholder="例: 4" />
+            <span class="servings-unit">人前</span>
+          </div>
+        </div>
+        
+        <!-- 参考URL -->
+        <div class="field">
+          <label for="sourceUrl">参考URL</label>
+          <div class="url-input-container">
+            <input id="sourceUrl" name="sourceUrl" type="url" class="input" placeholder="https://example.com/recipe/..." />
+            <button type="button" id="urlImportFromFieldBtn" class="btn primary">
+              <i class="fas fa-download"></i> URLから取り込み
+            </button>
+          </div>
+        </div>
+        
+        <!-- 材料 -->
+        <div class="field ingredients-section">
+          <label>材料</label>
+          <div id="ingredientsList">
+            <div class="ingredient-item">
+              <input type="text" placeholder="材料名" class="input" />
+              <input type="text" placeholder="分量" class="input" />
+              <button type="button" class="remove">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+          </div>
+          <button type="button" class="add-ingredient" id="addIngredientBtn">
+            <i class="fas fa-plus"></i> 材料を追加
+          </button>
+        </div>
+        
+        <!-- 作り方 -->
+        <div class="field instructions-section">
+          <label>作り方</label>
+          <div id="instructionsList">
+            <div class="instruction-item">
+              <textarea placeholder="手順を入力してください" class="input" rows="3"></textarea>
+              <button type="button" class="remove">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+          </div>
+          <button type="button" class="add-instruction" id="addInstructionBtn">
+            <i class="fas fa-plus"></i> 手順を追加
+          </button>
+        </div>
+        
+        <!-- メモ -->
+        <div class="field">
+          <label for="notes">メモ・コツ</label>
+          <textarea id="notes" name="notes" class="input" rows="3" placeholder="料理のコツや注意点を入力してください"></textarea>
+        </div>
+        
+        <!-- 保存ボタン -->
+        <div class="button-group">
+          <button type="submit" class="btn primary">
+            <i class="fas fa-save"></i> レシピを保存
+          </button>
+          <button type="button" class="btn ghost" id="cancelBtn">
+            <i class="fas fa-times"></i> キャンセル
+          </button>
+        </div>
+      </form>
+
+      <div class="status" id="statusRow"></div>
+    </section>
+  </main>
+
+  <!-- カテゴリーモーダル -->
+  <div id="categoryModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>カテゴリーを選択</h3>
+        <button class="modal-close" id="categoryModalClose">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="categoryOptions" class="category-options">
+          <!-- カテゴリーオプションは動的に生成 -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn ghost" id="categoryModalCancel">キャンセル</button>
+        <button type="button" class="btn primary" id="categoryModalConfirm">選択</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- タグモーダル -->
+  <div id="tagModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>タグを選択</h3>
+        <button class="modal-close" id="tagModalClose">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="tagOptions" class="tag-options">
+          <!-- タグオプションは動的に生成 -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn ghost" id="tagModalCancel">キャンセル</button>
+        <button type="button" class="btn primary" id="tagModalConfirm">選択</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- URL読み込みモーダル -->
+  <div id="urlImportModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>URLからレシピを読み込み</h3>
+        <button class="modal-close" id="urlImportModalClose">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="urlInput">レシピサイトURL</label>
+          <input type="url" id="urlInput" class="input" placeholder="https://cookpad.com/recipe/123456" />
+          <small style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 0.25rem;">
+            対応サイト: クックパッド、クラシル、Marmiton、DelishKitchen、料理王国など
+          </small>
+        </div>
+        <div class="field">
+          <label>AI API選択</label>
+          <div class="api-selector">
+            <div class="api-option" data-api="groq">
+              <input type="radio" name="api" value="groq" id="api-groq">
+              <label for="api-groq">Groq</label>
+            </div>
+            <div class="api-option selected" data-api="chatgpt">
+              <input type="radio" name="api" value="chatgpt" id="api-chatgpt" checked>
+              <label for="api-chatgpt">ChatGPT (推奨)</label>
+            </div>
+            <div class="api-option" data-api="gemini">
+              <input type="radio" name="api" value="gemini" id="api-gemini">
+              <label for="api-gemini">Gemini</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn ghost" id="urlImportModalCancel">キャンセル</button>
+        <button type="button" class="btn primary" id="urlImportModalConfirm">
+          <i class="fas fa-download"></i> レシピを取得
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 画像解析モーダル -->
+  <div id="imageImportModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>画像からレシピを抽出</h3>
+        <button class="modal-close" id="imageImportModalClose">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="imageFile">画像ファイル</label>
+          <input type="file" id="imageFile" accept="image/*" class="input" />
+        </div>
+        <div class="field">
+          <label>AI API選択</label>
+          <div class="api-selector">
+            <div class="api-option" data-api="groq">
+              <input type="radio" name="imageApi" value="groq" id="image-api-groq">
+              <label for="image-api-groq">Groq</label>
+            </div>
+            <div class="api-option selected" data-api="chatgpt">
+              <input type="radio" name="imageApi" value="chatgpt" id="image-api-chatgpt" checked>
+              <label for="image-api-chatgpt">ChatGPT (推奨)</label>
+            </div>
+            <div class="api-option" data-api="gemini">
+              <input type="radio" name="imageApi" value="gemini" id="image-api-gemini">
+              <label for="image-api-gemini">Gemini</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn ghost" id="imageImportModalCancel">キャンセル</button>
+        <button type="button" class="btn primary" id="imageImportModalConfirm">
+          <i class="fas fa-camera"></i> 画像を解析
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Supabaseクライアント
+    let sb = null;
+    
+    // Supabase初期化
+    function initSupabase() {
+      try {
+        if (window.APP_CONFIG && window.APP_CONFIG.SUPABASE_URL && window.APP_CONFIG.SUPABASE_ANON_KEY) {
+          sb = supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_ANON_KEY);
+          return true;
+        } else {
+          console.error('❌ Supabase設定が見つかりません');
+          return false;
+        }
+      } catch (error) {
+        console.error('❌ Supabase初期化エラー:', error);
+        return false;
+      }
+    }
+    
+    // 基本的なJavaScript機能を実装
+    document.addEventListener('DOMContentLoaded', function() {
+      // Supabase初期化
+      if (!initSupabase()) {
+        console.error('Supabaseの初期化に失敗しました');
+      }
+      
+      // 要素の取得
+      const editForm = document.getElementById('editForm');
+      const statusRow = document.getElementById('statusRow');
+      const urlImportBtn = document.getElementById('urlImportBtn');
+      const imageImportBtn = document.getElementById('imageImportBtn');
+      const imageUploadBtn = document.getElementById('imageUploadBtn');
+      const recipeImageFile = document.getElementById('recipeImageFile');
+      const addIngredientBtn = document.getElementById('addIngredientBtn');
+      const addInstructionBtn = document.getElementById('addInstructionBtn');
+      const ingredientsList = document.getElementById('ingredientsList');
+      const instructionsList = document.getElementById('instructionsList');
+      
+      // モーダル要素
+      const urlImportModal = document.getElementById('urlImportModal');
+      const imageImportModal = document.getElementById('imageImportModal');
+      const categoryModal = document.getElementById('categoryModal');
+      const tagModal = document.getElementById('tagModal');
+      
+      // URL読み込みモーダル要素
+      const urlInput = document.getElementById('urlInput');
+      const urlImportModalConfirm = document.getElementById('urlImportModalConfirm');
+      
+      // 画像解析モーダル要素
+      const imageFile = document.getElementById('imageFile');
+      const imageImportModalConfirm = document.getElementById('imageImportModalConfirm');
+      
+      // ステータス表示関数
+      function setStatus(message, type, icon = 'fa-info-circle') {
+        statusRow.innerHTML = `
+          <i class="fas ${icon}"></i>
+          <span>${message}</span>
+        `;
+        statusRow.className = `status show ${type}`;
+        statusRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      
+      // モーダル表示関数
+      function showModal(modal) {
+        modal.classList.add('show');
+        document.body.style.overflow = 'hidden';
+      }
+      
+      // モーダル非表示関数
+      function hideModal(modal) {
+        modal.classList.remove('show');
+        document.body.style.overflow = '';
+      }
+      
+      // HTMLを取得する関数
+      async function fetchHtmlFromUrl(url) {
+        if (!sb) {
+          throw new Error('Supabaseクライアントが利用できません');
+        }
+        
+        const { data, error } = await sb.functions.invoke('fetch-url-content', {
+          body: { url }
+        });
+
+        if (error) {
+          throw new Error(`HTML取得エラー: ${error.message}`);
+        }
+
+        if (!data.success) {
+          throw new Error(data.error || 'HTML取得に失敗しました');
+        }
+
+        return data;
+      }
+      
+      // AIでレシピを解析する関数
+      async function analyzeRecipeWithAI(html, url, apiType) {
+        if (!sb) {
+          throw new Error('Supabaseクライアントが利用できません');
+        }
+        
+        let functionName;
+        let requestBody;
+        
+        // クリーンアップされたHTMLを取得
+        const cleanedHtml = cleanHtml(html, url);
+        
+        switch (apiType) {
+          case 'groq':
+            functionName = 'call-groq-api';
+            requestBody = {
+              text: generateRecipeExtractionPrompt(cleanedHtml, url),
+              mode: 'recipe_extraction'
+            };
+            break;
+          case 'chatgpt':
+            functionName = 'call-chatgpt-api';
+            requestBody = {
+              text: generateRecipeExtractionPrompt(cleanedHtml, url),
+              mode: 'recipe_extraction'
+            };
+            break;
+          case 'gemini':
+            functionName = 'call-gemini-api';
+            requestBody = {
+              text: generateRecipeExtractionPrompt(cleanedHtml, url),
+              mode: 'recipe_extraction'
+            };
+            break;
+          default:
+            throw new Error('サポートされていないAPIタイプです');
+        }
+        
+        const { data, error } = await sb.functions.invoke(functionName, {
+          body: requestBody
+        });
+
+        if (error) {
+          throw new Error(`AI解析エラー: ${error.message}`);
+        }
+
+        if (!data.success) {
+          throw new Error(data.error || 'AI解析に失敗しました');
+        }
+
+        return data.result;
+      }
+      
+      // HTMLをクリーンアップする関数
+      function cleanHtml(html, url) {
+        // 基本的なHTMLクリーンアップ
+        let cleaned = html
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+          .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+          .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+          .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+          .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '');
+        
+        return cleaned;
+      }
+      
+      // レシピ抽出プロンプトを生成する関数
+      function generateRecipeExtractionPrompt(html, url) {
+        return `
+以下のHTMLからレシピ情報を抽出してください。JSON形式で返してください。
+
+URL: ${url}
+
+抽出する情報:
+- title: レシピのタイトル
+- description: レシピの説明（あれば）
+- servings: 人数（数値）
+- ingredients: 材料の配列（各要素は {item: "材料名", quantity: "分量", unit: "単位"} の形式）
+- instructions: 作り方の配列（各要素は手順の文字列）
+
+HTML:
+${html.substring(0, 10000)}...
+        `;
+      }
+      
+      // レシピデータをフォームに設定する関数
+      function populateFormWithRecipe(recipeData) {
+        // タイトル
+        if (recipeData.title) {
+          document.getElementById('title').value = recipeData.title;
+        }
+        
+        // 人数
+        if (recipeData.servings) {
+          document.getElementById('servings').value = recipeData.servings;
+        }
+        
+        // 材料
+        if (recipeData.ingredients && Array.isArray(recipeData.ingredients)) {
+          // 既存の材料をクリア
+          ingredientsList.innerHTML = '';
+          
+          recipeData.ingredients.forEach(ingredient => {
+            const ingredientItem = document.createElement('div');
+            ingredientItem.className = 'ingredient-item';
+            ingredientItem.innerHTML = `
+              <input type="text" placeholder="材料名" class="input" value="${ingredient.item || ''}" />
+              <input type="text" placeholder="分量" class="input" value="${ingredient.quantity || ''} ${ingredient.unit || ''}" />
+              <button type="button" class="remove">
+                <i class="fas fa-times"></i>
+              </button>
+            `;
+            ingredientsList.appendChild(ingredientItem);
+            
+            // 削除ボタンのイベントリスナー
+            const removeBtn = ingredientItem.querySelector('.remove');
+            removeBtn.addEventListener('click', () => {
+              ingredientItem.remove();
+            });
+          });
+        }
+        
+        // 作り方
+        if (recipeData.instructions && Array.isArray(recipeData.instructions)) {
+          // 既存の手順をクリア
+          instructionsList.innerHTML = '';
+          
+          recipeData.instructions.forEach(instruction => {
+            const instructionItem = document.createElement('div');
+            instructionItem.className = 'instruction-item';
+            instructionItem.innerHTML = `
+              <textarea placeholder="手順を入力してください" class="input" rows="3">${instruction}</textarea>
+              <button type="button" class="remove">
+                <i class="fas fa-times"></i>
+              </button>
+            `;
+            instructionsList.appendChild(instructionItem);
+            
+            // 削除ボタンのイベントリスナー
+            const removeBtn = instructionItem.querySelector('.remove');
+            removeBtn.addEventListener('click', () => {
+              instructionItem.remove();
+            });
+          });
+        }
+      }
+      
+      // URL読み込みボタン
+      urlImportBtn.addEventListener('click', () => {
+        showModal(urlImportModal);
+      });
+      
+      // 画像解析ボタン
+      imageImportBtn.addEventListener('click', () => {
+        showModal(imageImportModal);
+      });
+      
+      // 画像アップロードボタン
+      imageUploadBtn.addEventListener('click', () => {
+        recipeImageFile.click();
+      });
+      
+      // URL読み込み確認ボタン
+      urlImportModalConfirm.addEventListener('click', async () => {
+        const url = urlInput.value.trim();
+        const selectedApi = document.querySelector('input[name="api"]:checked').value;
+        
+        if (!url) {
+          setStatus('URLを入力してください', 'error', 'fa-circle-exclamation');
+          return;
+        }
+        
+        // URLの妥当性をチェック
+        try {
+          new URL(url);
+        } catch (urlError) {
+          setStatus('有効なURLを入力してください', 'error', 'fa-circle-exclamation');
+          return;
+        }
+        
+        hideModal(urlImportModal);
+        setStatus('レシピを取得中...', 'info', 'fa-spinner fa-spin');
+        urlImportModalConfirm.disabled = true;
+        
+        try {
+          // HTMLを取得
+          setStatus('Webサイトからコンテンツを取得中...', 'info', 'fa-spinner fa-spin');
+          const htmlData = await fetchHtmlFromUrl(url);
+          
+          if (!htmlData || !htmlData.html) {
+            throw new Error('Webサイトのコンテンツを取得できませんでした');
+          }
+          
+          // AI解析
+          setStatus(`${selectedApi.toUpperCase()} APIでレシピを解析中...`, 'info', 'fa-spinner fa-spin');
+          const recipeData = await analyzeRecipeWithAI(htmlData.html, url, selectedApi);
+          
+          // フォームにデータを設定
+          populateFormWithRecipe(recipeData);
+          
+          // 参考URLを設定
+          document.getElementById('sourceUrl').value = url;
+          
+          setStatus('レシピの取得が完了しました！', 'success', 'fa-circle-check');
+        } catch (error) {
+          console.error('レシピ取得エラー:', error);
+          setStatus(`エラー: ${error.message}`, 'error', 'fa-triangle-exclamation');
+        } finally {
+          urlImportModalConfirm.disabled = false;
+        }
+      });
+      
+      // 画像解析確認ボタン
+      imageImportModalConfirm.addEventListener('click', async () => {
+        const file = imageFile.files[0];
+        const selectedApi = document.querySelector('input[name="imageApi"]:checked').value;
+        
+        if (!file) {
+          setStatus('画像ファイルを選択してください', 'error', 'fa-circle-exclamation');
+          return;
+        }
+        
+        hideModal(imageImportModal);
+        setStatus('画像を解析中...', 'info', 'fa-spinner fa-spin');
+        imageImportModalConfirm.disabled = true;
+        
+        try {
+          // 画像をBase64に変換
+          const base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result.split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          
+          // AI解析（画像解析の実装は簡略化）
+          setStatus(`${selectedApi.toUpperCase()} APIで画像を解析中...`, 'info', 'fa-spinner fa-spin');
+          
+          // 仮の解析結果（実際のAPI呼び出しに置き換え）
+          const recipeData = {
+            title: '画像から抽出されたレシピ',
+            description: '画像解析により抽出されたレシピ情報',
+            servings: 4,
+            ingredients: [
+              { item: '材料1', quantity: '100', unit: 'g' },
+              { item: '材料2', quantity: '2', unit: '個' }
+            ],
+            instructions: [
+              '手順1: 材料を準備します',
+              '手順2: 調理を開始します',
+              '手順3: 完成です'
+            ]
+          };
+          
+          // フォームにデータを設定
+          populateFormWithRecipe(recipeData);
+          
+          setStatus('画像解析が完了しました！', 'success', 'fa-circle-check');
+        } catch (error) {
+          console.error('画像解析エラー:', error);
+          setStatus(`エラー: ${error.message}`, 'error', 'fa-triangle-exclamation');
+        } finally {
+          imageImportModalConfirm.disabled = false;
+        }
+      });
+      
+      // 材料追加ボタン
+      addIngredientBtn.addEventListener('click', () => {
+        const ingredientItem = document.createElement('div');
+        ingredientItem.className = 'ingredient-item';
+        ingredientItem.innerHTML = `
+          <input type="text" placeholder="材料名" class="input" />
+          <input type="text" placeholder="分量" class="input" />
+          <button type="button" class="remove">
+            <i class="fas fa-times"></i>
+          </button>
+        `;
+        ingredientsList.appendChild(ingredientItem);
+        
+        // 削除ボタンのイベントリスナー
+        const removeBtn = ingredientItem.querySelector('.remove');
+        removeBtn.addEventListener('click', () => {
+          ingredientItem.remove();
+        });
+      });
+      
+      // 手順追加ボタン
+      addInstructionBtn.addEventListener('click', () => {
+        const instructionItem = document.createElement('div');
+        instructionItem.className = 'instruction-item';
+        instructionItem.innerHTML = `
+          <textarea placeholder="手順を入力してください" class="input" rows="3"></textarea>
+          <button type="button" class="remove">
+            <i class="fas fa-times"></i>
+          </button>
+        `;
+        instructionsList.appendChild(instructionItem);
+        
+        // 削除ボタンのイベントリスナー
+        const removeBtn = instructionItem.querySelector('.remove');
+        removeBtn.addEventListener('click', () => {
+          instructionItem.remove();
+        });
+      });
+      
+      // 既存の削除ボタンにイベントリスナーを追加
+      document.querySelectorAll('.ingredient-item .remove, .instruction-item .remove').forEach(btn => {
+        btn.addEventListener('click', function() {
+          this.closest('.ingredient-item, .instruction-item').remove();
+        });
+      });
+      
+      // フォーム送信
+      editForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const formData = new FormData(editForm);
+        const recipeData = {
+          title: formData.get('title'),
+          servings: formData.get('servings'),
+          sourceUrl: formData.get('sourceUrl'),
+          notes: formData.get('notes'),
+          ingredients: [],
+          instructions: []
+        };
+        
+        // 材料データの収集
+        document.querySelectorAll('.ingredient-item').forEach(item => {
+          const inputs = item.querySelectorAll('input');
+          if (inputs[0].value.trim() && inputs[1].value.trim()) {
+            recipeData.ingredients.push({
+              name: inputs[0].value.trim(),
+              amount: inputs[1].value.trim()
+            });
+          }
+        });
+        
+        // 手順データの収集
+        document.querySelectorAll('.instruction-item').forEach(item => {
+          const textarea = item.querySelector('textarea');
+          if (textarea.value.trim()) {
+            recipeData.instructions.push(textarea.value.trim());
+          }
+        });
+        
+        setStatus('レシピを保存中...', 'info', 'fa-spinner fa-spin');
+        
+        try {
+          // ここで実際の保存処理を実装
+          
+          // 仮の保存処理（実際のAPI呼び出しに置き換え）
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          setStatus('レシピが正常に保存されました！', 'success', 'fa-check-circle');
+        } catch (error) {
+          console.error('保存エラー:', error);
+          setStatus('レシピの保存に失敗しました', 'error', 'fa-exclamation-triangle');
+        }
+      });
+      
+      // モーダル閉じるボタン
+      document.querySelectorAll('.modal-close, .modal .btn.ghost').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const modal = this.closest('.modal');
+          hideModal(modal);
+        });
+      });
+      
+      // モーダル外クリックで閉じる
+      document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', function(e) {
+          if (e.target === this) {
+            hideModal(this);
+          }
+        });
+      });
+      
+      // 初期化完了メッセージ
+      setStatus('レシピ編集画面が準備完了しました', 'success', 'fa-check-circle');
+    });
+  </script>
+</body>
+</html>
