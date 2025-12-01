@@ -5,6 +5,162 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Recipe Box — レシピ管理アプリ</title>
   <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="stylesheet" href="assets/css/style.css?v=20250116ai_v2">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- GitHub Pages用設定 -->
+  <script>
+    window.APP_CONFIG = {
+      SUPABASE_URL: 'https://nnbdzwrndqtsfzobknmj.supabase.co',
+      SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uYmR6d3JuZHF0c2Z6b2Jrbm1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAyMTkxNTQsImV4cCI6MjA3NTc5NTE1NH0.srlNmVFzw4w2d1tnp6gwZsBtXMJurpGDpFLe0bD0IYs',
+      API_BASE_URL: 'https://nnbdzwrndqtsfzobknmj.supabase.co/functions/v1',
+      APP_NAME: 'Recipe Keeper',
+      VERSION: '2.0.0',
+      IS_GITHUB_PAGES: true,
+      BASE_PATH: '/app'
+    };
+  </script>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="container header-content">
+      <a href="index.html" class="brand-section">
+        <i class="fa-solid fa-utensils brand-icon"></i>
+        <span class="brand">Recipe Box</span>
+      </a>
+      
+      <div class="header-actions">
+        <a href="recipe_edit_new.html" class="btn primary">
+          <i class="fa-solid fa-plus"></i> 新規レシピ
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container">
+    
+    <!-- Search Section -->
+    <div class="search-bar">
+      <i class="fa-solid fa-search search-icon"></i>
+      <input type="text" id="searchInput" class="search-input" placeholder="レシピを検索...">
+    </div>
+
+    <!-- Filter Tags (Optional, can be added later) -->
+    <!-- <div class="filter-tags">...</div> -->
+
+    <!-- Recipe Grid -->
+    <div id="recipe-list" class="recipe-grid">
+      <!-- Loading State -->
+      <div class="text-center" style="grid-column: 1/-1; padding: 40px; color: var(--text-secondary);">
+        <i class="fa-solid fa-circle-notch fa-spin fa-2x"></i>
+        <p class="mt-2">レシピを読み込み中...</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Scripts -->
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
+    
+    // Initialize Supabase
+    const supabase = createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_ANON_KEY);
+
+    // DOM Elements
+    const recipeList = document.getElementById('recipe-list');
+    const searchInput = document.getElementById('searchInput');
+
+    // Fetch Recipes
+    async function fetchRecipes() {
+      try {
+        const { data, error } = await supabase
+          .from('recipes')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        renderRecipes(data);
+      } catch (err) {
+        console.error('Error fetching recipes:', err);
+        recipeList.innerHTML = `
+          <div class="text-center" style="grid-column: 1/-1; color: var(--accent-primary);">
+            <i class="fa-solid fa-exclamation-circle fa-2x"></i>
+            <p class="mt-2">レシピの読み込みに失敗しました</p>
+          </div>
+        `;
+      }
+    }
+
+    // Render Recipes
+    function renderRecipes(recipes) {
+      if (!recipes || recipes.length === 0) {
+        recipeList.innerHTML = `
+          <div class="text-center" style="grid-column: 1/-1; padding: 40px; color: var(--text-muted);">
+            <p>レシピがまだありません</p>
+            <a href="recipe_edit_new.html" class="btn primary mt-2">最初のレシピを作成</a>
+          </div>
+        `;
+        return;
+      }
+
+      recipeList.innerHTML = recipes.map(recipe => {
+        // Image handling
+        let imageUrl = 'assets/images/finger.png'; // Default placeholder
+        if (recipe.image_url) {
+            imageUrl = recipe.image_url;
+        }
+
+        return `
+          <a href="recipe_view.html?id=${recipe.id}" class="recipe-card" style="text-decoration: none;">
+            <div class="recipe-image-wrapper">
+              <img src="${imageUrl}" alt="${recipe.title}" class="recipe-image" loading="lazy">
+            </div>
+            <div class="recipe-content">
+              <h3 class="recipe-title">${recipe.title}</h3>
+              <div class="recipe-meta">
+                <span><i class="fa-regular fa-clock"></i> ${recipe.cooking_time || '--'}分</span>
+                <span><i class="fa-solid fa-fire"></i> ${recipe.calories || '--'}kcal</span>
+              </div>
+              <div class="recipe-tags">
+                ${recipe.tags ? recipe.tags.map(tag => `<span class="tag">#${tag}</span>`).join('') : ''}
+              </div>
+            </div>
+          </a>
+        `;
+      }).join('');
+    }
+
+    // Search Filter
+    searchInput.addEventListener('input', (e) => {
+      const term = e.target.value.toLowerCase();
+      const cards = document.querySelectorAll('.recipe-card');
+      
+      cards.forEach(card => {
+        const title = card.querySelector('.recipe-title').textContent.toLowerCase();
+        if (title.includes(term)) {
+          card.style.display = 'flex';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    });
+
+    // Initial Load
+    fetchRecipes();
+  </script>
+</body>
+</html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Recipe Box — レシピ管理アプリ</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="stylesheet" href="assets/css/style.css?v=20250116ai">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">

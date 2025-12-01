@@ -1,5 +1,213 @@
 <!doctype html>
 <html lang="ja">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>レシピ編集 — Recipe Box</title>
+  <link rel="icon" type="image/x-icon" href="../favicon.ico">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="../assets/css/style.css?v=20250116ai_v2">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Scripts -->
+  <script src="../assets/js/utils.js"></script>
+  <script src="../assets/js/database.js"></script>
+  <script src="../assets/js/ui-components.js"></script>
+</head>
+
+<body>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="container header-content">
+      <a href="../index.html" class="brand-section">
+        <i class="fa-solid fa-utensils brand-icon"></i>
+        <span class="brand">Recipe Box</span>
+      </a>
+
+      <div class="header-actions">
+        <a href="../index.html" class="btn ghost small">キャンセル</a>
+        <button id="saveBtn" class="btn primary small">
+          <i class="fa-solid fa-save"></i> 保存
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container mt-4">
+    <div class="card">
+      <h1 style="font-size: 1.5rem; margin-bottom: 24px;">レシピ編集</h1>
+
+      <form id="editForm">
+
+        <!-- Basic Info -->
+        <div class="input-group">
+          <label class="input-label">料理名</label>
+          <input type="text" id="title" name="title" class="input-field" required placeholder="例: カレーライス">
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">画像URL</label>
+          <input type="url" id="image_url" name="image_url" class="input-field" placeholder="https://...">
+          <!-- Image Upload UI could go here -->
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+          <div class="input-group">
+            <label class="input-label">調理時間 (分)</label>
+            <input type="number" id="cooking_time" name="cooking_time" class="input-field" placeholder="30">
+          </div>
+          <div class="input-group">
+            <label class="input-label">カロリー (kcal)</label>
+            <input type="number" id="calories" name="calories" class="input-field" placeholder="500">
+          </div>
+          <div class="input-group">
+            <label class="input-label">人数 (人分)</label>
+            <input type="number" id="servings" name="servings" class="input-field" placeholder="2">
+          </div>
+        </div>
+
+        <!-- Ingredients (Simplified Text Area for now, can be enhanced) -->
+        <div class="input-group">
+          <label class="input-label">材料</label>
+          <textarea id="ingredients" name="ingredients" class="input-field" rows="6"
+            placeholder="材料を入力してください"></textarea>
+          <small style="color: var(--text-muted);">※ 1行に1つの材料を入力してください</small>
+        </div>
+
+        <!-- Steps -->
+        <div class="input-group">
+          <label class="input-label">作り方</label>
+          <textarea id="steps" name="steps" class="input-field" rows="8" placeholder="作り方を入力してください"></textarea>
+          <small style="color: var(--text-muted);">※ 1行に1つの手順を入力してください</small>
+        </div>
+
+        <!-- Notes -->
+        <div class="input-group">
+          <label class="input-label">メモ</label>
+          <textarea id="notes" name="notes" class="input-field" rows="4" placeholder="メモやコツを入力してください"></textarea>
+        </div>
+
+        <!-- Tags -->
+        <div class="input-group">
+          <label class="input-label">タグ (カンマ区切り)</label>
+          <input type="text" id="tags" name="tags" class="input-field" placeholder="和食, 定番, 時短">
+        </div>
+
+      </form>
+    </div>
+  </main>
+
+  <!-- Scripts -->
+  <script src="../config.js"></script>
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
+
+    // Initialize Supabase
+    const supabase = createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_ANON_KEY);
+
+    // Get Recipe ID
+    const urlParams = new URLSearchParams(window.location.search);
+    const recipeId = urlParams.get('id');
+
+    // DOM Elements
+    const form = document.getElementById('editForm');
+    const saveBtn = document.getElementById('saveBtn');
+
+    // Load Recipe if ID exists
+    if (recipeId) {
+      loadRecipe(recipeId);
+    }
+
+    async function loadRecipe(id) {
+      try {
+        const { data: recipe, error } = await supabase
+          .from('recipes')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (error) throw error;
+
+        // Populate Form
+        document.getElementById('title').value = recipe.title || '';
+        document.getElementById('image_url').value = recipe.image_url || '';
+        document.getElementById('cooking_time').value = recipe.cooking_time || '';
+        document.getElementById('calories').value = recipe.calories || '';
+        document.getElementById('servings').value = recipe.servings || '';
+        document.getElementById('notes').value = recipe.notes || '';
+
+        // Handle Ingredients (Array/JSON to Text)
+        if (Array.isArray(recipe.ingredients)) {
+          // Assuming simple object structure or string
+          document.getElementById('ingredients').value = recipe.ingredients.map(i => typeof i === 'string' ? i : `${i.name} ${i.amount}`).join('\n');
+        } else {
+          document.getElementById('ingredients').value = recipe.ingredients || '';
+        }
+
+        // Handle Steps
+        if (Array.isArray(recipe.steps)) {
+          document.getElementById('steps').value = recipe.steps.join('\n');
+        } else {
+          document.getElementById('steps').value = recipe.steps || '';
+        }
+
+        // Handle Tags
+        if (Array.isArray(recipe.tags)) {
+          document.getElementById('tags').value = recipe.tags.join(', ');
+        }
+
+      } catch (err) {
+        alert('レシピの読み込みに失敗しました');
+        console.error(err);
+      }
+    }
+
+    // Save Recipe
+    saveBtn.onclick = async () => {
+      const formData = {
+        title: document.getElementById('title').value,
+        image_url: document.getElementById('image_url').value,
+        cooking_time: parseInt(document.getElementById('cooking_time').value) || null,
+        calories: parseInt(document.getElementById('calories').value) || null,
+        servings: parseInt(document.getElementById('servings').value) || null,
+        notes: document.getElementById('notes').value,
+        // Convert text back to array
+        ingredients: document.getElementById('ingredients').value.split('\n').filter(line => line.trim() !== ''),
+        steps: document.getElementById('steps').value.split('\n').filter(line => line.trim() !== ''),
+        tags: document.getElementById('tags').value.split(',').map(t => t.trim()).filter(t => t !== '')
+      };
+
+      try {
+        let error;
+        if (recipeId) {
+          // Update
+          const res = await supabase.from('recipes').update(formData).eq('id', recipeId);
+          error = res.error;
+        } else {
+          // Insert
+          const res = await supabase.from('recipes').insert([formData]);
+          error = res.error;
+        }
+
+        if (error) throw error;
+
+        alert('保存しました！');
+        window.location.href = '../index.html';
+      } catch (err) {
+        alert('保存に失敗しました: ' + err.message);
+        console.error(err);
+      }
+    };
+  </script>
+</body>
+
+</html>
+<html lang="ja">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -28,7 +236,7 @@
       align-items: center !important;
       justify-content: center !important;
     }
-    
+
     #category-modal .modal-footer .btn,
     #tag-modal .modal-footer .btn {
       white-space: nowrap !important;
@@ -44,7 +252,7 @@
       font-size: 0.875rem !important;
       padding: 0.5rem 1rem !important;
     }
-    
+
     #category-modal .category-options,
     #tag-modal .tag-options {
       display: flex !important;
@@ -53,7 +261,7 @@
       justify-content: flex-start !important;
       align-items: flex-start !important;
     }
-    
+
     /* モーダル全体の幅を拡大 */
     #category-modal .modal-content,
     #tag-modal .modal-content {
@@ -61,22 +269,23 @@
       max-width: 800px !important;
       min-width: 600px !important;
     }
-    
+
     /* モーダルボディのパディング調整 */
     #category-modal .modal-body,
     #tag-modal .modal-body {
       padding: 1.5rem !important;
     }
-    
+
     /* レスポンシブ対応 */
     @media (max-width: 768px) {
+
       #category-modal .modal-content,
       #tag-modal .modal-content {
         width: 95vw !important;
         min-width: 320px !important;
         max-width: none !important;
       }
-      
+
       #category-modal .category-option,
       #tag-modal .tag-option {
         min-width: 80px !important;
@@ -84,8 +293,9 @@
         padding: 0.6rem 0.8rem !important;
       }
     }
-    
+
     @media (max-width: 480px) {
+
       #category-modal .category-option,
       #tag-modal .tag-option {
         min-width: 70px !important;
@@ -93,25 +303,25 @@
         padding: 0.5rem 0.6rem !important;
       }
     }
-    
+
     /* カテゴリーとタグのレイアウト調整 - 1列レイアウト */
     .category-tags-field {
       margin-bottom: 1rem;
     }
-    
+
     .category-tags-row {
       display: flex;
       flex-direction: row;
       gap: 0.1rem;
       align-items: stretch;
     }
-    
+
     .category-section,
     .tags-section {
       flex: 1;
       min-width: 0;
     }
-    
+
     .category-input-wrapper,
     .tag-input-wrapper {
       margin-bottom: 0.1rem;
@@ -120,13 +330,13 @@
       max-height: 44px !important;
       overflow: hidden;
     }
-    
+
     .custom-categories,
     .custom-tags {
       margin-top: 0.1rem;
       min-height: 1rem;
     }
-    
+
     /* ボタンの完全統一 - 最高詳細度で強制 */
     .category-tags-field .category-section .category-input-wrapper .category-select-btn,
     .category-tags-field .tags-section .tag-input-wrapper .tag-select-btn {
@@ -154,13 +364,13 @@
       white-space: nowrap !important;
       text-overflow: ellipsis !important;
     }
-    
+
     .category-tags-field .category-section .category-input-wrapper .category-select-btn:hover,
     .category-tags-field .tags-section .tag-input-wrapper .tag-select-btn:hover {
       border-color: var(--accent-primary) !important;
       box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1) !important;
     }
-    
+
     .category-tags-field .category-section .category-input-wrapper .category-select-btn span,
     .category-tags-field .tags-section .tag-input-wrapper .tag-select-btn span {
       flex: 1 !important;
@@ -177,7 +387,7 @@
       overflow-wrap: normal !important;
       min-width: 0 !important;
     }
-    
+
     .category-tags-field .category-section .category-input-wrapper .category-select-btn i,
     .category-tags-field .tags-section .tag-input-wrapper .tag-select-btn i {
       color: var(--text-muted) !important;
@@ -189,25 +399,25 @@
       width: 16px !important;
       text-align: center !important;
     }
-    
+
     .category-tags-field .category-section .category-input-wrapper .category-select-btn.open i,
     .category-tags-field .tags-section .tag-input-wrapper .tag-select-btn.open i {
       transform: rotate(180deg) !important;
     }
-    
+
     /* レスポンシブ対応 - 常に一行表示 */
     @media (max-width: 768px) {
       .category-tags-row {
         gap: 0.1rem;
       }
-      
+
       .category-input-wrapper,
       .tag-input-wrapper {
         height: 40px !important;
         min-height: 40px !important;
         max-height: 40px !important;
       }
-      
+
       .category-tags-field .category-section .category-input-wrapper .category-select-btn,
       .category-tags-field .tags-section .tag-input-wrapper .tag-select-btn {
         height: 40px !important;
@@ -216,25 +426,25 @@
         padding: 0 10px !important;
         font-size: 0.9em !important;
       }
-      
+
       .category-tags-field .category-section .category-input-wrapper .category-select-btn span,
       .category-tags-field .tags-section .tag-input-wrapper .tag-select-btn span {
         font-size: 0.85em !important;
       }
     }
-    
+
     @media (max-width: 480px) {
       .category-tags-row {
         gap: 0.1rem;
       }
-      
+
       .category-input-wrapper,
       .tag-input-wrapper {
         height: 36px !important;
         min-height: 36px !important;
         max-height: 36px !important;
       }
-      
+
       .category-tags-field .category-section .category-input-wrapper .category-select-btn,
       .category-tags-field .tags-section .tag-input-wrapper .tag-select-btn {
         height: 36px !important;
@@ -243,7 +453,7 @@
         padding: 0 8px !important;
         font-size: 0.8em !important;
       }
-      
+
       .category-tags-field .category-section .category-input-wrapper .category-select-btn span,
       .category-tags-field .tags-section .tag-input-wrapper .tag-select-btn span {
         font-size: 0.8em !important;
@@ -260,14 +470,17 @@
       text-align: center;
       transition: all var(--transition-normal);
     }
+
     #image-import-modal .image-upload-section:hover {
       border-color: var(--accent-primary);
       background: var(--bg-tertiary);
     }
+
     #image-import-modal p {
       color: var(--text-primary);
       margin: 0.5rem 0;
     }
+
     #image-import-modal #previewArea {
       background: var(--bg-secondary);
       border: 1px solid var(--border-medium);
@@ -275,14 +488,17 @@
       padding: var(--space-3);
       margin-top: var(--space-4);
     }
+
     #image-import-modal #previewImage {
       max-width: 100%;
       height: auto;
       border-radius: var(--radius-sm);
     }
+
     #image-import-modal #analyzeButton {
       margin-top: var(--space-3);
     }
+
     #image-import-modal #imageMessageArea {
       background: var(--bg-tertiary);
       color: var(--text-primary);
@@ -326,7 +542,7 @@
     .custom-category {
       padding-right: 8px !important;
     }
-    
+
     .category-delete-btn {
       opacity: 0.7;
       transition: opacity 0.2s ease;
@@ -335,17 +551,17 @@
       height: 20px !important;
       line-height: 1 !important;
     }
-    
+
     .category-delete-btn:hover {
       opacity: 1;
       background: #dc3545 !important;
       color: white !important;
     }
-    
+
     .custom-category:hover .category-delete-btn {
       opacity: 0.9;
     }
-    
+
     /* 読み込みポップアップ */
     #loadingPopup {
       position: fixed;
@@ -360,7 +576,7 @@
       z-index: 2000;
       backdrop-filter: blur(4px);
     }
-    
+
     #loadingContent {
       background: var(--bg-primary);
       color: var(--text-primary);
@@ -371,7 +587,7 @@
       border: 1px solid var(--border-medium);
       min-width: 300px;
     }
-    
+
     .loading-spinner {
       width: 40px;
       height: 40px;
@@ -381,18 +597,23 @@
       animation: spin 1s linear infinite;
       margin: 0 auto 1rem auto;
     }
-    
+
     @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
     }
-    
+
     .loading-text {
       font-size: var(--font-size-lg);
       font-weight: 600;
       margin-bottom: var(--space-2);
     }
-    
+
     .loading-subtext {
       font-size: var(--font-size-sm);
       color: var(--text-secondary);
@@ -410,22 +631,26 @@
       background: #f9f9f9;
       transition: border-color 0.3s ease, background-color 0.3s ease;
     }
+
     .image-upload-section.dragover {
       border-color: #007bff;
       background: #f0f8ff;
     }
+
     .image-preview {
       max-width: 100%;
       max-height: 300px;
       border-radius: 8px;
       margin: 10px 0;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
     }
+
     .loading-message {
       color: #007bff;
       font-style: italic;
       margin: 10px 0;
     }
+
     .error-message {
       color: #dc3545;
       background: #f8d7da;
@@ -433,6 +658,7 @@
       border-radius: 5px;
       margin: 10px 0;
     }
+
     .success-message {
       color: #155724;
       background: #d4edda;
@@ -440,7 +666,7 @@
       border-radius: 5px;
       margin: 10px 0;
     }
-    
+
     /* 画像解析メッセージスタイル */
     .error-message {
       background-color: #fee;
@@ -450,7 +676,7 @@
       border-radius: 5px;
       margin: 10px 0;
     }
-    
+
     .success-message {
       background-color: #efe;
       color: #363;
@@ -459,7 +685,7 @@
       border-radius: 5px;
       margin: 10px 0;
     }
-    
+
     .loading-message {
       background-color: #eef;
       color: #336;
@@ -536,15 +762,15 @@
       height: 28px;
       object-fit: contain;
     }
-    
+
     /* 画像プレビュースタイル */
     .image-preview {
       max-width: 100%;
       max-height: 300px;
       border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
-    
+
     /* アップロードエリアスタイル */
     .image-upload-section {
       text-align: center;
@@ -553,12 +779,12 @@
       border-radius: 8px;
       background-color: #f9f9f9;
     }
-    
+
     .image-upload-section:hover {
       border-color: #999;
       background-color: #f5f5f5;
     }
-    
+
     /* AI Modal Styles */
     .genre-btn {
       margin: 5px;
@@ -568,10 +794,12 @@
       cursor: pointer;
       border-radius: 4px;
     }
+
     .genre-btn.selected {
       background: #007bff;
       color: white;
     }
+
     .menu-suggestion {
       border: 1px solid #ddd;
       padding: 15px;
@@ -580,23 +808,28 @@
       cursor: pointer;
       transition: all 0.2s;
     }
+
     .menu-suggestion:hover {
       border-color: #007bff;
       background: #f8f9ff;
     }
+
     .menu-suggestion.selected {
       border-color: #007bff;
       background: #e3f2fd;
     }
+
     .menu-suggestion h4 {
       margin: 0 0 8px 0;
       color: #333;
     }
+
     .menu-suggestion p {
       margin: 0;
       color: #666;
       font-size: 0.9em;
     }
+
     .loading-spinner {
       border: 3px solid #f3f3f3;
       border-top: 3px solid #007bff;
@@ -606,9 +839,15 @@
       animation: spin 1s linear infinite;
       margin: 20px auto;
     }
+
     @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
     }
 
     /* Recipe preview background fix */
@@ -646,6 +885,7 @@
     }
   </style>
 </head>
+
 <body>
 
   <header class="app-header">
@@ -660,7 +900,7 @@
 
   <main class="container">
     <form id="editForm" class="panel">
-      
+
       <div class="field">
         <!-- URL読み込み/画像解析/画像アップロードボタンを料理名の上に配置 -->
         <div class="recipe-action-buttons">
@@ -675,27 +915,36 @@
           </button>
           <input type="file" id="recipeImageFile" accept="image/*" style="display:none;">
         </div>
-        
+
         <label for="title">料理名</label>
         <input id="title" name="title" class="input" required />
-        
+
         <!-- 翻訳入力テーブル -->
         <div class="translation-section" style="margin-top: 1rem;">
-          <label style="font-size: 0.9em; margin-bottom: 0.5rem; display: block; color: var(--text-primary);">翻訳名（任意）</label>
-          <div class="translation-table-container" style="background: var(--bg-secondary); border: 1px solid var(--border-medium); border-radius: 6px; padding: 1rem;">
+          <label
+            style="font-size: 0.9em; margin-bottom: 0.5rem; display: block; color: var(--text-primary);">翻訳名（任意）</label>
+          <div class="translation-table-container"
+            style="background: var(--bg-secondary); border: 1px solid var(--border-medium); border-radius: 6px; padding: 1rem;">
             <table class="translation-table" style="width: 100%; border-collapse: collapse;">
               <thead>
                 <tr style="background: var(--bg-tertiary);">
-                  <th style="padding: 0.5rem; text-align: left; border-bottom: 1px solid var(--border-medium); font-size: 0.85em; color: var(--text-primary);">言語</th>
-                  <th style="padding: 0.5rem; text-align: left; border-bottom: 1px solid var(--border-medium); font-size: 0.85em; color: var(--text-primary);">翻訳名</th>
-                  <th style="padding: 0.5rem; text-align: center; border-bottom: 1px solid var(--border-medium); font-size: 0.85em; width: 60px; color: var(--text-primary);">操作</th>
+                  <th
+                    style="padding: 0.5rem; text-align: left; border-bottom: 1px solid var(--border-medium); font-size: 0.85em; color: var(--text-primary);">
+                    言語</th>
+                  <th
+                    style="padding: 0.5rem; text-align: left; border-bottom: 1px solid var(--border-medium); font-size: 0.85em; color: var(--text-primary);">
+                    翻訳名</th>
+                  <th
+                    style="padding: 0.5rem; text-align: center; border-bottom: 1px solid var(--border-medium); font-size: 0.85em; width: 60px; color: var(--text-primary);">
+                    操作</th>
                 </tr>
               </thead>
               <tbody id="translationTableBody">
                 <!-- 翻訳行は動的に追加 -->
               </tbody>
             </table>
-            <button type="button" id="addTranslationBtn" class="btn ghost small" style="margin-top: 0.5rem;">＋ 翻訳を追加</button>
+            <button type="button" id="addTranslationBtn" class="btn ghost small" style="margin-top: 0.5rem;">＋
+              翻訳を追加</button>
           </div>
         </div>
       </div>
@@ -729,11 +978,15 @@
           <input id="servings" name="servings" class="input" type="number" min="1" max="20" placeholder="例: 4" />
           <span class="servings-unit">人前</span>
           <div id="inlineRecipeImageContainer" style="position: relative; margin-left: 12px; display: inline-block;">
-            <div id="noImagePlaceholder" style="height: 64px; width: 64px; border: 2px dashed #ccc; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; color: #6c757d; font-size: 12px; text-align: center; line-height: 1.2;">
+            <div id="noImagePlaceholder"
+              style="height: 64px; width: 64px; border: 2px dashed #ccc; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; color: #6c757d; font-size: 12px; text-align: center; line-height: 1.2;">
               No image
             </div>
-            <img id="inlineRecipeImageImg" src="" alt="レシピ画像" style="height: 64px; border-radius: 6px; display: none;" />
-            <button id="deleteInlineImageBtn" type="button" class="btn ghost" style="position: absolute; top: -8px; right: -8px; background: rgba(220,53,69,0.9); color: white; border: none; border-radius: 50%; width: 24px; height: 24px; display: none; align-items: center; justify-content: center; font-size: 12px; cursor: pointer;" title="画像を削除">
+            <img id="inlineRecipeImageImg" src="" alt="レシピ画像"
+              style="height: 64px; border-radius: 6px; display: none;" />
+            <button id="deleteInlineImageBtn" type="button" class="btn ghost"
+              style="position: absolute; top: -8px; right: -8px; background: rgba(220,53,69,0.9); color: white; border: none; border-radius: 50%; width: 24px; height: 24px; display: none; align-items: center; justify-content: center; font-size: 12px; cursor: pointer;"
+              title="画像を削除">
               <i class="fas fa-times"></i>
             </button>
           </div>
@@ -745,7 +998,8 @@
       <div class="field source-url-field">
         <label for="sourceUrl">参考URL</label>
         <div class="url-input-container">
-          <input id="sourceUrl" name="sourceUrl" type="url" class="input" placeholder="https://example.com/recipe/..." />
+          <input id="sourceUrl" name="sourceUrl" type="url" class="input"
+            placeholder="https://example.com/recipe/..." />
           <button type="button" id="urlImportFromFieldBtn" class="btn primary small" style="margin-left: 0.5rem;">
             <i class="fas fa-download"></i> URLから取り込み
           </button>
@@ -756,12 +1010,12 @@
         <label for="notes">メモ・コツ</label>
         <textarea id="notes" name="notes" class="input" rows="3"></textarea>
       </div>
-       <div class="field">
+      <div class="field">
         <label>材料</label>
         <div id="ingredientsEditor"></div>
         <div style="margin-top: 1rem; display: flex; gap: 0.75rem;">
-            <button type="button" class="btn ghost small" id="addIng">＋ 材料を追加</button>
-            <button type="button" class="btn primary small" id="ai-wizard-btn">✨ AIで創作</button>
+          <button type="button" class="btn ghost small" id="addIng">＋ 材料を追加</button>
+          <button type="button" class="btn primary small" id="ai-wizard-btn">✨ AIで創作</button>
         </div>
       </div>
       <div class="field">
@@ -769,27 +1023,28 @@
         <div id="stepsEditor"></div>
         <button type="button" class="btn ghost small" id="addStep" style="margin-top: 1rem;">＋ 手順を追加</button>
       </div>
-      
+
       <!-- フォーム下部の保存ボタン -->
       <div class="field" style="margin-top: 2rem; padding-top: 2rem; border-top: 2px solid var(--border-medium);">
         <div style="display: flex; gap: 1rem; justify-content: center; align-items: center;">
           <a href="../index.html" class="btn ghost" style="min-width: 150px;">
             <i class="fas fa-arrow-left"></i> キャンセル
           </a>
-          <button type="button" class="btn primary js-save-bottom" style="min-width: 200px; font-size: 1.1rem; padding: 0.75rem 2rem;">
+          <button type="button" class="btn primary js-save-bottom"
+            style="min-width: 200px; font-size: 1.1rem; padding: 0.75rem 2rem;">
             <i class="fas fa-save"></i> 保存する
           </button>
         </div>
       </div>
     </form>
   </main>
-  
+
   <!-- フローティング保存ボタン（常に表示） -->
   <button type="button" class="floating-save-btn js-save-floating" title="レシピを保存">
     <i class="fas fa-save"></i>
     <span>保存</span>
   </button>
-  
+
   <style>
     /* フローティング保存ボタン */
     .floating-save-btn {
@@ -812,30 +1067,33 @@
       transition: all 0.3s ease;
       animation: pulse 2s infinite;
     }
-    
+
     .floating-save-btn:hover {
       background: linear-gradient(135deg, #ff5722, #f4511e);
       transform: translateY(-3px);
       box-shadow: 0 6px 25px rgba(255, 107, 53, 0.7);
     }
-    
+
     .floating-save-btn:active {
       transform: translateY(-1px);
     }
-    
+
     .floating-save-btn i {
       font-size: 1.3rem;
     }
-    
+
     @keyframes pulse {
-      0%, 100% {
+
+      0%,
+      100% {
         box-shadow: 0 4px 20px rgba(255, 107, 53, 0.5);
       }
+
       50% {
         box-shadow: 0 4px 30px rgba(255, 107, 53, 0.8);
       }
     }
-    
+
     /* レスポンシブ対応 */
     @media (max-width: 768px) {
       .floating-save-btn {
@@ -844,12 +1102,12 @@
         padding: 12px 20px;
         font-size: 0.95rem;
       }
-      
+
       .floating-save-btn i {
         font-size: 1.1rem;
       }
     }
-    
+
     @media (max-width: 480px) {
       .floating-save-btn {
         bottom: 15px;
@@ -857,11 +1115,11 @@
         padding: 10px 15px;
         font-size: 0.9rem;
       }
-      
+
       .floating-save-btn span {
         display: none;
       }
-      
+
       .floating-save-btn {
         border-radius: 50%;
         width: 60px;
@@ -869,14 +1127,14 @@
         padding: 0;
         justify-content: center;
       }
-      
+
       .floating-save-btn i {
         font-size: 1.5rem;
         margin: 0;
       }
     }
   </style>
-  
+
   <!-- URL読み込みモーダル -->
   <div id="url-import-modal" class="modal-overlay" style="display: none;">
     <div class="modal-content">
@@ -942,7 +1200,8 @@
         </div>
 
         <div id="previewArea" style="display: none; text-align: center; margin-top: 1rem;">
-          <img id="previewImage" class="image-preview" alt="プレビュー" style="max-width: 100%; max-height: 300px; border-radius: 8px;">
+          <img id="previewImage" class="image-preview" alt="プレビュー"
+            style="max-width: 100%; max-height: 300px; border-radius: 8px;">
           <div style="margin-top: 1rem;">
             <button type="button" id="analyzeButton" class="btn" type="button">
               <i class="fas fa-search"></i> 解析してレシピを抽出
@@ -952,7 +1211,7 @@
             </button>
           </div>
         </div>
-        
+
         <div id="imageMessageArea" style="margin-top: 1rem;"></div>
       </div>
       <div class="modal-footer">
@@ -969,7 +1228,7 @@
       <div class="loading-subtext">AIがレシピを抽出しています。しばらくお待ちください。</div>
     </div>
   </div>
-  
+
   <!-- カテゴリー選択モーダル -->
   <div id="category-modal" class="modal-overlay" style="display: none;">
     <div class="modal-content">
@@ -978,8 +1237,10 @@
         <button id="category-modal-close-btn" class="modal-close">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="selected-categories-preview" id="selected-categories-preview" style="margin-bottom: 1rem; padding: 0.75rem; background: #e3f2fd; border: 1px solid #bbdefb; border-radius: 6px; min-height: 2.5rem;">
-          <div class="selected-categories-list" id="selected-categories-list" style="color: #1565c0; font-weight: 500;"></div>
+        <div class="selected-categories-preview" id="selected-categories-preview"
+          style="margin-bottom: 1rem; padding: 0.75rem; background: #e3f2fd; border: 1px solid #bbdefb; border-radius: 6px; min-height: 2.5rem;">
+          <div class="selected-categories-list" id="selected-categories-list" style="color: #1565c0; font-weight: 500;">
+          </div>
         </div>
         <div class="category-list">
           <div class="category-group">
@@ -1049,7 +1310,7 @@
       position: relative;
       padding-right: 30px !important;
     }
-    
+
     .tag-delete-btn {
       position: absolute;
       right: 8px;
@@ -1067,7 +1328,7 @@
       justify-content: center;
       transition: background-color 0.2s;
     }
-    
+
     .tag-delete-btn:hover {
       background-color: #ff4757;
       color: white;
@@ -1122,10 +1383,15 @@
     }
 
     @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
     }
-    
+
     /* AI ルセット創作アシスタント モーダルスタイル */
     #ai-modal .modal-content {
       background: #2c3e50;
@@ -1135,38 +1401,38 @@
       max-height: 80vh;
       overflow-y: auto;
     }
-    
+
     #ai-modal .modal-header {
       background: #34495e;
       border-bottom: 1px solid #4a5f7a;
       padding: 1rem;
     }
-    
+
     #ai-modal .modal-title {
       color: #ecf0f1;
       margin: 0;
       font-size: 1.2rem;
     }
-    
+
     #ai-modal .modal-body {
       padding: 1.5rem;
       background: #2c3e50;
     }
-    
+
     #ai-modal .step-title {
       color: #ecf0f1;
       font-weight: bold;
       margin-bottom: 1rem;
       font-size: 1.1rem;
     }
-    
+
     #ai-modal .genre-selection {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
       gap: 0.5rem;
       margin-bottom: 1.5rem;
     }
-    
+
     #ai-modal .genre-btn {
       background: #5a6f8a;
       border: 2px solid #6c7b95;
@@ -1177,45 +1443,45 @@
       transition: all 0.2s;
       font-size: 0.9rem;
     }
-    
+
     #ai-modal .genre-btn:hover {
       background: #6c7b95;
       border-color: #7d8ba0;
     }
-    
+
     #ai-modal .genre-btn.selected {
       background: #3498db;
       border-color: #3498db;
       color: white;
     }
-    
+
     #ai-modal .field label {
       color: #ecf0f1;
       font-weight: 500;
     }
-    
+
     #ai-modal .input {
       background: #34495e;
       border: 1px solid #4a5f7a;
       color: #ecf0f1;
     }
-    
+
     #ai-modal .input:focus {
       border-color: #3498db;
       box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
     }
-    
+
     #ai-modal .input::placeholder {
       color: #bdc3c7;
     }
-    
+
     #ai-modal .modal-footer {
       background: #34495e;
       border-top: 1px solid #4a5f7a;
       padding: 1rem;
       text-align: right;
     }
-    
+
     #ai-modal .btn {
       background: #3498db;
       color: white;
@@ -1225,32 +1491,32 @@
       cursor: pointer;
       font-size: 0.9rem;
     }
-    
+
     #ai-modal .btn:hover {
       background: #2980b9;
     }
-    
+
     #ai-modal .btn:disabled {
       background: #7f8c8d;
       cursor: not-allowed;
     }
-    
+
     #ai-modal .btn.ghost {
       background: transparent;
       color: #bdc3c7;
       border: 1px solid #7f8c8d;
     }
-    
+
     #ai-modal .btn.ghost:hover {
       background: #7f8c8d;
       color: white;
     }
-    
+
     #ai-modal .menu-suggestions {
       max-height: 300px;
       overflow-y: auto;
     }
-    
+
     #ai-modal .menu-item {
       background: #ffffff;
       border: 1px solid #dee2e6;
@@ -1260,43 +1526,43 @@
       cursor: pointer;
       transition: all 0.2s;
     }
-    
+
     #ai-modal .menu-item:not(.selected) {
       background: #ffffff;
     }
-    
+
     #ai-modal .menu-item:hover {
       background: #f8f9fa;
       border-color: #ced4da;
     }
-    
+
     #ai-modal .menu-item.selected {
       background: #27ae60;
       border-color: #2ecc71;
     }
-    
+
     #ai-modal .menu-item h4 {
       color: #2c3e50;
       margin: 0 0 0.5rem 0;
       font-size: 1rem;
       font-weight: bold;
     }
-    
+
     #ai-modal .menu-item p {
       color: #34495e;
       margin: 0;
       font-size: 0.9rem;
       line-height: 1.4;
     }
-    
+
     #ai-modal .menu-item.selected h4 {
       color: #ffffff;
     }
-    
+
     #ai-modal .menu-item.selected p {
       color: #ffffff;
     }
-    
+
     /* 例ボタンのスタイル */
     #ai-modal .example-buttons {
       display: flex;
@@ -1304,7 +1570,7 @@
       gap: 0.4rem;
       margin-bottom: 0.5rem;
     }
-    
+
     #ai-modal .example-btn {
       background: #34495e;
       border: 1px solid #4a5f7a;
@@ -1317,23 +1583,23 @@
       white-space: nowrap;
       min-width: fit-content;
     }
-    
+
     #ai-modal .example-btn:hover {
       background: #4a5f7a;
       border-color: #5a6f8a;
     }
-    
+
     #ai-modal .example-btn:active {
       background: #3498db;
       border-color: #3498db;
     }
-    
+
     #ai-modal .example-btn.selected {
       background: #3498db !important;
       border-color: #3498db !important;
       color: #ffffff !important;
     }
-    
+
     /* 翻訳メニュー名のスタイル */
     #ai-modal .translated-menu-name {
       font-size: 0.8em;
@@ -1490,7 +1756,7 @@
       background: var(--bg-secondary);
       border-radius: 8px;
       overflow: hidden;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
 
     .ingredients-table thead {
@@ -1525,7 +1791,7 @@
     }
 
     .ingredients-table tbody tr:hover {
-      background: rgba(0,123,255,0.05);
+      background: rgba(0, 123, 255, 0.05);
     }
 
     .ingredients-table td {
@@ -1706,7 +1972,8 @@
               <button type="button" class="example-btn" data-example="地元食材を最大限活用">地元食材</button>
               <button type="button" class="example-btn" data-example="サステナブルな調理法">サステナブル</button>
             </div>
-            <textarea id="ai-custom-request" class="input" rows="2" placeholder="カスタムの希望を入力するか、上記の例から選択してください"></textarea>
+            <textarea id="ai-custom-request" class="input" rows="2"
+              placeholder="カスタムの希望を入力するか、上記の例から選択してください"></textarea>
           </div>
           <div class="modal-footer">
             <button id="get-suggestions-btn" class="btn primary" disabled>メニュー案を創作</button>
@@ -1720,11 +1987,13 @@
           </div>
         </div>
         <div id="ai-step-3" style="display: none;">
-            <p class="step-title">3. 内容を確認して反映</p>
-            <div id="recipe-preview" style="white-space: pre-wrap; background: var(--bg-secondary); padding: 1rem; border-radius: 0.5rem; max-height: 40vh; overflow-y: auto; border: 1px solid var(--border-medium); color: var(--text-primary); font-size: var(--font-size-sm); line-height: 1.5;"></div>
-            <div class="modal-footer">
-              <button id="apply-recipe-btn" class="btn primary">フォームに反映する</button>
-            </div>
+          <p class="step-title">3. 内容を確認して反映</p>
+          <div id="recipe-preview"
+            style="white-space: pre-wrap; background: var(--bg-secondary); padding: 1rem; border-radius: 0.5rem; max-height: 40vh; overflow-y: auto; border: 1px solid var(--border-medium); color: var(--text-primary); font-size: var(--font-size-sm); line-height: 1.5;">
+          </div>
+          <div class="modal-footer">
+            <button id="apply-recipe-btn" class="btn primary">フォームに反映する</button>
+          </div>
         </div>
         <div id="ai-loading" style="display: none;">
           <div class="loading-spinner"></div>
@@ -1780,7 +2049,8 @@
         <p style="margin-bottom: 1rem; font-size: 1rem; color: var(--text-secondary);">
           追加の要望があれば入力してください（空欄でもOK）
         </p>
-        <div style="margin-bottom: 1rem; padding: 1rem; background: var(--bg-secondary); border-radius: 8px; font-size: 0.9rem; color: var(--text-secondary);">
+        <div
+          style="margin-bottom: 1rem; padding: 1rem; background: var(--bg-secondary); border-radius: 8px; font-size: 0.9rem; color: var(--text-secondary);">
           <strong>例：</strong><br>
           ・もっとヘルシーな料理<br>
           ・簡単に作れるもの<br>
@@ -1788,7 +2058,8 @@
           ・スパイシーな味付け<br>
           ・和風のアレンジ
         </div>
-        <textarea id="additional-request-input" placeholder="追加の要望を入力してください..." style="width: 100%; min-height: 100px; padding: 1rem; border: 1px solid var(--border-color); border-radius: 8px; font-family: inherit; font-size: 1rem; resize: vertical; background: var(--bg-primary); color: var(--text-primary);"></textarea>
+        <textarea id="additional-request-input" placeholder="追加の要望を入力してください..."
+          style="width: 100%; min-height: 100px; padding: 1rem; border: 1px solid var(--border-color); border-radius: 8px; font-family: inherit; font-size: 1rem; resize: vertical; background: var(--bg-primary); color: var(--text-primary);"></textarea>
       </div>
       <div class="modal-footer" style="display: flex; gap: 1rem; justify-content: flex-end;">
         <button id="additional-request-cancel" class="btn secondary">キャンセル</button>
@@ -1800,530 +2071,530 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../config.js"></script>
   <script src="../assets/js/settings-manager.js"></script>
-  
+
   <!-- 外部JavaScriptファイル -->
   <script src="../assets/js/utils.js?v=20250115"></script>
   <script src="../assets/js/database.js?v=20250115"></script>
   <script src="../assets/js/ui-components.js?v=20250115"></script>
-    <script src="../assets/js/proxy-manager.js?v=20250115"></script>
-    <script src="../assets/js/recipe-edit.js?v=20250115"></script>
-    <script src="../assets/js/ai-config.js?v=20250923"></script>
-    <script src="../assets/js/groq-analyzer.js?v=20250923"></script>
-    <script src="../assets/js/chatgpt-analyzer.js?v=20250930"></script>
-    <script src="../assets/js/ai-analyzer-manager.js?v=20250923"></script>
-    <script src="../assets/js/translation.js?v=20250116dual"></script>
-    <script src="../assets/js/app-edit.js?v=20250917save-fix" defer></script>
+  <script src="../assets/js/proxy-manager.js?v=20250115"></script>
+  <script src="../assets/js/recipe-edit.js?v=20250115"></script>
+  <script src="../assets/js/ai-config.js?v=20250923"></script>
+  <script src="../assets/js/groq-analyzer.js?v=20250923"></script>
+  <script src="../assets/js/chatgpt-analyzer.js?v=20250930"></script>
+  <script src="../assets/js/ai-analyzer-manager.js?v=20250923"></script>
+  <script src="../assets/js/translation.js?v=20250116dual"></script>
+  <script src="../assets/js/app-edit.js?v=20250917save-fix" defer></script>
 
   <script>
 
-  function setupApiUsageHooks() {
-    if (typeof window === 'undefined') {
-      return;
-    }
+    function setupApiUsageHooks() {
+      if (typeof window === 'undefined') {
+        return;
+      }
 
-    if (typeof window.__apiUsageInvokeInProgress === 'undefined') {
-      window.__apiUsageInvokeInProgress = false;
-    }
+      if (typeof window.__apiUsageInvokeInProgress === 'undefined') {
+        window.__apiUsageInvokeInProgress = false;
+      }
 
-    if (window.sb?.functions?.invoke && !window.__apiUsageInvokePatched) {
-      const originalInvoke = window.sb.functions.invoke.bind(window.sb.functions);
-      window.sb.functions.invoke = async function(functionName, invokeOptions) {
-        const previousFlag = window.__apiUsageInvokeInProgress;
-        window.__apiUsageInvokeInProgress = true;
-        try {
-          const result = await originalInvoke(functionName, invokeOptions);
-          if (!result?.error) {
-            if (functionName === 'call-groq-api') {
-              window.ApiUsageManager?.increment('groq');
-            } else if (functionName === 'call-openai-api') {
-              window.ApiUsageManager?.increment('chatgpt');
+      if (window.sb?.functions?.invoke && !window.__apiUsageInvokePatched) {
+        const originalInvoke = window.sb.functions.invoke.bind(window.sb.functions);
+        window.sb.functions.invoke = async function (functionName, invokeOptions) {
+          const previousFlag = window.__apiUsageInvokeInProgress;
+          window.__apiUsageInvokeInProgress = true;
+          try {
+            const result = await originalInvoke(functionName, invokeOptions);
+            if (!result?.error) {
+              if (functionName === 'call-groq-api') {
+                window.ApiUsageManager?.increment('groq');
+              } else if (functionName === 'call-openai-api') {
+                window.ApiUsageManager?.increment('chatgpt');
+              }
             }
+            return result;
+          } finally {
+            window.__apiUsageInvokeInProgress = previousFlag;
           }
-          return result;
-        } finally {
-          window.__apiUsageInvokeInProgress = previousFlag;
-        }
-      };
-      window.__apiUsageInvokePatched = true;
-    }
+        };
+        window.__apiUsageInvokePatched = true;
+      }
 
-    if (!window.__apiUsageFetchPatched && typeof window.fetch === 'function') {
-      const originalFetch = window.fetch.bind(window);
-      window.fetch = async (...args) => {
-        const response = await originalFetch(...args);
-        try {
-          if (!window.__apiUsageInvokeInProgress && response && response.ok) {
-            const request = args[0];
-            const url = typeof request === 'string' ? request : request?.url || '';
-            if (url.includes('/functions/v1/call-groq-api')) {
-              window.ApiUsageManager?.increment('groq');
-            } else if (url.includes('/functions/v1/call-openai-api')) {
-              window.ApiUsageManager?.increment('chatgpt');
+      if (!window.__apiUsageFetchPatched && typeof window.fetch === 'function') {
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = async (...args) => {
+          const response = await originalFetch(...args);
+          try {
+            if (!window.__apiUsageInvokeInProgress && response && response.ok) {
+              const request = args[0];
+              const url = typeof request === 'string' ? request : request?.url || '';
+              if (url.includes('/functions/v1/call-groq-api')) {
+                window.ApiUsageManager?.increment('groq');
+              } else if (url.includes('/functions/v1/call-openai-api')) {
+                window.ApiUsageManager?.increment('chatgpt');
+              }
             }
+          } catch (hookError) {
+            console.warn('⚠️ API使用数の追跡に失敗しました:', hookError);
           }
-        } catch (hookError) {
-          console.warn('⚠️ API使用数の追跡に失敗しました:', hookError);
-        }
-        return response;
-      };
-      window.__apiUsageFetchPatched = true;
-    }
-  }
-
-  if (typeof window !== 'undefined') {
-    window.setupApiUsageHooks = setupApiUsageHooks;
-  }
-
-  // 画像解析機能を独立して実行
-  document.addEventListener('DOMContentLoaded', function() {
-    if (window.AzureUsageManager && typeof window.AzureUsageManager.updateDisplay === 'function') {
-      try {
-        window.AzureUsageManager.updateDisplay();
-      } catch (usageInitError) {
-        console.warn('⚠️ Azure使用状況の初期化に失敗しました:', usageInitError);
+          return response;
+        };
+        window.__apiUsageFetchPatched = true;
       }
     }
-    // AI解析プロバイダー選択UIを初期化
-    if (window.aiConfig) {
-      
-      // プロバイダー選択UIを表示
-      setTimeout(() => {
-        addAIProviderSelector();
-      }, 300);
+
+    if (typeof window !== 'undefined') {
+      window.setupApiUsageHooks = setupApiUsageHooks;
     }
-    'use strict';
-    
-    const PROJECT_URL = 'https://nnbdzwrndqtsfzobknmj.supabase.co';
-    const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uYmR6d3JuZHF0c2Z6b2Jrbm1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAyMTkxNTQsImV4cCI6MjA3NTc5NTE1NH0.srlNmVFzw4w2d1tnp6gwZsBtXMJurpGDpFLe0bD0IYs';
 
-    if (typeof supabase === 'undefined') {
-      return;
-    }
-    // Reuse global client to avoid multiple GoTrueClient instances
-    if (!window.sb) {
-      window.sb = supabase.createClient(PROJECT_URL, ANON, {
-        auth: {
-          storageKey: 'app-main-11-edit',
-          autoRefreshToken: true,
-          persistSession: true,
-          detectSessionInUrl: false
-        }
-      });
-    }
-    const sb = window.sb;
-
-    setupApiUsageHooks();
-
-
-    async function runImport(url) {
+    // 画像解析機能を独立して実行
+    document.addEventListener('DOMContentLoaded', function () {
+      if (window.AzureUsageManager && typeof window.AzureUsageManager.updateDisplay === 'function') {
         try {
-            // URL取り込み元を記録してフィールドに表示
-            const sourceUrlEl = document.getElementById('sourceUrl');
-            if (sourceUrlEl) sourceUrlEl.value = url;
-            
-            // 直接Groq APIを使用してレシピ抽出
-            const html = await fetchHTMLViaProxy(url);
-            const recipeData = await callGroqAPI(html, url);
-            const r = recipeData || {};
-            const titleEl = document.getElementById('title');
-            if (titleEl) titleEl.value = r.title || '';
-            const notesEl = document.getElementById('notes');
-            if (notesEl) notesEl.value = r.description || '';
-            const ingredientsEditor = document.getElementById('ingredientsEditor');
-            const addIngBtn = document.getElementById('addIng');
-            if (ingredientsEditor) ingredientsEditor.innerHTML = '';
-            (r.ingredientLines || []).forEach(line => {
-                addIngBtn?.dispatchEvent(new Event('click'));
-                const rows = ingredientsEditor?.querySelectorAll('.ingredient-row');
-                const row  = rows?.[rows.length-1];
-                const itemInput = row?.querySelector('.ingredient-item');
-                if (itemInput) itemInput.value = line;
-            });
-            const stepsEditor = document.getElementById('stepsEditor');
-            const addStepBtn = document.getElementById('addStep');
-            if (stepsEditor) stepsEditor.innerHTML = '';
-            (r.steps || []).forEach(text => {
-                addStepBtn?.dispatchEvent(new Event('click'));
-                const rows = stepsEditor?.querySelectorAll('.step-row .step-text');
-                const el = rows?.[rows.length-1];
-                if (el) el.value = text;
-            });
+          window.AzureUsageManager.updateDisplay();
+        } catch (usageInitError) {
+          console.warn('⚠️ Azure使用状況の初期化に失敗しました:', usageInitError);
+        }
+      }
+      // AI解析プロバイダー選択UIを初期化
+      if (window.aiConfig) {
+
+        // プロバイダー選択UIを表示
+        setTimeout(() => {
+          addAIProviderSelector();
+        }, 300);
+      }
+      'use strict';
+
+      const PROJECT_URL = 'https://nnbdzwrndqtsfzobknmj.supabase.co';
+      const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uYmR6d3JuZHF0c2Z6b2Jrbm1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAyMTkxNTQsImV4cCI6MjA3NTc5NTE1NH0.srlNmVFzw4w2d1tnp6gwZsBtXMJurpGDpFLe0bD0IYs';
+
+      if (typeof supabase === 'undefined') {
+        return;
+      }
+      // Reuse global client to avoid multiple GoTrueClient instances
+      if (!window.sb) {
+        window.sb = supabase.createClient(PROJECT_URL, ANON, {
+          auth: {
+            storageKey: 'app-main-11-edit',
+            autoRefreshToken: true,
+            persistSession: true,
+            detectSessionInUrl: false
+          }
+        });
+      }
+      const sb = window.sb;
+
+      setupApiUsageHooks();
+
+
+      async function runImport(url) {
+        try {
+          // URL取り込み元を記録してフィールドに表示
+          const sourceUrlEl = document.getElementById('sourceUrl');
+          if (sourceUrlEl) sourceUrlEl.value = url;
+
+          // 直接Groq APIを使用してレシピ抽出
+          const html = await fetchHTMLViaProxy(url);
+          const recipeData = await callGroqAPI(html, url);
+          const r = recipeData || {};
+          const titleEl = document.getElementById('title');
+          if (titleEl) titleEl.value = r.title || '';
+          const notesEl = document.getElementById('notes');
+          if (notesEl) notesEl.value = r.description || '';
+          const ingredientsEditor = document.getElementById('ingredientsEditor');
+          const addIngBtn = document.getElementById('addIng');
+          if (ingredientsEditor) ingredientsEditor.innerHTML = '';
+          (r.ingredientLines || []).forEach(line => {
+            addIngBtn?.dispatchEvent(new Event('click'));
+            const rows = ingredientsEditor?.querySelectorAll('.ingredient-row');
+            const row = rows?.[rows.length - 1];
+            const itemInput = row?.querySelector('.ingredient-item');
+            if (itemInput) itemInput.value = line;
+          });
+          const stepsEditor = document.getElementById('stepsEditor');
+          const addStepBtn = document.getElementById('addStep');
+          if (stepsEditor) stepsEditor.innerHTML = '';
+          (r.steps || []).forEach(text => {
+            addStepBtn?.dispatchEvent(new Event('click'));
+            const rows = stepsEditor?.querySelectorAll('.step-row .step-text');
+            const el = rows?.[rows.length - 1];
+            if (el) el.value = text;
+          });
         } catch (e) {
-            // Error handling without debug logging
+          // Error handling without debug logging
         }
-    }
-    // ===== 材料解析ユーティリティ =====
-    function parseIngredientString(ingredientStr) {
-      if (!ingredientStr) return { item: '', quantity: '', unit: '', price: '' };
-      
-      const str = ingredientStr.toString().trim();
-      
-      // パターン1: "材料名 分量単位 価格円" (例: "コンデンスミルク 1kg 1320円")
-      const pattern1 = str.match(/^(.+?)\s+(\d+(?:\.\d+)?(?:\/\d+)?)\s*([a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+)\s+(\d+)円$/);
-      if (pattern1) {
-        const result = {
-          item: pattern1[1].trim(),
-          quantity: pattern1[2].trim(),
-          unit: pattern1[3].trim(),
-          price: pattern1[4].trim()
-        };
-        return result;
       }
-      
-      // パターン2: "材料名 価格円" (例: "グラニュー糖 290円")
-      const pattern2 = str.match(/^(.+?)\s+(\d+)円$/);
-      if (pattern2) {
-        const result = {
-          item: pattern2[1].trim(),
-          quantity: '',
-          unit: '',
-          price: pattern2[2].trim()
-        };
-        return result;
-      }
-      
-      // 日本語の単位をチェック（大さじ、小さじ、カップ）
-      const japaneseUnits = str.match(/^(.+?)\s+(大さじ|小さじ|カップ)([0-9\/\.]+)$/);
-      if (japaneseUnits) {
-        const result = {
-          item: japaneseUnits[1].trim(),
-          quantity: japaneseUnits[3].trim(),
-          unit: japaneseUnits[2].trim(),
-          price: ''
-        };
-        return result;
-      }
-      
-      // 分量フィールドに「大さじ2」のような形式が入った場合の処理
-      const spoonUnits = str.match(/^(大さじ|小さじ|tbsp|tsp)([0-9\/\.]+)$/);
-      if (spoonUnits) {
-        const result = {
-          item: '',
-          quantity: spoonUnits[2].trim(),
-          unit: spoonUnits[1].trim(),
-          price: ''
-        };
-        return result;
-      }
-      
-      // 分量フィールドに「大さじ2 材料名」のような形式が入った場合の処理
-      const spoonWithItem = str.match(/^(大さじ|小さじ|tbsp|tsp)([0-9\/\.]+)\s+(.+)$/);
-      if (spoonWithItem) {
-        const result = {
-          item: spoonWithItem[3].trim(),
-          quantity: spoonWithItem[2].trim(),
-          unit: spoonWithItem[1].trim(),
-          price: ''
-        };
-        return result;
-      }
-      
-      // 数値 + 単位 + 材料名の形式
-      const numUnitItem = str.match(/^([0-9\/\.]+)\s*([a-zA-Z]+|ml|g|mg|kg|個|本|枚|匙|杯|滴)\s+(.+)$/);
-      if (numUnitItem) {
-        const result = {
-          item: numUnitItem[3].trim(),
-          quantity: numUnitItem[1].trim(),
-          unit: numUnitItem[2].trim(),
-          price: ''
-        };
-        return result;
-      }
-      
-      // 材料名 + 数値 + 単位の形式
-      const itemNumUnit = str.match(/^(.+?)\s+([0-9\/\.]+)\s*([a-zA-Z]+|ml|g|mg|kg|個|本|枚|匙|杯|滴)$/);
-      if (itemNumUnit) {
-        const result = {
-          item: itemNumUnit[1].trim(),
-          quantity: itemNumUnit[2].trim(),
-          unit: itemNumUnit[3].trim(),
-          price: ''
-        };
-        return result;
-      }
-      
-      // 曖昧な表現
-      const vague = str.match(/^(.+?)\s+(適量|少々|お好みで|ひとつまみ|少し|ひとかけ)$/);
-      if (vague) {
-        const result = {
-          item: vague[1].trim(),
-          quantity: vague[2].trim(),
-          unit: '',
-          price: ''
-        };
-        return result;
-      }
-      
-      // 分離できない場合は材料名としてそのまま返す
-      const result = { item: str, quantity: '', unit: '', price: '' };
-      return result;
-    }
+      // ===== 材料解析ユーティリティ =====
+      function parseIngredientString(ingredientStr) {
+        if (!ingredientStr) return { item: '', quantity: '', unit: '', price: '' };
 
-    // ===== 単位変換ユーティリティ =====
-    function convertUnits(quantity, unit, itemName = '') {
-      if (!quantity || !unit) return { quantity, unit };
-      
-      // 分数を処理（例: 1/2, 3/4など）
-      let qty = 0;
-      const quantityStr = quantity.toString().trim();
-      if (quantityStr.includes('/')) {
-        const fractionMatch = quantityStr.match(/(\d+)\/(\d+)/);
-        if (fractionMatch) {
-          const numerator = parseInt(fractionMatch[1]);
-          const denominator = parseInt(fractionMatch[2]);
-          qty = numerator / denominator;
+        const str = ingredientStr.toString().trim();
+
+        // パターン1: "材料名 分量単位 価格円" (例: "コンデンスミルク 1kg 1320円")
+        const pattern1 = str.match(/^(.+?)\s+(\d+(?:\.\d+)?(?:\/\d+)?)\s*([a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+)\s+(\d+)円$/);
+        if (pattern1) {
+          const result = {
+            item: pattern1[1].trim(),
+            quantity: pattern1[2].trim(),
+            unit: pattern1[3].trim(),
+            price: pattern1[4].trim()
+          };
+          return result;
         }
-      } else {
-        qty = parseFloat(quantityStr.replace(/[^\d\.]/g, '')) || 0;
+
+        // パターン2: "材料名 価格円" (例: "グラニュー糖 290円")
+        const pattern2 = str.match(/^(.+?)\s+(\d+)円$/);
+        if (pattern2) {
+          const result = {
+            item: pattern2[1].trim(),
+            quantity: '',
+            unit: '',
+            price: pattern2[2].trim()
+          };
+          return result;
+        }
+
+        // 日本語の単位をチェック（大さじ、小さじ、カップ）
+        const japaneseUnits = str.match(/^(.+?)\s+(大さじ|小さじ|カップ)([0-9\/\.]+)$/);
+        if (japaneseUnits) {
+          const result = {
+            item: japaneseUnits[1].trim(),
+            quantity: japaneseUnits[3].trim(),
+            unit: japaneseUnits[2].trim(),
+            price: ''
+          };
+          return result;
+        }
+
+        // 分量フィールドに「大さじ2」のような形式が入った場合の処理
+        const spoonUnits = str.match(/^(大さじ|小さじ|tbsp|tsp)([0-9\/\.]+)$/);
+        if (spoonUnits) {
+          const result = {
+            item: '',
+            quantity: spoonUnits[2].trim(),
+            unit: spoonUnits[1].trim(),
+            price: ''
+          };
+          return result;
+        }
+
+        // 分量フィールドに「大さじ2 材料名」のような形式が入った場合の処理
+        const spoonWithItem = str.match(/^(大さじ|小さじ|tbsp|tsp)([0-9\/\.]+)\s+(.+)$/);
+        if (spoonWithItem) {
+          const result = {
+            item: spoonWithItem[3].trim(),
+            quantity: spoonWithItem[2].trim(),
+            unit: spoonWithItem[1].trim(),
+            price: ''
+          };
+          return result;
+        }
+
+        // 数値 + 単位 + 材料名の形式
+        const numUnitItem = str.match(/^([0-9\/\.]+)\s*([a-zA-Z]+|ml|g|mg|kg|個|本|枚|匙|杯|滴)\s+(.+)$/);
+        if (numUnitItem) {
+          const result = {
+            item: numUnitItem[3].trim(),
+            quantity: numUnitItem[1].trim(),
+            unit: numUnitItem[2].trim(),
+            price: ''
+          };
+          return result;
+        }
+
+        // 材料名 + 数値 + 単位の形式
+        const itemNumUnit = str.match(/^(.+?)\s+([0-9\/\.]+)\s*([a-zA-Z]+|ml|g|mg|kg|個|本|枚|匙|杯|滴)$/);
+        if (itemNumUnit) {
+          const result = {
+            item: itemNumUnit[1].trim(),
+            quantity: itemNumUnit[2].trim(),
+            unit: itemNumUnit[3].trim(),
+            price: ''
+          };
+          return result;
+        }
+
+        // 曖昧な表現
+        const vague = str.match(/^(.+?)\s+(適量|少々|お好みで|ひとつまみ|少し|ひとかけ)$/);
+        if (vague) {
+          const result = {
+            item: vague[1].trim(),
+            quantity: vague[2].trim(),
+            unit: '',
+            price: ''
+          };
+          return result;
+        }
+
+        // 分離できない場合は材料名としてそのまま返す
+        const result = { item: str, quantity: '', unit: '', price: '' };
+        return result;
       }
-      const unitLower = unit.toString().toLowerCase().trim();
-      const itemLower = itemName.toString().toLowerCase();
-      
-      // 液体系の材料判定（材料名と単位の両方で判断）
-      const liquidItems = ['水', '油', '醤油', 'しょうゆ', '酒', '酢', 'みりん', '牛乳', 'だし', 'スープ', 'ソース', '出汁', 'だし汁', 'ワイン', 'ビール', 'ココナッツミルク', 'オリーブオイル', 'ごま油', 'サラダ油'];
-      const isLiquid = liquidItems.some(liquid => itemLower.includes(liquid)) || 
-                       unitLower.includes('ml') || unitLower.includes('リットル') || unitLower.includes('cc');
-      
-      // 大さじの変換（15ml/15g）
-      if (unitLower.includes('大さじ') || unitLower.includes('おおさじ') || unitLower.includes('tbsp')) {
-        return {
-          quantity: (qty * 15).toString(),
-          unit: isLiquid ? 'ml' : 'g'
-        };
-      }
-      
-      // 小さじの変換（5ml/5g）
-      if (unitLower.includes('小さじ') || unitLower.includes('こさじ') || unitLower.includes('tsp')) {
-        return {
-          quantity: (qty * 5).toString(),
-          unit: isLiquid ? 'ml' : 'g'
-        };
-      }
-      
-      // カップの変換（200ml）
-      if (unitLower.includes('カップ') || unitLower.includes('cup')) {
-        return {
-          quantity: (qty * 200).toString(),
-          unit: 'ml'
-        };
-      }
-      
-      // 1/2カップ、1/4カップなどの分数対応
-      if (quantity.toString().includes('/') && (unitLower.includes('カップ') || unitLower.includes('cup'))) {
-        const fractionMatch = quantity.toString().match(/(\d+)\/(\d+)/);
-        if (fractionMatch) {
-          const numerator = parseInt(fractionMatch[1]);
-          const denominator = parseInt(fractionMatch[2]);
-          const cupValue = (numerator / denominator) * 200;
+
+      // ===== 単位変換ユーティリティ =====
+      function convertUnits(quantity, unit, itemName = '') {
+        if (!quantity || !unit) return { quantity, unit };
+
+        // 分数を処理（例: 1/2, 3/4など）
+        let qty = 0;
+        const quantityStr = quantity.toString().trim();
+        if (quantityStr.includes('/')) {
+          const fractionMatch = quantityStr.match(/(\d+)\/(\d+)/);
+          if (fractionMatch) {
+            const numerator = parseInt(fractionMatch[1]);
+            const denominator = parseInt(fractionMatch[2]);
+            qty = numerator / denominator;
+          }
+        } else {
+          qty = parseFloat(quantityStr.replace(/[^\d\.]/g, '')) || 0;
+        }
+        const unitLower = unit.toString().toLowerCase().trim();
+        const itemLower = itemName.toString().toLowerCase();
+
+        // 液体系の材料判定（材料名と単位の両方で判断）
+        const liquidItems = ['水', '油', '醤油', 'しょうゆ', '酒', '酢', 'みりん', '牛乳', 'だし', 'スープ', 'ソース', '出汁', 'だし汁', 'ワイン', 'ビール', 'ココナッツミルク', 'オリーブオイル', 'ごま油', 'サラダ油'];
+        const isLiquid = liquidItems.some(liquid => itemLower.includes(liquid)) ||
+          unitLower.includes('ml') || unitLower.includes('リットル') || unitLower.includes('cc');
+
+        // 大さじの変換（15ml/15g）
+        if (unitLower.includes('大さじ') || unitLower.includes('おおさじ') || unitLower.includes('tbsp')) {
           return {
-            quantity: cupValue.toString(),
+            quantity: (qty * 15).toString(),
+            unit: isLiquid ? 'ml' : 'g'
+          };
+        }
+
+        // 小さじの変換（5ml/5g）
+        if (unitLower.includes('小さじ') || unitLower.includes('こさじ') || unitLower.includes('tsp')) {
+          return {
+            quantity: (qty * 5).toString(),
+            unit: isLiquid ? 'ml' : 'g'
+          };
+        }
+
+        // カップの変換（200ml）
+        if (unitLower.includes('カップ') || unitLower.includes('cup')) {
+          return {
+            quantity: (qty * 200).toString(),
             unit: 'ml'
           };
         }
+
+        // 1/2カップ、1/4カップなどの分数対応
+        if (quantity.toString().includes('/') && (unitLower.includes('カップ') || unitLower.includes('cup'))) {
+          const fractionMatch = quantity.toString().match(/(\d+)\/(\d+)/);
+          if (fractionMatch) {
+            const numerator = parseInt(fractionMatch[1]);
+            const denominator = parseInt(fractionMatch[2]);
+            const cupValue = (numerator / denominator) * 200;
+            return {
+              quantity: cupValue.toString(),
+              unit: 'ml'
+            };
+          }
+        }
+
+        return { quantity, unit };
       }
-      
-      return { quantity, unit };
-    }
 
-    // ===== Vision API からの受け取り（ローカルストレージ / URLパラメータ） =====
-    (async () => {
-      try {
-        // URLパラメータ優先（file:// や別オリジン対策）
-        const params = new URLSearchParams(location.search);
-        const paramData = params.get('data');
-        if (paramData) {
-          const json = decodeURIComponent(escape(atob(paramData)));
-          const data = JSON.parse(json);
-          await applyRecipeData(data);
-          history.replaceState(null, '', location.pathname); // URLクリーン
-        }
-
-        const raw = localStorage.getItem('recipe_from_vision');
-        if (raw) {
-          const data = JSON.parse(raw);
-          await applyRecipeData(data);
-          // 1回だけ使う
-          localStorage.removeItem('recipe_from_vision');
-        }
-      } catch (_) {}
-    })();
-
-    // ヘルパ: Vision APIのJSONをフォームに反映
-    async function applyRecipeData(r) {
-      
-      try {
-        const providerKey = (r.aiProvider || r.ai_provider || '').toString().toLowerCase();
-        const providerCategoryMap = {
-          groq: 'AI-Groq解析',
-          chatgpt: 'AI-ChatGPT解析'
-        };
-
-        if (providerKey && providerCategoryMap[providerKey]) {
-          const categoryLabel = providerCategoryMap[providerKey];
-          window.selectedCategory = categoryLabel;
-          const categoryText = document.getElementById('selectedCategoryText');
-          if (categoryText) {
-            categoryText.textContent = categoryLabel;
+      // ===== Vision API からの受け取り（ローカルストレージ / URLパラメータ） =====
+      (async () => {
+        try {
+          // URLパラメータ優先（file:// や別オリジン対策）
+          const params = new URLSearchParams(location.search);
+          const paramData = params.get('data');
+          if (paramData) {
+            const json = decodeURIComponent(escape(atob(paramData)));
+            const data = JSON.parse(json);
+            await applyRecipeData(data);
+            history.replaceState(null, '', location.pathname); // URLクリーン
           }
 
-          document.querySelectorAll('.category-option').forEach(option => {
-            if (option.textContent.trim() === categoryLabel) {
-              option.classList.add('selected');
-            } else {
-              option.classList.remove('selected');
+          const raw = localStorage.getItem('recipe_from_vision');
+          if (raw) {
+            const data = JSON.parse(raw);
+            await applyRecipeData(data);
+            // 1回だけ使う
+            localStorage.removeItem('recipe_from_vision');
+          }
+        } catch (_) { }
+      })();
+
+      // ヘルパ: Vision APIのJSONをフォームに反映
+      async function applyRecipeData(r) {
+
+        try {
+          const providerKey = (r.aiProvider || r.ai_provider || '').toString().toLowerCase();
+          const providerCategoryMap = {
+            groq: 'AI-Groq解析',
+            chatgpt: 'AI-ChatGPT解析'
+          };
+
+          if (providerKey && providerCategoryMap[providerKey]) {
+            const categoryLabel = providerCategoryMap[providerKey];
+            window.selectedCategory = categoryLabel;
+            const categoryText = document.getElementById('selectedCategoryText');
+            if (categoryText) {
+              categoryText.textContent = categoryLabel;
             }
-          });
+
+            document.querySelectorAll('.category-option').forEach(option => {
+              if (option.textContent.trim() === categoryLabel) {
+                option.classList.add('selected');
+              } else {
+                option.classList.remove('selected');
+              }
+            });
 
             provider: providerKey,
-            category: categoryLabel
+              category: categoryLabel
           });
         }
       } catch (categoryError) {
-        console.warn('⚠️ AIプロバイダーカテゴリー設定に失敗:', categoryError);
-      }
-      
-      // タイトル・説明・人数
-      const titleEl = document.getElementById('title');
-      if (titleEl) {
-        titleEl.value = (r.title || '').toString();
-      }
-      const notesEl = document.getElementById('notes');
-      if (notesEl) {
-        notesEl.value = (r.description || r.notes || '').toString();
-      }
-      const servingsEl = document.getElementById('servings');
-      const srv = r.servings; 
-      if (servingsEl && (srv || srv === 0)) {
-        servingsEl.value = parseInt(srv || 0, 10) || '';
-      }
+      console.warn('⚠️ AIプロバイダーカテゴリー設定に失敗:', categoryError);
+    }
 
-      // 材料
-      const ingredientsEditor = document.getElementById('ingredientsEditor');
-      const addIngBtn = document.getElementById('addIng');
-      if (ingredientsEditor) ingredientsEditor.innerHTML = '';
-      // 受け取るフォーマットのゆらぎを吸収
-      let ingredients = [];
-      if (Array.isArray(r.ingredients)) {
-        ingredients = r.ingredients.map(x => {
-          if (typeof x === 'string') return { item: x };
-          return { 
-            item: x.item || '', 
-            quantity: x.quantity || '', 
-            unit: x.unit || '',
-            price: x.price || ''
-          };
-        });
-      } else if (Array.isArray(r.ingredientLines)) {
-        ingredients = r.ingredientLines.map(line => ({ item: line }));
-      }
+    // タイトル・説明・人数
+    const titleEl = document.getElementById('title');
+    if (titleEl) {
+      titleEl.value = (r.title || '').toString();
+    }
+    const notesEl = document.getElementById('notes');
+    if (notesEl) {
+      notesEl.value = (r.description || r.notes || '').toString();
+    }
+    const servingsEl = document.getElementById('servings');
+    const srv = r.servings;
+    if (servingsEl && (srv || srv === 0)) {
+      servingsEl.value = parseInt(srv || 0, 10) || '';
+    }
 
-
-      for (let i = 0; i < ingredients.length; i++) {
-        const ing = ingredients[i];
-        let parsedIng = { item: '', quantity: '', unit: '', price: '' };
-        
-        // 材料データの形式を確認
-        if (ing.item && ing.quantity && ing.unit) {
-          // 既に分離されている場合
-          parsedIng = {
-            item: ing.item,
-            quantity: ing.quantity,
-            unit: ing.unit,
-            price: ing.price || ''
-          };
-        } else if (ing.item && !ing.quantity && !ing.unit) {
-          // 材料名だけの場合、文字列解析を試行
-          parsedIng = parseIngredientString(ing.item);
-        } else {
-          // その他の場合
-          parsedIng = {
-            item: ing.item || '',
-            quantity: ing.quantity || '',
-            unit: ing.unit || '',
-            price: ing.price || ''
-          };
-        }
-        
-        // 単位変換を適用（材料名も考慮）
-        const converted = convertUnits(parsedIng.quantity, parsedIng.unit, parsedIng.item);
-        
-        // 変換が行われた場合はコンソールに記録
-        if (converted.quantity !== parsedIng.quantity || converted.unit !== parsedIng.unit) {
-        }
-        
-        const convertedIng = {
-          item: parsedIng.item,
-          quantity: converted.quantity,
-          unit: converted.unit,
-          price: parsedIng.price
+    // 材料
+    const ingredientsEditor = document.getElementById('ingredientsEditor');
+    const addIngBtn = document.getElementById('addIng');
+    if (ingredientsEditor) ingredientsEditor.innerHTML = '';
+    // 受け取るフォーマットのゆらぎを吸収
+    let ingredients = [];
+    if (Array.isArray(r.ingredients)) {
+      ingredients = r.ingredients.map(x => {
+        if (typeof x === 'string') return { item: x };
+        return {
+          item: x.item || '',
+          quantity: x.quantity || '',
+          unit: x.unit || '',
+          price: x.price || ''
         };
-        
-        addIngBtn?.dispatchEvent(new Event('click'));
-        // 追加完了を待つ（エディタが行を挿入するのを待機）
-        await new Promise(resolve => setTimeout(resolve, 50));
-        const rows = ingredientsEditor?.querySelectorAll('.ingredient-row');
-        const row  = rows?.[rows.length-1];
-        // エディタのフィールド仕様に合わせて、存在すれば個別に代入
-        const itemInput = row?.querySelector('.ingredient-item');
-        const qtyInput  = row?.querySelector('.ingredient-quantity');
-        const unitInput = row?.querySelector('.ingredient-unit');
-        const priceInput = row?.querySelector('.ingredient-price');
-        
-          hasRow: !!row,
-          hasItemInput: !!itemInput,
-          hasQtyInput: !!qtyInput,
-          hasUnitInput: !!unitInput,
-          hasPriceInput: !!priceInput,
-          rowHTML: row ? row.outerHTML.substring(0, 200) + '...' : 'null'
-        });
-        
-        const line = [convertedIng.item, convertedIng.quantity, convertedIng.unit].filter(Boolean).join(' ');
-        if (itemInput && (qtyInput || unitInput)) {
-          if (itemInput) {
-            itemInput.value = (convertedIng.item || '').toString();
-          }
-          if (qtyInput) {
-            qtyInput.value = (convertedIng.quantity || '').toString();
-          }
-          if (unitInput) {
-            unitInput.value = (convertedIng.unit || '').toString();
-          }
-          if (priceInput) {
-            priceInput.value = (convertedIng.price || '').toString();
-          }
-          
-          // 変換が行われた場合はログに記録
-          if (converted.quantity !== ing.quantity || converted.unit !== ing.unit) {
-          }
-        } else if (itemInput) {
-          itemInput.value = line;
-        } else {
-          console.error(`❌ 材料${i + 1}フィールドが見つかりません:`, {
-            hasRow: !!row,
-            hasItemInput: !!itemInput,
-            hasQtyInput: !!qtyInput,
-            hasUnitInput: !!unitInput,
-            hasPriceInput: !!priceInput
-          });
-        }
+      });
+    } else if (Array.isArray(r.ingredientLines)) {
+      ingredients = r.ingredientLines.map(line => ({ item: line }));
+    }
+
+
+    for (let i = 0; i < ingredients.length; i++) {
+      const ing = ingredients[i];
+      let parsedIng = { item: '', quantity: '', unit: '', price: '' };
+
+      // 材料データの形式を確認
+      if (ing.item && ing.quantity && ing.unit) {
+        // 既に分離されている場合
+        parsedIng = {
+          item: ing.item,
+          quantity: ing.quantity,
+          unit: ing.unit,
+          price: ing.price || ''
+        };
+      } else if (ing.item && !ing.quantity && !ing.unit) {
+        // 材料名だけの場合、文字列解析を試行
+        parsedIng = parseIngredientString(ing.item);
+      } else {
+        // その他の場合
+        parsedIng = {
+          item: ing.item || '',
+          quantity: ing.quantity || '',
+          unit: ing.unit || '',
+          price: ing.price || ''
+        };
       }
 
-      // 手順
-      const stepsEditor = document.getElementById('stepsEditor');
-      const addStepBtn = document.getElementById('addStep');
-      if (stepsEditor) stepsEditor.innerHTML = '';
-      const steps = Array.isArray(r.steps) ? r.steps : Array.isArray(r.directions) ? r.directions : [];
-      
-      for (let i = 0; i < steps.length; i++) {
-        const text = steps[i];
-        addStepBtn?.dispatchEvent(new Event('click'));
-        await new Promise(resolve => setTimeout(resolve, 50));
-        const rows = stepsEditor?.querySelectorAll('.step-row .step-text');
-        const el = rows?.[rows.length-1];
-        if (el) {
-          el.value = (text || '').toString();
-        }
+      // 単位変換を適用（材料名も考慮）
+      const converted = convertUnits(parsedIng.quantity, parsedIng.unit, parsedIng.item);
+
+      // 変換が行われた場合はコンソールに記録
+      if (converted.quantity !== parsedIng.quantity || converted.unit !== parsedIng.unit) {
       }
+
+      const convertedIng = {
+        item: parsedIng.item,
+        quantity: converted.quantity,
+        unit: converted.unit,
+        price: parsedIng.price
+      };
+
+      addIngBtn?.dispatchEvent(new Event('click'));
+      // 追加完了を待つ（エディタが行を挿入するのを待機）
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const rows = ingredientsEditor?.querySelectorAll('.ingredient-row');
+      const row = rows?.[rows.length - 1];
+      // エディタのフィールド仕様に合わせて、存在すれば個別に代入
+      const itemInput = row?.querySelector('.ingredient-item');
+      const qtyInput = row?.querySelector('.ingredient-quantity');
+      const unitInput = row?.querySelector('.ingredient-unit');
+      const priceInput = row?.querySelector('.ingredient-price');
+
+      hasRow: !!row,
+        hasItemInput: !!itemInput,
+          hasQtyInput: !!qtyInput,
+            hasUnitInput: !!unitInput,
+              hasPriceInput: !!priceInput,
+                rowHTML: row ? row.outerHTML.substring(0, 200) + '...' : 'null'
+    });
+
+    const line = [convertedIng.item, convertedIng.quantity, convertedIng.unit].filter(Boolean).join(' ');
+    if (itemInput && (qtyInput || unitInput)) {
+      if (itemInput) {
+        itemInput.value = (convertedIng.item || '').toString();
+      }
+      if (qtyInput) {
+        qtyInput.value = (convertedIng.quantity || '').toString();
+      }
+      if (unitInput) {
+        unitInput.value = (convertedIng.unit || '').toString();
+      }
+      if (priceInput) {
+        priceInput.value = (convertedIng.price || '').toString();
+      }
+
+      // 変換が行われた場合はログに記録
+      if (converted.quantity !== ing.quantity || converted.unit !== ing.unit) {
+      }
+    } else if (itemInput) {
+      itemInput.value = line;
+    } else {
+      console.error(`❌ 材料${i + 1}フィールドが見つかりません:`, {
+        hasRow: !!row,
+        hasItemInput: !!itemInput,
+        hasQtyInput: !!qtyInput,
+        hasUnitInput: !!unitInput,
+        hasPriceInput: !!priceInput
+      });
+    }
+      }
+
+    // 手順
+    const stepsEditor = document.getElementById('stepsEditor');
+    const addStepBtn = document.getElementById('addStep');
+    if (stepsEditor) stepsEditor.innerHTML = '';
+    const steps = Array.isArray(r.steps) ? r.steps : Array.isArray(r.directions) ? r.directions : [];
+
+    for (let i = 0; i < steps.length; i++) {
+      const text = steps[i];
+      addStepBtn?.dispatchEvent(new Event('click'));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const rows = stepsEditor?.querySelectorAll('.step-row .step-text');
+      const el = rows?.[rows.length - 1];
+      if (el) {
+        el.value = (text || '').toString();
+      }
+    }
     }
 
     // ===== 画像解析機能 =====
@@ -2347,20 +2618,20 @@
     const sendImageButton = document.getElementById('sendImageButton');
 
     // デバッグ: 要素の存在確認
-      imageImportBtn: !!imageImportBtn,
+    imageImportBtn: !!imageImportBtn,
       imageImportModal: !!imageImportModal,
-      fileSelectBtn: !!fileSelectBtn,
-      cameraBtn: !!cameraBtn,
-      imageInput: !!imageInput,
-      cameraInput: !!cameraInput,
-      analyzeButton: !!analyzeButton,
-      clearImageButton: !!clearImageButton,
-      sendImageButton: !!sendImageButton
+        fileSelectBtn: !!fileSelectBtn,
+          cameraBtn: !!cameraBtn,
+            imageInput: !!imageInput,
+              cameraInput: !!cameraInput,
+                analyzeButton: !!analyzeButton,
+                  clearImageButton: !!clearImageButton,
+                    sendImageButton: !!sendImageButton
     });
 
     if (imageImportBtn && imageImportModal) {
       // シンプルなクリックイベント
-      imageImportBtn.onclick = function() {
+      imageImportBtn.onclick = function () {
         imageImportModal.style.display = 'flex';
       };
     }
@@ -2377,13 +2648,13 @@
     // モーダルを閉じる
     const closeImageModal = () => {
       imageImportModal.style.display = 'none';
-      
+
       // ローディングポップアップも非表示にする
       const loadingPopup = document.getElementById('loadingPopup');
       if (loadingPopup) {
         loadingPopup.style.display = 'none';
       }
-      
+
       clearImage();
     };
 
@@ -2409,7 +2680,7 @@
             handleFile(f);
           }
         } finally {
-          try { document.body.removeChild(temp); } catch(_){}
+          try { document.body.removeChild(temp); } catch (_) { }
         }
       });
       document.body.appendChild(temp);
@@ -2418,7 +2689,7 @@
 
     // ファイル選択ボタン（完全新規アプローチ）
     if (fileSelectBtn) {
-      fileSelectBtn.addEventListener('click', function(e) {
+      fileSelectBtn.addEventListener('click', function (e) {
         e.preventDefault(); e.stopPropagation();
 
         try {
@@ -2495,7 +2766,7 @@
 
     // カメラボタン（背面カメラ希望なら 'environment'）
     if (cameraBtn) {
-      cameraBtn.addEventListener('click', function(e) {
+      cameraBtn.addEventListener('click', function (e) {
         e.preventDefault(); e.stopPropagation();
         try {
           if (isIOS) {
@@ -2511,12 +2782,12 @@
     }
 
     // ファイル選択のイベント（重複バインド防止・Safari対策）
-    function onFileChange(event){
+    function onFileChange(event) {
       try {
         event.preventDefault();
         event.stopPropagation();
         if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
-      } catch(_){ }
+      } catch (_) { }
       handleFileSelect(event);
     }
 
@@ -2562,80 +2833,80 @@
         return;
       }
 
-        name: file.name,
+      name: file.name,
         type: file.type,
-        size: file.size
-      });
+          size: file.size
+    });
 
-      currentFile = file;
-      window.__ocrCurrentFile = file;
-      window.currentImageFiles = [file];
-      
-      // プレビュー表示（JPEGでも稀にFileReaderが発火しないSafari対策でフォールバックあり）
-      const previewImage = document.getElementById('previewImage');
-      const previewArea = document.getElementById('previewArea');
+    currentFile = file;
+    window.__ocrCurrentFile = file;
+    window.currentImageFiles = [file];
 
-        previewImage: !!previewImage,
-        previewArea: !!previewArea
+    // プレビュー表示（JPEGでも稀にFileReaderが発火しないSafari対策でフォールバックあり）
+    const previewImage = document.getElementById('previewImage');
+    const previewArea = document.getElementById('previewArea');
+
+    previewImage: !!previewImage,
+      previewArea: !!previewArea
       });
-      const isHeic = /\.hei[cf]$/i.test(file.name || '') || /image\/(heic|heif)/i.test(file.type || '');
-      let previewShown = false;
-      if (isHeic && previewImage && previewArea) {
-        try {
-          const objUrl = URL.createObjectURL(file);
-          previewImage.src = objUrl;
+    const isHeic = /\.hei[cf]$/i.test(file.name || '') || /image\/(heic|heif)/i.test(file.type || '');
+    let previewShown = false;
+    if (isHeic && previewImage && previewArea) {
+      try {
+        const objUrl = URL.createObjectURL(file);
+        previewImage.src = objUrl;
+        previewArea.style.display = 'block';
+        showImageMessage(`画像読み込み(HEIC/HEIF): ${file.name}`, 'success');
+        previewShown = true;
+      } catch (_) {
+        showImageMessage('HEICプレビューに失敗（解析は可能です）', 'error');
+      }
+    }
+    if (!previewShown) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (previewImage && previewArea) {
+          previewImage.src = e.target.result;
           previewArea.style.display = 'block';
-          showImageMessage(`画像読み込み(HEIC/HEIF): ${file.name}`, 'success');
+          showImageMessage(`画像読み込み完了: ${file.name}`, 'success');
           previewShown = true;
-        } catch(_) {
-          showImageMessage('HEICプレビューに失敗（解析は可能です）', 'error');
+        } else {
+          console.error('❌ Preview elements not found in onload');
         }
-      }
-      if (!previewShown) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          if (previewImage && previewArea) {
-            previewImage.src = e.target.result;
+      };
+      reader.onerror = (error) => {
+        console.error('❌ FileReader error:', error);
+        showImageMessage('ファイルの読み込みに失敗しました（解析は可能です）', 'error');
+      };
+      // iOS / Safari 安定化: 非同期に遅延させてUIスレッドとの競合を避ける
+      setTimeout(() => reader.readAsDataURL(file), 0);
+      // フォールバック: 一定時間でプレビューが出なければ ObjectURL で表示を試行
+      setTimeout(() => {
+        if (!previewShown && previewImage && previewArea) {
+          try {
+            const objUrl = URL.createObjectURL(file);
+            previewImage.src = objUrl;
             previewArea.style.display = 'block';
-            showImageMessage(`画像読み込み完了: ${file.name}`, 'success');
-            previewShown = true;
-          } else {
-            console.error('❌ Preview elements not found in onload');
-          }
-        };
-        reader.onerror = (error) => {
-          console.error('❌ FileReader error:', error);
-          showImageMessage('ファイルの読み込みに失敗しました（解析は可能です）', 'error');
-        };
-        // iOS / Safari 安定化: 非同期に遅延させてUIスレッドとの競合を避ける
-        setTimeout(() => reader.readAsDataURL(file), 0);
-        // フォールバック: 一定時間でプレビューが出なければ ObjectURL で表示を試行
-        setTimeout(() => {
-          if (!previewShown && previewImage && previewArea) {
-            try {
-              const objUrl = URL.createObjectURL(file);
-              previewImage.src = objUrl;
-              previewArea.style.display = 'block';
-              showImageMessage(`画像読み込み(フォールバック): ${file.name}`, 'success');
-            } catch(_) { /* ignore */ }
-          }
-        }, 600);
-      }
-      
-      // 選択後に解析ボタンとアップロードボタンを有効化
-      if (analyzeButton) {
-        analyzeButton.disabled = false;
-      } else {
-        console.error('❌ analyzeButton not found when trying to enable');
-      }
-      
-      // アップロードボタンも有効化
-      const sendImageButton = document.getElementById('sendImageBtn');
-      if (sendImageButton) {
-        sendImageButton.disabled = false;
-      } else {
-        console.error('❌ sendImageButton not found when trying to enable');
-      }
+            showImageMessage(`画像読み込み(フォールバック): ${file.name}`, 'success');
+          } catch (_) { /* ignore */ }
+        }
+      }, 600);
+    }
+
+    // 選択後に解析ボタンとアップロードボタンを有効化
+    if (analyzeButton) {
+      analyzeButton.disabled = false;
+    } else {
+      console.error('❌ analyzeButton not found when trying to enable');
+    }
+
+    // アップロードボタンも有効化
+    const sendImageButton = document.getElementById('sendImageBtn');
+    if (sendImageButton) {
+      sendImageButton.disabled = false;
+    } else {
+      console.error('❌ sendImageButton not found when trying to enable');
+    }
     }
 
     // AI解析プロバイダー選択UIを追加
@@ -2703,11 +2974,11 @@
     // 解析ボタン
     if (analyzeButton) {
       analyzeButton.disabled = true;
-      
+
       // AI解析プロバイダー選択UIを追加
       addAIProviderSelector();
-      
-      analyzeButton.addEventListener('click', function(e){
+
+      analyzeButton.addEventListener('click', function (e) {
         e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
 
         analyzeImage();
@@ -2719,35 +2990,35 @@
     // 画像送信（アップロードのみ）
     if (sendImageButton) {
       sendImageButton.disabled = true;
-      sendImageButton.addEventListener('click', async function(e){
+      sendImageButton.addEventListener('click', async function (e) {
         e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
         try {
-          if (!currentFile) { 
-            showImageMessage('画像を選択してください', 'error'); 
-            return; 
+          if (!currentFile) {
+            showImageMessage('画像を選択してください', 'error');
+            return;
           }
-          
+
           const f = currentFile;
           const ext = (f.name?.split('.')?.pop() || 'jpg').toLowerCase();
           const name = `${(crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now()}.${ext}`;
           const path = `ocr/${name}`;
-          
-          if (!window.sb) { 
-            showImageMessage('Supabaseが初期化されていません', 'error'); 
-            return; 
+
+          if (!window.sb) {
+            showImageMessage('Supabaseが初期化されていません', 'error');
+            return;
           }
-          
+
           showImageMessage('画像をアップロード中...', 'loading');
-          
+
           const { error } = await window.sb.storage.from('images').upload(path, f, {
             upsert: true,
             cacheControl: '3600',
             contentType: f.type || 'image/jpeg'
           });
-          
+
           if (error) {
             console.error('❌ ストレージアップロードエラー:', error);
-            
+
             // RLSポリシーエラーの場合は特別なメッセージを表示
             if (error.message && error.message.includes('row-level security policy')) {
               showImageMessage('ストレージ設定エラー: 管理者に連絡してください', 'error');
@@ -2756,7 +3027,7 @@
             }
             return;
           }
-          
+
           const { data } = window.sb.storage.from('images').getPublicUrl(path);
           const url = data?.publicUrl;
           if (url) {
@@ -2773,14 +3044,14 @@
 
     // クリアボタン
     if (clearImageButton) {
-      clearImageButton.addEventListener('click', function(e){
+      clearImageButton.addEventListener('click', function (e) {
         e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
         clearImage();
       });
     }
 
     // フォームのEnter送信を抑止（解析モーダル操作中の誤送信防止）
-    document.getElementById('editForm')?.addEventListener('submit', function(e){ e.preventDefault(); });
+    document.getElementById('editForm')?.addEventListener('submit', function (e) { e.preventDefault(); });
 
     function getActiveOcrFile() {
       if (currentFile instanceof File) {
@@ -3077,15 +3348,15 @@
         }
         recipeData.aiProvider = recipeData.aiProvider || selectedProvider;
         recipeData.aiProviderModel = recipeData.aiProviderModel || providerInfo?.model || null;
-          provider: recipeData.aiProvider,
+        provider: recipeData.aiProvider,
           ingredients: recipeData.ingredients?.length || 0,
-          steps: recipeData.steps?.length || 0
-        });
-        return recipeData;
-      } catch (analysisError) {
-        console.error('❌ Gemini Visionフォールバック解析エラー:', analysisError);
-        throw analysisError;
-      }
+            steps: recipeData.steps?.length || 0
+      });
+      return recipeData;
+    } catch (analysisError) {
+      console.error('❌ Gemini Visionフォールバック解析エラー:', analysisError);
+      throw analysisError;
+    }
     }
 
     async function analyzeImage() {
@@ -3236,12 +3507,12 @@
 
     function parseTextToRecipe(text) {
       const lines = text.split('\n').filter(line => line.trim());
-      
+
       // タイトルを探す（最初の行または料理名らしい行）
       let title = 'OCRで抽出したレシピ';
-      const titleCandidates = lines.filter(line => 
-        !line.includes('材料') && 
-        !line.includes('作り方') && 
+      const titleCandidates = lines.filter(line =>
+        !line.includes('材料') &&
+        !line.includes('作り方') &&
         !line.includes('手順') &&
         !line.includes('人前') &&
         !line.includes('人分') &&
@@ -3250,25 +3521,25 @@
       if (titleCandidates.length > 0) {
         title = titleCandidates[0].trim();
       }
-      
+
       // 人数を抽出
       let servings = 2;
-      const servingLine = lines.find(line => 
+      const servingLine = lines.find(line =>
         line.includes('人前') || line.includes('人分') || line.match(/\d+人/)
       );
       if (servingLine) {
         const match = servingLine.match(/(\d+)/);
         if (match) servings = parseInt(match[1]);
       }
-      
+
       // 材料部分を抽出（改善版）
       const ingredients = [];
-      
+
       // 材料セクションを探す
-      const ingredientStartIndex = lines.findIndex(line => 
+      const ingredientStartIndex = lines.findIndex(line =>
         line.includes('材料') || line.includes('材料名') || line.includes('ingredient')
       );
-      
+
       const normalizeQuantityInfo = (qtyRaw, unitRaw) => {
         let quantityNorm = (qtyRaw || '').toString().trim();
         let unitNorm = (unitRaw || '').toString().trim();
@@ -3305,12 +3576,12 @@
       };
 
       if (ingredientStartIndex >= 0) {
-        const stepsStartIndex = lines.findIndex(line => 
+        const stepsStartIndex = lines.findIndex(line =>
           line.includes('作り方') || line.includes('手順') || line.includes('調理方法') || line.includes('step')
         );
-        
+
         const endIndex = stepsStartIndex >= 0 ? stepsStartIndex : Math.min(ingredientStartIndex + 15, lines.length);
-        
+
         for (let i = ingredientStartIndex + 1; i < endIndex; i++) {
           const line = lines[i].trim();
           if (line && line.length > 1 && !line.includes('作り方') && !line.includes('手順')) {
@@ -3319,7 +3590,7 @@
             let quantity = '';
             let unit = '';
             let price = '';
-            
+
             // 数字が含まれている場合は分量と単位を分離
             if (line.match(/\d/)) {
               const match = line.match(/^(.+?)\s*(\d+(?:\.\d+)?(?:\/\d+)?)\s*(.*)$/);
@@ -3329,15 +3600,15 @@
                 unit = match[3].trim();
               }
             }
-            
+
             const normalized = normalizeQuantityInfo(quantity, unit);
             quantity = normalized.quantity;
             unit = normalized.unit;
             price = normalized.price;
-            
-            ingredients.push({ 
-              item: item, 
-              quantity: quantity, 
+
+            ingredients.push({
+              item: item,
+              quantity: quantity,
               unit: unit,
               price: price
             });
@@ -3345,29 +3616,29 @@
         }
       } else {
         // 材料セクションが見つからない場合、材料らしい行を探す
-        
+
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i].trim();
-          
+
           // 材料らしい行の判定（数字と単位が含まれ、料理名や手順でない）
-          if (line && line.length > 1 && 
-              line.match(/\d/) && 
-              (line.match(/[gml個本枚大さじ小さじ]/) || line.match(/\d+円/)) &&
-              !line.includes('作り方') && 
-              !line.includes('手順') &&
-              !line.includes('調理方法') &&
-              !line.includes('人前') &&
-              !line.includes('人分') &&
-              line.length < 100) {
-            
-            
+          if (line && line.length > 1 &&
+            line.match(/\d/) &&
+            (line.match(/[gml個本枚大さじ小さじ]/) || line.match(/\d+円/)) &&
+            !line.includes('作り方') &&
+            !line.includes('手順') &&
+            !line.includes('調理方法') &&
+            !line.includes('人前') &&
+            !line.includes('人分') &&
+            line.length < 100) {
+
+
             // 材料名、分量、単位、価格を分離（改善版）
             let item = line;
             let quantity = '';
             let unit = '';
             let price = '';
-            
-            
+
+
             // パターン1: "材料名 分量単位 価格円" (例: "コンデンスミルク 1kg 1320円")
             const pattern1 = line.match(/^(.+?)\s+(\d+(?:\.\d+)?(?:\/\d+)?)\s*([a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+)\s+(\d+)円$/);
             if (pattern1) {
@@ -3415,24 +3686,24 @@
             }
             quantity = normalized.quantity;
             unit = normalized.unit;
-            
-            ingredients.push({ 
-              item: item, 
-              quantity: quantity, 
+
+            ingredients.push({
+              item: item,
+              quantity: quantity,
               unit: unit,
               price: price
             });
           }
         }
       }
-      
-      
+
+
       // 手順部分を抽出
       const steps = [];
-      const stepsStartIndex = lines.findIndex(line => 
+      const stepsStartIndex = lines.findIndex(line =>
         line.includes('作り方') || line.includes('手順') || line.includes('調理方法') || line.includes('step')
       );
-      
+
       if (stepsStartIndex >= 0) {
         for (let i = stepsStartIndex + 1; i < lines.length; i++) {
           const line = lines[i].trim();
@@ -3445,7 +3716,7 @@
           }
         }
       }
-      
+
       return {
         title: title,
         description: `OCRで抽出されたレシピです。\n\n${text.substring(0, 200)}...`,
@@ -3465,7 +3736,7 @@
       const imageInput = document.getElementById('imageInput');
       const cameraInput = document.getElementById('cameraInput');
       const messageArea = document.getElementById('imageMessageArea');
-      
+
       if (previewArea) previewArea.style.display = 'none';
       if (imageInput) imageInput.value = '';
       if (cameraInput) cameraInput.value = '';
@@ -3477,9 +3748,9 @@
     function showImageMessage(message, type = 'info') {
       const messageArea = document.getElementById('imageMessageArea');
       if (!messageArea) return;
-      
-      const className = type === 'error' ? 'error-message' : 
-                      type === 'success' ? 'success-message' : 'loading-message';
+
+      const className = type === 'error' ? 'error-message' :
+        type === 'success' ? 'success-message' : 'loading-message';
       const provider = (window.latestAIProvider || '').toString().toLowerCase();
       const providerIconMap = {
         groq: '../assets/icons/URL-groq.svg',
@@ -3498,7 +3769,7 @@
       }
 
       messageArea.innerHTML = contentHtml;
-      
+
       if (type === 'success') {
         setTimeout(() => {
           messageArea.innerHTML = '';
@@ -3516,10 +3787,11 @@
     }
 
     // (duplicate listeners removed)
-    
+
     // レシピ編集の初期化はapp-edit.jsで実行されるため、ここでは不要
 
   });
   </script>
 </body>
+
 </html>
