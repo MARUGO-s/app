@@ -1,0 +1,77 @@
+.container-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-lg);
+}
+
+.section-title {
+  font-size: 2rem;
+  /* More restrained */
+  margin: 0;
+  color: hsl(var(--color-text-main));
+  /* Solid color */
+}
+
+/* App specific global overrides or layout can go here */
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: hsl(var(--color-bg-base));
+}
+
+/* Tag Filter Styles */
+.tag-filter-container {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid transparent;
+  align-items: center;
+}
+
+.store-filter-select {
+  padding: 6px 12px;
+  border: 1px solid hsl(var(--color-border));
+  border-radius: var(--radius-full);
+  background-color: white;
+  font-size: 0.85rem;
+  color: hsl(var(--color-text-main));
+  cursor: pointer;
+  height: 32px;
+  /* Match button height approx */
+}
+
+.tag-divider {
+  width: 1px;
+  height: 24px;
+  background-color: hsl(var(--color-border));
+  margin: 0 var(--space-xs);
+}
+
+.tag-filter-btn {
+  background: transparent;
+  border: 1px solid hsl(var(--color-border));
+  border-radius: var(--radius-full);
+  padding: 6px 16px;
+  font-size: 0.85rem;
+  color: hsl(var(--color-text-muted));
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-family-main);
+  background-color: white;
+}
+
+.tag-filter-btn:hover {
+  border-color: hsl(var(--color-primary));
+  color: hsl(var(--color-primary));
+}
+
+.tag-filter-btn.active {
+  background: hsl(var(--color-primary));
+  color: white;
+  border-color: hsl(var(--color-primary));
+  font-weight: 500;
+}

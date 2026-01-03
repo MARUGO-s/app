@@ -1,0 +1,35 @@
+.app-layout {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.app-header {
+    padding: var(--space-md) 0;
+    margin-bottom: var(--space-xl);
+}
+
+.app-header__content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.app-logo {
+    font-size: 1.5rem;
+    margin: 0;
+    cursor: pointer;
+}
+
+.app-main {
+    flex: 1;
+    width: 100%;
+}
+
+.app-footer {
+    margin-top: var(--space-xl);
+    padding: var(--space-lg) 0;
+    text-align: center;
+    color: hsl(var(--color-text-muted));
+    font-size: 0.875rem;
+}
