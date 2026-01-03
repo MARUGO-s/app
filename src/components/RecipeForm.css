@@ -4,6 +4,22 @@
     }
 }
 
+/* Make Cards in RecipeForm 50% transparent as requested */
+.recipe-form .glass-card {
+    background: rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(8px);
+    /* Optional: adds nice glass effect */
+}
+
+/* Also make Inputs transparent to match */
+.recipe-form .input-field {
+    background: rgba(255, 255, 255, 0.5) !important;
+}
+
+.recipe-form .input-field:focus {
+    background: rgba(255, 255, 255, 0.8) !important;
+}
+
 .recipe-form__header {
     display: flex;
     justify-content: space-between;
