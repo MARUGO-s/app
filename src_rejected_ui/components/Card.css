@@ -1,0 +1,38 @@
+.card {
+    background: var(--color-bg-surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    /* Default soft shadow */
+    border: 1px solid var(--color-border);
+    overflow: hidden;
+    /* Ensure images don't bleed */
+    transition: box-shadow var(--transition-base), transform var(--transition-base), border-color var(--transition-base);
+}
+
+/* Interactive Card State (e.g., in lists) */
+.card-interactive:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+    border-color: var(--color-primary-light);
+    cursor: pointer;
+}
+
+/* Card Content Padding Variants */
+.card-body {
+    padding: var(--spacing-6);
+}
+
+.card-header {
+    padding: var(--spacing-4) var(--spacing-6);
+    border-bottom: 1px solid var(--color-border);
+    background-color: var(--color-bg-subtle);
+}
+
+.card-footer {
+    padding: var(--spacing-4) var(--spacing-6);
+    border-top: 1px solid var(--color-border);
+    background-color: var(--color-bg-subtle);
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-2);
+}

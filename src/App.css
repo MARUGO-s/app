@@ -18,7 +18,7 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: hsl(var(--color-bg-base));
+
 }
 
 /* Tag Filter Styles */
@@ -30,6 +30,13 @@
   padding-bottom: var(--space-md);
   border-bottom: 1px solid transparent;
   align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #353535;
+  /* Match body bg */
+  padding-top: var(--space-md);
+  /* Add padding for visual breathing room when stuck */
 }
 
 .store-filter-select {
@@ -38,7 +45,8 @@
   border-radius: var(--radius-full);
   background-color: white;
   font-size: 0.85rem;
-  color: hsl(var(--color-text-main));
+  color: #333;
+  /* Dark text for white background */
   cursor: pointer;
   height: 32px;
   /* Match button height approx */
@@ -62,6 +70,8 @@
   transition: all 0.2s;
   font-family: var(--font-family-main);
   background-color: white;
+  color: #555;
+  /* Dark gray for contrast on white */
 }
 
 .tag-filter-btn:hover {
@@ -74,4 +84,57 @@
   color: white;
   border-color: hsl(var(--color-primary));
   font-weight: 500;
+}
+
+/* Sidebar Layout Logic */
+.main-content-wrapper {
+  display: flex;
+  gap: var(--space-lg);
+  align-items: flex-start;
+}
+
+.recipe-list-container {
+  flex: 1;
+  min-width: 0;
+  /* Prevent flex child overflow */
+}
+
+.sidebar-right {
+  width: 240px;
+  /* Fixed width for sidebar */
+  flex-shrink: 0;
+  position: sticky;
+  top: 20px;
+  /* Sticky scroll */
+}
+
+@media (max-width: 900px) {
+  .main-content-wrapper {
+    flex-direction: column;
+  }
+
+  .sidebar-right {
+    width: 100%;
+    margin-top: var(--space-lg);
+    position: static;
+  }
+
+  .recent-list {
+    flex-direction: row;
+    /* Horizontal scroll on mobile? or grid */
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+
+  .recent-item {
+    width: 160px;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .recent-thumbnail {
+    width: 100%;
+    height: 100px;
+  }
 }

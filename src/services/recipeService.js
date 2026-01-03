@@ -176,30 +176,95 @@ export const recipeService = {
 
         if (error) throw error
         return true
+    },
+
+    async fetchRecentRecipes() {
+        const { data, error } = await supabase
+            .from('recent_views')
+            .select('recipe_id')
+            .order('viewed_at', { ascending: false })
+            .limit(20);
+
+        if (error) throw error;
+        return data.map(item => item.recipe_id);
+    },
+
+    async addToHistory(recipeId) {
+        // Upsert logic: if recipe_id exists, update viewed_at
+        const { error } = await supabase
+            .from('recent_views')
+            .upsert({
+                recipe_id: recipeId,
+                viewed_at: new Date().toISOString()
+            }, { onConflict: 'recipe_id' });
+
+        if (error) throw error;
+        return true;
     }
 }
 
 // Helpers to map between frontend (camelCase) and DB (snake_case)
 const toDbFormat = (recipe) => {
-    // Explicitly destructure to remove camelCase keys
-    const { prepTime, cookTime, imageFile, ...rest } = recipe
+    // Explicitly destructure to remove camelCase keys and bread-specific keys
+    const { prepTime, cookTime, imageFile, type, flours, breadIngredients, ...rest } = recipe
+
+    let ingredientsToSave = recipe.ingredients || [];
+
+    // PACKING STRATEGY:
+    // If bread mode, pack everything into 'ingredients' JSON to avoid schema changes.
+    // Structure: [ { _meta: true, type: 'bread' }, ...flours(w/ _group='flour'), ...others(w/ _group='other') ]
+    if (type === 'bread') {
+        const metaItem = { _meta: true, type: 'bread' };
+        const packedFlours = (flours || []).map(f => ({ ...f, _group: 'flour' }));
+        const packedOthers = (breadIngredients || []).map(i => ({ ...i, _group: 'other' }));
+        ingredientsToSave = [metaItem, ...packedFlours, ...packedOthers];
+    }
 
     return {
         ...rest,
         prep_time: prepTime,
         cook_time: cookTime,
         // Ensure arrays
-        ingredients: recipe.ingredients || [],
+        ingredients: ingredientsToSave,
         steps: recipe.steps || [],
         tags: recipe.tags || []
+        // NOTE: We do NOT send 'type' as a column, as it likely doesn't exist.
     }
 }
 
-const fromDbFormat = (recipe) => ({
-    ...recipe,
-    prepTime: recipe.prep_time,
-    cookTime: recipe.cook_time,
-})
+const fromDbFormat = (recipe) => {
+    const rawIngs = recipe.ingredients || [];
+    let type = 'normal';
+    let flours = [];
+    let breadIngredients = [];
+    let cleanIngredients = rawIngs;
+
+    // UNPACKING STRATEGY:
+    // Check for _meta item
+    if (Array.isArray(rawIngs) && rawIngs.length > 0 && rawIngs[0]._meta) {
+        const meta = rawIngs[0];
+        type = meta.type || 'normal';
+
+        // Filter out meta
+        const dataItems = rawIngs.slice(1);
+
+        flours = dataItems.filter(i => i._group === 'flour').map(({ _group, ...i }) => i);
+        breadIngredients = dataItems.filter(i => i._group === 'other').map(({ _group, ...i }) => i);
+
+        // For standard views, we might want a combined list
+        cleanIngredients = [...flours, ...breadIngredients];
+    }
+
+    return {
+        ...recipe,
+        prepTime: recipe.prep_time,
+        cookTime: recipe.cook_time,
+        type,
+        flours,
+        breadIngredients,
+        ingredients: cleanIngredients // Ensure list views still see something
+    }
+}
 
 const fromDeletedDbFormat = (recipe) => ({
     ...fromDbFormat(recipe),

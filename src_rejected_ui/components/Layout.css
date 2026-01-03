@@ -1,0 +1,53 @@
+/* Layout Shell */
+.app-layout {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--color-bg-page);
+}
+
+/* Main Content Area */
+.main-content {
+    flex: 1;
+    width: 100%;
+    max-width: var(--container-width-max);
+    margin: 0 auto;
+    padding: var(--spacing-6) var(--spacing-4);
+}
+
+/* Header */
+.app-header {
+    background-color: #1E1E1E;
+    /* Dark Surface */
+    border-bottom: 1px solid #333;
+    height: 56px;
+    /* Compact header */
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.header-container {
+    max-width: var(--container-width-max);
+    margin: 0 auto;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--spacing-4);
+}
+
+.app-logo {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--color-text-main);
+    text-decoration: none;
+    letter-spacing: 0.5px;
+}
+
+@media (max-width: 640px) {
+    .main-content {
+        padding: var(--spacing-4);
+    }
+}

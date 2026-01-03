@@ -74,13 +74,14 @@
 .meta-label {
     font-size: 0.7rem;
     text-transform: uppercase;
-    color: hsl(var(--color-text-muted));
+    color: #666;
     font-weight: 600;
 }
 
 .meta-value {
     font-weight: 600;
     font-size: 1rem;
+    color: #000;
 }
 
 .recipe-detail__main {
@@ -333,6 +334,16 @@
     display: flex;
     align-items: center;
     gap: var(--space-sm);
+    width: 100%;
+    cursor: pointer;
+}
+
+.ingredient-name label {
+    flex: 1;
+    /* Expand label to fill space */
+    cursor: pointer;
+    padding: 4px 0;
+    /* Add vertical padding for easier clicking */
 }
 
 .ingredient-row:last-child td {
@@ -354,6 +365,24 @@
     padding: var(--space-md);
     border-radius: var(--radius-md);
     border: 1px solid hsl(var(--color-border));
+    color: #333;
+    /* Dark text for white card */
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.step-card.is-completed {
+    opacity: 0.5;
+    background-color: rgba(255, 255, 255, 0.4);
+}
+
+.step-card.is-completed .step-text {
+    text-decoration: line-through;
+    color: #666;
+}
+
+.step-card:hover {
+    border-color: hsl(var(--color-primary));
 }
 
 .step-number {

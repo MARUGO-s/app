@@ -1,0 +1,1534 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>レシピ詳細 — Recipe Box</title>
+  <link rel="icon" type="image/x-icon" href="../favicon.ico">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Crimson+Pro:wght@400;600&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      color-scheme: light dark;
+      /* ライトモード */
+      --bg-primary: #f6f8fa;
+      --bg-surface: #ffffff;
+      --text-primary: #1f2933;
+      --text-secondary: #64748b;
+      --border-color: rgba(148, 163, 184, 0.25);
+      --accent-primary: #6366f1;
+      --success-color: #059669;
+      --warning-color: #d97706;
+      --error-color: #dc2626;
+      
+      /* 互換性のためのエイリアス */
+      --primary: var(--accent-primary);
+      --primary-dark: #4f46e5;
+      --secondary: var(--text-secondary);
+      --accent: var(--accent-primary);
+      --success: var(--success-color);
+      --bg-main: var(--bg-primary);
+      --bg-card: var(--bg-surface);
+      --bg-light: #f1f5f9;
+      --text-primary: var(--text-primary);
+      --text-secondary: var(--text-secondary);
+      --text-muted: #94a3b8;
+      --border: var(--border-color);
+      --shadow: rgba(15, 23, 42, 0.12);
+
+      /* タイポグラフィ */
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-serif: 'Crimson Pro', Georgia, serif;
+    }
+    
+    @media (prefers-color-scheme: dark) {
+      :root {
+        /* ダークモード */
+        --bg-primary: #0f172a;
+        --bg-surface: #1e293b;
+        --text-primary: #f8fafc;
+        --text-secondary: #94a3b8;
+        --border-color: rgba(148, 163, 184, 0.2);
+        --accent-primary: #818cf8;
+        --success-color: #10b981;
+        --warning-color: #f59e0b;
+        --error-color: #ef4444;
+        
+        /* 互換性のためのエイリアス */
+        --primary: var(--accent-primary);
+        --primary-dark: #6366f1;
+        --secondary: var(--text-secondary);
+        --accent: var(--accent-primary);
+        --success: var(--success-color);
+        --bg-main: var(--bg-primary);
+        --bg-card: var(--bg-surface);
+        --bg-light: #334155;
+        --text-primary: var(--text-primary);
+        --text-secondary: var(--text-secondary);
+        --text-muted: #64748b;
+        --border: var(--border-color);
+        --shadow: rgba(0, 0, 0, 0.3);
+      }
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-main);
+      color: var(--text-primary);
+      line-height: 1.6;
+      word-wrap: break-word !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      min-height: 100vh;
+    }
+    
+    /* ヘッダー */
+    .header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 20px var(--shadow);
+    }
+    
+    .header-content {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.25rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-weight: 500;
+      transition: all 0.3s ease;
+    }
+
+    .back-btn:hover {
+      background: var(--bg-light);
+      border-color: var(--accent-primary);
+      color: var(--accent-primary);
+      transform: translateX(-3px);
+    }
+    
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.25rem;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border: none;
+      transition: all 0.3s ease;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-primary), var(--primary-dark));
+      color: white;
+      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+    }
+    
+    .btn-secondary {
+      background: var(--bg-light);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+    }
+    
+    .btn-secondary:hover {
+      background: var(--bg-surface);
+      border-color: var(--accent-primary);
+    }
+    
+    /* メインコンテンツ */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    
+    /* レシピヘッダー */
+    .recipe-hero {
+      background: var(--bg-surface);
+      border-radius: 24px;
+      padding: clamp(2rem, 5vw, 3rem);
+      margin-bottom: 2rem;
+      box-shadow: 0 20px 45px var(--shadow);
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      text-align: center;
+      transition: box-shadow 0.3s ease;
+    }
+    
+    .recipe-hero:hover {
+      box-shadow: 0 25px 55px var(--shadow);
+    }
+
+    .recipe-hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(150deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.35) 45%, rgba(255, 255, 255, 0.08) 100%);
+      pointer-events: none;
+    }
+
+    .recipe-hero-inner {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: clamp(1.5rem, 4vw, 2.75rem);
+      width: 100%;
+    }
+
+    .recipe-hero-top {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: clamp(0.75rem, 2vw, 1.25rem);
+    }
+
+    .recipe-hero-media {
+      position: relative;
+      border-radius: 18px;
+      overflow: hidden;
+      display: none;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 22px 45px var(--shadow);
+      isolation: isolate;
+      width: min(560px, 100%);
+      margin: 0 auto;
+    }
+
+    .recipe-hero-info {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.9rem;
+    }
+
+    .recipe-hero-inner.has-media .recipe-hero-media {
+      display: block;
+    }
+
+    .recipe-hero-inner.has-media .recipe-hero-info {
+      align-items: center;
+    }
+
+    .recipe-hero-media {
+      position: relative;
+      border-radius: 18px;
+      overflow: hidden;
+      display: none;
+      background: rgba(255, 255, 255, 0.85);
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      box-shadow: 0 22px 45px rgba(148, 163, 184, 0.25);
+      isolation: isolate;
+    }
+
+    .recipe-hero-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.4s ease;
+    }
+
+    .recipe-hero-media:hover .recipe-hero-image {
+      transform: scale(1.03);
+    }
+
+    .recipe-hero-media__glow {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 15% 15%, rgba(255, 255, 255, 0.18), transparent 58%),
+                  radial-gradient(circle at 85% 85%, rgba(251, 191, 36, 0.2), transparent 55%);
+      mix-blend-mode: screen;
+      pointer-events: none;
+    }
+
+    .recipe-hero-media__overlay {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(15, 23, 42, 0.06) 0%, rgba(15, 23, 42, 0.15) 100%);
+      pointer-events: none;
+    }
+    
+    .recipe-title {
+      font-family: var(--font-serif);
+      font-size: clamp(1.8rem, 4vw, 3.2rem);
+      font-weight: 700;
+      color: #1f2937;
+      margin: 0;
+      line-height: 1.1;
+      word-wrap: break-word;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      hyphens: auto;
+      text-align: center;
+    }
+    
+    .recipe-meta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-top: 0.75rem;
+    }
+
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-secondary);
+      font-weight: 600;
+      background: var(--bg-light);
+      padding: 0.5rem 1rem;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 1px 3px var(--shadow);
+    }
+    
+    .meta-item i {
+      font-size: 1.1rem;
+    }
+
+    .recipe-tags {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.5rem;
+    }
+
+    .tag {
+      background: rgba(99, 102, 241, 0.12);
+      color: var(--accent-primary);
+      padding: 0.35rem 0.85rem;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+    
+    /* カード */
+    .card {
+      background: var(--bg-surface);
+      border-radius: 20px;
+      padding: 1.75rem;
+      margin-bottom: 1.5rem;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 20px 45px var(--shadow);
+      color: var(--text-primary);
+      transition: box-shadow 0.3s ease;
+    }
+    
+    .card:hover {
+      box-shadow: 0 25px 55px var(--shadow);
+    }
+
+    .ingredient-sections {
+      display: grid;
+      gap: 1.25rem;
+    }
+
+    .ingredient-section {
+      background: var(--bg-surface);
+      border-radius: 16px;
+      border: 1px solid var(--border-color);
+      padding: 1.25rem;
+      box-shadow: 0 1px 3px var(--shadow);
+    }
+
+    .ingredient-section--plain {
+      background: transparent;
+      border: none;
+      padding: 0;
+      box-shadow: none;
+    }
+
+    .ingredient-section-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0 0 0.85rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      color: var(--accent);
+      letter-spacing: 0.02em;
+    }
+
+    .ingredient-section-title::before {
+      content: '';
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #f97316 0%, #38bdf8 100%);
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+    }
+
+    .ingredient-section--plain .ingredient-section-title::before {
+      display: none;
+    }
+
+    .ingredient-section--plain .ingredient-section-title {
+      margin-bottom: 0.25rem;
+      display: none;
+    }
+
+    .ingredient-section-list {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .ingredient-column {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid var(--border);
+    }
+    
+    .card-header i {
+      font-size: 1.3rem;
+      color: var(--primary);
+    }
+    
+    .card-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    
+    /* 表示切替トグル */
+    .view-toggle {
+      display: none;
+      margin: 0 0 1rem 0;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .view-toggle .toggle-btn {
+      background: var(--bg-light);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      padding: 0.4rem 0.9rem;
+      border-radius: 999px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .view-toggle .toggle-btn.active {
+      background: linear-gradient(135deg, var(--accent-primary), var(--primary-dark));
+      color: #fff;
+      border-color: transparent;
+    }
+    
+    /* 両方表示用の2カラム（モバイルで縦積み） */
+    .dual-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 768px) {
+      .dual-grid { grid-template-columns: 1fr; }
+    }
+    
+    /* 材料セクション */
+    .ingredients-grid {
+      display: grid;
+      gap: 0.5rem;
+    }
+    
+    .ingredient-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 1rem;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      background: var(--bg-light);
+      border-radius: 10px;
+      transition: all 0.3s ease;
+      border: 1px solid var(--border-color);
+    }
+
+    .ingredient-item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 22px rgba(99, 102, 241, 0.12);
+    }
+    
+    .ingredient-name {
+      font-weight: 600;
+      color: var(--text-primary);
+      word-wrap: break-word;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      line-height: 1.4;
+    }
+
+    .ingredient-amount {
+      display: flex;
+      align-items: baseline;
+      gap: 0.35rem;
+      white-space: nowrap;
+      flex-shrink: 0;
+      color: var(--secondary);
+    }
+    
+    .ingredient-quantity {
+      font-weight: 600;
+      color: var(--primary);
+      font-size: 1rem;
+    }
+    
+    .ingredient-unit {
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+    }
+    
+    /* 手順セクション */
+    .steps-list {
+      display: grid;
+      gap: 1rem;
+    }
+    
+    .step-item {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 1rem;
+      align-items: start;
+    }
+    
+    .step-number {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(255, 148, 106, 0.92), rgba(126, 214, 255, 0.95));
+      color: #1f2937;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1rem;
+      flex-shrink: 0;
+      box-shadow: 0 4px 12px rgba(255, 177, 95, 0.3);
+    }
+
+    .step-content {
+      background: var(--bg-surface);
+      padding: 1rem;
+      border-radius: 12px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      word-wrap: break-word;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      hyphens: auto;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 6px 16px var(--shadow);
+    }
+    
+    /* メモセクション */
+    .notes-box {
+      background: var(--bg-light);
+      border-radius: 12px;
+      padding: 1.25rem;
+      color: var(--text-primary);
+      line-height: 1.6;
+      word-wrap: break-word;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      hyphens: auto;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 10px 22px var(--shadow);
+    }
+    
+    .notes-box strong {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+      font-size: 1.05rem;
+    }
+    
+    .notes-box strong i {
+      font-size: 1.1rem;
+    }
+    
+    /* 空状態 */
+    .empty-state {
+      text-align: center;
+      padding: 3rem;
+      color: var(--text-muted);
+    }
+    
+    .empty-state i {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+    
+    /* ローディング */
+    .loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 50vh;
+      gap: 1rem;
+    }
+    
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid rgba(203, 213, 225, 0.7);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* レスポンシブ */
+    @media (max-width: 768px) {
+      .container {
+        padding: 0.75rem;
+      }
+      
+      .recipe-hero {
+        padding: 1.65rem 1.35rem;
+        margin-bottom: 1rem;
+      }
+
+      .recipe-hero-media {
+        height: clamp(220px, 55vw, 360px);
+      }
+
+      .recipe-title {
+        font-size: 1.9rem;
+      }
+
+      .meta-item {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.85rem;
+      }
+
+      .meta-item i {
+        font-size: 0.95rem;
+      }
+
+      .card {
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        border-radius: 16px;
+      }
+      
+      .card-header {
+        margin-bottom: 1rem;
+        padding-bottom: 0.6rem;
+      }
+      
+      .card-header i {
+        font-size: 1.2rem;
+      }
+      
+      .card-title {
+        font-size: 1.15rem;
+      }
+      
+      .ingredients-grid {
+        gap: 0.4rem;
+      }
+      
+      .ingredient-item {
+        grid-template-columns: 1fr auto;
+        gap: 0.75rem;
+        padding: 0.6rem 0.85rem;
+        border-radius: 8px;
+      }
+      
+      .ingredient-name {
+        font-size: 0.95rem;
+        line-height: 1.3;
+      }
+      
+      .ingredient-quantity {
+        font-size: 0.95rem;
+      }
+      
+      .ingredient-unit {
+        font-size: 0.8rem;
+      }
+      
+      .steps-list {
+        gap: 0.75rem;
+      }
+      
+      .step-item {
+        grid-template-columns: auto 1fr;
+        gap: 0.75rem;
+      }
+      
+      .step-number {
+        width: 32px;
+        height: 32px;
+        font-size: 0.9rem;
+      }
+      
+      .step-content {
+        padding: 0.85rem;
+        font-size: 0.95rem;
+        line-height: 1.5;
+        border-radius: 8px;
+      }
+      
+      .header-content {
+        padding: 0.75rem 1rem;
+      }
+      
+      .header-actions {
+        width: 100%;
+        justify-content: space-between;
+        gap: 0.5rem;
+      }
+      
+      .btn {
+        padding: 0.6rem 1rem;
+        font-size: 0.85rem;
+      }
+      
+      .back-btn {
+        padding: 0.6rem 1rem;
+        font-size: 0.85rem;
+      }
+      
+      .notes-box {
+        padding: 1rem;
+        border-radius: 10px;
+        font-size: 0.95rem;
+        line-height: 1.5;
+      }
+      
+      .notes-box strong {
+        font-size: 1rem;
+        margin-bottom: 0.6rem;
+      }
+      
+      .notes-box strong i {
+        font-size: 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- ヘッダー -->
+  <header class="header">
+    <div class="header-content">
+      <a href="../index.html" class="back-btn">
+        <i class="fas fa-arrow-left"></i>
+        <span>戻る</span>
+      </a>
+      
+      <div class="header-actions">
+        <button class="btn btn-secondary" onclick="window.print()">
+          <i class="fas fa-print"></i>
+          <span>印刷</span>
+        </button>
+        <button class="btn btn-secondary" id="editBtn" style="display: none;">
+          <i class="fas fa-edit"></i>
+          <span>編集</span>
+        </button>
+        <button class="btn btn-primary" id="favoriteBtn" style="display: none;">
+          <i class="fas fa-heart"></i>
+          <span>お気に入り</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- メインコンテンツ -->
+  <main class="container">
+    <!-- 表示切替 -->
+    <div id="viewToggle" class="view-toggle">
+      <button class="toggle-btn active" data-mode="original">原語</button>
+      <button class="toggle-btn" data-mode="translated" id="toggleTranslated" style="display: none;">翻訳</button>
+      <button class="toggle-btn" data-mode="both" id="toggleBoth" style="display: none;">両方</button>
+    </div>
+    <!-- ローディング -->
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <p style="color: var(--text-secondary);">レシピを読み込んでいます...</p>
+    </div>
+
+    <!-- レシピコンテンツ -->
+    <div id="recipeContent" style="display: none;">
+      <!-- レシピヘッダー -->
+      <div class="recipe-hero">
+        <div class="recipe-hero-inner">
+          <div class="recipe-hero-top">
+            <h1 class="recipe-title" id="recipeTitle">レシピタイトル</h1>
+          </div>
+          <figure class="recipe-hero-media" id="recipeHeroMedia" style="display: none;">
+            <img id="recipeHeroImage" class="recipe-hero-image" src="" alt="レシピ画像" loading="lazy">
+            <span class="recipe-hero-media__glow"></span>
+            <span class="recipe-hero-media__overlay"></span>
+          </figure>
+          <div class="recipe-hero-info">
+            <div class="recipe-meta">
+              <div class="meta-item" id="servingsMeta" style="display: none;">
+                <i class="fas fa-users"></i>
+                <span id="servingsText">-</span>
+              </div>
+              <div class="meta-item" id="categoryMeta" style="display: none;">
+                <i class="fas fa-tag"></i>
+                <span id="categoryText">-</span>
+              </div>
+              <div class="meta-item" id="dateMeta" style="display: none;">
+                <i class="fas fa-calendar"></i>
+                <span id="dateText">-</span>
+              </div>
+            </div>
+            <div class="recipe-tags" id="recipeTags"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 説明 -->
+      <div class="card" id="descriptionCard" style="display: none;">
+        <div class="card-header">
+          <i class="fas fa-align-left"></i>
+          <h2 class="card-title">説明</h2>
+        </div>
+        <p id="recipeDescription" style="color: var(--text-secondary); line-height: 1.8;"></p>
+      </div>
+
+      <!-- 材料 -->
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-shopping-basket"></i>
+          <h2 class="card-title">材料</h2>
+        </div>
+        <div class="ingredients-grid" id="ingredientsList">
+          <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <p>材料がありません</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 作り方 -->
+      <div class="card">
+        <div class="card-header">
+          <i class="fas fa-list-ol"></i>
+          <h2 class="card-title">作り方</h2>
+        </div>
+        <div class="steps-list" id="stepsList">
+          <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <p>手順がありません</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- メモ・コツ -->
+      <div class="card" id="notesCard" style="display: none;">
+        <div class="card-header">
+          <i class="fas fa-lightbulb"></i>
+          <h2 class="card-title">メモ・コツ</h2>
+        </div>
+        <div class="notes-box" id="recipeNotes"></div>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../config.js"></script>
+  <script src="../config.local.js"></script>
+  <script>
+    // Supabase初期化
+      hasAppConfig: !!window.APP_CONFIG,
+      appConfigUrl: window.APP_CONFIG?.SUPABASE_URL,
+      appConfigKey: window.APP_CONFIG?.SUPABASE_ANON_KEY?.substring(0, 20) + '...'
+    });
+    
+    let sb;
+    if (window.APP_CONFIG) {
+      sb = supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_ANON_KEY);
+    } else {
+      console.error('❌ Supabase設定が見つかりません');
+    }
+
+    // URLからレシピIDを取得
+    const urlParams = new URLSearchParams(window.location.search);
+    const recipeIdParam = urlParams.get('id');
+    const normalizedRecipeId = normalizeRecordId(recipeIdParam);
+
+    const heroMediaEl = document.getElementById('recipeHeroMedia');
+    const heroImageEl = document.getElementById('recipeHeroImage');
+    const heroInnerEl = document.querySelector('.recipe-hero-inner');
+
+    // グローバル状態
+    let originalData = { recipe: null, ingredients: [], steps: [] };
+    let translationData = { recipe: null, ingredients: [], steps: [] };
+    let currentMode = 'original';
+
+    function normalizeRecordId(value) {
+      if (value === null || value === undefined) return null;
+      const trimmed = String(value).trim();
+      if (trimmed === '') return null;
+      return /^\d+$/.test(trimmed) ? parseInt(trimmed, 10) : trimmed;
+    }
+
+    function normalizeSectionTitleValue(value) {
+      if (value === null || value === undefined) return '';
+      const normalized = String(value).replace(/\s+/g, ' ').trim();
+      return normalized;
+    }
+
+    const SECTION_TAG_PREFIX = '__section__';
+
+    function encodeSectionTitleToBase64(title) {
+      return btoa(encodeURIComponent(title).replace(/%([0-9A-F]{2})/g, (_, p1) =>
+        String.fromCharCode(parseInt(p1, 16))
+      ));
+    }
+
+    function decodeSectionTitleFromBase64(payload) {
+      const binary = atob(payload)
+        .split('')
+        .map(ch => '%' + ('00' + ch.charCodeAt(0).toString(16)).slice(-2))
+        .join('');
+      return decodeURIComponent(binary);
+    }
+
+    function decodeSectionTag(tag) {
+      if (!tag || typeof tag !== 'string' || !tag.startsWith(SECTION_TAG_PREFIX)) return null;
+      const [prefix, payload] = tag.split(':');
+      if (!payload) return null;
+      const index = parseInt(prefix.replace(SECTION_TAG_PREFIX, ''), 10);
+      if (Number.isNaN(index)) return null;
+      try {
+        const title = decodeSectionTitleFromBase64(payload);
+        return { index, title };
+      } catch (error) {
+        console.warn('セクションタグのデコードに失敗しました:', tag, error);
+        return null;
+      }
+    }
+
+    function extractSectionAssignmentsFromTags(tags = []) {
+      const assignments = new Map();
+      const visibleTags = [];
+      if (Array.isArray(tags)) {
+        tags.forEach(tag => {
+          const decoded = decodeSectionTag(tag);
+          if (decoded) {
+            assignments.set(decoded.index, decoded.title);
+          } else if (tag && typeof tag === 'string') {
+            visibleTags.push(tag);
+          }
+        });
+      }
+      return { assignments, visibleTags: Array.from(new Set(visibleTags)) };
+    }
+
+    function decorateIngredientsWithSections(ingredients = [], assignments = new Map()) {
+      if (!Array.isArray(ingredients) || ingredients.length === 0) return [];
+      return ingredients.map((ing, index) => {
+        const baseSection = normalizeSectionTitleValue(ing?.sectionTitle || ing?.section_title || '');
+        const assignedSection = assignments.has(index) ? normalizeSectionTitleValue(assignments.get(index)) : '';
+        const finalSection = baseSection || assignedSection;
+        return { ...ing, sectionTitle: finalSection };
+      });
+    }
+
+    function resetDescription() {
+      const card = document.getElementById('descriptionCard');
+      const desc = document.getElementById('recipeDescription');
+      if (card) card.style.display = 'none';
+      if (desc) desc.innerHTML = '';
+    }
+
+    function resetNotes() {
+      const notesCard = document.getElementById('notesCard');
+      const notes = document.getElementById('recipeNotes');
+      if (notesCard) notesCard.style.display = 'none';
+      if (notes) notes.innerHTML = '';
+    }
+
+    function createIngredientItemMarkup(ingredient) {
+      const name = ingredient?.item || ingredient?.name || '-';
+      const quantity = ingredient?.quantity !== null && ingredient?.quantity !== undefined
+        ? String(ingredient.quantity).trim()
+        : '';
+      const unit = ingredient?.unit !== null && ingredient?.unit !== undefined
+        ? String(ingredient.unit).trim()
+        : '';
+      const hasAmount = quantity || unit;
+
+      return `
+        <div class="ingredient-item">
+          <span class="ingredient-name">${name || '-'}</span>
+          <div class="ingredient-amount">
+            ${hasAmount ? `
+              ${quantity ? `<span class="ingredient-quantity">${quantity}</span>` : ''}
+              ${unit ? `<span class="ingredient-unit">${unit}</span>` : ''}
+            ` : '<span class="ingredient-quantity">-</span>'}
+          </div>
+        </div>
+      `;
+    }
+
+    function groupIngredientsBySection(ingredients = []) {
+      if (!Array.isArray(ingredients) || ingredients.length === 0) return [];
+
+      const sections = [];
+      const sectionMap = new Map();
+      const defaultKey = '__default__';
+
+      ingredients.forEach((raw) => {
+        if (!raw) return;
+        const title = normalizeSectionTitleValue(
+          raw.sectionTitle ?? raw.section_title ?? raw.section ?? raw.group ?? ''
+        );
+        const key = title || defaultKey;
+
+        if (!sectionMap.has(key)) {
+          sectionMap.set(key, {
+            key,
+            title,
+            items: []
+          });
+          sections.push(sectionMap.get(key));
+        }
+
+        sectionMap.get(key).items.push({
+          item: raw.item || raw.name || '',
+          quantity: raw.quantity,
+          unit: raw.unit,
+          sectionTitle: title
+        });
+      });
+
+      return sections;
+    }
+
+    function createIngredientSectionsMarkup(sections, { showSectionContainer = true, showEmptyState = true } = {}) {
+      if (!sections || sections.length === 0) {
+        return showEmptyState
+          ? `
+            <div class="empty-state">
+              <i class="fas fa-inbox"></i>
+              <p>材料がありません</p>
+            </div>
+          `
+          : '';
+      }
+
+      const populatedSections = sections.filter(section => section.items && section.items.length > 0);
+
+      if (populatedSections.length === 0) {
+        return showEmptyState
+          ? `
+            <div class="empty-state">
+              <i class="fas fa-inbox"></i>
+              <p>材料がありません</p>
+            </div>
+          `
+          : '';
+      }
+
+      const sectionMarkup = populatedSections.map(section => {
+        const hasTitle = Boolean(section.title);
+        const itemsMarkup = section.items.map(item => createIngredientItemMarkup(item)).join('');
+        const sectionClasses = ['ingredient-section'];
+        if (!hasTitle) sectionClasses.push('ingredient-section--plain');
+
+        return `
+          <section class="${sectionClasses.join(' ')}">
+            ${hasTitle ? `<h3 class="ingredient-section-title">${section.title}</h3>` : ''}
+            <div class="ingredient-section-list">
+              ${itemsMarkup}
+            </div>
+          </section>
+        `;
+      }).join('');
+
+      if (showSectionContainer) {
+        return `<div class="ingredient-sections">${sectionMarkup}</div>`;
+      }
+      return sectionMarkup;
+    }
+
+    function renderIngredients(container, ingredients) {
+      if (!container) return;
+      const sections = groupIngredientsBySection(ingredients);
+      container.innerHTML = createIngredientSectionsMarkup(sections);
+    }
+
+    function renderEmptyIngredients(container, message = '材料がありません') {
+      if (!container) return;
+      container.innerHTML = `
+        <div class="empty-state">
+          <i class="fas fa-inbox"></i>
+          <p>${message}</p>
+        </div>
+      `;
+    }
+
+    function renderIngredientColumns(ingredients) {
+      const sections = groupIngredientsBySection(ingredients);
+      return createIngredientSectionsMarkup(sections, { showSectionContainer: true });
+    }
+
+    // 進捗表示（将来の拡張用）
+    function updateInProgressState() {
+      // 現状はチェックマーク表示等のUIが未定義のためプレースホルダーとする。
+      // 将来的に詳細ページで進捗トラッキングを行う場合はここで状態更新を実装する。
+      return;
+    }
+
+    function updateHeroMedia(imageUrl, titleText) {
+      if (!heroMediaEl || !heroImageEl) return;
+
+      if (imageUrl) {
+        heroImageEl.src = imageUrl;
+        heroImageEl.alt = titleText ? `${titleText}の画像` : 'レシピ画像';
+        heroMediaEl.style.display = 'block';
+        if (heroInnerEl) heroInnerEl.classList.add('has-media');
+      } else {
+        heroImageEl.removeAttribute('src');
+        heroMediaEl.style.display = 'none';
+        if (heroInnerEl) heroInnerEl.classList.remove('has-media');
+      }
+    }
+
+    if (heroImageEl) {
+      heroImageEl.addEventListener('error', () => {
+        heroImageEl.removeAttribute('src');
+        if (heroMediaEl) {
+          heroMediaEl.style.display = 'none';
+        }
+        if (heroInnerEl) heroInnerEl.classList.remove('has-media');
+      });
+    }
+
+    // レシピデータを読み込む
+    async function loadRecipe() {
+      if (!normalizedRecipeId) {
+        alert('レシピIDが指定されていません');
+        window.location.href = '../index.html';
+        return;
+      }
+
+      try {
+
+        // レシピ本体を取得
+        const { data: recipe, error: recipeError } = await sb
+          .from('recipes')
+          .select('*')
+          .eq('id', normalizedRecipeId)
+          .single();
+
+        if (recipeError) {
+          console.error('レシピ取得エラー詳細:', {
+            error: recipeError,
+            message: recipeError.message,
+            details: recipeError.details,
+            hint: recipeError.hint,
+            code: recipeError.code,
+            recipeId: normalizedRecipeId
+          });
+          throw recipeError;
+        }
+
+        // 材料と手順はJSONB形式でrecipesテーブルに保存されている
+        const ingredients = recipe.ingredients || [];
+        const steps = recipe.steps || [];
+
+        // 保存
+        originalData = { recipe, ingredients, steps };
+
+        // 翻訳データ（最新1件）を取得
+        const { data: translations, error: translationError } = await sb
+          .from('translation_recipes')
+          .select('*')
+          .eq('original_recipe_id', normalizedRecipeId)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+          translations, 
+          translationError,
+          count: translations?.length || 0 
+        });
+
+        if (translations && translations.length > 0) {
+          const tr = translations[0];
+          // 翻訳データはJSONB形式でtranslation_recipesテーブルに保存されている
+          const translatedIngredients = tr.translated_ingredients || [];
+          const translatedSteps = tr.translated_steps || [];
+          translationData = { recipe: tr, ingredients: translatedIngredients, steps: translatedSteps };
+        } else {
+          translationData = { recipe: null, ingredients: [], steps: [] };
+        }
+
+        // トグルを初期化
+        initToggle();
+
+        // レシピを表示（初期: 原語）
+        displayRecipe(recipe, ingredients || [], steps || []);
+
+        // ローディングを非表示
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('recipeContent').style.display = 'block';
+
+      } catch (error) {
+        console.error('レシピ読み込みエラー:', error);
+        alert('レシピの読み込みに失敗しました: ' + error.message);
+        window.location.href = '../index.html';
+      }
+    }
+
+    // レシピを表示
+    function displayRecipe(recipe, ingredients, steps) {
+      document.body.dataset.recipeId = recipe?.id || recipeIdParam || '';
+      if (!recipe) return;
+
+      resetDescription();
+      resetNotes();
+      updateHeroMedia(recipe.image_url || recipe.thumbnail_url || null, recipe.title);
+
+      const { assignments: sectionAssignments, visibleTags } = extractSectionAssignmentsFromTags(recipe.tags || []);
+
+      // タイトル
+      document.getElementById('recipeTitle').textContent = recipe.title || '無題のレシピ';
+      document.title = `${recipe.title || '無題のレシピ'} — Recipe Box`;
+
+      // メタ情報
+      if (recipe.servings) {
+        document.getElementById('servingsMeta').style.display = 'flex';
+        document.getElementById('servingsText').textContent = recipe.servings;
+      }
+
+      if (recipe.category) {
+        document.getElementById('categoryMeta').style.display = 'flex';
+        document.getElementById('categoryText').textContent = recipe.category;
+      }
+
+      if (recipe.created_at) {
+        document.getElementById('dateMeta').style.display = 'flex';
+        const date = new Date(recipe.created_at);
+        document.getElementById('dateText').textContent = date.toLocaleDateString('ja-JP');
+      }
+
+      // タグ
+      const tagsContainer = document.getElementById('recipeTags');
+      if (tagsContainer) {
+        tagsContainer.innerHTML = visibleTags.length > 0
+          ? visibleTags.map(tag => `<span class="tag">${tag}</span>`).join('')
+          : '';
+      }
+
+      // 説明
+      if (recipe.description) {
+        document.getElementById('descriptionCard').style.display = 'block';
+        document.getElementById('recipeDescription').textContent = recipe.description;
+      }
+
+      // 材料
+      const ingredientsList = document.getElementById('ingredientsList');
+      if (ingredients && ingredients.length > 0) {
+        const decorated = decorateIngredientsWithSections(ingredients, sectionAssignments);
+        renderIngredients(ingredientsList, decorated);
+      } else {
+        renderEmptyIngredients(ingredientsList);
+      }
+
+      // 手順
+      const stepsList = document.getElementById('stepsList');
+      if (steps && steps.length > 0) {
+        stepsList.innerHTML = steps.map((step, index) => `
+          <div class="step-item">
+            <div class="step-number">${index + 1}</div>
+            <div class="step-content">${step.step || step.text || step.instruction || '-'}</div>
+          </div>
+        `).join('');
+      } else {
+        stepsList.innerHTML = `
+          <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <p>手順がありません</p>
+          </div>
+        `;
+      }
+
+      // メモ
+      if (recipe.notes) {
+        document.getElementById('notesCard').style.display = 'block';
+        document.getElementById('recipeNotes').innerHTML = `<strong><i class="fas fa-lightbulb"></i> コツ・メモ</strong>${recipe.notes}`;
+      }
+
+      // 編集ボタン
+      document.getElementById('editBtn').style.display = 'inline-flex';
+      document.getElementById('editBtn').onclick = () => {
+        const targetId = recipeIdParam || recipe.id;
+        if (targetId) {
+          window.location.href = `recipe_edit.html?id=${encodeURIComponent(targetId)}`;
+        }
+      };
+
+      // お気に入りボタン
+      document.getElementById('favoriteBtn').style.display = 'inline-flex';
+      updateInProgressState();
+    }
+
+    // 表示切替の初期化
+    function initToggle() {
+      const viewToggle = document.getElementById('viewToggle');
+      if (!viewToggle) return;
+      viewToggle.style.display = 'flex';
+
+      const hasTranslation = !!translationData.recipe;
+      
+      const toggleTranslated = document.getElementById('toggleTranslated');
+      const toggleBoth = document.getElementById('toggleBoth');
+      if (hasTranslation) {
+        if (toggleTranslated) toggleTranslated.style.display = 'inline-block';
+        if (toggleBoth) toggleBoth.style.display = 'inline-block';
+      } else {
+      }
+
+      viewToggle.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.onclick = () => setMode(btn.dataset.mode);
+      });
+
+      // 保存済みのモードがあれば切り替える
+      const lastMode = localStorage.getItem('recipeDetailViewMode');
+      if (lastMode && (lastMode === 'original' || (lastMode === 'translated' && hasTranslation) || (lastMode === 'both' && hasTranslation))) {
+        setMode(lastMode);
+      }
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      localStorage.setItem('recipeDetailViewMode', mode);
+      document.querySelectorAll('.view-toggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+
+      if (mode === 'original') {
+        displayRecipe(originalData.recipe, originalData.ingredients, originalData.steps);
+        return;
+      }
+      if (mode === 'translated' && translationData.recipe) {
+        renderTranslated();
+        return;
+      }
+      if (mode === 'both' && translationData.recipe) {
+        renderBoth();
+        return;
+      }
+    }
+
+    function renderTranslated() {
+      const tr = translationData.recipe;
+      resetDescription();
+      resetNotes();
+
+      const translatedImage = tr?.image_url || originalData.recipe?.image_url || null;
+      updateHeroMedia(translatedImage, tr?.translated_title || originalData.recipe?.title);
+      const { assignments: sectionAssignments, visibleTags } = extractSectionAssignmentsFromTags(tr?.tags || []);
+
+      // タイトル・説明
+      document.getElementById('recipeTitle').textContent = tr.translated_title || originalData.recipe.title || '無題のレシピ';
+      document.title = `${tr.translated_title || originalData.recipe.title} — Recipe Box`;
+      if (tr.translated_description) {
+        document.getElementById('descriptionCard').style.display = 'block';
+        document.getElementById('recipeDescription').textContent = tr.translated_description;
+      }
+
+      const tagsContainer = document.getElementById('recipeTags');
+      if (tagsContainer) {
+        tagsContainer.innerHTML = visibleTags.length > 0
+          ? visibleTags.map(tag => `<span class="tag">${tag}</span>`).join('')
+          : '';
+      }
+
+      // 材料
+      const ingredientsList = document.getElementById('ingredientsList');
+      const translatedIngredients = (translationData.ingredients || []).map(ing => ({
+        item: ing.item || '',
+        quantity: ing.quantity || '',
+        unit: ing.unit || '',
+        sectionTitle: ing.sectionTitle || ''
+      }));
+
+      if (translatedIngredients.length > 0) {
+        const decorated = decorateIngredientsWithSections(translatedIngredients, sectionAssignments);
+        renderIngredients(ingredientsList, decorated);
+      } else {
+        renderEmptyIngredients(ingredientsList);
+      }
+
+      // 手順
+      const stepsList = document.getElementById('stepsList');
+      const translatedSteps = translationData.steps || [];
+      if (translatedSteps.length > 0) {
+        stepsList.innerHTML = translatedSteps.map((step, index) => `
+          <div class="step-item">
+            <div class="step-number">${index + 1}</div>
+            <div class="step-content">${step.step || step.text || step.instruction || '-'}</div>
+          </div>
+        `).join('');
+      } else {
+        stepsList.innerHTML = `
+          <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <p>手順がありません</p>
+          </div>
+        `;
+      }
+      updateInProgressState();
+    }
+
+    function renderBoth() {
+      resetDescription();
+      resetNotes();
+      updateHeroMedia(
+        translationData.recipe?.image_url || originalData.recipe?.image_url || null,
+        originalData.recipe?.title
+      );
+      const { assignments: originalAssignments, visibleTags: originalVisibleTags } = extractSectionAssignmentsFromTags(originalData.recipe?.tags || []);
+      const { assignments: translatedAssignments, visibleTags: translatedVisibleTags } = extractSectionAssignmentsFromTags(translationData.recipe?.tags || []);
+      const mergedTags = Array.from(new Set([...originalVisibleTags, ...translatedVisibleTags]));
+      const tagsContainer = document.getElementById('recipeTags');
+      if (tagsContainer) {
+        tagsContainer.innerHTML = mergedTags.length > 0
+          ? mergedTags.map(tag => `<span class="tag">${tag}</span>`).join('')
+          : '';
+      }
+      // 材料（2カラム）
+      const ingredientsList = document.getElementById('ingredientsList');
+      const originalDecorated = decorateIngredientsWithSections(originalData.ingredients || [], originalAssignments);
+      const originalSectionsMarkup = renderIngredientColumns(originalDecorated);
+      const translatedNormalized = (translationData.ingredients || []).map(ing => ({
+        item: ing.item || ing.translated_item || ing.original_item || '',
+        quantity: ing.quantity || '',
+        unit: ing.unit || '',
+        sectionTitle: ing.sectionTitle || ing.section_title || ''
+      }));
+      const translatedDecorated = decorateIngredientsWithSections(translatedNormalized, translatedAssignments);
+      const translatedMarkup = renderIngredientColumns(translatedDecorated);
+
+      ingredientsList.innerHTML = `
+        <div class="dual-grid">
+          <div class="ingredient-column">
+            <div class="card-header" style="margin:0 0 0.75rem 0; padding:0 0 0.5rem 0; border-bottom: 1px solid var(--border);">
+              <i class="fas fa-shopping-basket"></i><h2 class="card-title">材料（原語）</h2>
+            </div>
+            ${originalSectionsMarkup || '<div class="empty-state"><i class="fas fa-inbox"></i><p>材料がありません</p></div>'}
+          </div>
+          <div class="ingredient-column">
+            <div class="card-header" style="margin:0 0 0.75rem 0; padding:0 0 0.5rem 0; border-bottom: 1px solid var(--border);">
+              <i class="fas fa-language"></i><h2 class="card-title">材料（翻訳）</h2>
+            </div>
+            ${translatedMarkup || '<div class="empty-state"><i class="fas fa-inbox"></i><p>材料がありません</p></div>'}
+          </div>
+        </div>`;
+
+      // 手順（2カラム）
+      const stepsList = document.getElementById('stepsList');
+      const leftSteps = (originalData.steps || []).map((step, index) => `
+        <div class=\"step-item\">
+          <div class=\"step-number\">${index + 1}</div>
+          <div class=\"step-content\">${step.step || step.instruction || step.text || '-'}</div>
+        </div>
+      `).join('');
+      const rightSteps = (translationData.steps || []).map((step, index) => `
+        <div class=\"step-item\">
+          <div class=\"step-number\">${index + 1}</div>
+          <div class=\"step-content\">${step.step || step.translated_instruction || step.original_instruction || '-'}</div>
+        </div>
+      `).join('');
+      stepsList.innerHTML = `
+        <div class="dual-grid">
+          <div>
+            <div class="card-header" style="margin:0 0 0.75rem 0; padding:0 0 0.5rem 0; border-bottom: 1px solid var(--border);">
+              <i class="fas fa-list-ol"></i><h2 class="card-title">作り方（原語）</h2>
+            </div>
+            ${leftSteps || '<div class="empty-state"><i class="fas fa-inbox"></i><p>手順がありません</p></div>'}
+          </div>
+          <div>
+            <div class="card-header" style="margin:0 0 0.75rem 0; padding:0 0 0.5rem 0; border-bottom: 1px solid var(--border);">
+              <i class="fas fa-language"></i><h2 class="card-title">作り方（翻訳）</h2>
+            </div>
+            ${rightSteps || '<div class="empty-state"><i class="fas fa-inbox"></i><p>手順がありません</p></div>'}
+          </div>
+        </div>`;
+
+      // タイトル・説明は原語のままにしておく（見出しで区別）
+      document.getElementById('recipeTitle').textContent = originalData.recipe.title || '無題のレシピ';
+      if (originalData.recipe.description || translationData.recipe?.translated_description) {
+        const desc = [];
+        if (originalData.recipe.description) desc.push(`<div><strong>原語</strong><br>${originalData.recipe.description}</div>`);
+        if (translationData.recipe?.translated_description) desc.push(`<div style=\"margin-top:.5rem\"><strong>翻訳</strong><br>${translationData.recipe.translated_description}</div>`);
+        document.getElementById('descriptionCard').style.display = 'block';
+        document.getElementById('recipeDescription').innerHTML = desc.join('');
+      }
+      updateInProgressState();
+    }
+
+    // ページ読み込み時に実行
+    loadRecipe();
+  </script>
+</body>
+</html>

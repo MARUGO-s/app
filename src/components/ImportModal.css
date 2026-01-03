@@ -1,0 +1,34 @@
+.import-modal-card {
+    width: 90%;
+    max-width: 500px;
+    padding: 1.5rem;
+}
+
+.import-url-input {
+    width: 100%;
+    padding: 0.8rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 1rem;
+    margin: 1rem 0;
+    box-sizing: border-box;
+}
+
+.import-url-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(239, 83, 80, 0.2);
+}
+
+.error-text {
+    color: var(--color-danger);
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 1rem;
+}

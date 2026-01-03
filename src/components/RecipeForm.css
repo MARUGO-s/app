@@ -182,3 +182,36 @@ h3 {
     width: 20px;
     flex-shrink: 0;
 }
+
+/* Force black text for inputs and labels in RecipeForm */
+.recipe-form input,
+.recipe-form textarea,
+.recipe-form select,
+.recipe-form label,
+.recipe-form p,
+.recipe-form span,
+.recipe-form div {
+    color: #000 !important;
+}
+
+/* Exceptions */
+.recipe-form .step-count {
+    color: #666 !important;
+}
+
+.recipe-form .remove-btn {
+    color: #999 !important;
+}
+
+.recipe-form .remove-btn:hover {
+    color: #ff4d4f !important;
+}
+
+.recipe-form h3 {
+    color: hsl(var(--color-primary)) !important;
+}
+
+.recipe-form ::placeholder {
+    color: #999 !important;
+    opacity: 1;
+}

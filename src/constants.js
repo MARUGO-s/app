@@ -6,3 +6,12 @@ export const STORE_LIST = [
     "MITAN", "焼肉マルゴ", "SOBA-JU", "Bar Violet",
     "X&C", "トラットリア ブリッコラ"
 ];
+
+export const SUPPORTED_LANGUAGES = [
+    { code: 'EN-US', label: '🇺🇸 English', name: 'English' },
+    { code: 'JA', label: '🇯🇵 Japanese', name: 'Japanese' },
+    { code: 'FR', label: '🇫🇷 French', name: 'French' },
+    { code: 'IT', label: '🇮🇹 Italian', name: 'Italian' },
+    { code: 'ES', label: '🇪🇸 Spanish', name: 'Spanish' },
+    { code: 'ZH', label: '🇨🇳 Chinese', name: 'Chinese' },
+];

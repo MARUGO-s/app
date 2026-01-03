@@ -1,17 +1,94 @@
 import React from 'react';
 import { Button } from './Button';
 import { Card } from './Card';
+import { translationService } from '../services/translationService';
+import { SUPPORTED_LANGUAGES } from '../constants';
 import './RecipeDetail.css';
 
-export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, isDeleted }) => {
+export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, isDeleted, onView }) => {
     const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
     const [showHardDeleteConfirm, setShowHardDeleteConfirm] = React.useState(false);
+    const [completedSteps, setCompletedSteps] = React.useState(new Set());
 
-    if (!recipe) return null;
-    // Mock ingredients/steps if not present in simple mock data
-    const ingredients = recipe.ingredients || []; // Empty fallback or Japanese sample if needed
+    // Translation State
+    const [translationCache, setTranslationCache] = React.useState({}); // { [langCode]: recipeObj }
+    const [currentLang, setCurrentLang] = React.useState('ORIGINAL'); // 'ORIGINAL' is source text
+    const [isTranslating, setIsTranslating] = React.useState(false);
 
-    const steps = recipe.steps || [];
+    // ISO duration formatter (PT10M -> 10分)
+    const formatDuration = (isoString) => {
+        if (!isoString) return '';
+        if (!isoString.startsWith('P')) return isoString; // Not ISO format
+
+        try {
+            const match = isoString.match(/PT(\d+H)?(\d+M)?/);
+            if (!match) return isoString;
+
+            const hours = match[1] ? parseInt(match[1]) : 0;
+            const minutes = match[2] ? parseInt(match[2]) : 0;
+
+            if (hours > 0) return `${hours}時間${minutes > 0 ? ` ${minutes}分` : ''}`;
+            return `${minutes}分`;
+        } catch (e) {
+            return isoString;
+        }
+    };
+
+    // Determines which data to show
+    const displayRecipe = currentLang === 'ORIGINAL' ? recipe : (translationCache[currentLang] || recipe);
+
+
+    const toggleStep = (index) => {
+        const next = new Set(completedSteps);
+        if (next.has(index)) {
+            next.delete(index);
+        } else {
+            next.add(index);
+        }
+        setCompletedSteps(next);
+    };
+
+    const handleLanguageChange = async (e) => {
+        const targetLang = e.target.value;
+
+        if (targetLang === 'ORIGINAL') {
+            setCurrentLang('ORIGINAL');
+            return;
+        }
+
+        // Check cache first
+        if (translationCache[targetLang]) {
+            setCurrentLang(targetLang);
+            return;
+        }
+
+        try {
+            setIsTranslating(true);
+            const translated = await translationService.translateRecipe(recipe, targetLang);
+            setTranslationCache(prev => ({ ...prev, [targetLang]: translated }));
+            setCurrentLang(targetLang);
+        } catch (error) {
+            alert("翻訳に失敗しました。");
+            console.error(error);
+            // Revert to JA if failed
+            setCurrentLang('ORIGINAL');
+        } finally {
+            setIsTranslating(false);
+        }
+    };
+
+    React.useEffect(() => {
+        if (onView && recipe && !isDeleted) {
+            onView(recipe.id);
+        }
+        // Reset translation on recipe change
+        setTranslationCache({});
+        // Reset translation on recipe change
+        setTranslationCache({});
+        setCurrentLang('ORIGINAL');
+        setCompletedSteps(new Set());
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [recipe.id]);
 
     const handleDeleteClick = () => {
         setShowDeleteConfirm(true);
@@ -38,6 +115,12 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
     const cancelHardDelete = () => {
         setShowHardDeleteConfirm(false);
     };
+
+    if (!recipe) return null;
+
+    // Safety check for array rendering
+    const ingredients = displayRecipe.ingredients || [];
+    const steps = displayRecipe.steps || [];
 
     return (
         <div className="recipe-detail fade-in">
@@ -85,6 +168,20 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                 <Button variant="ghost" onClick={onBack} size="sm">← 戻る</Button>
                 {!isDeleted && (
                     <div className="recipe-detail__actions">
+                        <select
+                            className="language-select"
+                            value={currentLang}
+                            onChange={handleLanguageChange}
+                            disabled={isTranslating}
+                            style={{ padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', marginRight: '0.5rem', cursor: 'pointer' }}
+                        >
+                            <option value="ORIGINAL">📄 Original (原文)</option>
+                            {SUPPORTED_LANGUAGES.map(lang => (
+                                <option key={lang.code} value={lang.code}>
+                                    {lang.label}
+                                </option>
+                            ))}
+                        </select>
                         <Button variant="secondary" size="sm" onClick={() => window.print()}>🖨️ 印刷 / PDF</Button>
                         <Button variant="secondary" size="sm" onClick={onEdit}>編集</Button>
                         <Button variant="danger" size="sm" onClick={handleDeleteClick} style={{ marginLeft: '0.5rem' }}>削除</Button>
@@ -100,29 +197,46 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
             </div>
 
             <div className="recipe-detail__hero">
-                {recipe.image ? (
-                    <img src={recipe.image} alt={recipe.title} className="recipe-detail__image" />
+                {displayRecipe.image ? (
+                    <img src={displayRecipe.image} alt={displayRecipe.title} className="recipe-detail__image" />
                 ) : (
-                    <div className="recipe-detail__image-placeholder" style={{ height: '300px', backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
+                    <div className="recipe-detail__image-placeholder" style={{ height: '100%', backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
                         画像なし
                     </div>
                 )}
-                <div className="recipe-detail__title-card glass-panel">
-                    <h1>{recipe.title}</h1>
-                    <p className="recipe-detail__desc">{recipe.description}</p>
-                    <div className="recipe-detail__meta">
+            </div>
+
+            <div className="recipe-detail__title-card glass-panel">
+                <h1>{displayRecipe.title}</h1>
+                <p className="recipe-detail__desc">{displayRecipe.description}</p>
+                <div className="recipe-detail__meta">
+                    {displayRecipe.course && (
+                        <div className="meta-item">
+                            <span className="meta-label">コース</span>
+                            <span className="meta-value">{displayRecipe.course}</span>
+                        </div>
+                    )}
+                    {displayRecipe.category && (
+                        <div className="meta-item">
+                            <span className="meta-label">カテゴリー</span>
+                            <span className="meta-value">{displayRecipe.category}</span>
+                        </div>
+                    )}
+                    {displayRecipe.prepTime && (
                         <div className="meta-item">
                             <span className="meta-label">準備時間</span>
-                            <span className="meta-value">{recipe.prepTime}</span>
+                            <span className="meta-value">{formatDuration(displayRecipe.prepTime)}</span>
                         </div>
+                    )}
+                    {displayRecipe.cookTime && (
                         <div className="meta-item">
                             <span className="meta-label">調理時間</span>
-                            <span className="meta-value">{recipe.cookTime}</span>
+                            <span className="meta-value">{formatDuration(displayRecipe.cookTime)}</span>
                         </div>
-                        <div className="meta-item">
-                            <span className="meta-label">分量</span>
-                            <span className="meta-value">{recipe.servings}人分</span>
-                        </div>
+                    )}
+                    <div className="meta-item">
+                        <span className="meta-label">分量</span>
+                        <span className="meta-value">{displayRecipe.servings}人分</span>
                     </div>
                 </div>
             </div>
@@ -132,37 +246,121 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                     <section className="detail-section">
                         <h2>材料</h2>
                         <Card className="ingredients-card">
-                            <table className="ingredients-table">
-                                <thead>
-                                    <tr>
-                                        <th style={{ width: '50%' }}>材料名</th>
-                                        <th style={{ width: '25%', textAlign: 'right', paddingRight: '0.5rem' }}>分量</th>
-                                        <th style={{ width: '25%', paddingLeft: '0.5rem' }}>単位</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {ingredients.map((ing, i) => (
-                                        <tr key={i} className="ingredient-row">
-                                            <td>
-                                                <div className="ingredient-name">
-                                                    <input type="checkbox" id={`ing-${i}`} />
-                                                    <label htmlFor={`ing-${i}`}>{typeof ing === 'string' ? ing : ing.name}</label>
+                            {displayRecipe.type === 'bread' ? (
+                                <div className="bread-detail-view">
+                                    {/* Helper for total calculation */}
+                                    {(() => {
+                                        const flours = displayRecipe.flours || [];
+                                        const others = displayRecipe.breadIngredients || [];
+                                        const totalFlour = flours.reduce((sum, f) => sum + (parseFloat(f.quantity) || 0), 0);
+                                        const calcPercent = (q) => totalFlour ? ((parseFloat(q) || 0) / totalFlour * 100).toFixed(1) : '0.0';
+
+                                        return (
+                                            <>
+                                                <div className="bread-section" style={{ marginBottom: '2rem' }}>
+                                                    <h3 style={{
+                                                        fontSize: '1.2rem',
+                                                        borderLeft: '4px solid var(--color-primary)',
+                                                        paddingLeft: '10px',
+                                                        marginBottom: '1rem',
+                                                        marginTop: 0,
+                                                        display: 'flex',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center',
+                                                        color: 'var(--color-text-main)'
+                                                    }}>
+                                                        <span>粉グループ</span>
+                                                        <span style={{ fontSize: '0.9rem', background: 'var(--color-primary)', color: 'white', padding: '4px 12px', borderRadius: '20px', fontWeight: 'bold' }}>Total: {totalFlour}g (100%)</span>
+                                                    </h3>
+                                                    <table className="ingredients-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>材料名</th>
+                                                                <th style={{ textAlign: 'right' }}>分量 (g)</th>
+                                                                <th style={{ textAlign: 'center', width: '60px' }}>%</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {flours.map((item, i) => (
+                                                                <tr key={`f-${i}`}>
+                                                                    <td>{item.name}</td>
+                                                                    <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{item.quantity}</td>
+                                                                    <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-primary)' }}>{calcPercent(item.quantity)}%</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
                                                 </div>
-                                            </td>
-                                            <td style={{ textAlign: 'right', paddingRight: '0.5rem' }}>{ing.quantity}</td>
-                                            <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
+
+                                                <div className="bread-section" style={{ marginTop: '3rem' }}>
+                                                    <h3 style={{
+                                                        fontSize: '1.2rem',
+                                                        borderLeft: '4px solid #f39c12',
+                                                        paddingLeft: '10px',
+                                                        marginBottom: '1rem',
+                                                        color: 'var(--color-text-main)'
+                                                    }}>
+                                                        その他材料
+                                                    </h3>
+                                                    <table className="ingredients-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>材料名</th>
+                                                                <th style={{ textAlign: 'right' }}>分量 (g)</th>
+                                                                <th style={{ textAlign: 'center', width: '60px' }}>%</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {others.map((item, i) => (
+                                                                <tr key={`o-${i}`}>
+                                                                    <td>{item.name}</td>
+                                                                    <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{item.quantity}</td>
+                                                                    <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-text-muted)' }}>{calcPercent(item.quantity)}%</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+                            ) : (
+                                <table className="ingredients-table">
+                                    <thead>
+                                        <tr>
+                                            <th style={{ width: '50%' }}>材料名</th>
+                                            <th style={{ width: '25%', textAlign: 'right', paddingRight: '0.5rem' }}>分量</th>
+                                            <th style={{ width: '25%', paddingLeft: '0.5rem' }}>単位</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {ingredients.map((ing, i) => (
+                                            <tr key={i} className="ingredient-row">
+                                                <td>
+                                                    <div className="ingredient-name">
+                                                        <input type="checkbox" id={`ing-${i}`} />
+                                                        <label htmlFor={`ing-${i}`}>{typeof ing === 'string' ? ing : ing.name}</label>
+                                                    </div>
+                                                </td>
+                                                <td style={{ textAlign: 'right', paddingRight: '0.5rem' }}>{ing.quantity}</td>
+                                                <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
                         </Card>
                     </section>
-
                     <section className="detail-section">
                         <h2>作り方</h2>
                         <div className="steps-list">
                             {steps.map((step, i) => (
-                                <Card key={i} className="step-card">
+                                <Card
+                                    key={i}
+                                    className={`step-card ${completedSteps.has(i) ? 'is-completed' : ''}`}
+                                    onClick={() => toggleStep(i)}
+                                >
                                     <div className="step-number">{i + 1}</div>
                                     <p className="step-text">{step}</p>
                                 </Card>

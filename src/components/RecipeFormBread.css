@@ -1,0 +1,114 @@
+/* Bread Form Styles */
+.bread-card {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--color-border);
+    /* Giving it a slightly different feel */
+}
+
+.bread-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-sm);
+    border-bottom: 2px solid var(--color-primary);
+    padding-bottom: 4px;
+}
+
+.bread-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--color-text-main);
+}
+
+.bread-badge {
+    background: var(--color-primary);
+    color: white;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: bold;
+}
+
+.bread-subtitle {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+}
+
+/* Grid Layout */
+.bread-grid-header {
+    display: grid;
+    grid-template-columns: 2fr 1fr 60px 30px;
+    gap: 8px;
+    padding: 0 4px;
+    margin-bottom: 8px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: var(--color-text-muted);
+}
+
+.text-center {
+    text-align: center;
+}
+
+.bread-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 60px 30px;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+/* Inputs override */
+.bread-input {
+    margin: 0 !important;
+    /* Override default input margin */
+}
+
+.bread-input input {
+    /* Make inputs look a bit more "technical" */
+    font-family: monospace;
+    font-size: 1rem;
+}
+
+.bread-input.name input {
+    font-family: inherit;
+    /* Name can be normal font */
+}
+
+.bread-percent {
+    text-align: center;
+    font-weight: bold;
+    color: var(--color-primary);
+    font-size: 0.9rem;
+}
+
+.bread-remove {
+    background: none;
+    border: none;
+    color: #ff4d4d;
+    font-size: 1.2rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.bread-remove:hover {
+    color: #ff0000;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+
+    .bread-grid-header,
+    .bread-row {
+        grid-template-columns: 1.5fr 1fr 50px 24px;
+        gap: 4px;
+    }
+
+    .bread-percent {
+        font-size: 0.8rem;
+    }
+}

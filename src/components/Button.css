@@ -58,7 +58,8 @@
 
 .btn--secondary {
     background: white;
-    color: hsl(var(--color-text-main));
+    color: #333;
+    /* Explicit dark text for white button */
     border-color: hsl(var(--color-border-dark));
 }
 
@@ -74,7 +75,8 @@
 }
 
 .btn--ghost:not(:disabled):hover {
-    color: hsl(var(--color-text-main));
+    color: #333;
+    /* Dark text on hover */
     background: hsl(var(--color-bg-surface));
 }
 

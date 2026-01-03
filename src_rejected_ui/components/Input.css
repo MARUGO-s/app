@@ -1,0 +1,67 @@
+/* Base Input Styles */
+.input-field {
+    width: 100%;
+    padding: 0 var(--spacing-4);
+    height: 48px;
+    /* Taller, more touch-friendly */
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background-color: var(--color-bg-surface);
+    color: var(--color-text-main);
+    font-size: var(--font-size-base);
+    font-family: var(--font-family-base);
+    transition: all var(--transition-fast);
+    appearance: none;
+    /* Remove default styling */
+}
+
+/* Textarea specific */
+textarea.input-field {
+    height: auto;
+    padding: var(--spacing-3) var(--spacing-4);
+    min-height: 120px;
+    line-height: 1.6;
+    resize: vertical;
+}
+
+/* States */
+.input-field:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(230, 81, 0, 0.1);
+    /* Soft primary ring */
+}
+
+.input-field:hover:not(:focus) {
+    border-color: var(--color-border-hover);
+}
+
+.input-field:disabled {
+    background-color: var(--color-bg-subtle);
+    color: var(--color-text-ghost);
+    cursor: not-allowed;
+}
+
+.input-field::placeholder {
+    color: var(--color-text-ghost);
+}
+
+/* Label Styling (often paired with inputs) */
+.input-label {
+    display: block;
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-main);
+    margin-bottom: var(--spacing-2);
+    font-size: var(--font-size-sm);
+}
+
+.input-helper {
+    margin-top: var(--spacing-1);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+}
+
+/* Component Container */
+.input-group {
+    margin-bottom: var(--spacing-6);
+}

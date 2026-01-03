@@ -1,0 +1,74 @@
+/* Main App Container Structure */
+.container-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-6);
+  flex-wrap: wrap;
+  gap: var(--spacing-4);
+}
+
+.section-title {
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: var(--color-text-main);
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: var(--spacing-2);
+  align-items: center;
+}
+
+/* Filter Controls - Dark Mode */
+.tag-filter-container {
+  margin-bottom: var(--spacing-6);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding-bottom: var(--spacing-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tag-filter-btn {
+  background: #333;
+  border: 1px solid #444;
+  color: var(--color-text-muted);
+  padding: 6px 16px;
+  border-radius: 9999px;
+  /* Pill */
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tag-filter-btn:hover {
+  background-color: #444;
+  color: white;
+}
+
+.tag-filter-btn.active {
+  background-color: var(--color-brand-orange);
+  color: white;
+  border-color: var(--color-brand-orange);
+  font-weight: 600;
+}
+
+.store-filter-select {
+  padding: 6px 12px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: white;
+  font-size: 0.9rem;
+  background-color: #333;
+  cursor: pointer;
+}
+
+.tag-divider {
+  width: 1px;
+  height: 24px;
+  background-color: #444;
+  margin: 0 8px;
+}

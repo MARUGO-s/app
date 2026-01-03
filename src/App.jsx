@@ -3,7 +3,10 @@ import { Layout } from './components/Layout';
 import { RecipeList } from './components/RecipeList';
 import { RecipeDetail } from './components/RecipeDetail';
 import { RecipeForm } from './components/RecipeForm';
+import { ImportModal } from './components/ImportModal';
+
 import { Button } from './components/Button';
+import { RecentRecipes } from './components/RecentRecipes';
 import { recipeService } from './services/recipeService';
 import { STORE_LIST } from './constants';
 import './App.css';
@@ -12,14 +15,40 @@ function App() {
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [trashCount, setTrashCount] = useState(0);
+  const [recentIds, setRecentIds] = useState([]);
   const [currentView, setCurrentView] = useState('list'); // 'list', 'detail', 'create'
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [selectedTag, setSelectedTag] = useState('すべて');
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importedData, setImportedData] = useState(null);
 
   useEffect(() => {
     loadRecipes();
     loadTrashCount();
+    loadRecentHistory();
   }, []);
+
+  const loadRecentHistory = async () => {
+    try {
+      const ids = await recipeService.fetchRecentRecipes();
+      setRecentIds(ids || []);
+    } catch (error) {
+      console.error("Failed to load history:", error);
+    }
+  };
+
+  const addToHistory = async (id) => {
+    // Optimistic update
+    const newHistory = [id, ...recentIds.filter(rId => rId !== id)].slice(0, 20);
+    setRecentIds(newHistory);
+
+    // Server update
+    try {
+      await recipeService.addToHistory(id);
+    } catch (e) {
+      console.error("Failed to sync history", e);
+    }
+  };
 
   const loadTrashCount = async () => {
     try {
@@ -42,13 +71,24 @@ function App() {
     }
   };
 
-  // Get unique tags from all recipes
-  const allTags = ['すべて', ...new Set(recipes.flatMap(r => r.tags || []))];
+  // Get unique courses and categories
+  const allCourses = [...new Set(recipes.map(r => r.course).filter(Boolean))];
+  const allCategories = [...new Set(recipes.map(r => r.category).filter(Boolean))];
 
   // Filter recipes based on selected tag
-  const filteredRecipes = selectedTag === 'すべて'
-    ? recipes
-    : recipes.filter(r => (r.tags || []).includes(selectedTag));
+  // Filter recipes based on selected tag
+  let filteredRecipes = recipes;
+  if (selectedTag === 'recent') {
+    filteredRecipes = recentIds
+      .map(id => recipes.find(r => r.id === id))
+      .filter(Boolean); // Remove nulls if recipe deleted
+  } else if (selectedTag !== 'すべて') {
+    filteredRecipes = recipes.filter(r =>
+      r.course === selectedTag ||
+      r.category === selectedTag ||
+      (r.tags && r.tags.includes(selectedTag))
+    );
+  }
 
   const handleSelectRecipe = (recipe) => {
     setSelectedRecipe(recipe);
@@ -135,6 +175,11 @@ function App() {
     }
   };
 
+  const handleImportRecipe = (recipeData) => {
+    setImportedData(recipeData);
+    setCurrentView('create');
+  };
+
   return (
     <Layout>
       {(currentView === 'list' || currentView === 'trash') && (
@@ -149,6 +194,9 @@ function App() {
                   </Button>
                   <Button onClick={() => setCurrentView('create')}>
                     + レシピ追加
+                  </Button>
+                  <Button variant="secondary" onClick={() => setShowImportModal(true)} style={{ marginLeft: '0.5rem' }}>
+                    🌐 Webから追加
                   </Button>
                 </>
               ) : (
@@ -171,15 +219,41 @@ function App() {
               ))}
             </select>
             <div className="tag-divider"></div>
-            {allTags.sort().map(tag => (
-              <button
-                key={tag}
-                className={`tag-filter-btn ${selectedTag === tag ? 'active' : ''}`}
-                onClick={() => setSelectedTag(tag)}
-              >
-                {tag}
-              </button>
-            ))}
+            <button
+              className={`tag-filter-btn ${selectedTag === 'recent' ? 'active' : ''}`}
+              onClick={() => setSelectedTag('recent')}
+            >
+              🕒 最近見た
+            </button>
+            <div className="tag-divider"></div>
+            <button
+              className={`tag-filter-btn ${selectedTag === 'すべて' ? 'active' : ''}`}
+              onClick={() => setSelectedTag('すべて')}
+            >
+              すべて
+            </button>
+
+            <select
+              className="store-filter-select"
+              value={allCourses.includes(selectedTag) ? selectedTag : ""}
+              onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
+            >
+              <option value="">コースで絞り込み...</option>
+              {allCourses.sort().map(course => (
+                <option key={course} value={course}>{course}</option>
+              ))}
+            </select>
+
+            <select
+              className="store-filter-select"
+              value={allCategories.includes(selectedTag) ? selectedTag : ""}
+              onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
+            >
+              <option value="">カテゴリーで絞り込み...</option>
+              {allCategories.sort().map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
           </div>
 
           {loading ? (
@@ -190,7 +264,20 @@ function App() {
                 {currentView === 'trash' ? 'ゴミ箱は空です' : 'レシピがありません'}
               </div>
             ) : (
-              <RecipeList recipes={filteredRecipes} onSelectRecipe={handleSelectRecipe} />
+              <div className="main-content-wrapper">
+                <div className="recipe-list-container">
+                  <RecipeList recipes={filteredRecipes} onSelectRecipe={handleSelectRecipe} />
+                </div>
+                {currentView === 'list' && (
+                  <aside className="sidebar-right">
+                    <RecentRecipes
+                      recipes={recipes}
+                      recentIds={recentIds}
+                      onSelect={handleSelectRecipe}
+                    />
+                  </aside>
+                )}
+              </div>
             )
           )}
         </>
@@ -203,6 +290,7 @@ function App() {
           onBack={() => selectedRecipe.deletedAt ? handleSwitchToTrash() : handleSwitchToMain()}
           onEdit={() => setCurrentView('edit')}
           onDelete={handleDeleteRecipe}
+          onView={addToHistory}
           onHardDelete={handleHardDeleteRecipe}
         />
       )}
@@ -218,9 +306,20 @@ function App() {
 
       {currentView === 'create' && (
         <RecipeForm
-          key="create-form"
-          onCancel={() => setCurrentView('list')}
+          key={importedData ? 'create-form-imported' : 'create-form'}
+          initialData={importedData}
+          onCancel={() => {
+            setCurrentView('list');
+            setImportedData(null);
+          }}
           onSave={(newRecipe) => handleSaveRecipe(newRecipe, false)}
+        />
+      )}
+
+      {showImportModal && (
+        <ImportModal
+          onClose={() => setShowImportModal(false)}
+          onImport={handleImportRecipe}
         />
       )}
     </Layout>
