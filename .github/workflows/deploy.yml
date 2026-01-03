@@ -34,8 +34,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Clean dist
+        run: rm -rf dist
+
       - name: Build
         run: npm run build
+
+      - name: Debug - List dist
+        run: ls -laR dist
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
