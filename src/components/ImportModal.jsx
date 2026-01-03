@@ -4,8 +4,8 @@ import { Card } from './Card';
 import { Button } from './Button';
 import './ImportModal.css';
 
-export const ImportModal = ({ onClose, onImport }) => {
-    const [mode, setMode] = useState('url'); // 'url' | 'image'
+export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
+    const [mode, setMode] = useState(initialMode); // 'url' | 'image'
     const [url, setUrl] = useState('');
     const [imageFile, setImageFile] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);

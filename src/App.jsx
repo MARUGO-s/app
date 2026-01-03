@@ -19,7 +19,7 @@ function App() {
   const [currentView, setCurrentView] = useState('list'); // 'list', 'detail', 'create'
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [selectedTag, setSelectedTag] = useState('すべて');
-  const [showImportModal, setShowImportModal] = useState(false);
+  const [importMode, setImportMode] = useState(null); // null | 'url' | 'image'
   const [importedData, setImportedData] = useState(null);
 
   useEffect(() => {
@@ -195,8 +195,11 @@ function App() {
                   <Button onClick={() => setCurrentView('create')}>
                     + レシピ追加
                   </Button>
-                  <Button variant="secondary" onClick={() => setShowImportModal(true)} style={{ marginLeft: '0.5rem' }}>
+                  <Button variant="secondary" onClick={() => setImportMode('url')} style={{ marginLeft: '0.5rem' }}>
                     🌐 Webから追加
+                  </Button>
+                  <Button variant="secondary" onClick={() => setImportMode('image')} style={{ marginLeft: '0.5rem' }}>
+                    📷 画像から追加
                   </Button>
                 </>
               ) : (
@@ -316,9 +319,10 @@ function App() {
         />
       )}
 
-      {showImportModal && (
+      {importMode && (
         <ImportModal
-          onClose={() => setShowImportModal(false)}
+          initialMode={importMode}
+          onClose={() => setImportMode(null)}
           onImport={handleImportRecipe}
         />
       )}
