@@ -1,24 +1,13 @@
-# Properties
+node_modules/
+dist/
+dist-ssr/
 .DS_Store
 .env
 .env.local
-
-# Modules
-node_modules/
-
-# Build
-dist/
-dist-ssr/
-
-# Editor
 .vscode/
 .idea/
-
-# Supabase
 supabase/.temp/
 supabase/functions/*/deno.lock
 supabase/functions/*/.npmrc
-
-# Large files
 recipe.pdf
 bread_recipe.html
