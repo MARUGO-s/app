@@ -21,6 +21,7 @@ function App() {
   const [selectedTag, setSelectedTag] = useState('すべて');
   const [importMode, setImportMode] = useState(null); // null | 'url' | 'image'
   const [importedData, setImportedData] = useState(null);
+  const [searchQuery, setSearchQuery] = useState(''); // New search state
 
   useEffect(() => {
     loadRecipes();
@@ -75,20 +76,27 @@ function App() {
   const allCourses = [...new Set(recipes.map(r => r.course).filter(Boolean))];
   const allCategories = [...new Set(recipes.map(r => r.category).filter(Boolean))];
 
-  // Filter recipes based on selected tag
-  // Filter recipes based on selected tag
-  let filteredRecipes = recipes;
-  if (selectedTag === 'recent') {
-    filteredRecipes = recentIds
-      .map(id => recipes.find(r => r.id === id))
-      .filter(Boolean); // Remove nulls if recipe deleted
-  } else if (selectedTag !== 'すべて') {
-    filteredRecipes = recipes.filter(r =>
-      r.course === selectedTag ||
-      r.category === selectedTag ||
-      (r.tags && r.tags.includes(selectedTag))
-    );
-  }
+  // Filter recipes based on Tag/Category/Store AND Search Query
+  const filteredRecipes = recipes.filter(recipe => {
+    // 1. Tag/Category/Store Filter
+    const matchesTag =
+      selectedTag === 'すべて' ||
+      (selectedTag === 'recent' && recentIds.includes(recipe.id)) ||
+      (recipe.tags && recipe.tags.includes(selectedTag)) ||
+      (recipe.category && recipe.category === selectedTag) || // Assuming 'category' is a single string, not an array
+      (recipe.course && recipe.course === selectedTag) || // Assuming 'course' is a single string
+      (recipe.store && recipe.store === selectedTag);
+
+    // 2. Search Query Filter
+    const query = searchQuery.toLowerCase().trim();
+    const matchesSearch =
+      !query ||
+      recipe.title.toLowerCase().includes(query) ||
+      (recipe.description && recipe.description.toLowerCase().includes(query)) ||
+      (recipe.ingredients && recipe.ingredients.some(ing => ing.name.toLowerCase().includes(query)));
+
+    return matchesTag && matchesSearch;
+  });
 
   const handleSelectRecipe = (recipe) => {
     setSelectedRecipe(recipe);
@@ -209,6 +217,19 @@ function App() {
               )}
             </div>
           </div>
+
+          {currentView === 'list' && (
+            <div className="search-container">
+              <span className="search-icon">🔍</span>
+              <input
+                type="text"
+                className="search-input"
+                placeholder="レシピ名、材料、メモから検索..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          )}
 
           <div className="tag-filter-container">
             <select
