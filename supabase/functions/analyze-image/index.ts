@@ -105,8 +105,15 @@ serve(async (req) => {
 
         // Iterate and classify
         // Keywords
-        const ingKeywords = ['材料', 'Ingredients', '用意するもの'];
-        const stepKeywords = ['作り方', '手順', 'Directions', 'Method', 'Steps'];
+        const ingKeywords = ['材料', 'Ingredients', '用意するもの', '買い物リスト'];
+        const stepKeywords = ['作り方', 'つくり方', '手順', 'Directions', 'Method', 'Steps', 'How to cook'];
+        const excludeKeywords = ['保存方法', '使いみち', 'ポイント', 'advice', 'memo'];
+
+        // Heuristics:
+        // Exclude explicit step numbers (e.g. "1.", "1 ", "①") from implicit ingredients
+        const ingredientPattern = /(\d+|g|ml|kg|cc|tbsp|tsp|cup|個|本|枚|円)/i;
+        const stepNumberPattern = /^(\d+[\.\)\s]|①|②|③|❶|❷|❸|I\s|II\s|■|●|・)/;
+        const sentencePattern = /[。\.]$/;
 
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
@@ -121,22 +128,80 @@ serve(async (req) => {
                 currentSection = 'steps';
                 continue;
             }
+            // Check for exclusion headers -> switch to unknown/description
+            if (excludeKeywords.some(k => line.includes(k))) {
+                currentSection = 'unknown';
+                recipe.description += "\n" + line + "\n";
+                continue;
+            }
+
+            // Implicit section detection / Correction
+            const isStepLine = stepNumberPattern.test(line);
+            const isSentence = sentencePattern.test(line);
+            // Ingredient heuristic: contains unit/qty AND is short AND not a step number AND not a sentence
+            const isIngLine = ingredientPattern.test(line) && line.length < 50 && !isSentence;
+
+            if (isStepLine) {
+                currentSection = 'steps';
+            } else if (isIngLine && currentSection !== 'ingredients') {
+                currentSection = 'ingredients';
+            }
 
             if (currentSection === 'ingredients') {
-                // Very naive split. "Beef 200g" -> Name: Beef, Qty: 200g
-                // Or just put everything in name for user to fix.
-                // Let's try to find numbers.
-                recipe.ingredients.push({ name: line, quantity: '', unit: '' });
+                if (isSentence && !isStepLine) {
+                    // Fallback: If it's a sentence, it's likely a step or description, not an ingredient
+                    if (currentSection === 'ingredients') {
+                        currentSection = 'steps'; // Assume step
+                        recipe.steps.push(line);
+                        continue;
+                    }
+                }
+
+                if (currentSection === 'steps') {
+                    recipe.steps.push(line);
+                } else {
+                    // Smart Split for Ingredients
+                    // Search for Number+Unit at the END of the line via backward regex strategy
+                    // Extract the last run of [digits/chars] at end of line.
+                    const lastPartMatch = line.match(/[\d\.\/]+[\s]*[a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF%]+$/);
+
+                    if (lastPartMatch) {
+                        const qtyString = lastPartMatch[0]; // e.g. "70g"
+                        const namePart = line.substring(0, line.length - qtyString.length).replace(/[\.…]+$/, '').trim();
+
+                        // Parse qtyString into val + unit
+                        const valMatch = qtyString.match(/^([\d\.\/]+)\s*(.*)$/);
+                        if (valMatch) {
+                            recipe.ingredients.push({
+                                name: namePart,
+                                quantity: valMatch[1],
+                                unit: valMatch[2]
+                            });
+                        } else {
+                            recipe.ingredients.push({ name: namePart, quantity: qtyString, unit: '' });
+                        }
+                    } else {
+                        // Fallback to splitting at first digit if end-of-line fail
+                        const match = line.match(/(.*?)(\d+.*)/);
+                        if (match) {
+                            const qSection = match[2].trim();
+                            const qMatch = qSection.match(/^([\d\.\/]+)\s*(.*)$/);
+                            if (qMatch) {
+                                recipe.ingredients.push({ name: match[1].trim(), quantity: qMatch[1], unit: qMatch[2] });
+                            } else {
+                                recipe.ingredients.push({ name: match[1].trim(), quantity: qSection, unit: '' });
+                            }
+                        } else {
+                            recipe.ingredients.push({ name: line, quantity: '', unit: '' });
+                        }
+                    }
+                }
             } else if (currentSection === 'steps') {
                 recipe.steps.push(line);
             } else {
-                // Maybe description?
-                if (i < 5 && currentSection === 'unknown') {
-                    recipe.description += line + "\n";
-                }
+                recipe.description += line + "\n";
             }
         }
-
         recipe.description = recipe.description.trim();
 
         return new Response(
