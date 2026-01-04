@@ -165,34 +165,25 @@
     font-size: 0.85rem;
   }
 
-  /* Make filter container a horizontal scroll strip */
+  /* Make filter container wrap so nothing is hidden */
   .tag-filter-container {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 4px;
-    margin-bottom: var(--space-md);
-    /* Hide scrollbar visually but keep functionality */
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    /* Firefox */
-  }
-
-  .tag-filter-container::-webkit-scrollbar {
-    display: none;
-    /* Chrome/Safari */
+    flex-wrap: wrap;
+    overflow-x: visible;
+    height: auto;
+    justify-content: flex-start;
   }
 
   .tag-filter-btn,
   .store-filter-select {
-    flex-shrink: 0;
-    white-space: nowrap;
+    flex: 1 1 auto;
+    /* Allow growth but respect content */
+    min-width: 0;
+    text-align: center;
     height: 36px;
-    /* consistent height */
     font-size: 0.8rem;
   }
 
   .tag-divider {
     display: none;
-    /* remove dividers on mobile/scroll */
   }
 }
