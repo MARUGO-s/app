@@ -31,8 +31,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         description: safeInitialData.description || '',
         image: safeInitialData.image || '',
         imageFile: null, // New state for file upload
-        prepTime: safeInitialData.prepTime || '',
-        cookTime: safeInitialData.cookTime || '',
+        storeName: safeInitialData.storeName || '',
         servings: safeInitialData.servings || '',
         ingredients: (safeInitialData.ingredients || [{ name: '', quantity: '', unit: '', cost: '', purchaseCost: '' }]).map(ing =>
             typeof ing === 'string' ? { name: ing, quantity: '', unit: '', cost: '', purchaseCost: '' } : { ...ing, cost: ing.cost || '', purchaseCost: ing.purchaseCost || '' }
@@ -241,20 +240,29 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                         </div>
 
                         <div className="form-row-3">
-                            <Input
-                                label="準備時間"
-                                id="prepTime"
-                                value={formData.prepTime}
-                                onChange={handleChange}
-                                placeholder="15分"
-                            />
-                            <Input
-                                label="調理時間"
-                                id="cookTime"
-                                value={formData.cookTime}
-                                onChange={handleChange}
-                                placeholder="30分"
-                            />
+                            <div className="form-group">
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>店舗名</label>
+                                <select
+                                    id="storeName"
+                                    value={formData.storeName}
+                                    onChange={handleChange}
+                                    style={{
+                                        display: 'block',
+                                        width: '100%',
+                                        padding: '0.75rem',
+                                        fontSize: '1rem',
+                                        border: '1px solid #ddd',
+                                        borderRadius: '8px',
+                                        backgroundColor: 'white',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    <option value="">店舗を選択</option>
+                                    {STORE_LIST.map(store => (
+                                        <option key={store} value={store}>{store}</option>
+                                    ))}
+                                </select>
+                            </div>
                             <Input
                                 label="分量"
                                 id="servings"

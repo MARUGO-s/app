@@ -25,8 +25,7 @@ export const RecipeList = ({ recipes, onSelectRecipe }) => {
                         <h3 className="recipe-title">{recipe.title}</h3>
                         <p className="recipe-desc">{recipe.description}</p>
                         <div className="recipe-meta">
-                            <span>⏱ {recipe.prepTime}</span>
-                            <span>🔥 {recipe.cookTime}</span>
+                            {recipe.storeName && <span>🏢 {recipe.storeName}</span>}
                         </div>
                     </div>
                 </Card>

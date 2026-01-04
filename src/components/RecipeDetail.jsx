@@ -15,25 +15,6 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
     const [currentLang, setCurrentLang] = React.useState('ORIGINAL'); // 'ORIGINAL' is source text
     const [isTranslating, setIsTranslating] = React.useState(false);
 
-    // ISO duration formatter (PT10M -> 10分)
-    const formatDuration = (isoString) => {
-        if (!isoString) return '';
-        if (!isoString.startsWith('P')) return isoString; // Not ISO format
-
-        try {
-            const match = isoString.match(/PT(\d+H)?(\d+M)?/);
-            if (!match) return isoString;
-
-            const hours = match[1] ? parseInt(match[1]) : 0;
-            const minutes = match[2] ? parseInt(match[2]) : 0;
-
-            if (hours > 0) return `${hours}時間${minutes > 0 ? ` ${minutes}分` : ''}`;
-            return `${minutes}分`;
-        } catch (e) {
-            return isoString;
-        }
-    };
-
     // Determines which data to show
     const displayRecipe = currentLang === 'ORIGINAL' ? recipe : (translationCache[currentLang] || recipe);
 
@@ -222,16 +203,10 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                             <span className="meta-value">{displayRecipe.category}</span>
                         </div>
                     )}
-                    {displayRecipe.prepTime && (
+                    {displayRecipe.storeName && (
                         <div className="meta-item">
-                            <span className="meta-label">準備時間</span>
-                            <span className="meta-value">{formatDuration(displayRecipe.prepTime)}</span>
-                        </div>
-                    )}
-                    {displayRecipe.cookTime && (
-                        <div className="meta-item">
-                            <span className="meta-label">調理時間</span>
-                            <span className="meta-value">{formatDuration(displayRecipe.cookTime)}</span>
+                            <span className="meta-label">店舗名</span>
+                            <span className="meta-value">{displayRecipe.storeName}</span>
                         </div>
                     )}
                     <div className="meta-item">
