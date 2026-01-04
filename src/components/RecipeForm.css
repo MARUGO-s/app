@@ -50,12 +50,11 @@
 
 .recipe-form__grid {
     display: grid;
-    /* Give significantly more space to ingredients column (right) */
-    grid-template-columns: 1fr 2.5fr;
+    grid-template-columns: 1fr 1fr;
     gap: var(--space-lg);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1200px) {
     .recipe-form__grid {
         grid-template-columns: 1fr;
     }
@@ -230,4 +229,21 @@ h3 {
 .recipe-form ::placeholder {
     color: #999 !important;
     opacity: 1;
+}
+
+/* Custom styling for file input button */
+.recipe-form input[type="file"]::file-selector-button {
+    border-radius: 4px;
+    /* Small rounded corners as requested */
+    border: 1px solid #ccc;
+    padding: 4px 12px;
+    margin-right: 10px;
+    background-color: #f9f9f9;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    color: #333;
+}
+
+.recipe-form input[type="file"]::file-selector-button:hover {
+    background-color: #e0e0e0;
 }

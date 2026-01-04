@@ -4,6 +4,7 @@ import { RecipeList } from './components/RecipeList';
 import { RecipeDetail } from './components/RecipeDetail';
 import { RecipeForm } from './components/RecipeForm';
 import { ImportModal } from './components/ImportModal';
+import { DataManagement } from './components/DataManagement';
 
 import { Button } from './components/Button';
 import { RecentRecipes } from './components/RecentRecipes';
@@ -16,7 +17,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [trashCount, setTrashCount] = useState(0);
   const [recentIds, setRecentIds] = useState([]);
-  const [currentView, setCurrentView] = useState('list'); // 'list', 'detail', 'create'
+  const [currentView, setCurrentView] = useState('list'); // 'list', 'detail', 'create', 'data'
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [selectedTag, setSelectedTag] = useState('すべて');
   const [importMode, setImportMode] = useState(null); // null | 'url' | 'image'
@@ -209,6 +210,10 @@ function App() {
                   <Button variant="secondary" onClick={() => setImportMode('image')} style={{ marginLeft: '0.5rem' }}>
                     📷 画像から追加
                   </Button>
+                  <Button variant="secondary" onClick={() => setCurrentView('data')} style={{ marginLeft: '0.5rem' }}>
+                    📊 データ管理
+                  </Button>
+
                 </>
               ) : (
                 <Button variant="ghost" onClick={handleSwitchToMain}>
@@ -346,6 +351,10 @@ function App() {
           onClose={() => setImportMode(null)}
           onImport={handleImportRecipe}
         />
+      )}
+
+      {currentView === 'data' && (
+        <DataManagement onBack={() => setCurrentView('list')} />
       )}
     </Layout>
   );

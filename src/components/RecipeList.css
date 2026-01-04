@@ -1,7 +1,7 @@
 .recipe-grid {
     display: grid;
-    /* Allow 2 columns on mobile (360px width -> ~170px available per card if gap is small) */
-    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+    /* Allow 2 columns on mobile (320px width - 24px padding = 296px available. 130*2 + 12 gap = 272px) */
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
     gap: var(--space-md);
     padding: var(--space-sm) 0;
 }

@@ -93,6 +93,12 @@ a {
   padding: 0 var(--space-md);
 }
 
+@media (min-width: 1201px) {
+  .container {
+    max-width: 1600px;
+  }
+}
+
 /* Remove glassmorphism, replace with solid border utility */
 .glass-panel {
   background: hsl(var(--color-bg-base));

@@ -278,6 +278,8 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                                 <th>材料名</th>
                                                                 <th style={{ textAlign: 'right' }}>分量 (g)</th>
                                                                 <th style={{ textAlign: 'center', width: '60px' }}>%</th>
+                                                                <th style={{ textAlign: 'right', width: '80px' }}>仕入れ</th>
+                                                                <th style={{ textAlign: 'right', width: '80px' }}>原価</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
@@ -286,6 +288,8 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                                     <td>{item.name}</td>
                                                                     <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{item.quantity}</td>
                                                                     <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-primary)' }}>{calcPercent(item.quantity)}%</td>
+                                                                    <td style={{ textAlign: 'right', color: '#666' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
+                                                                    <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
                                                                 </tr>
                                                             ))}
                                                         </tbody>
@@ -308,6 +312,8 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                                 <th>材料名</th>
                                                                 <th style={{ textAlign: 'right' }}>分量 (g)</th>
                                                                 <th style={{ textAlign: 'center', width: '60px' }}>%</th>
+                                                                <th style={{ textAlign: 'right', width: '80px' }}>仕入れ</th>
+                                                                <th style={{ textAlign: 'right', width: '80px' }}>原価</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
@@ -316,39 +322,82 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                                     <td>{item.name}</td>
                                                                     <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{item.quantity}</td>
                                                                     <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-text-muted)' }}>{calcPercent(item.quantity)}%</td>
+                                                                    <td style={{ textAlign: 'right', color: '#666' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
+                                                                    <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
                                                                 </tr>
                                                             ))}
                                                         </tbody>
                                                     </table>
+
+                                                    <div style={{
+                                                        marginTop: '2rem',
+                                                        padding: '1rem',
+                                                        background: 'var(--color-bg-surface)',
+                                                        borderRadius: 'var(--radius-md)',
+                                                        border: '1px solid var(--color-border)',
+                                                        display: 'flex',
+                                                        justifyContent: 'flex-end',
+                                                        alignItems: 'center',
+                                                        gap: '1rem'
+                                                    }}>
+                                                        <span style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>合計原価:</span>
+                                                        <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>
+                                                            ¥{(() => {
+                                                                const flourCost = flours.reduce((sum, item) => sum + (parseInt(item.cost) || 0), 0);
+                                                                const otherCost = others.reduce((sum, item) => sum + (parseInt(item.cost) || 0), 0);
+                                                                return (flourCost + otherCost).toLocaleString();
+                                                            })()}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </>
                                         );
                                     })()}
                                 </div>
                             ) : (
-                                <table className="ingredients-table">
-                                    <thead>
-                                        <tr>
-                                            <th style={{ width: '50%' }}>材料名</th>
-                                            <th style={{ width: '25%', textAlign: 'right', paddingRight: '0.5rem' }}>分量</th>
-                                            <th style={{ width: '25%', paddingLeft: '0.5rem' }}>単位</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {ingredients.map((ing, i) => (
-                                            <tr key={i} className="ingredient-row">
-                                                <td>
-                                                    <div className="ingredient-name">
-                                                        <input type="checkbox" id={`ing-${i}`} />
-                                                        <label htmlFor={`ing-${i}`}>{typeof ing === 'string' ? ing : ing.name}</label>
-                                                    </div>
-                                                </td>
-                                                <td style={{ textAlign: 'right', paddingRight: '0.5rem' }}>{ing.quantity}</td>
-                                                <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
+                                <>
+                                    <table className="ingredients-table">
+                                        <thead>
+                                            <tr>
+                                                <th style={{ width: '40%' }}>材料名</th>
+                                                <th style={{ width: '20%', textAlign: 'right', paddingRight: '0.5rem' }}>分量</th>
+                                                <th style={{ width: '15%', paddingLeft: '0.5rem' }}>単位</th>
+                                                <th style={{ width: '15%', textAlign: 'right' }}>仕入れ</th>
+                                                <th style={{ width: '15%', textAlign: 'right' }}>原価</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody>
+                                            {ingredients.map((ing, i) => (
+                                                <tr key={i} className="ingredient-row">
+                                                    <td>
+                                                        <div className="ingredient-name">
+                                                            <input type="checkbox" id={`ing-${i}`} />
+                                                            <label htmlFor={`ing-${i}`}>{typeof ing === 'string' ? ing : ing.name}</label>
+                                                        </div>
+                                                    </td>
+                                                    <td style={{ textAlign: 'right', paddingRight: '0.5rem' }}>{ing.quantity}</td>
+                                                    <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
+                                                    <td style={{ textAlign: 'right', color: '#666' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
+                                                    <td style={{ textAlign: 'right' }}>{ing.cost ? `¥${ing.cost}` : '-'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                    <div style={{
+                                        marginTop: '1.5rem',
+                                        paddingTop: '1rem',
+                                        borderTop: '2px dashed var(--color-border)',
+                                        display: 'flex',
+                                        justifyContent: 'flex-end',
+                                        alignItems: 'center',
+                                        gap: '1rem'
+                                    }}>
+                                        <span style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>合計原価:</span>
+                                        <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>
+                                            ¥{ingredients.reduce((sum, ing) => sum + (parseInt(ing.cost) || 0), 0).toLocaleString()}
+                                        </span>
+                                    </div>
+                                </>
                             )}
                         </Card>
                     </section>
