@@ -205,30 +205,31 @@ export const recipeService = {
 
 // Helpers to map between frontend (camelCase) and DB (snake_case)
 const toDbFormat = (recipe) => {
-    // Explicitly destructure to remove camelCase keys and bread-specific keys
-    const { prepTime, cookTime, imageFile, type, flours, breadIngredients, ...rest } = recipe
-
     let ingredientsToSave = recipe.ingredients || [];
 
     // PACKING STRATEGY:
     // If bread mode, pack everything into 'ingredients' JSON to avoid schema changes.
     // Structure: [ { _meta: true, type: 'bread' }, ...flours(w/ _group='flour'), ...others(w/ _group='other') ]
-    if (type === 'bread') {
+    if (recipe.type === 'bread') {
         const metaItem = { _meta: true, type: 'bread' };
-        const packedFlours = (flours || []).map(f => ({ ...f, _group: 'flour' }));
-        const packedOthers = (breadIngredients || []).map(i => ({ ...i, _group: 'other' }));
+        const packedFlours = (recipe.flours || []).map(f => ({ ...f, _group: 'flour' }));
+        const packedOthers = (recipe.breadIngredients || []).map(i => ({ ...i, _group: 'other' }));
         ingredientsToSave = [metaItem, ...packedFlours, ...packedOthers];
     }
 
+    // Explicitly whitelist columns to avoid sending unknown fields
     return {
-        ...rest,
-        prep_time: prepTime,
-        cook_time: cookTime,
-        // Ensure arrays
+        title: recipe.title,
+        description: recipe.description,
+        image: recipe.image,
+        servings: recipe.servings,
+        course: recipe.course,
+        category: recipe.category,
+        store_name: recipe.storeName, // Map camelCase to snake_case
         ingredients: ingredientsToSave,
         steps: recipe.steps || [],
         tags: recipe.tags || []
-        // NOTE: We do NOT send 'type' as a column, as it likely doesn't exist.
+        // Note: prep_time and cook_time are omitted as they are no longer used
     }
 }
 
@@ -259,6 +260,7 @@ const fromDbFormat = (recipe) => {
         ...recipe,
         prepTime: recipe.prep_time,
         cookTime: recipe.cook_time,
+        storeName: recipe.store_name,
         type,
         flours,
         breadIngredients,

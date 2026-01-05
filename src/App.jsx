@@ -86,7 +86,7 @@ function App() {
       (recipe.tags && recipe.tags.includes(selectedTag)) ||
       (recipe.category && recipe.category === selectedTag) || // Assuming 'category' is a single string, not an array
       (recipe.course && recipe.course === selectedTag) || // Assuming 'course' is a single string
-      (recipe.store && recipe.store === selectedTag);
+      (recipe.storeName && recipe.storeName === selectedTag);
 
     // 2. Search Query Filter
     const query = searchQuery.toLowerCase().trim();
