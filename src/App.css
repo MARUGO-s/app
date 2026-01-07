@@ -280,16 +280,26 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
-    background: white;
-    border: 1px solid hsl(var(--color-border));
-    border-radius: var(--radius-md);
-    font-size: 1.2rem;
+    width: 44px;
+    /* Slightly larger touch target */
+    height: 44px;
+    background: transparent;
+    /* Remove white box */
+    border: none;
+    /* Remove border */
+    border-radius: 50%;
+    /* Rounded touch area */
+    font-size: 1.5rem;
+    /* Larger icon */
     cursor: pointer;
-    color: hsl(var(--color-text-main));
+    color: white;
+    /* Force white for visibility on dark header */
     z-index: 1003;
-    /* Ensure above drawer and backdrop */
+    transition: background-color 0.2s;
+  }
+
+  .mobile-menu-toggle:active {
+    background-color: rgba(255, 255, 255, 0.1);
   }
 
   .secondary-actions {
