@@ -175,6 +175,26 @@
   }
 }
 
+/* Base styles for desktop */
+.mobile-menu-toggle {
+  display: none;
+}
+
+.trash-badge {
+  margin-left: 6px;
+  background-color: #e74c3c;
+  color: white;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.secondary-actions {
+  display: contents;
+  /* On desktop, act as if this container doesn't exist to keep layout */
+}
+
 @media (max-width: 600px) {
   .container-header {
     flex-direction: column;
@@ -189,10 +209,13 @@
   }
 
   .header-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    position: relative;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
     gap: 0.5rem;
-    width: 100%;
+    grid-template-columns: none;
+    /* Override grid */
   }
 
   .header-actions button {
@@ -224,16 +247,6 @@
   }
 
   /* Mobile Header Menu */
-  .header-actions {
-    position: relative;
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 0.5rem;
-    grid-template-columns: none;
-    /* Override grid */
-  }
-
   .primary-action-btn {
     flex: 1;
     margin: 0 !important;
@@ -283,24 +296,4 @@
     text-align: left;
     padding: 10px 12px;
   }
-}
-
-/* Base styles for desktop */
-.mobile-menu-toggle {
-  display: none;
-}
-
-.trash-badge {
-  margin-left: 6px;
-  background-color: #e74c3c;
-  color: white;
-  border-radius: 12px;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: bold;
-}
-
-.secondary-actions {
-  display: contents;
-  /* On desktop, act as if this container doesn't exist to keep layout */
 }
