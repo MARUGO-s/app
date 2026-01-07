@@ -213,16 +213,16 @@ function App() {
 
                   <div className={`secondary-actions ${isMenuOpen ? 'open' : ''}`}>
                     <Button variant="ghost" onClick={() => { handleSwitchToTrash(); setIsMenuOpen(false); }} style={{ position: 'relative' }}>
-                      🗑️ ゴミ箱 {trashCount > 0 && <span className="trash-badge">{trashCount}</span>}
+                      <span style={{ marginRight: '8px' }}>🗑️</span> ゴミ箱 {trashCount > 0 && <span className="trash-badge">{trashCount}</span>}
                     </Button>
                     <Button variant="secondary" onClick={() => { setImportMode('url'); setIsMenuOpen(false); }}>
-                      🌐 Webから追加
+                      <span style={{ marginRight: '8px' }}>🌐</span> Webから追加
                     </Button>
                     <Button variant="secondary" onClick={() => { setImportMode('image'); setIsMenuOpen(false); }}>
-                      📷 画像から追加
+                      <span style={{ marginRight: '8px' }}>📷</span> 画像から追加
                     </Button>
                     <Button variant="secondary" onClick={() => { setCurrentView('data'); setIsMenuOpen(false); }}>
-                      📊 データ管理
+                      <span style={{ marginRight: '8px' }}>📊</span> データ管理
                     </Button>
                   </div>
 
@@ -267,20 +267,6 @@ function App() {
                 <option key={store} value={store}>{store}</option>
               ))}
             </select>
-            <div className="tag-divider"></div>
-            <button
-              className={`tag-filter-btn ${selectedTag === 'recent' ? 'active' : ''}`}
-              onClick={() => setSelectedTag('recent')}
-            >
-              🕒 最近見た
-            </button>
-            <div className="tag-divider"></div>
-            <button
-              className={`tag-filter-btn ${selectedTag === 'すべて' ? 'active' : ''}`}
-              onClick={() => setSelectedTag('すべて')}
-            >
-              すべて
-            </button>
 
             <select
               className="store-filter-select"
@@ -303,6 +289,13 @@ function App() {
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>
+
+            <button
+              className={`tag-filter-btn ${selectedTag === 'すべて' ? 'active' : ''}`}
+              onClick={() => setSelectedTag('すべて')}
+            >
+              すべて
+            </button>
           </div>
 
           {loading ? (
@@ -314,18 +307,18 @@ function App() {
               </div>
             ) : (
               <div className="main-content-wrapper">
-                <div className="recipe-list-container">
-                  <RecipeList recipes={filteredRecipes} onSelectRecipe={handleSelectRecipe} />
-                </div>
                 {currentView === 'list' && (
-                  <aside className="sidebar-right">
+                  <div className="recent-list-wrapper">
                     <RecentRecipes
                       recipes={recipes}
                       recentIds={recentIds}
                       onSelect={handleSelectRecipe}
                     />
-                  </aside>
+                  </div>
                 )}
+                <div className="recipe-list-container">
+                  <RecipeList recipes={filteredRecipes} onSelectRecipe={handleSelectRecipe} />
+                </div>
               </div>
             )
           )}
