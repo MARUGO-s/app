@@ -264,29 +264,55 @@
     font-size: 1.2rem;
     cursor: pointer;
     color: hsl(var(--color-text-main));
-    z-index: 101;
+    z-index: 1003;
+    /* Ensure above drawer and backdrop */
   }
 
   .secondary-actions {
-    display: none;
-    /* Hidden by default on mobile */
-    position: absolute;
-    top: 100%;
+    display: flex;
+    position: fixed;
+    top: 0;
     right: 0;
-    margin-top: 8px;
-    width: 220px;
+    bottom: 0;
+    width: 250px;
+    height: 100vh;
     background: white;
-    border: 1px solid hsl(var(--color-border));
-    border-radius: var(--radius-lg);
-    padding: 0.5rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    /* Remove border radius for drawer feel */
+    border-radius: 0;
+    border-left: 1px solid hsl(var(--color-border));
+    padding: 1rem;
+    padding-top: 60px;
+    /* Space for close button if needed, or just visual breathing room */
+    box-shadow: -4px 0 12px rgba(0, 0, 0, 0.15);
     flex-direction: column;
     gap: 0.5rem;
-    z-index: 101;
+    z-index: 1002;
+    /* Higher than toggle */
+
+    /* Sliding animation */
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .secondary-actions.open {
-    display: flex;
+    transform: translateX(0);
+  }
+
+  /* Backdrop styles */
+  .menu-backdrop {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    backdrop-filter: blur(2px);
+  }
+
+  .menu-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .secondary-actions button {

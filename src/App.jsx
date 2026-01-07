@@ -23,7 +23,7 @@ function App() {
   const [importMode, setImportMode] = useState(null); // null | 'url' | 'image'
   const [importedData, setImportedData] = useState(null);
   const [searchQuery, setSearchQuery] = useState(''); // New search state
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
     loadRecipes();
@@ -205,26 +205,34 @@ function App() {
 
                   <button
                     className="mobile-menu-toggle"
-                    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                    onClick={() => setIsMenuOpen(!isMenuOpen)}
                     aria-label="メニュー"
                   >
-                    {isMobileMenuOpen ? '✕' : '☰'}
+                    {isMenuOpen ? '✕' : '☰'}
                   </button>
 
-                  <div className={`secondary-actions ${isMobileMenuOpen ? 'open' : ''}`}>
-                    <Button variant="ghost" onClick={() => { handleSwitchToTrash(); setIsMobileMenuOpen(false); }} style={{ position: 'relative' }}>
+                  <div className={`secondary-actions ${isMenuOpen ? 'open' : ''}`}>
+                    <Button variant="ghost" onClick={() => { handleSwitchToTrash(); setIsMenuOpen(false); }} style={{ position: 'relative' }}>
                       🗑️ ゴミ箱 {trashCount > 0 && <span className="trash-badge">{trashCount}</span>}
                     </Button>
-                    <Button variant="secondary" onClick={() => { setImportMode('url'); setIsMobileMenuOpen(false); }}>
+                    <Button variant="secondary" onClick={() => { setImportMode('url'); setIsMenuOpen(false); }}>
                       🌐 Webから追加
                     </Button>
-                    <Button variant="secondary" onClick={() => { setImportMode('image'); setIsMobileMenuOpen(false); }}>
+                    <Button variant="secondary" onClick={() => { setImportMode('image'); setIsMenuOpen(false); }}>
                       📷 画像から追加
                     </Button>
-                    <Button variant="secondary" onClick={() => { setCurrentView('data'); setIsMobileMenuOpen(false); }}>
+                    <Button variant="secondary" onClick={() => { setCurrentView('data'); setIsMenuOpen(false); }}>
                       📊 データ管理
                     </Button>
                   </div>
+
+                  {/* Backdrop for closing menu */}
+                  <div
+                    className={`menu-backdrop ${isMenuOpen ? 'open' : ''}`}
+                    onClick={() => setIsMenuOpen(false)}
+                    aria-hidden="true"
+                  />
+
 
                 </>
               ) : (
