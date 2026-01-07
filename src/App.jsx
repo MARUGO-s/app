@@ -23,6 +23,7 @@ function App() {
   const [importMode, setImportMode] = useState(null); // null | 'url' | 'image'
   const [importedData, setImportedData] = useState(null);
   const [searchQuery, setSearchQuery] = useState(''); // New search state
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     loadRecipes();
@@ -198,21 +199,32 @@ function App() {
             <div className="header-actions">
               {currentView === 'list' ? (
                 <>
-                  <Button variant="ghost" onClick={handleSwitchToTrash} style={{ marginRight: '0.5rem' }}>
-                    🗑️ ゴミ箱 {trashCount > 0 && <span style={{ marginLeft: '4px', backgroundColor: '#e74c3c', color: 'white', borderRadius: '12px', padding: '2px 8px', fontSize: '12px' }}>{trashCount}</span>}
-                  </Button>
-                  <Button onClick={() => setCurrentView('create')}>
+                  <Button onClick={() => setCurrentView('create')} className="primary-action-btn">
                     + レシピ追加
                   </Button>
-                  <Button variant="secondary" onClick={() => setImportMode('url')} style={{ marginLeft: '0.5rem' }}>
-                    🌐 Webから追加
-                  </Button>
-                  <Button variant="secondary" onClick={() => setImportMode('image')} style={{ marginLeft: '0.5rem' }}>
-                    📷 画像から追加
-                  </Button>
-                  <Button variant="secondary" onClick={() => setCurrentView('data')} style={{ marginLeft: '0.5rem' }}>
-                    📊 データ管理
-                  </Button>
+
+                  <button
+                    className="mobile-menu-toggle"
+                    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                    aria-label="メニュー"
+                  >
+                    {isMobileMenuOpen ? '✕' : '☰'}
+                  </button>
+
+                  <div className={`secondary-actions ${isMobileMenuOpen ? 'open' : ''}`}>
+                    <Button variant="ghost" onClick={() => { handleSwitchToTrash(); setIsMobileMenuOpen(false); }} style={{ position: 'relative' }}>
+                      🗑️ ゴミ箱 {trashCount > 0 && <span className="trash-badge">{trashCount}</span>}
+                    </Button>
+                    <Button variant="secondary" onClick={() => { setImportMode('url'); setIsMobileMenuOpen(false); }}>
+                      🌐 Webから追加
+                    </Button>
+                    <Button variant="secondary" onClick={() => { setImportMode('image'); setIsMobileMenuOpen(false); }}>
+                      📷 画像から追加
+                    </Button>
+                    <Button variant="secondary" onClick={() => { setCurrentView('data'); setIsMobileMenuOpen(false); }}>
+                      📊 データ管理
+                    </Button>
+                  </div>
 
                 </>
               ) : (

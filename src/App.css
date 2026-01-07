@@ -222,4 +222,85 @@
   .tag-divider {
     display: none;
   }
+
+  /* Mobile Header Menu */
+  .header-actions {
+    position: relative;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.5rem;
+    grid-template-columns: none;
+    /* Override grid */
+  }
+
+  .primary-action-btn {
+    flex: 1;
+    margin: 0 !important;
+  }
+
+  .mobile-menu-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: white;
+    border: 1px solid hsl(var(--color-border));
+    border-radius: var(--radius-md);
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: hsl(var(--color-text-main));
+    z-index: 101;
+  }
+
+  .secondary-actions {
+    display: none;
+    /* Hidden by default on mobile */
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    width: 220px;
+    background: white;
+    border: 1px solid hsl(var(--color-border));
+    border-radius: var(--radius-lg);
+    padding: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: 101;
+  }
+
+  .secondary-actions.open {
+    display: flex;
+  }
+
+  .secondary-actions button {
+    width: 100%;
+    margin: 0 !important;
+    justify-content: flex-start;
+    text-align: left;
+    padding: 10px 12px;
+  }
+}
+
+/* Base styles for desktop */
+.mobile-menu-toggle {
+  display: none;
+}
+
+.trash-badge {
+  margin-left: 6px;
+  background-color: #e74c3c;
+  color: white;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.secondary-actions {
+  display: contents;
+  /* On desktop, act as if this container doesn't exist to keep layout */
 }
