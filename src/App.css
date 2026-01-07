@@ -233,38 +233,37 @@
     font-size: 0.85rem;
   }
 
-  /* Make filter container wrap so nothing is hidden */
-  /* Make filter container single row scrollable */
+  /* Make filter container fit all items without scrolling */
   .tag-filter-container {
     flex-wrap: nowrap;
-    /* No wrapping */
-    overflow-x: auto;
-    /* Horizontal scroll */
-    height: auto;
-    justify-content: flex-start;
+    overflow-x: hidden;
+    /* Disable scroll */
+    justify-content: space-between;
+    gap: 4px;
+    /* Tight gap */
     padding-bottom: 8px;
-    /* Space for scrollbar if visible */
-    gap: 8px;
-    -webkit-overflow-scrolling: touch;
-    /* Smooth scroll on iOS */
-    /* Hide scrollbar for cleaner look if preferred */
-    scrollbar-width: none;
+    padding-right: 0;
+    /* Remove scroll padding */
   }
 
-  .tag-filter-container::-webkit-scrollbar {
-    display: none;
-  }
-
-  /* Fixed widths or auto for scroll items */
+  /* Flex items to share space equally */
   .tag-filter-btn,
   .store-filter-select {
-    flex: 0 0 auto;
-    /* Don't shrink, auto width */
-    min-width: auto;
-    text-align: center;
+    flex: 1;
+    /* Share space */
+    width: auto;
+    /* Override fixed width */
+    min-width: 0;
+    /* Allow shrinking */
+    padding: 0 2px;
+    /* Minimal padding, let text centered */
+    font-size: 0.75rem;
+    /* Smaller text if needed */
     height: 36px;
-    font-size: 0.8rem;
-    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
   }
 
   .tag-divider {
