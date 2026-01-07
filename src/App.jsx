@@ -262,7 +262,7 @@ function App() {
               value={STORE_LIST.includes(selectedTag) ? selectedTag : ""}
               onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
             >
-              <option value="">店舗で絞り込み...</option>
+              <option value="">店舗</option>
               {STORE_LIST.map(store => (
                 <option key={store} value={store}>{store}</option>
               ))}
@@ -287,7 +287,7 @@ function App() {
               value={allCourses.includes(selectedTag) ? selectedTag : ""}
               onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
             >
-              <option value="">コースで絞り込み...</option>
+              <option value="">コース</option>
               {allCourses.sort().map(course => (
                 <option key={course} value={course}>{course}</option>
               ))}
@@ -298,7 +298,7 @@ function App() {
               value={allCategories.includes(selectedTag) ? selectedTag : ""}
               onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
             >
-              <option value="">カテゴリーで絞り込み...</option>
+              <option value="">カテゴリー</option>
               {allCategories.sort().map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
