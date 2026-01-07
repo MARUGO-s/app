@@ -180,7 +180,7 @@ function App() {
       setCurrentView(isEdit ? 'detail' : 'list');
     } catch (error) {
       console.error("Failed to save recipe:", error);
-      alert("保存に失敗しました。");
+      alert(`保存に失敗しました。\nエラー: ${error.message || error.error_description || JSON.stringify(error)}`);
     }
   };
 
