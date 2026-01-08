@@ -127,6 +127,12 @@
   display: flex;
   gap: var(--space-lg);
   align-items: flex-start;
+  flex-direction: row-reverse;
+}
+
+.recent-list-wrapper {
+  width: 260px;
+  flex-shrink: 0;
 }
 
 .recipe-list-container {

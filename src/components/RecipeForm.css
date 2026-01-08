@@ -63,6 +63,8 @@
 .form-column {
     display: flex;
     flex-direction: column;
+    min-width: 0;
+    /* Prevent grid item from expanding to min-content width */
 }
 
 .mb-md {

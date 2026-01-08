@@ -2,7 +2,21 @@
 .bread-card {
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03));
     border: 1px solid var(--color-border);
-    /* Giving it a slightly different feel */
+    max-width: 100%;
+    overflow: hidden;
+    /* Ensure content obeys border radius and width */
+    min-width: 0;
+    /* Prevent flex item expansion */
+}
+
+.bread-form {
+    width: 100%;
+    max-width: 100%;
+    /* Changed from 100vw to be safer in nested contexts */
+    overflow-x: hidden;
+    /* Prevent page scroll */
+    min-width: 0;
+    /* Prevent flex item expansion */
 }
 
 .bread-header {
@@ -37,13 +51,16 @@
 /* Grid Layout */
 .bread-grid-header {
     display: grid;
-    grid-template-columns: 2fr 1fr 60px 30px;
-    gap: 8px;
+    /* Use minmax to ensure columns have a sensible minimum width even if squashed */
+    grid-template-columns: minmax(140px, 2fr) minmax(80px, 1fr) 50px 90px 90px 30px;
+    gap: 4px;
     padding: 0 4px;
     margin-bottom: 8px;
     font-size: 0.8rem;
     font-weight: bold;
     color: var(--color-text-muted);
+    min-width: 600px;
+    /* Force minimum width to prevent collapse */
 }
 
 .text-center {
@@ -52,16 +69,41 @@
 
 .bread-row {
     display: grid;
-    grid-template-columns: 2fr 1fr 60px 30px;
-    gap: 8px;
+    grid-template-columns: minmax(140px, 2fr) minmax(80px, 1fr) 50px 90px 90px 30px;
+    gap: 4px;
     align-items: center;
     margin-bottom: 8px;
+    min-width: 600px;
+    /* Match header min-width */
+}
+
+/* Scroll Wrapper */
+.bread-scroll-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    /* Use width: 100% and negative margins carefully */
+    width: calc(100% + 32px);
+    margin-left: -16px;
+    margin-right: -16px;
+    padding: 0 16px;
+    padding-bottom: 8px;
 }
 
 /* Inputs override */
 .bread-input {
     margin: 0 !important;
     /* Override default input margin */
+}
+
+/* Remove wrapper margin for inputs in grid */
+.bread-row .input-group {
+    margin-bottom: 0;
+    width: 100%;
+}
+
+.bread-row .input-field {
+    padding: 4px 6px;
+    font-size: 0.9rem;
 }
 
 .bread-input input {
@@ -73,6 +115,10 @@
 .bread-input.name input {
     font-family: inherit;
     /* Name can be normal font */
+}
+
+.bread-input.name {
+    position: relative;
 }
 
 .bread-percent {
@@ -101,13 +147,6 @@
 
 /* Responsive */
 @media (max-width: 600px) {
-
-    .bread-grid-header,
-    .bread-row {
-        grid-template-columns: 1.5fr 1fr 50px 24px;
-        gap: 4px;
-    }
-
     .bread-percent {
         font-size: 0.8rem;
     }
