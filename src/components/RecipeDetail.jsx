@@ -222,6 +222,11 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                 </div>
             </div>
 
+            <div className="recipe-detail-dates" style={{ marginTop: '0.5rem', marginBottom: '1.5rem', borderTop: 'none', paddingRight: '0.5rem' }}>
+                <span>📅 登録: {formatDate(recipe.created_at)}</span>
+                {recipe.updated_at && <span>🔄 更新: {formatDate(recipe.updated_at)}</span>}
+            </div>
+
             <div className="recipe-detail__content">
                 <div className="recipe-detail__main">
                     <section className="detail-section">
@@ -340,10 +345,6 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                             })()}
                                                         </span>
                                                     </div>
-                                                    <div className="recipe-detail-dates">
-                                                        <span>📅 登録: {formatDate(recipe.created_at)}</span>
-                                                        {recipe.updated_at && <span>🔄 更新: {formatDate(recipe.updated_at)}</span>}
-                                                    </div>
                                                 </div>
                                             </>
                                         );
@@ -392,10 +393,6 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                             ¥{ingredients.reduce((sum, ing) => sum + (parseInt(ing.cost) || 0), 0).toLocaleString()}
                                         </span>
                                     </div>
-                                    <div className="recipe-detail-dates">
-                                        <span>📅 登録: {formatDate(recipe.created_at)}</span>
-                                        {recipe.updated_at && <span>🔄 更新: {formatDate(recipe.updated_at)}</span>}
-                                    </div>
                                 </>
                             )}
                         </Card>
@@ -416,7 +413,7 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                         </div>
                     </section>
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 };
