@@ -15,6 +15,27 @@
     gap: var(--space-sm);
 }
 
+@media (max-width: 768px) {
+    .recipe-detail__header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-sm);
+    }
+
+    .recipe-detail__actions {
+        width: 100%;
+        overflow-x: auto;
+        padding-bottom: 4px;
+        /* for scrollbar spacing */
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .recipe-detail__actions button,
+    .recipe-detail__actions select {
+        flex-shrink: 0;
+    }
+}
+
 /* Image now separate from title */
 .recipe-detail__hero {
     height: 200px;
