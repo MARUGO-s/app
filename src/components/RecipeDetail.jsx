@@ -5,6 +5,12 @@ import { translationService } from '../services/translationService';
 import { SUPPORTED_LANGUAGES } from '../constants';
 import './RecipeDetail.css';
 
+const formatDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+};
+
 export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, isDeleted, onView }) => {
     const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
     const [showHardDeleteConfirm, setShowHardDeleteConfirm] = React.useState(false);
@@ -334,6 +340,10 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                             })()}
                                                         </span>
                                                     </div>
+                                                    <div className="recipe-detail-dates">
+                                                        <span>📅 登録: {formatDate(recipe.created_at)}</span>
+                                                        {recipe.updated_at && <span>🔄 更新: {formatDate(recipe.updated_at)}</span>}
+                                                    </div>
                                                 </div>
                                             </>
                                         );
@@ -381,6 +391,10 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                         <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>
                                             ¥{ingredients.reduce((sum, ing) => sum + (parseInt(ing.cost) || 0), 0).toLocaleString()}
                                         </span>
+                                    </div>
+                                    <div className="recipe-detail-dates">
+                                        <span>📅 登録: {formatDate(recipe.created_at)}</span>
+                                        {recipe.updated_at && <span>🔄 更新: {formatDate(recipe.updated_at)}</span>}
                                     </div>
                                 </>
                             )}

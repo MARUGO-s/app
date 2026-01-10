@@ -400,3 +400,14 @@
     flex-shrink: 0;
     border: none;
 }
+
+.recipe-detail-dates {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    font-size: 0.8rem;
+    color: hsl(var(--color-text-muted));
+    border-top: 1px dotted hsl(var(--color-border));
+    padding-top: 0.5rem;
+}
