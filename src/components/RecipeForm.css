@@ -244,3 +244,9 @@ h3 {
 .recipe-form input[type="file"]::file-selector-button:hover {
     background-color: #e0e0e0;
 }
+
+/* Force Cancel button (ghost) in header to be white text */
+.recipe-form .recipe-form__actions .btn--ghost,
+.recipe-form .recipe-form__actions .btn--ghost span {
+    color: var(--color-text-main) !important;
+}
