@@ -15,6 +15,8 @@
   /* Light Gray for secondary actions */
   --color-accent: 210 100% 50%;
   /* Subtle Blue for links/highlights */
+  --color-danger: 354 70% 54%;
+  /* Red */
 
   /* Dark Mode Text Colors */
   --color-text-main: 0 0% 95%;

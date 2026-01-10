@@ -260,7 +260,12 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                         <tbody>
                                                             {flours.map((item, i) => (
                                                                 <tr key={`f-${i}`}>
-                                                                    <td>{item.name}</td>
+                                                                    <td>
+                                                                        <div className="ingredient-name">
+                                                                            <input type="checkbox" id={`flour-${i}`} />
+                                                                            <label htmlFor={`flour-${i}`}>{item.name}</label>
+                                                                        </div>
+                                                                    </td>
                                                                     <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{item.quantity}</td>
                                                                     <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-primary)' }}>{calcPercent(item.quantity)}%</td>
                                                                     <td style={{ textAlign: 'right', color: '#666' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
@@ -294,7 +299,12 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                         <tbody>
                                                             {others.map((item, i) => (
                                                                 <tr key={`o-${i}`}>
-                                                                    <td>{item.name}</td>
+                                                                    <td>
+                                                                        <div className="ingredient-name">
+                                                                            <input type="checkbox" id={`other-${i}`} />
+                                                                            <label htmlFor={`other-${i}`}>{item.name}</label>
+                                                                        </div>
+                                                                    </td>
                                                                     <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{item.quantity}</td>
                                                                     <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-text-muted)' }}>{calcPercent(item.quantity)}%</td>
                                                                     <td style={{ textAlign: 'right', color: '#666' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>

@@ -136,10 +136,18 @@ serve(async (req) => {
             }
 
             // Implicit section detection / Correction
-            const isStepLine = stepNumberPattern.test(line);
+            let isStepLine = stepNumberPattern.test(line);
             const isSentence = sentencePattern.test(line);
             // Ingredient heuristic: contains unit/qty AND is short AND not a step number AND not a sentence
             const isIngLine = ingredientPattern.test(line) && line.length < 50 && !isSentence;
+
+            // FIX: If it looks like a step ("1 ...") but also starts with "Number Unit", it's likely an ingredient (e.g. "450 g")
+            if (isStepLine) {
+                const startsWithUnit = /^\d+\s*(g|ml|kg|cc|tbsp|tsp|cup|個|本|枚|円|%)/i.test(line);
+                if (startsWithUnit) {
+                    isStepLine = false;
+                }
+            }
 
             if (isStepLine) {
                 currentSection = 'steps';
@@ -161,40 +169,95 @@ serve(async (req) => {
                     recipe.steps.push(line);
                 } else {
                     // Smart Split for Ingredients
-                    // Search for Number+Unit at the END of the line via backward regex strategy
-                    // Extract the last run of [digits/chars] at end of line.
-                    const lastPartMatch = line.match(/[\d\.\/]+[\s]*[a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF%]+$/);
+                    let namePart = "";
+                    let qtyPart = "";
+                    let unitPart = "";
 
-                    if (lastPartMatch) {
-                        const qtyString = lastPartMatch[0]; // e.g. "70g"
-                        const namePart = line.substring(0, line.length - qtyString.length).replace(/[\.…]+$/, '').trim();
+                    // Strategy 1: Check if line STARTS with Quantity+Unit (Orphaned Quantity or "Qty Name")
+                    const startMatch = line.match(/^([\d\.\/]+)\s*([a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF%]+)(.*)$/);
+                    const startsWithUnit = /^\d+\s*(g|ml|kg|cc|tbsp|tsp|cup|個|本|枚|円|%)/i.test(line);
 
-                        // Parse qtyString into val + unit
-                        const valMatch = qtyString.match(/^([\d\.\/]+)\s*(.*)$/);
-                        if (valMatch) {
-                            recipe.ingredients.push({
-                                name: namePart,
-                                quantity: valMatch[1],
-                                unit: valMatch[2]
-                            });
-                        } else {
-                            recipe.ingredients.push({ name: namePart, quantity: qtyString, unit: '' });
+                    if (startsWithUnit && startMatch) {
+                        const q = startMatch[1];
+                        const u = startMatch[2];
+                        // startMatch[3] is the remainder. 
+
+                        // Check if we should merge with the LAST ingredient (if it has name but no qty)
+                        const lastIng = recipe.ingredients.length > 0 ? recipe.ingredients[recipe.ingredients.length - 1] : null;
+                        if (lastIng && !lastIng.quantity && lastIng.name) {
+                            lastIng.quantity = q;
+                            lastIng.unit = u;
+                            // The remainder *might* be part of the unit or the name, but usually it's garbage or " (75%)"
+                            // For now, we assume the line was primarily quantity.
+                            continue;
                         }
+
+                        // Check if we can merge with the last line of DESCRIPTION (orphaned name)
+                        if (recipe.description) {
+                            const descLines = recipe.description.trim().split('\n');
+                            if (descLines.length > 0) {
+                                const lastDesc = descLines[descLines.length - 1].trim();
+                                // Heuristic: Short and not a sentence
+                                if (lastDesc.length < 20 && !/[。\.]$/.test(lastDesc)) {
+                                    namePart = lastDesc;
+                                    // Remove from description
+                                    descLines.pop();
+                                    recipe.description = descLines.join('\n');
+
+                                    // Add new ingredient
+                                    recipe.ingredients.push({
+                                        name: namePart,
+                                        quantity: q,
+                                        unit: u
+                                    });
+                                    continue;
+                                }
+                            }
+                        }
+
+                        // If no merge target, treat as standard parsed line (maybe "200g Pork")
+                        // If remainder exists, it might be the name
+                        const remainder = startMatch[3].trim();
+                        if (remainder.length > 0 && !/^[\(\)0-9%\s]+$/.test(remainder)) {
+                            // E.g. "200g Pork"
+                            namePart = remainder;
+                            qtyPart = q;
+                            unitPart = u;
+                        } else {
+                            // Just quantity? e.g. "200 g"
+                            // Add as is (empty name)
+                            qtyPart = q;
+                            unitPart = u;
+                        }
+
                     } else {
-                        // Fallback to splitting at first digit if end-of-line fail
-                        const match = line.match(/(.*?)(\d+.*)/);
-                        if (match) {
-                            const qSection = match[2].trim();
-                            const qMatch = qSection.match(/^([\d\.\/]+)\s*(.*)$/);
-                            if (qMatch) {
-                                recipe.ingredients.push({ name: match[1].trim(), quantity: qMatch[1], unit: qMatch[2] });
+                        // Strategy 2: End-of-line Quantity (Standard "Name Quantity")
+                        // Updated regex to include parentheses in unit/tail
+                        const lastPartMatch = line.match(/[\d\.\/]+[\s]*[a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF%\(\)\s]+$/);
+
+                        if (lastPartMatch) {
+                            const qtyString = lastPartMatch[0];
+                            namePart = line.substring(0, line.length - qtyString.length).replace(/[\.…]+$/, '').trim();
+
+                            // Parse qtyString onto val + unit
+                            const valMatch = qtyString.match(/^([\d\.\/]+)\s*(.*)$/);
+                            if (valMatch) {
+                                qtyPart = valMatch[1];
+                                unitPart = valMatch[2];
                             } else {
-                                recipe.ingredients.push({ name: match[1].trim(), quantity: qSection, unit: '' });
+                                qtyPart = qtyString;
                             }
                         } else {
-                            recipe.ingredients.push({ name: line, quantity: '', unit: '' });
+                            // Fallback
+                            namePart = line;
                         }
                     }
+
+                    recipe.ingredients.push({
+                        name: namePart,
+                        quantity: qtyPart,
+                        unit: unitPart
+                    });
                 }
             } else if (currentSection === 'steps') {
                 recipe.steps.push(line);

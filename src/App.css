@@ -210,6 +210,16 @@
   /* On desktop, act as if this container doesn't exist to keep layout */
 }
 
+/* Hide empty section title (main view) to allow buttons to shift left when title is absent */
+.section-title:empty {
+  display: none;
+}
+
+.menu-divider {
+  display: none;
+  /* Hide on desktop */
+}
+
 @media (max-width: 600px) {
   .container-header {
     flex-direction: column;
@@ -378,5 +388,19 @@
     background: rgba(255, 255, 255, 0.1);
     /* Subtle highlight */
     color: white;
+  }
+
+  .menu-divider {
+    display: block;
+    /* Show on mobile */
+    height: 1px;
+    background-color: #444;
+    margin: 8px 0;
+    width: 100%;
+  }
+
+  .danger-text {
+    color: #ff6b6b !important;
+    /* Lighter red for visibility on dark bg */
   }
 }

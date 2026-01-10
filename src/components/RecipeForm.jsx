@@ -45,6 +45,34 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         breadIngredients: safeInitialData.breadIngredients || []
     });
 
+    const [isDragActive, setIsDragActive] = useState(false);
+
+    const handleDrag = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.type === "dragenter" || e.type === "dragover") {
+            setIsDragActive(true);
+        } else if (e.type === "dragleave") {
+            setIsDragActive(false);
+        }
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragActive(false);
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            const file = e.dataTransfer.files[0];
+            if (file.type.startsWith('image/')) {
+                setFormData(prev => ({
+                    ...prev,
+                    imageFile: file,
+                    image: URL.createObjectURL(file) // Preview URL
+                }));
+            }
+        }
+    };
+
     const handleChange = (e) => {
         const { id, value } = e.target;
         setFormData(prev => ({ ...prev, [id]: value }));
@@ -220,23 +248,62 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                         />
                         <div style={{ marginBottom: '1rem' }}>
                             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', color: 'hsl(var(--color-primary))' }}>画像</label>
-                            {formData.image && (
-                                <div style={{ marginBottom: '0.5rem', borderRadius: 'var(--radius-md)', overflow: 'hidden', height: '200px', backgroundColor: '#f0f0f0' }}>
-                                    <img
-                                        src={formData.image}
-                                        alt="プレビュー"
-                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                        onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.textContent = '画像読み込みエラー'; }}
-                                    />
-                                </div>
-                            )}
-                            <input
-                                type="file"
-                                accept="image/*"
-                                onChange={handleImageChange}
-                                style={{ display: 'block', width: '100%', padding: '0.5rem', border: '1px solid hsl(var(--color-border))', borderRadius: 'var(--radius-md)' }}
-                            />
-                            {/* Hidden URL input fallback if needed, or just let file input take precedence */}
+                            {/* Drag and Drop Zone */}
+                            <div
+                                onDragEnter={handleDrag}
+                                onDragLeave={handleDrag}
+                                onDragOver={handleDrag}
+                                onDrop={handleDrop}
+                                style={{
+                                    position: 'relative',
+                                    marginBottom: '1rem',
+                                    borderRadius: 'var(--radius-md)',
+                                    overflow: 'hidden',
+                                    border: isDragActive ? '2px dashed var(--color-primary)' : '1px dashed hsl(var(--color-border))',
+                                    backgroundColor: isDragActive ? '#f0f9ff' : '#f9f9f9',
+                                    transition: 'all 0.2s ease',
+                                    minHeight: '200px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'center',
+                                    alignItems: 'center'
+                                }}
+                            >
+                                {formData.image ? (
+                                    <>
+                                        <div style={{ width: '100%', height: '200px', backgroundColor: '#f0f0f0' }}>
+                                            <img
+                                                src={formData.image}
+                                                alt="プレビュー"
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isDragActive ? 0.5 : 1 }}
+                                                onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.textContent = '画像読み込みエラー'; }}
+                                            />
+                                        </div>
+                                        <div style={{ padding: '0.5rem', fontSize: '0.8rem', color: '#666' }}>
+                                            クリックして変更、または画像をドロップ
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
+                                        {isDragActive ? "ここに画像をドロップ" : "クリックして画像を選択、またはドラッグ＆ドロップ"}
+                                    </div>
+                                )}
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleImageChange}
+                                    style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        width: '100%',
+                                        height: '100%',
+                                        opacity: 0,
+                                        cursor: 'pointer'
+                                    }}
+                                />
+                            </div>
+
                         </div>
 
                         <div className="form-row-3">
@@ -316,118 +383,129 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                         {formData.type === 'bread' ? (
                             <RecipeFormBread formData={formData} setFormData={setFormData} />
                         ) : (
-                            <div className="dynamic-list">
-                                {(formData.ingredients || []).map((item, i) => (
-                                    <div key={i} className="dynamic-item ingredient-row" style={{ gap: '0.5rem' }}>
-                                        <div className="ingredient-name" style={{ position: 'relative' }}>
-                                            <Input
-                                                value={item.name}
-                                                onChange={(e) => handleArrayChange(i, e.target.value, 'ingredients', 'name')}
-                                                onFocus={() => {
-                                                    if (item.name.trim()) {
-                                                        const matchVal = item.name.toLowerCase();
-                                                        const matches = allIngredientNames.filter(n => n.toLowerCase().includes(matchVal));
-                                                        setFilteredSuggestions(matches.slice(0, 10));
-                                                        setActiveSuggestionRow(i);
-                                                    }
-                                                }}
-                                                onBlur={() => {
-                                                    // Delay hide to allow click
-                                                    setTimeout(() => setActiveSuggestionRow(null), 200);
-                                                }}
-                                                placeholder="材料名"
-                                                style={{ width: '100%' }}
-                                                autoComplete="off"
-                                            />
-                                            {activeSuggestionRow === i && filteredSuggestions.length > 0 && (
-                                                <ul style={{
-                                                    position: 'absolute',
-                                                    top: '100%',
-                                                    left: 0,
-                                                    right: 0,
-                                                    backgroundColor: 'white',
-                                                    border: '1px solid #ccc',
-                                                    borderRadius: '0 0 4px 4px',
-                                                    maxHeight: '150px',
-                                                    overflowY: 'auto',
-                                                    zIndex: 1000,
-                                                    padding: 0,
-                                                    margin: 0,
-                                                    listStyle: 'none',
-                                                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                                                }}>
-                                                    {filteredSuggestions.map((suggestion, idx) => (
-                                                        <li
-                                                            key={idx}
-                                                            onMouseDown={() => handleSuggestionSelect(i, suggestion)}
-                                                            style={{
-                                                                padding: '8px 12px',
-                                                                cursor: 'pointer',
-                                                                borderBottom: idx < filteredSuggestions.length - 1 ? '1px solid #f0f0f0' : 'none',
-                                                                fontSize: '14px',
-                                                                color: '#333'
-                                                            }}
-                                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
-                                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                                                        >
-                                                            {suggestion}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            )}
+                            <div className="recipe-scroll-wrapper">
+                                <div className="recipe-list-header">
+                                    <span>材料名</span>
+                                    <span>分量</span>
+                                    <span>単位</span>
+                                    <span style={{ textAlign: 'center' }}>仕入れ</span>
+                                    <span style={{ textAlign: 'center' }}>原価</span>
+                                    <span></span>
+                                </div>
+                                <div className="dynamic-list">
+                                    {(formData.ingredients || []).map((item, i) => (
+                                        <div key={i} className="ingredient-row">
+                                            <div className="ingredient-name" style={{ position: 'relative' }}>
+                                                <Input
+                                                    value={item.name}
+                                                    onChange={(e) => handleArrayChange(i, e.target.value, 'ingredients', 'name')}
+                                                    onFocus={() => {
+                                                        if (item.name.trim()) {
+                                                            const matchVal = item.name.toLowerCase();
+                                                            const matches = allIngredientNames.filter(n => n.toLowerCase().includes(matchVal));
+                                                            setFilteredSuggestions(matches.slice(0, 10));
+                                                            setActiveSuggestionRow(i);
+                                                        }
+                                                    }}
+                                                    onBlur={() => {
+                                                        // Delay hide to allow click
+                                                        setTimeout(() => setActiveSuggestionRow(null), 200);
+                                                    }}
+                                                    placeholder="材料名"
+                                                    style={{ width: '100%' }}
+                                                    autoComplete="off"
+                                                />
+                                                {activeSuggestionRow === i && filteredSuggestions.length > 0 && (
+                                                    <ul style={{
+                                                        position: 'absolute',
+                                                        top: '100%',
+                                                        left: 0,
+                                                        right: 0,
+                                                        backgroundColor: 'white',
+                                                        border: '1px solid #ccc',
+                                                        borderRadius: '0 0 4px 4px',
+                                                        maxHeight: '150px',
+                                                        overflowY: 'auto',
+                                                        zIndex: 1000,
+                                                        padding: 0,
+                                                        margin: 0,
+                                                        listStyle: 'none',
+                                                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                                                    }}>
+                                                        {filteredSuggestions.map((suggestion, idx) => (
+                                                            <li
+                                                                key={idx}
+                                                                onMouseDown={() => handleSuggestionSelect(i, suggestion)}
+                                                                style={{
+                                                                    padding: '8px 12px',
+                                                                    cursor: 'pointer',
+                                                                    borderBottom: idx < filteredSuggestions.length - 1 ? '1px solid #f0f0f0' : 'none',
+                                                                    fontSize: '14px',
+                                                                    color: '#333'
+                                                                }}
+                                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                                                            >
+                                                                {suggestion}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                )}
+                                            </div>
+                                            <div className="ingredient-qty">
+                                                <Input
+                                                    value={item.quantity}
+                                                    onChange={(e) => handleArrayChange(i, e.target.value, 'ingredients', 'quantity')}
+                                                    placeholder="0"
+                                                    style={{ width: '100%' }}
+                                                />
+                                            </div>
+                                            <div className="ingredient-unit">
+                                                <Input
+                                                    value={item.unit}
+                                                    onChange={(e) => handleArrayChange(i, e.target.value, 'ingredients', 'unit')}
+                                                    placeholder="単位"
+                                                    style={{ width: '100%' }}
+                                                />
+                                            </div>
+                                            <div className="ingredient-cost">
+                                                <Input
+                                                    type="number"
+                                                    value={item.purchaseCost}
+                                                    onChange={(e) => handleArrayChange(i, e.target.value, 'ingredients', 'purchaseCost')}
+                                                    placeholder={item.purchaseCostRef ? `Ref` : "仕入れ"}
+                                                    style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '' }}
+                                                    min="0"
+                                                    title={item.purchaseCostRef ? `参考: ¥${item.purchaseCostRef}${item.vendorRef ? ` (${item.vendorRef})` : ''}` : "No data"}
+                                                />
+                                                {item.purchaseCostRef && (
+                                                    <div style={{ fontSize: '10px', color: '#666', lineHeight: '1.2', marginTop: '2px', wordBreak: 'break-all', textAlign: 'center' }}>
+                                                        ¥{item.purchaseCostRef}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="ingredient-cost">
+                                                <Input
+                                                    type="number"
+                                                    value={item.cost}
+                                                    onChange={(e) => handleArrayChange(i, e.target.value, 'ingredients', 'cost')}
+                                                    placeholder="原価"
+                                                    style={{ width: '100%' }}
+                                                    min="0"
+                                                />
+                                            </div>
+                                            <div className="remove-button-cell">
+                                                <button
+                                                    type="button"
+                                                    className="icon-btn-delete"
+                                                    onClick={() => removeArrayItem(i, 'ingredients')}
+                                                    title="削除"
+                                                >✕</button>
+                                            </div>
                                         </div>
-                                        <div className="ingredient-qty">
-                                            <Input
-                                                value={item.quantity}
-                                                onChange={(e) => handleArrayChange(i, e.target.value, 'ingredients', 'quantity')}
-                                                placeholder="分量"
-                                                style={{ width: '100%' }}
-                                            />
-                                        </div>
-                                        <div className="ingredient-unit">
-                                            <Input
-                                                value={item.unit}
-                                                onChange={(e) => handleArrayChange(i, e.target.value, 'ingredients', 'unit')}
-                                                placeholder="単位"
-                                                style={{ width: '100%' }}
-                                            />
-                                        </div>
-                                        <div className="ingredient-cost" style={{ width: '100px' }}>
-                                            <Input
-                                                type="number"
-                                                value={item.purchaseCost}
-                                                onChange={(e) => handleArrayChange(i, e.target.value, 'ingredients', 'purchaseCost')}
-                                                placeholder={item.purchaseCostRef ? `Ref: ¥${item.purchaseCostRef}` : "仕入れ"}
-                                                style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '' }}
-                                                min="0"
-                                                title={item.purchaseCostRef ? `参考: ¥${item.purchaseCostRef}${item.vendorRef ? ` (${item.vendorRef})` : ''}` : "No data"}
-                                            />
-                                            {item.purchaseCostRef && (
-                                                <div style={{ fontSize: '10px', color: '#666', lineHeight: '1.2', marginTop: '2px', wordBreak: 'break-all' }}>
-                                                    ¥{item.purchaseCostRef} {item.vendorRef && `(${item.vendorRef})`}
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="ingredient-cost" style={{ width: '100px' }}>
-                                            <Input
-                                                type="number"
-                                                value={item.cost}
-                                                onChange={(e) => handleArrayChange(i, e.target.value, 'ingredients', 'cost')}
-                                                placeholder="原価"
-                                                style={{ width: '100%' }}
-                                                min="0"
-                                            />
-                                        </div>
-                                        {(formData.ingredients || []).length > 1 && (
-                                            <button
-                                                type="button"
-                                                className="remove-btn"
-                                                onClick={() => removeArrayItem(i, 'ingredients')}
-                                            >✕</button>
-                                        )}
-                                    </div>
-                                ))}
-                                <Button type="button" variant="secondary" size="sm" onClick={() => addArrayItem('ingredients')} block>+ 材料を追加</Button>
+                                    ))}
+                                    <Button type="button" variant="secondary" size="sm" onClick={() => addArrayItem('ingredients')} block>+ 材料を追加</Button>
+                                </div>
                             </div>
                         )}
                     </Card>
@@ -436,7 +514,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                         <h3>作り方</h3>
                         <div className="dynamic-list">
                             {(formData.steps || []).map((item, i) => (
-                                <div key={i} className="dynamic-item">
+                                <div key={i} className="step-row">
                                     <div className="step-count">{i + 1}</div>
                                     <Input
                                         textarea
@@ -445,13 +523,14 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                         placeholder={`手順 ${i + 1}...`}
                                         style={{ minHeight: '80px', marginBottom: 0 }}
                                     />
-                                    {(formData.steps || []).length > 1 && (
+                                    <div className="remove-button-cell">
                                         <button
                                             type="button"
-                                            className="remove-btn"
+                                            className="icon-btn-delete"
                                             onClick={() => removeArrayItem(i, 'steps')}
+                                            title="削除"
                                         >✕</button>
-                                    )}
+                                    </div>
                                 </div>
                             ))}
                             <Button type="button" variant="secondary" size="sm" onClick={() => addArrayItem('steps')} block>+ 作り方を追加</Button>

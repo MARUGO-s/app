@@ -5,6 +5,7 @@ import { RecipeDetail } from './components/RecipeDetail';
 import { RecipeForm } from './components/RecipeForm';
 import { ImportModal } from './components/ImportModal';
 import { DataManagement } from './components/DataManagement';
+import { Card } from './components/Card';
 
 import { Button } from './components/Button';
 import { RecentRecipes } from './components/RecentRecipes';
@@ -24,6 +25,9 @@ function App() {
   const [importedData, setImportedData] = useState(null);
   const [searchQuery, setSearchQuery] = useState(''); // New search state
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedRecipeIds, setSelectedRecipeIds] = useState(new Set());
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
   useEffect(() => {
     loadRecipes();
@@ -186,22 +190,129 @@ function App() {
   };
 
   const handleImportRecipe = (recipeData) => {
+    // Smart detection for Bread recipes
+    const hasYeast = (recipeData.ingredients || []).some(ing =>
+      (ing.name && (ing.name.toLowerCase().includes('yeast') || ing.name.includes('イースト')))
+    );
+
+    if (hasYeast) {
+      recipeData.type = 'bread';
+      recipeData.flours = [];
+      recipeData.breadIngredients = [];
+
+      // Keywords for flours (avoid generic '粉' to exclude powder/cheese etc)
+      const flourKeywords = ['flour', '強力粉', '薄力粉', '準強力粉', '中力粉', '全粒粉', 'ライ麦粉', 'フランス粉', 'デュラムセモリナ'];
+
+      (recipeData.ingredients || []).forEach(ing => {
+        const isFlour = flourKeywords.some(k => ing.name.includes(k));
+        if (isFlour) {
+          recipeData.flours.push(ing);
+        } else {
+          recipeData.breadIngredients.push(ing);
+        }
+      });
+    }
+
     setImportedData(recipeData);
     setCurrentView('create');
   };
 
+  const toggleSelectMode = () => {
+    setIsSelectMode(!isSelectMode);
+    setSelectedRecipeIds(new Set());
+  };
+
+  const handleToggleSelection = (id) => {
+    const next = new Set(selectedRecipeIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setSelectedRecipeIds(next);
+  };
+
+  const handleBulkDelete = () => {
+    setShowBulkDeleteConfirm(true);
+  };
+
+  const cancelBulkDelete = () => {
+    setShowBulkDeleteConfirm(false);
+  };
+
+  const confirmBulkDelete = async () => {
+    setShowBulkDeleteConfirm(false);
+    try {
+      setLoading(true);
+      // Process sequentially to reuse existing logic (or optimize with bulk API in future)
+      for (const id of selectedRecipeIds) {
+        await recipeService.deleteRecipe(id);
+      }
+
+      // Update UI
+      setRecipes(recipes.filter(r => !selectedRecipeIds.has(r.id)));
+      loadTrashCount();
+      setIsSelectMode(false);
+      setSelectedRecipeIds(new Set());
+      alert("削除しました。");
+
+    } catch (error) {
+      console.error("Bulk delete failed", error);
+      alert("一部の削除に失敗した可能性があります。");
+      loadRecipes(); // reload to sync
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
   return (
     <Layout>
+      {showBulkDeleteConfirm && (
+        <div className="modal-overlay" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <Card style={{ width: '90%', maxWidth: '400px', padding: '1.5rem', border: '2px solid var(--color-danger)', backgroundColor: 'white' }}>
+            <h3 style={{ marginTop: 0, color: '#dc3545', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>⚠️</span> {selectedRecipeIds.size}件のレシピを削除
+            </h3>
+            <p style={{ margin: '1rem 0', color: '#333' }}>
+              選択したレシピをゴミ箱に移動しますか？
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+              <Button variant="ghost" onClick={cancelBulkDelete}>キャンセル</Button>
+              <Button variant="danger" onClick={confirmBulkDelete}>削除する</Button>
+            </div>
+          </Card>
+        </div>
+      )}
       {(currentView === 'list' || currentView === 'trash') && (
         <>
           <div className="container-header">
-            <h2 className="section-title">{currentView === 'trash' ? 'ゴミ箱 (削除済み)' : 'マイレシピ'}</h2>
+            <h2 className="section-title">{currentView === 'trash' ? 'ゴミ箱 (削除済み)' : ''}</h2>
             <div className="header-actions">
               {currentView === 'list' ? (
                 <>
-                  <Button onClick={() => setCurrentView('create')} className="primary-action-btn">
-                    + レシピ追加
-                  </Button>
+                  {isSelectMode ? (
+                    <>
+                      <Button variant="ghost" onClick={toggleSelectMode}>キャンセル</Button>
+                      <Button
+                        variant="danger"
+                        onClick={handleBulkDelete}
+                        disabled={selectedRecipeIds.size === 0}
+                      >
+                        削除 ({selectedRecipeIds.size})
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button onClick={() => setCurrentView('create')} className="primary-action-btn">
+                        + レシピ追加
+                      </Button>
+                    </>
+                  )}
 
                   <button
                     className="mobile-menu-toggle"
@@ -212,9 +323,6 @@ function App() {
                   </button>
 
                   <div className={`secondary-actions ${isMenuOpen ? 'open' : ''}`}>
-                    <Button variant="ghost" onClick={() => { handleSwitchToTrash(); setIsMenuOpen(false); }} style={{ position: 'relative' }}>
-                      <span style={{ marginRight: '8px' }}>🗑️</span> ゴミ箱 {trashCount > 0 && <span className="trash-badge">{trashCount}</span>}
-                    </Button>
                     <Button variant="secondary" onClick={() => { setImportMode('url'); setIsMenuOpen(false); }}>
                       <span style={{ marginRight: '8px' }}>🌐</span> Webから追加
                     </Button>
@@ -223,6 +331,18 @@ function App() {
                     </Button>
                     <Button variant="secondary" onClick={() => { setCurrentView('data'); setIsMenuOpen(false); }}>
                       <span style={{ marginRight: '8px' }}>📊</span> データ管理
+                    </Button>
+
+                    <div className="menu-divider"></div>
+
+                    {!isSelectMode && (
+                      <Button variant="ghost" onClick={() => { toggleSelectMode(); setIsMenuOpen(false); }} className="danger-text">
+                        <span style={{ marginRight: '8px' }}>☑️</span> 一括削除
+                      </Button>
+                    )}
+
+                    <Button variant="ghost" onClick={() => { handleSwitchToTrash(); setIsMenuOpen(false); }} style={{ position: 'relative' }}>
+                      <span style={{ marginRight: '8px' }}>🗑️</span> ゴミ箱 {trashCount > 0 && <span className="trash-badge">{trashCount}</span>}
                     </Button>
                   </div>
 
@@ -317,7 +437,13 @@ function App() {
                   </div>
                 )}
                 <div className="recipe-list-container">
-                  <RecipeList recipes={filteredRecipes} onSelectRecipe={handleSelectRecipe} />
+                  <RecipeList
+                    recipes={filteredRecipes}
+                    onSelectRecipe={handleSelectRecipe}
+                    isSelectMode={isSelectMode}
+                    selectedIds={selectedRecipeIds}
+                    onToggleSelection={handleToggleSelection}
+                  />
                 </div>
               </div>
             )

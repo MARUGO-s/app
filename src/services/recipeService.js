@@ -30,7 +30,7 @@ export const recipeService = {
     },
 
     async createRecipe(recipe) {
-        const { id, created_at, ...recipeData } = recipe
+        const { id: _ID, created_at: _CREATED_AT, ...recipeData } = recipe
 
         // Handle image upload if a File object is provided
         if (recipeData.image instanceof File) {
@@ -50,7 +50,7 @@ export const recipeService = {
     },
 
     async updateRecipe(recipe) {
-        const { id, created_at, ...recipeData } = recipe
+        const { id: _ID, created_at: _CREATED_AT, ...recipeData } = recipe
 
         // Handle image upload if a File object is provided
         if (recipeData.image instanceof File) {
@@ -62,7 +62,7 @@ export const recipeService = {
         const { data, error } = await supabase
             .from('recipes')
             .update(payload)
-            .eq('id', id)
+            .eq('id', recipe.id) // Use recipe.id here since we stripped it from recipeData
             .select()
             .single()
 
@@ -139,7 +139,7 @@ export const recipeService = {
         if (fetchError) throw fetchError
 
         // 2. Insert back into recipes (new ID will be generated, or we could force the old one if we disabled identity generation, but easier to just create new)
-        // We will prioritize "original_id" if we want, but let's just make a new record to avoid collisions if identity column issues arise.
+        // We will prioritize "original_id" if we want, but let's just make a new insert to be safe.
         // Actually, let's treat it as a new insert to be safe.
         const { error: insertError } = await supabase
             .from('recipes')
@@ -249,8 +249,8 @@ const fromDbFormat = (recipe) => {
         // Filter out meta
         const dataItems = rawIngs.slice(1);
 
-        flours = dataItems.filter(i => i._group === 'flour').map(({ _group, ...i }) => i);
-        breadIngredients = dataItems.filter(i => i._group === 'other').map(({ _group, ...i }) => i);
+        flours = dataItems.filter(i => i._group === 'flour').map(({ _group: _GROUP, ...i }) => i);
+        breadIngredients = dataItems.filter(i => i._group === 'other').map(({ _group: _GROUP, ...i }) => i);
 
         // For standard views, we might want a combined list
         cleanIngredients = [...flours, ...breadIngredients];

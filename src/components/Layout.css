@@ -5,19 +5,25 @@
 }
 
 .app-header {
-    padding: var(--space-md) 0;
-    margin-bottom: var(--space-xl);
+    padding: 0;
+    margin-bottom: 1rem;
 }
 
 .app-header__content {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
 }
 
 .app-logo {
-    font-size: 1.5rem;
-    margin: 0;
+    display: flex;
+}
+
+.app-logo-image {
+    height: 100px;
+    /* Increased slightly for better visibility of script font */
+    width: auto;
+    object-fit: contain;
     cursor: pointer;
 }
 

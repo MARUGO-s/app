@@ -11,6 +11,30 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
     const [imagePreview, setImagePreview] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [isDragActive, setIsDragActive] = useState(false);
+
+    const handleDrag = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.type === "dragenter" || e.type === "dragover") {
+            setIsDragActive(true);
+        } else if (e.type === "dragleave") {
+            setIsDragActive(false);
+        }
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragActive(false);
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            const file = e.dataTransfer.files[0];
+            if (file.type.startsWith('image/')) {
+                setImageFile(file);
+                setImagePreview(URL.createObjectURL(file));
+            }
+        }
+    };
 
     const handleImport = async () => {
         setIsLoading(true);
@@ -45,8 +69,10 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
             onClose();
 
         } catch (err) {
-            console.error("Import failed:", err);
-            setError(err.message || "Import failed. Please try again.");
+            console.error("Import failed details:", err);
+            const msg = err.message || "Import failed. Please try again.";
+            setError(msg);
+            alert(`Error: ${msg}`); // Temporary Alert for debugging
         } finally {
             setIsLoading(false);
         }
@@ -121,20 +147,25 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                             />
                             <label
                                 htmlFor="recipe-image-upload"
+                                onDragEnter={handleDrag}
+                                onDragLeave={handleDrag}
+                                onDragOver={handleDrag}
+                                onDrop={handleDrop}
                                 style={{
                                     display: 'block',
                                     padding: '2rem',
-                                    border: '2px dashed #ccc',
+                                    border: isDragActive ? '2px dashed var(--color-primary)' : '2px dashed #ccc',
                                     borderRadius: '8px',
                                     cursor: 'pointer',
-                                    background: '#f9f9f9',
-                                    color: '#666'
+                                    background: isDragActive ? '#f0f9ff' : '#f9f9f9',
+                                    color: isDragActive ? 'var(--color-primary)' : '#666',
+                                    transition: 'all 0.2s ease'
                                 }}
                             >
                                 {imagePreview ? (
                                     <img src={imagePreview} alt="Preview" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '4px' }} />
                                 ) : (
-                                    "クリックして画像を選択"
+                                    isDragActive ? "ここに画像をドロップ" : "クリックして画像を選択、またはドラッグ＆ドロップ"
                                 )}
                             </label>
                         </div>
