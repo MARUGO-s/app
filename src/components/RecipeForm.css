@@ -248,5 +248,5 @@ h3 {
 /* Force Cancel button (ghost) in header to be white text */
 .recipe-form .recipe-form__actions .btn--ghost,
 .recipe-form .recipe-form__actions .btn--ghost span {
-    color: var(--color-text-main) !important;
+    color: hsl(var(--color-text-main)) !important;
 }
