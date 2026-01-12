@@ -11,11 +11,6 @@ export const translationService = {
      * @param {string} targetLang 'EN-US', 'JA', etc.
      */
     async translateRecipe(recipe, targetLang = 'EN-US') {
-        // Collect all text to translate in a specific order to minimize API calls
-        // 1. Title
-        // 2. Description
-        // 3. Ingredients (names)
-        // 4. Steps
         const textsToTranslate = [];
 
         // Push Title (Index 0)
@@ -24,15 +19,26 @@ export const translationService = {
         // Push Description (Index 1)
         textsToTranslate.push(recipe.description || "");
 
-        // Ingredients start at Index 2
-        const ingredientsStart = 2;
-        const ingredients = recipe.ingredients || [];
-        ingredients.forEach(ing => {
-            textsToTranslate.push(typeof ing === 'string' ? ing : ing.name);
-        });
+        // Unified indices
+        let ingredientsStart = 2;
+        let stepsStart = 2;
 
-        // Steps start after ingredients
-        const stepsStart = ingredientsStart + ingredients.length;
+        if (recipe.type === 'bread') {
+            const flours = recipe.flours || [];
+            const breadIngredients = recipe.breadIngredients || [];
+
+            flours.forEach(f => textsToTranslate.push(f.name || ""));
+            breadIngredients.forEach(ing => textsToTranslate.push(ing.name || ""));
+
+            stepsStart = ingredientsStart + flours.length + breadIngredients.length;
+        } else {
+            const ingredients = recipe.ingredients || [];
+            ingredients.forEach(ing => {
+                textsToTranslate.push(typeof ing === 'string' ? ing : ing.name);
+            });
+            stepsStart = ingredientsStart + ingredients.length;
+        }
+
         const steps = recipe.steps || [];
         steps.forEach(step => {
             textsToTranslate.push(step);
@@ -49,13 +55,26 @@ export const translationService = {
             newRecipe.title = translatedTexts[0];
             newRecipe.description = translatedTexts[1];
 
-            // Map ingredients back
-            newRecipe.ingredients = ingredients.map((ing, i) => {
-                const translatedName = translatedTexts[ingredientsStart + i];
-                if (typeof ing === 'string') return translatedName;
-                return { ...ing, name: translatedName };
-                // Note: We don't translate units/quantities automatically as they might not change or might be complex
-            });
+            if (recipe.type === 'bread') {
+                const floursCount = (recipe.flours || []).length;
+                const breadIngCount = (recipe.breadIngredients || []).length;
+
+                newRecipe.flours = (recipe.flours || []).map((f, i) => ({
+                    ...f,
+                    name: translatedTexts[ingredientsStart + i]
+                }));
+
+                newRecipe.breadIngredients = (recipe.breadIngredients || []).map((ing, i) => ({
+                    ...ing,
+                    name: translatedTexts[ingredientsStart + floursCount + i]
+                }));
+            } else {
+                newRecipe.ingredients = (recipe.ingredients || []).map((ing, i) => {
+                    const translatedName = translatedTexts[ingredientsStart + i];
+                    if (typeof ing === 'string') return translatedName;
+                    return { ...ing, name: translatedName };
+                });
+            }
 
             // Map steps back
             newRecipe.steps = steps.map((_, i) => translatedTexts[stepsStart + i]);

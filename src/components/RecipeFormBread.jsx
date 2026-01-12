@@ -370,10 +370,22 @@ const FlourItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, ac
             >
                 ⋮⋮
             </div>
-            <div style={{ position: 'relative', zIndex: activeSuggestion?.type === 'flour' && activeSuggestion?.index === index ? 100 : 'auto' }}>
+            <div style={{ position: 'relative', zIndex: activeSuggestion?.type === 'flour' && activeSuggestion?.index === index ? 10000 : 'auto' }}>
                 <Input
                     value={item.name}
-                    onChange={(e) => onChange(index, 'name', e.target.value)}
+                    onChange={(e) => {
+                        onChange(index, 'name', e.target.value);
+                        // Trigger suggestions
+                        if (e.target.value.trim()) {
+                            const matchVal = e.target.value.toLowerCase();
+                            const matches = allIngredientNames.filter(n => n.toLowerCase().includes(matchVal));
+                            setFilteredSuggestions(matches.slice(0, 10));
+                            setActiveSuggestion({ type: 'flour', index: index });
+                        } else {
+                            setFilteredSuggestions([]);
+                            setActiveSuggestion(null);
+                        }
+                    }}
                     onFocus={() => {
                         if (item.name.trim()) {
                             const matchVal = item.name.toLowerCase();
@@ -398,7 +410,7 @@ const FlourItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, ac
                         borderRadius: '0 0 4px 4px',
                         maxHeight: '150px',
                         overflowY: 'auto',
-                        zIndex: 1000,
+                        zIndex: 10001,
                         padding: 0,
                         margin: 0,
                         listStyle: 'none',
@@ -506,10 +518,22 @@ const BreadIngredientItem = ({ id, index, item, onChange, onRemove, onSuggestion
             >
                 ⋮⋮
             </div>
-            <div style={{ position: 'relative', zIndex: activeSuggestion?.type === 'ingredient' && activeSuggestion?.index === index ? 100 : 'auto' }}>
+            <div style={{ position: 'relative', zIndex: activeSuggestion?.type === 'ingredient' && activeSuggestion?.index === index ? 10000 : 'auto' }}>
                 <Input
                     value={item.name}
-                    onChange={(e) => onChange(index, 'name', e.target.value)}
+                    onChange={(e) => {
+                        onChange(index, 'name', e.target.value);
+                        // Trigger suggestions
+                        if (e.target.value.trim()) {
+                            const matchVal = e.target.value.toLowerCase();
+                            const matches = allIngredientNames.filter(n => n.toLowerCase().includes(matchVal));
+                            setFilteredSuggestions(matches.slice(0, 10));
+                            setActiveSuggestion({ type: 'ingredient', index: index });
+                        } else {
+                            setFilteredSuggestions([]);
+                            setActiveSuggestion(null);
+                        }
+                    }}
                     onFocus={() => {
                         if (item.name.trim()) {
                             const matchVal = item.name.toLowerCase();
@@ -534,7 +558,7 @@ const BreadIngredientItem = ({ id, index, item, onChange, onRemove, onSuggestion
                         borderRadius: '0 0 4px 4px',
                         maxHeight: '150px',
                         overflowY: 'auto',
-                        zIndex: 1000,
+                        zIndex: 10001,
                         padding: 0,
                         margin: 0,
                         listStyle: 'none',

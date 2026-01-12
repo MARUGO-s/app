@@ -122,17 +122,12 @@
   font-weight: 500;
 }
 
-/* Sidebar Layout Logic */
+/* Sidebar Layout Logic - Mobile First */
 .main-content-wrapper {
   display: flex;
   gap: var(--space-lg);
   align-items: flex-start;
-  flex-direction: row-reverse;
-}
-
-.recent-list-wrapper {
-  width: 260px;
-  flex-shrink: 0;
+  flex-direction: column;
 }
 
 .recipe-list-container {
@@ -142,55 +137,83 @@
 }
 
 .sidebar-right {
-  width: 240px;
-  /* Fixed width for sidebar */
-  flex-shrink: 0;
-  position: sticky;
-  top: 20px;
-  /* Sticky scroll */
+  width: 100%;
+  margin-top: var(--space-lg);
+  position: static;
 }
 
-@media (max-width: 900px) {
+.recent-list-wrapper {
+  width: 100%;
+  margin-bottom: var(--space-md);
+}
+
+.recent-list {
+  display: flex;
+  flex-direction: row;
+  /* Horizontal scroll on mobile */
+  overflow-x: auto;
+  padding-bottom: 8px;
+  gap: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.recent-item {
+  width: 120px;
+  /* Slightly smaller for mobile top list */
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.recent-thumbnail {
+  width: 100%;
+  height: 80px;
+  /* Smaller thumbnail */
+}
+
+@media (min-width: 750px) {
   .main-content-wrapper {
-    flex-direction: column;
+    flex-direction: row-reverse;
   }
 
   .sidebar-right {
-    width: 100%;
-    margin-top: var(--space-lg);
-    position: static;
+    width: 240px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 20px;
+    margin-top: 0;
   }
 
   .recent-list-wrapper {
-    width: 100%;
-    margin-bottom: var(--space-md);
+    width: 260px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 20px;
+    align-self: flex-start;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    margin-bottom: 0;
   }
 
   .recent-list {
-    flex-direction: row;
-    /* Horizontal scroll on mobile */
-    overflow-x: auto;
-    padding-bottom: 8px;
-    gap: 12px;
-    -webkit-overflow-scrolling: touch;
+    flex-direction: column;
+    gap: var(--space-sm);
+    overflow-x: visible;
   }
 
   .recent-item {
-    width: 120px;
-    /* Slightly smaller for mobile top list */
-    flex-direction: column;
-    gap: 4px;
-    flex-shrink: 0;
+    width: 100%;
+    flex-direction: row;
+    gap: var(--space-sm);
   }
 
   .recent-thumbnail {
-    width: 100%;
-    height: 80px;
-    /* Smaller thumbnail */
+    width: 80px;
+    height: 60px;
   }
 }
 
-/* Base styles for desktop */
+/* Base styles for desktop/mobile */
 .mobile-menu-toggle {
   display: none;
 }
@@ -220,187 +243,237 @@
   /* Hide on desktop */
 }
 
-@media (max-width: 600px) {
+/* Header & Navigation - Mobile First */
+.container-header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.section-title {
+  font-size: 1.5rem;
+  text-align: left;
+}
+
+.header-actions {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.header-actions button {
+  margin: 0 !important;
+  justify-content: center;
+  font-size: 0.85rem;
+}
+
+/* Make filter container fit all items without scrolling */
+.tag-filter-container {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+  margin-bottom: var(--space-lg);
+  padding-bottom: 8px;
+  border-bottom: 1px solid transparent;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #353535;
+  padding-top: var(--space-md);
+  overflow-x: hidden;
+  justify-content: space-between;
+}
+
+.tag-filter-btn,
+.store-filter-select {
+  flex: 1;
+  min-width: 0;
+  padding: 0 2px;
+  font-size: 0.75rem;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border: 1px solid hsl(var(--color-border));
+  border-radius: var(--radius-full);
+  background-color: white;
+  color: #555;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tag-divider {
+  display: none;
+}
+
+@media (min-width: 750px) {
   .container-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--space-md);
-    margin-bottom: var(--space-md);
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-lg);
   }
 
   .section-title {
-    font-size: 1.5rem;
-    text-align: left;
+    font-size: 2rem;
   }
 
   .header-actions {
-    position: relative;
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 0.5rem;
-    grid-template-columns: none;
-    /* Override grid */
+    gap: var(--space-sm);
   }
 
-  .header-actions button {
-    margin: 0 !important;
-    justify-content: center;
-    font-size: 0.85rem;
-  }
-
-  /* Make filter container fit all items without scrolling */
   .tag-filter-container {
-    flex-wrap: nowrap;
-    overflow-x: hidden;
-    /* Disable scroll */
-    justify-content: space-between;
-    gap: 4px;
-    /* Tight gap */
-    padding-bottom: 8px;
-    padding-right: 0;
-    /* Remove scroll padding */
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    justify-content: flex-start;
+    overflow-x: visible;
+    padding-bottom: var(--space-md);
   }
 
-  /* Flex items to share space equally */
-  .tag-filter-btn,
+  .tag-filter-btn {
+    padding: 6px 16px;
+    font-size: 0.85rem;
+    flex: none;
+    height: auto;
+  }
+
   .store-filter-select {
-    flex: 1;
-    /* Share space */
-    width: auto;
-    /* Override fixed width */
-    min-width: 0;
-    /* Allow shrinking */
-    padding: 0 2px;
-    /* Minimal padding, let text centered */
-    font-size: 0.75rem;
-    /* Smaller text if needed */
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    height: 32px;
+    flex: none;
   }
 
   .tag-divider {
-    display: none;
-  }
-
-  /* Mobile Header Menu */
-  .primary-action-btn {
-    flex: 1;
-    margin: 0 !important;
-  }
-
-  .mobile-menu-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 44px;
-    /* Slightly larger touch target */
-    height: 44px;
-    background: rgba(0, 0, 0, 0.2);
-    /* Subtle dark tint */
-    border: 1px solid rgba(255, 255, 255, 0.8);
-    /* Thin white border */
-    border-radius: 50%;
-    /* Rounded touch area */
-    font-size: 1.5rem;
-    /* Larger icon */
-    cursor: pointer;
-    color: white;
-    /* Force white for visibility on dark header */
-    z-index: 1003;
-    transition: background-color 0.2s;
-  }
-
-  .mobile-menu-toggle:active {
-    background-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .secondary-actions {
-    display: flex;
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 250px;
-    height: 100vh;
-    background: #222;
-    /* Dark background */
-    color: #eee;
-    /* Light text */
-    /* Remove border radius for drawer feel */
-    border-radius: 0;
-    border-left: 1px solid #444;
-    /* Darker border */
-    padding: 1rem;
-    padding-top: 60px;
-    /* Space for close button if needed, or just visual breathing room */
-    box-shadow: -4px 0 12px rgba(0, 0, 0, 0.15);
-    flex-direction: column;
-    gap: 0.5rem;
-    z-index: 1002;
-    /* Higher than toggle */
-
-    /* Sliding animation */
-    transform: translateX(100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .secondary-actions.open {
-    transform: translateX(0);
-  }
-
-  /* Backdrop styles */
-  .menu-backdrop {
-    position: fixed;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.5);
-    z-index: 1000;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s ease;
-    backdrop-filter: blur(2px);
-  }
-
-  .menu-backdrop.open {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .secondary-actions button {
-    width: 100%;
-    margin: 0 !important;
-    justify-content: flex-start;
-    text-align: left;
-    padding: 12px 16px;
-    color: #eee;
-    /* Light text */
-    border: none;
-    /* Flatten look */
-    background: transparent;
-    transition: background 0.2s;
-  }
-
-  .secondary-actions button:hover,
-  .secondary-actions button:active {
-    background: rgba(255, 255, 255, 0.1);
-    /* Subtle highlight */
-    color: white;
-  }
-
-  .menu-divider {
     display: block;
-    /* Show on mobile */
-    height: 1px;
-    background-color: #444;
-    margin: 8px 0;
-    width: 100%;
+    width: 1px;
+    height: 24px;
+    background-color: hsl(var(--color-border));
+    margin: 0 var(--space-xs);
   }
+}
 
-  .danger-text {
-    color: #ff6b6b !important;
-    /* Lighter red for visibility on dark bg */
-  }
+/* Mobile Header Menu */
+.primary-action-btn {
+  flex: 1;
+  margin: 0 !important;
+}
+
+.mobile-menu-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  /* Slightly larger touch target */
+  height: 44px;
+  background: rgba(0, 0, 0, 0.2);
+  /* Subtle dark tint */
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  /* Thin white border */
+  border-radius: 50%;
+  /* Rounded touch area */
+  font-size: 1.5rem;
+  /* Larger icon */
+  cursor: pointer;
+  color: white;
+  /* Force white for visibility on dark header */
+  z-index: 1003;
+  transition: background-color 0.2s;
+}
+
+.mobile-menu-toggle:active {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.secondary-actions {
+  display: flex;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 250px;
+  height: 100vh;
+  background: #222;
+  /* Dark background */
+  color: #eee;
+  /* Light text */
+  /* Remove border radius for drawer feel */
+  border-radius: 0;
+  border-left: 1px solid #444;
+  /* Darker border */
+  padding: 1rem;
+  padding-top: 60px;
+  /* Space for close button if needed, or just visual breathing room */
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.15);
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 1002;
+  /* Higher than toggle */
+
+  /* Sliding animation */
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.secondary-actions.open {
+  transform: translateX(0);
+}
+
+/* Backdrop styles */
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  backdrop-filter: blur(2px);
+}
+
+.menu-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.secondary-actions button {
+  width: 100%;
+  margin: 0 !important;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 12px 16px;
+  color: #eee;
+  /* Light text */
+  border: none;
+  /* Flatten look */
+  background: transparent;
+  transition: background 0.2s;
+}
+
+.secondary-actions button:hover,
+.secondary-actions button:active {
+  background: rgba(255, 255, 255, 0.1);
+  /* Subtle highlight */
+  color: white;
+}
+
+.menu-divider {
+  display: block;
+  /* Show on mobile */
+  height: 1px;
+  background-color: #444;
+  margin: 8px 0;
+  width: 100%;
+}
+
+.danger-text {
+  color: #ff6b6b !important;
+  /* Lighter red for visibility on dark bg */
+}
 }

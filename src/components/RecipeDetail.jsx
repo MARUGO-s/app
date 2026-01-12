@@ -84,12 +84,24 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
         if (onView && recipe && !isDeleted) {
             onView(recipe.id);
         }
+
+        // Update document title for printing/PDF filename
+        const originalTitle = document.title;
+        if (recipe && recipe.title) {
+            document.title = recipe.title;
+        }
+
         // Reset translation on recipe change
         setTranslationCache({});
         setCurrentLang('ORIGINAL');
         setCompletedSteps(new Set());
+
+        // Revert title on unmount or recipe change
+        return () => {
+            document.title = originalTitle;
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [recipe.id]);
+    }, [recipe.id, recipe.title]);
 
     const handleDeleteClick = () => {
         setShowDeleteConfirm(true);
@@ -116,6 +128,8 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
     const cancelHardDelete = () => {
         setShowHardDeleteConfirm(false);
     };
+
+    const [targetTotal, setTargetTotal] = React.useState('');
 
     if (!recipe) return null;
 
@@ -264,10 +278,82 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                         const flours = displayRecipe.flours || [];
                                         const others = displayRecipe.breadIngredients || [];
                                         const totalFlour = flours.reduce((sum, f) => sum + (parseFloat(f.quantity) || 0), 0);
+                                        const grandTotal = totalFlour + others.reduce((sum, o) => sum + (parseFloat(o.quantity) || 0), 0);
+                                        const totalPercent = totalFlour ? (grandTotal / totalFlour * 100).toFixed(1) : '0.0';
+
                                         const calcPercent = (q) => totalFlour ? ((parseFloat(q) || 0) / totalFlour * 100).toFixed(1) : '0.0';
+
+                                        // Scaling logic
+                                        const target = parseFloat(targetTotal);
+                                        const scaleFactor = (target && grandTotal) ? (target / grandTotal) : 1;
+
+                                        const getScaledQty = (q) => {
+                                            if (!target) return q;
+                                            return ((parseFloat(q) || 0) * scaleFactor).toFixed(1);
+                                        };
 
                                         return (
                                             <>
+                                                {/* Scaling Controls */}
+                                                <div style={{
+                                                    background: '#f1f3f5',
+                                                    padding: '0.4rem 0.8rem',
+                                                    borderRadius: '6px',
+                                                    marginBottom: '1rem',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.5rem 1rem', // Smaller row gap
+                                                    flexWrap: 'wrap',
+                                                    border: '1px solid #dee2e6',
+                                                    lineHeight: 1.2
+                                                }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#000' }}>現在の総重量:</span>
+                                                        <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#000' }}>{grandTotal.toLocaleString()}g</span>
+                                                        <span style={{ fontSize: '0.75rem', color: '#444' }}>({totalPercent}%)</span>
+                                                    </div>
+                                                    <div style={{ height: '16px', width: '1px', background: '#adb5bd' }}></div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <label htmlFor="target-total-input" style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#000' }}>仕上がり総重量:</label>
+                                                        <div style={{ position: 'relative' }}>
+                                                            <input
+                                                                id="target-total-input"
+                                                                type="number"
+                                                                value={targetTotal}
+                                                                onChange={(e) => setTargetTotal(e.target.value)}
+                                                                placeholder="1000"
+                                                                style={{
+                                                                    padding: '2px 20px 2px 6px',
+                                                                    width: '80px',
+                                                                    borderRadius: '4px',
+                                                                    border: '1.5px solid #333',
+                                                                    fontSize: '0.9rem',
+                                                                    fontWeight: 'bold',
+                                                                    textAlign: 'right',
+                                                                    color: '#000',
+                                                                    backgroundColor: '#fff'
+                                                                }}
+                                                            />
+                                                            <span style={{ position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.75rem', color: '#333' }}>g</span>
+                                                        </div>
+                                                        {targetTotal && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => setTargetTotal('')}
+                                                                style={{ padding: '0 4px', fontSize: '0.7rem', color: '#555', height: '22px', border: '1px solid #dee2e6' }}
+                                                            >
+                                                                リセット
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                    {targetTotal && (
+                                                        <div style={{ fontSize: '0.75rem', color: '#000', fontWeight: 'bold', marginLeft: 'auto' }}>
+                                                            ← 倍率: ×{scaleFactor.toFixed(3)} で計算中
+                                                        </div>
+                                                    )}
+                                                </div>
+
                                                 <div className="bread-section" style={{ marginBottom: '2rem' }}>
                                                     <h3 style={{
                                                         fontSize: '1.2rem',
@@ -281,7 +367,7 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                         color: 'var(--color-text-main)'
                                                     }}>
                                                         <span>粉グループ</span>
-                                                        <span style={{ fontSize: '0.9rem', background: 'var(--color-primary)', color: 'white', padding: '4px 12px', borderRadius: '20px', fontWeight: 'bold' }}>Total: {totalFlour}g (100%)</span>
+                                                        <span style={{ fontSize: '0.9rem', background: 'var(--color-primary)', color: 'white', padding: '4px 12px', borderRadius: '20px', fontWeight: 'bold' }}>Total: {targetTotal ? getScaledQty(totalFlour) : totalFlour}g (100%)</span>
                                                     </h3>
                                                     <table className="ingredients-table">
                                                         <thead>
@@ -304,7 +390,13 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                                                 <label htmlFor={`flour-${i}`}>{renderText(item.name, originalItem?.name)}</label>
                                                                             </div>
                                                                         </td>
-                                                                        <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{item.quantity}</td>
+                                                                        <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                                                                            {targetTotal ? (
+                                                                                <span style={{ color: 'var(--color-primary)' }}>{getScaledQty(item.quantity)}</span>
+                                                                            ) : (
+                                                                                item.quantity
+                                                                            )}
+                                                                        </td>
                                                                         <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-primary)' }}>
                                                                             {calcPercent(item.quantity)}%
                                                                         </td>
@@ -348,7 +440,13 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                                                 <label htmlFor={`ingredient-${i}`}>{renderText(item.name, originalItem?.name)}</label>
                                                                             </div>
                                                                         </td>
-                                                                        <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{item.quantity}</td>
+                                                                        <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                                                                            {targetTotal ? (
+                                                                                <span style={{ color: 'var(--color-primary)' }}>{getScaledQty(item.quantity)}</span>
+                                                                            ) : (
+                                                                                item.quantity
+                                                                            )}
+                                                                        </td>
                                                                         <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-text-muted)' }}>
                                                                             {calcPercent(item.quantity)}%
                                                                         </td>
@@ -376,7 +474,8 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                             ¥{(() => {
                                                                 const flourCost = flours.reduce((sum, item) => sum + (parseInt(item.cost) || 0), 0);
                                                                 const otherCost = others.reduce((sum, item) => sum + (parseInt(item.cost) || 0), 0);
-                                                                return (flourCost + otherCost).toLocaleString();
+                                                                const total = flourCost + otherCost;
+                                                                return Math.round(total * scaleFactor).toLocaleString();
                                                             })()}
                                                         </span>
                                                     </div>

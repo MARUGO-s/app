@@ -13,6 +13,19 @@ import { recipeService } from './services/recipeService';
 import { STORE_LIST } from './constants';
 import './App.css';
 
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  sortableKeyboardCoordinates,
+} from '@dnd-kit/sortable';
+
 function App() {
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,6 +48,35 @@ function App() {
     loadRecentHistory();
   }, []);
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+
+    if (active.id !== over.id) {
+      setRecipes((items) => {
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
+
+        if (oldIndex === -1 || newIndex === -1) return items;
+
+        const newItems = arrayMove(items, oldIndex, newIndex);
+
+        // Optimistically update UI, fire and forget backend update
+        const updates = newItems.map((item, index) => ({
+          id: item.id,
+          order_index: index
+        }));
+        recipeService.updateOrder(updates).catch(err => console.error("Order update failed", err));
+
+        return newItems;
+      });
+    }
+  };
+
   const loadRecentHistory = async () => {
     try {
       const ids = await recipeService.fetchRecentRecipes();
@@ -45,6 +87,7 @@ function App() {
   };
 
   const addToHistory = async (id) => {
+    // ... same ...
     // Optimistic update
     const newHistory = [id, ...recentIds.filter(rId => rId !== id)].slice(0, 20);
     setRecentIds(newHistory);
@@ -104,6 +147,8 @@ function App() {
     return matchesTag && matchesSearch;
   });
 
+  const isDragEnabled = selectedTag === 'すべて' && !searchQuery.trim() && currentView === 'list';
+
   const handleSelectRecipe = (recipe) => {
     setSelectedRecipe(recipe);
     setCurrentView('detail');
@@ -137,7 +182,6 @@ function App() {
     try {
       await recipeService.hardDeleteRecipe(recipe.id);
       setRecipes(recipes.filter(r => r.id !== recipe.id));
-      setCurrentView('trash'); // Stay in trash view but list updates
       setCurrentView('trash'); // Stay in trash view but list updates
       alert("レシピを完全に削除しました。");
       loadDeletedRecipes(); // Reload list to reflect changes
@@ -180,6 +224,12 @@ function App() {
         setSelectedRecipe(savedRecipe); // Update selected recipe with new data
       } else {
         savedRecipe = await recipeService.createRecipe(recipe);
+        // Add to TOP or BOTTOM? 
+        // Logic: if other items have order_index, ideally we should set safe order_index.
+        // But newly created might have null.
+        // If sorting asc, nulls might be last.
+        // Let's prepend for UX, but on reload it might jump if no order.
+        // For now, prepend is default.
         setRecipes([savedRecipe, ...recipes]);
       }
       setCurrentView(isEdit ? 'detail' : 'list');
@@ -190,27 +240,58 @@ function App() {
   };
 
   const handleImportRecipe = (recipeData) => {
-    // Smart detection for Bread recipes
-    const hasYeast = (recipeData.ingredients || []).some(ing =>
-      (ing.name && (ing.name.toLowerCase().includes('yeast') || ing.name.includes('イースト')))
+    // Smart detection for Bread recipes (Baker's %)
+    // 1. Check for explicit keywords in title/description
+    const breadKeywords = ['ベーカーズ', 'baker', '生地', 'パン', '発酵', 'dough', 'fermentation'];
+    const titleMatch = breadKeywords.some(k => (recipeData.title || "").toLowerCase().includes(k));
+
+    // 2. Check for yeast or flour keywords in ingredients
+    const flourKeywords = ['flour', '強力粉', '薄力粉', '準強力粉', '中力粉', '全粒粉', 'ライ麦粉', 'フランス粉', 'デュラムセモリナ', '粉'];
+    const yeastKeywords = ['yeast', 'イースト', '酵母', 'ルヴァン'];
+
+    const ingredients = recipeData.ingredients || [];
+    const hasYeast = ingredients.some(ing =>
+      yeastKeywords.some(k => (ing.name || "").toLowerCase().includes(k))
+    );
+    const hasFlour = ingredients.some(ing =>
+      flourKeywords.some(k => (ing.name || "").toLowerCase().includes(k)) &&
+      !ing.name.includes('粉糖') // Exclude powdered sugar
     );
 
-    if (hasYeast) {
+    // 3. Check for percentage sign in quantities or units (Strong indicator of Baker's %)
+    const hasPercent = ingredients.some(ing =>
+      (ing.quantity && String(ing.quantity).includes('%')) ||
+      (ing.unit && String(ing.unit).includes('%'))
+    );
+
+    // Final Decision
+    if (hasPercent || hasYeast || (titleMatch && hasFlour)) {
       recipeData.type = 'bread';
       recipeData.flours = [];
       recipeData.breadIngredients = [];
 
-      // Keywords for flours (avoid generic '粉' to exclude powder/cheese etc)
-      const flourKeywords = ['flour', '強力粉', '薄力粉', '準強力粉', '中力粉', '全粒粉', 'ライ麦粉', 'フランス粉', 'デュラムセモリナ'];
+      // Strict flour keywords for splitting
+      const strictFlourKeywords = ['flour', '強力粉', '薄力粉', '準強力粉', '中力粉', '全粒粉', 'ライ麦粉', 'フランス粉', 'デュラムセモリナ'];
 
-      (recipeData.ingredients || []).forEach(ing => {
-        const isFlour = flourKeywords.some(k => ing.name.includes(k));
+      ingredients.forEach(ing => {
+        // Cleanup quantity if it contains percent (e.g. "2%(10g)" -> "10")
+        // But for now, we just split into groups.
+        const isFlour = strictFlourKeywords.some(k => (ing.name || "").includes(k));
         if (isFlour) {
           recipeData.flours.push(ing);
         } else {
           recipeData.breadIngredients.push(ing);
         }
       });
+
+      // Fallback: If no flours found but it's bread, push the first ingredient as flour if it contains '粉'
+      if (recipeData.flours.length === 0 && ingredients.length > 0) {
+        const firstIng = ingredients[0];
+        if ((firstIng.name || "").includes('粉')) {
+          recipeData.flours.push(firstIng);
+          recipeData.breadIngredients = recipeData.breadIngredients.filter(i => i !== firstIng);
+        }
+      }
     }
 
     setImportedData(recipeData);
@@ -267,6 +348,7 @@ function App() {
 
 
   return (
+
     <Layout>
       {showBulkDeleteConfirm && (
         <div className="modal-overlay" style={{
@@ -437,13 +519,32 @@ function App() {
                   </div>
                 )}
                 <div className="recipe-list-container">
-                  <RecipeList
-                    recipes={filteredRecipes}
-                    onSelectRecipe={handleSelectRecipe}
-                    isSelectMode={isSelectMode}
-                    selectedIds={selectedRecipeIds}
-                    onToggleSelection={handleToggleSelection}
-                  />
+                  {/* Wrap only RecipeList with DndContext */}
+                  {currentView === 'list' ? (
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleDragEnd}
+                    >
+                      <RecipeList
+                        recipes={filteredRecipes}
+                        onSelectRecipe={handleSelectRecipe}
+                        isSelectMode={isSelectMode}
+                        selectedIds={selectedRecipeIds}
+                        onToggleSelection={handleToggleSelection}
+                        disableDrag={!isDragEnabled}
+                      />
+                    </DndContext>
+                  ) : (
+                    <RecipeList
+                      recipes={filteredRecipes}
+                      onSelectRecipe={handleSelectRecipe}
+                      isSelectMode={isSelectMode}
+                      selectedIds={selectedRecipeIds}
+                      onToggleSelection={handleToggleSelection}
+                      disableDrag={true} // Disable drag for trash/filtered views if accidentally here
+                    />
+                  )}
                 </div>
               </div>
             )
@@ -497,6 +598,7 @@ function App() {
       )}
     </Layout>
   );
+
 }
 
 export default App;

@@ -4,7 +4,9 @@
 
 .recipe-detail__header {
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
     margin-bottom: var(--space-md);
     border-bottom: 1px solid hsl(var(--color-border));
     padding-bottom: var(--space-sm);
@@ -13,26 +15,30 @@
 .recipe-detail__actions {
     display: flex;
     gap: var(--space-sm);
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    /* for scrollbar spacing */
+    -webkit-overflow-scrolling: touch;
 }
 
-@media (max-width: 768px) {
+.recipe-detail__actions button,
+.recipe-detail__actions select {
+    flex-shrink: 0;
+}
+
+@media (min-width: 750px) {
     .recipe-detail__header {
-        flex-direction: column;
-        align-items: flex-start;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
         gap: var(--space-sm);
     }
 
     .recipe-detail__actions {
-        width: 100%;
-        overflow-x: auto;
-        padding-bottom: 4px;
-        /* for scrollbar spacing */
-        -webkit-overflow-scrolling: touch;
-    }
-
-    .recipe-detail__actions button,
-    .recipe-detail__actions select {
-        flex-shrink: 0;
+        width: auto;
+        overflow-x: visible;
+        padding-bottom: 0;
     }
 }
 
@@ -107,16 +113,16 @@
 
 .recipe-detail__main {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    /* 2 columns for Ingredients vs Steps */
-    gap: var(--space-xl);
+    grid-template-columns: 1fr;
+    gap: var(--space-lg);
     align-items: start;
 }
 
-@media (max-width: 768px) {
+@media (min-width: 750px) {
     .recipe-detail__main {
-        grid-template-columns: 1fr;
-        gap: var(--space-lg);
+        grid-template-columns: 1fr 1fr;
+        /* 2 columns for Ingredients vs Steps */
+        gap: var(--space-xl);
     }
 }
 
@@ -281,7 +287,8 @@
 
     .ingredient-name label {
         display: inline-block;
-        /* Ensure label fits */
+        white-space: nowrap;
+        /* Ensure label fits and doesn't wrap weirdly */
     }
 
     .ingredient-row:last-child td {

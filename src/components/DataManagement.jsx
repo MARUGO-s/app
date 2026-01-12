@@ -280,6 +280,96 @@ export const DataManagement = ({ onBack }) => {
                         )}
                     </div>
                 </main>
+
+                {/* Backup & Restore Section (Moved to after Main) */}
+                <aside className="dashboard-sidebar">
+                    <div className="sidebar-card" style={{ borderColor: 'var(--color-primary)' }}>
+                        <div className="sidebar-title" style={{ color: 'var(--color-primary)' }}>
+                            <span>🔄</span> レシピバックアップ
+                        </div>
+
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem' }}>
+                                全レシピを保存
+                            </p>
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                block
+                                onClick={async () => {
+                                    try {
+                                        const data = await import('../services/recipeService').then(m => m.recipeService.exportAllRecipes());
+                                        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                                        const url = URL.createObjectURL(blob);
+                                        const a = document.createElement('a');
+                                        a.href = url;
+                                        a.download = `recipe_backup_${new Date().toISOString().slice(0, 10)}.json`;
+                                        document.body.appendChild(a);
+                                        a.click();
+                                        document.body.removeChild(a);
+                                        URL.revokeObjectURL(url);
+                                    } catch (e) {
+                                        alert("バックアップ作成に失敗しました");
+                                        console.error(e);
+                                    }
+                                }}
+                            >
+                                📥 JSON形式でダウンロード
+                            </Button>
+                        </div>
+
+                        <div>
+                            <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem' }}>
+                                データを復元 / 追加
+                            </p>
+                            <input
+                                type="file"
+                                accept=".json"
+                                id="backup-upload-input"
+                                style={{ display: 'none' }}
+                                onChange={async (e) => {
+                                    const file = e.target.files[0];
+                                    if (!file) return;
+
+                                    if (!window.confirm("バックアップファイルからレシピを読み込みますか？\n（既存の各レシピは維持され、バックアップ内のレシピが新規追加されます）")) {
+                                        e.target.value = '';
+                                        return;
+                                    }
+
+                                    try {
+                                        setStatus({ type: 'info', message: '読み込み中...' });
+                                        setIsUploading(true);
+                                        const text = await file.text();
+                                        const json = JSON.parse(text);
+
+                                        const { recipeService } = await import('../services/recipeService');
+                                        const result = await recipeService.importRecipes(json);
+
+                                        alert(`${result.count}件のレシピを復元しました。${result.errors.length > 0 ? `\n失敗: ${result.errors.length}件` : ''}`);
+                                        setStatus({ type: 'success', message: '復元完了' });
+                                    } catch (err) {
+                                        console.error(err);
+                                        alert("復元に失敗しました。ファイル形式を確認してください。");
+                                        setStatus({ type: 'error', message: '復元エラー' });
+                                    } finally {
+                                        setIsUploading(false);
+                                        e.target.value = '';
+                                    }
+                                }}
+                            />
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                block
+                                onClick={() => document.getElementById('backup-upload-input').click()}
+                                disabled={isUploading}
+                            >
+                                📤 バックアップから復元
+                            </Button>
+                        </div>
+                    </div>
+                </aside>
+
             </div>
 
             {/* Custom Confirm Modal */}

@@ -89,34 +89,18 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
     return (
         <div className="modal-overlay fade-in">
             <Card className="import-modal-card">
-                <h3>レシピを取り込む</h3>
+                <h3 className="modal-title">レシピを取り込む</h3>
 
-                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', borderBottom: '1px solid #eee' }}>
+                <div className="import-mode-tabs">
                     <button
                         onClick={() => setMode('url')}
-                        style={{
-                            padding: '0.5rem 1rem',
-                            background: 'none',
-                            border: 'none',
-                            borderBottom: mode === 'url' ? '2px solid var(--color-primary)' : 'none',
-                            color: mode === 'url' ? 'var(--color-primary)' : '#666',
-                            fontWeight: mode === 'url' ? 'bold' : 'normal',
-                            cursor: 'pointer'
-                        }}
+                        className={`tab-btn tab-import-web ${mode === 'url' ? 'active' : ''}`}
                     >
                         🌐 Web URL
                     </button>
                     <button
                         onClick={() => setMode('image')}
-                        style={{
-                            padding: '0.5rem 1rem',
-                            background: 'none',
-                            border: 'none',
-                            borderBottom: mode === 'image' ? '2px solid var(--color-primary)' : 'none',
-                            color: mode === 'image' ? 'var(--color-primary)' : '#666',
-                            fontWeight: mode === 'image' ? 'bold' : 'normal',
-                            cursor: 'pointer'
-                        }}
+                        className={`tab-btn tab-import-image ${mode === 'image' ? 'active' : ''}`}
                     >
                         📷 画像解析 (Best Effort)
                     </button>
@@ -137,13 +121,13 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                 ) : (
                     <>
                         <p>レシピの画像（スクリーンショットや写真）をアップロードしてください。</p>
-                        <div style={{ margin: '1rem 0', textAlign: 'center' }}>
+                        <div className="image-upload-wrapper">
                             <input
                                 type="file"
                                 accept="image/*"
                                 onChange={handleFileChange}
                                 id="recipe-image-upload"
-                                style={{ display: 'none' }}
+                                className="image-upload-input"
                             />
                             <label
                                 htmlFor="recipe-image-upload"
@@ -151,19 +135,10 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                                 onDragLeave={handleDrag}
                                 onDragOver={handleDrag}
                                 onDrop={handleDrop}
-                                style={{
-                                    display: 'block',
-                                    padding: '2rem',
-                                    border: isDragActive ? '2px dashed var(--color-primary)' : '2px dashed #ccc',
-                                    borderRadius: '8px',
-                                    cursor: 'pointer',
-                                    background: isDragActive ? '#f0f9ff' : '#f9f9f9',
-                                    color: isDragActive ? 'var(--color-primary)' : '#666',
-                                    transition: 'all 0.2s ease'
-                                }}
+                                className={`image-upload-label ${isDragActive ? 'drag-active' : ''}`}
                             >
                                 {imagePreview ? (
-                                    <img src={imagePreview} alt="Preview" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '4px' }} />
+                                    <img src={imagePreview} alt="Preview" className="image-upload-preview" />
                                 ) : (
                                     isDragActive ? "ここに画像をドロップ" : "クリックして画像を選択、またはドラッグ＆ドロップ"
                                 )}

@@ -52,15 +52,21 @@
 .bread-grid-header {
     display: grid;
     /* Use minmax to ensure columns have a sensible minimum width even if squashed */
-    grid-template-columns: 30px minmax(140px, 2fr) minmax(80px, 1fr) 50px 90px 90px 30px;
+    grid-template-columns: 24px minmax(100px, 2fr) minmax(60px, 1fr) 44px 80px 80px 30px;
     gap: 4px;
     padding: 0 4px;
     margin-bottom: 8px;
     font-size: 0.8rem;
     font-weight: bold;
     color: var(--color-text-muted);
-    min-width: 630px;
-    /* Force minimum width to prevent collapse */
+    min-width: 0;
+}
+
+@media (min-width: 989px) {
+    .bread-grid-header {
+        grid-template-columns: 30px 1fr 90px 60px 90px 90px 30px;
+        min-width: 700px;
+    }
 }
 
 .text-center {
@@ -69,24 +75,37 @@
 
 .bread-row {
     display: grid;
-    grid-template-columns: 30px minmax(140px, 2fr) minmax(80px, 1fr) 50px 90px 90px 30px;
+    grid-template-columns: 24px minmax(100px, 2fr) minmax(60px, 1fr) 44px 80px 80px 30px;
     gap: 4px;
     align-items: center;
     margin-bottom: 8px;
-    min-width: 630px;
-    /* Match header min-width */
+    min-width: 0;
+}
+
+@media (min-width: 989px) {
+    .bread-row {
+        grid-template-columns: 30px 1fr 90px 60px 90px 90px 30px;
+        min-width: 700px;
+    }
 }
 
 /* Scroll Wrapper */
 .bread-scroll-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    /* Use width: 100% and negative margins carefully */
-    width: calc(100% + 32px);
-    margin-left: -16px;
-    margin-right: -16px;
-    padding: 0 16px;
+    width: 100%;
+    margin: 0;
+    padding: 0;
     padding-bottom: 8px;
+}
+
+@media (max-width: 749px) {
+    .bread-scroll-wrapper {
+        width: calc(100% + 32px);
+        margin-left: -16px;
+        margin-right: -16px;
+        padding: 0 16px;
+    }
 }
 
 /* Inputs override */
@@ -125,7 +144,7 @@
     text-align: center;
     font-weight: bold;
     color: var(--color-primary);
-    font-size: 0.9rem;
+    font-size: 0.8rem;
 }
 
 .bread-remove {
@@ -146,8 +165,8 @@
 }
 
 /* Responsive */
-@media (max-width: 600px) {
+@media (min-width: 750px) {
     .bread-percent {
-        font-size: 0.8rem;
+        font-size: 0.9rem;
     }
 }

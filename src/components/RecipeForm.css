@@ -1,6 +1,10 @@
-@media (max-width: 650px) {
+.recipe-form {
+    padding: 0 var(--space-sm);
+}
+
+@media (min-width: 750px) {
     .recipe-form {
-        padding: 0 var(--space-sm);
+        padding: 0;
     }
 }
 
@@ -22,41 +26,45 @@
 
 .recipe-form__header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-md);
     margin-bottom: var(--space-lg);
-}
-
-/* Ensure actions don't overflow on very small screens */
-@media (max-width: 650px) {
-    .recipe-form__header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: var(--space-md);
-    }
-
-    .recipe-form__actions {
-        width: 100%;
-        justify-content: flex-end;
-        flex-wrap: wrap;
-        /* Safety for very narrow screens */
-    }
 }
 
 .recipe-form__actions {
     display: flex;
     gap: var(--space-sm);
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    /* Safety for very narrow screens */
+}
+
+@media (min-width: 750px) {
+    .recipe-form__header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0;
+    }
+
+    .recipe-form__actions {
+        width: auto;
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+    }
 }
 
 .recipe-form__grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: var(--space-lg);
 }
 
-@media (max-width: 1200px) {
+@media (min-width: 750px) {
     .recipe-form__grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: 3fr 7fr;
     }
 }
 
@@ -78,14 +86,14 @@ h3 {
 
 .form-row-3 {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr;
+    /* Stack inputs on mobile */
     gap: var(--space-md);
 }
 
-@media (max-width: 650px) {
+@media (min-width: 750px) {
     .form-row-3 {
-        grid-template-columns: 1fr;
-        /* Stack inputs on mobile */
+        grid-template-columns: 1fr 1fr 1fr;
     }
 }
 
@@ -110,10 +118,19 @@ h3 {
 .recipe-scroll-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    width: calc(100% + 32px);
-    margin-left: -16px;
-    margin-right: -16px;
-    padding: 0 16px;
+    width: 100%;
+    /* Changed from calc(100% + 32px) to prevent layout issues in intermediate widths */
+    margin: 0;
+    padding: 0;
+}
+
+@media (max-width: 749px) {
+    .recipe-scroll-wrapper {
+        width: calc(100% + 32px);
+        margin-left: -16px;
+        margin-right: -16px;
+        padding: 0 16px;
+    }
 }
 
 .dynamic-list {
@@ -122,28 +139,57 @@ h3 {
     gap: 8px;
 }
 
+/* Ensure ingredient name container fills the grid cell */
+.ingredient-name {
+    width: 100%;
+    min-width: 0;
+    /* Allows grid item to shrink below content size if needed */
+}
+
+/* Ensure inner input group fills container */
+.ingredient-name .input-group {
+    width: 100%;
+}
+
 .recipe-list-header {
     display: grid;
     /* Handle | Name | Qty | Unit | Purchase | Cost | Delete */
-    grid-template-columns: 30px minmax(140px, 2fr) minmax(70px, 1fr) minmax(60px, 1fr) 90px 90px 40px;
-    gap: 8px;
+    grid-template-columns: 24px minmax(100px, 2fr) minmax(60px, 1fr) minmax(50px, 1fr) 80px 80px 34px;
+    gap: 4px;
     margin-bottom: 8px;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     font-weight: bold;
     color: var(--color-text-muted);
-    min-width: 630px;
-    /* Force scroll on small screens */
+    min-width: 0;
+    width: 100%;
     padding: 0 4px;
+}
+
+@media (min-width: 989px) {
+    .recipe-list-header {
+        grid-template-columns: 30px 1fr 80px 70px 90px 90px 40px;
+        gap: 8px;
+        font-size: 0.85rem;
+        min-width: 700px;
+    }
 }
 
 
 .form-ingredient-row {
     display: grid;
-    grid-template-columns: 30px minmax(140px, 2fr) minmax(70px, 1fr) minmax(60px, 1fr) 90px 90px 40px;
-    gap: 8px;
+    grid-template-columns: 24px minmax(100px, 2fr) minmax(60px, 1fr) minmax(50px, 1fr) 80px 80px 34px;
+    gap: 4px;
     align-items: center;
-    min-width: 630px;
-    /* Match header */
+    min-width: 0;
+    width: 100%;
+}
+
+@media (min-width: 989px) {
+    .form-ingredient-row {
+        grid-template-columns: 30px 1fr 80px 70px 90px 90px 40px;
+        gap: 8px;
+        min-width: 700px;
+    }
 }
 
 /* Steps Row */
@@ -199,7 +245,7 @@ h3 {
 }
 
 /* Mobile adjustments */
-@media (max-width: 650px) {
+@media (max-width: 749px) {
     /* We use the scroll wrapper now, so we don't strictly *need* to stack, 
        but for better UX we keep the scroll and min-width. */
 }
@@ -254,4 +300,41 @@ h3 {
 .recipe-form .recipe-form__actions .btn--ghost,
 .recipe-form .recipe-form__actions .btn--ghost span {
     color: hsl(var(--color-text-main)) !important;
+}
+
+.import-actions-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 0.4rem;
+}
+
+.btn-import-web {
+    background-color: #e3f2fd !important;
+    color: #1976d2 !important;
+    border: 1px solid #bbdefb !important;
+    font-weight: bold !important;
+    font-size: 0.85rem !important;
+    padding: 6px 12px !important;
+}
+
+.btn-import-web:hover {
+    background-color: #bbdefb !important;
+}
+
+.btn-import-image {
+    background-color: #e8f5e9 !important;
+    color: #2e7d32 !important;
+    border: 1px solid #c8e6c9 !important;
+    font-weight: bold !important;
+    font-size: 0.85rem !important;
+    padding: 6px 12px !important;
+}
+
+.btn-import-image:hover {
+    background-color: #c8e6c9 !important;
+}
+
+.image-upload-section {
+    border-top: 1px dashed #eee;
+    padding-top: 0.8rem;
 }

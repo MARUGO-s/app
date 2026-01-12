@@ -2,13 +2,28 @@ import { supabase } from '../supabase'
 
 export const recipeService = {
     async fetchRecipes() {
-        const { data, error } = await supabase
-            .from('recipes')
-            .select('*')
-            .order('created_at', { ascending: false })
+        try {
+            const { data, error } = await supabase
+                .from('recipes')
+                .select('*')
+                .order('order_index', { ascending: true, nullsFirst: true })
+                .order('created_at', { ascending: false })
 
-        if (error) throw error
-        return data.map(fromDbFormat)
+            if (error) throw error
+            return data.map(fromDbFormat)
+        } catch (error) {
+            console.warn("Primary fetch failed (likely missing order_index), using fallback:", error);
+            const { data, error: retryError } = await supabase
+                .from('recipes')
+                .select('*')
+                .order('created_at', { ascending: false })
+
+            if (retryError) {
+                console.error("Fallback fetch failed:", retryError);
+                throw retryError;
+            }
+            return data.map(fromDbFormat)
+        }
     },
 
     async uploadImage(file) {
@@ -200,6 +215,48 @@ export const recipeService = {
 
         if (error) throw error;
         return true;
+    },
+
+    async updateOrder(items) {
+        // items: [{ id, order_index }]
+        // Supabase upsert can work for bulk updates if we carefully construct it,
+        // but simple loop is safer for partial updates to avoid overwriting other fields with nulls
+        // if upsert behaves like REPLACE.
+        // Actually, let's use a loop for safety. High volume is not expected.
+
+        const updates = items.map(item =>
+            supabase
+                .from('recipes')
+                .update({ order_index: item.order_index })
+                .eq('id', item.id)
+        );
+
+        await Promise.all(updates);
+    },
+
+    async exportAllRecipes() {
+        // Fetch all data for backup
+        // We reuse fetchRecipes to get the clean frontend format
+        return await this.fetchRecipes();
+    },
+
+    async importRecipes(recipes) {
+        if (!Array.isArray(recipes)) throw new Error("Invalid backup format");
+
+        let successCount = 0;
+        let errors = [];
+
+        for (const recipe of recipes) {
+            try {
+                await this.createRecipe(recipe);
+                successCount++;
+            } catch (e) {
+                console.error("Import failed for recipe:", recipe.title, e);
+                errors.push({ title: recipe.title, error: e.message });
+            }
+        }
+
+        return { success: true, count: successCount, errors };
     }
 }
 

@@ -57,18 +57,23 @@
     top: var(--space-sm);
     left: var(--space-sm);
     display: flex;
-    gap: 2px;
+    gap: 6px;
+    flex-wrap: nowrap;
+    max-width: calc(100% - var(--space-md));
+    overflow: hidden;
 }
 
 .recipe-tag {
     background: rgba(255, 255, 255, 0.9);
     color: #333;
-    padding: 2px 8px;
-    border-radius: var(--radius-sm);
+    padding: 1px 6px;
+    border-radius: 4px;
     font-size: 0.7rem;
-    font-weight: 600;
+    font-weight: 500;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    border: none;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(4px);
+    white-space: nowrap;
 }
 
 .recipe-card__content {

@@ -471,12 +471,20 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         // For 'ingredients', let's clean it up to keep DB clean.
         const cleanedIngredients = formData.ingredients.map(({ id, ...rest }) => rest);
 
+        // Automatically derive tags from course and category
+        const tagSet = new Set([formData.course, formData.category].filter(val => val && val.trim()));
+        if (formData.type === 'bread') {
+            tagSet.add('パン');
+        }
+        const derivedTags = Array.from(tagSet);
+
         onSave({
             ...formData,
             ingredients: cleanedIngredients,
             steps: formData.steps.map(s => s.text), // Convert back to string array
             image: formData.imageFile || formData.image, // Pass file if selected, otherwise string
-            id: safeInitialData.id || Date.now() // preserve ID on edit or new one on create
+            id: safeInitialData.id || Date.now(), // preserve ID on edit or new one on create
+            tags: derivedTags
         });
     };
 
@@ -599,40 +607,84 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                             </div>
 
                         </div>
-
-                        <div className="form-row-3">
-                            <div className="form-group">
-                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>店舗名</label>
-                                <select
-                                    id="storeName"
-                                    value={formData.storeName}
-                                    onChange={handleChange}
-                                    style={{
-                                        display: 'block',
-                                        width: '100%',
-                                        padding: '0.75rem',
-                                        fontSize: '1rem',
-                                        border: '1px solid #ddd',
-                                        borderRadius: '8px',
-                                        backgroundColor: 'white',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    <option value="">店舗を選択</option>
-                                    {STORE_LIST.map(store => (
-                                        <option key={store} value={store}>{store}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <Input
-                                label="分量"
-                                id="servings"
-                                value={formData.servings}
-                                onChange={handleChange}
-                                placeholder="4人分"
-                            />
-                        </div>
                     </Card>
+                    {!safeInitialData.id && (
+                        <Card className="mb-md glass-card">
+                            <h3 style={{ borderBottom: '1px solid #eee', paddingBottom: '0.8rem', marginBottom: '0.8rem' }}>レシピを取り込む</h3>
+                            <div className="import-actions-row">
+                                <Button
+                                    variant="secondary"
+                                    type="button"
+                                    onClick={() => setShowWebImport(true)}
+                                    className="btn-import-web"
+                                >
+                                    🌐 Web URLから自動入力
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    type="button"
+                                    onClick={() => setShowImageImport(true)}
+                                    className="btn-import-image"
+                                >
+                                    📸 画像解析 (Best Effort)
+                                </Button>
+                            </div>
+
+                            <div className="image-upload-section" style={{ marginTop: '0.2rem' }}>
+                                <label style={{ fontSize: '0.9rem', color: '#555', marginBottom: '0.4rem', display: 'block' }}>
+                                    レシピの画像（スクリーンショットや写真）をアップロードしてください。
+                                </label>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleImageChange}
+                                    style={{ marginBottom: '0.5rem' }}
+                                />
+                                {formData.image && (
+                                    <div style={{ marginTop: '0.5rem' }}>
+                                        <img
+                                            src={formData.image}
+                                            alt="Preview"
+                                            style={{ width: '100%', maxHeight: '200px', objectFit: 'cover', borderRadius: '4px' }}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        </Card>
+                    )}
+
+                    <div className="form-row-3">
+                        <div className="form-group">
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>店舗名</label>
+                            <select
+                                id="storeName"
+                                value={formData.storeName}
+                                onChange={handleChange}
+                                style={{
+                                    display: 'block',
+                                    width: '100%',
+                                    padding: '0.75rem',
+                                    fontSize: '1rem',
+                                    border: '1px solid #ddd',
+                                    borderRadius: '8px',
+                                    backgroundColor: 'white',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                <option value="">店舗を選択</option>
+                                {STORE_LIST.map(store => (
+                                    <option key={store} value={store}>{store}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <Input
+                            label="分量"
+                            id="servings"
+                            value={formData.servings}
+                            onChange={handleChange}
+                            placeholder="4人分"
+                        />
+                    </div>
                 </div>
 
                 <div className="form-column">
