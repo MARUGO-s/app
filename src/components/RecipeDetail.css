@@ -393,13 +393,12 @@
 }
 
 .step-card.is-completed {
-    opacity: 0.5;
-    background-color: rgba(255, 255, 255, 0.4);
+    /* No background change, just text style */
 }
 
 .step-card.is-completed .step-text {
     text-decoration: line-through;
-    color: #666;
+    color: #888;
 }
 
 .step-card:hover {

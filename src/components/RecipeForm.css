@@ -124,24 +124,25 @@ h3 {
 
 .recipe-list-header {
     display: grid;
-    /* Name | Qty | Unit | Purchase | Cost | Delete */
-    grid-template-columns: minmax(140px, 2fr) minmax(70px, 1fr) minmax(60px, 1fr) 90px 90px 40px;
+    /* Handle | Name | Qty | Unit | Purchase | Cost | Delete */
+    grid-template-columns: 30px minmax(140px, 2fr) minmax(70px, 1fr) minmax(60px, 1fr) 90px 90px 40px;
     gap: 8px;
     margin-bottom: 8px;
     font-size: 0.85rem;
     font-weight: bold;
     color: var(--color-text-muted);
-    min-width: 600px;
+    min-width: 630px;
     /* Force scroll on small screens */
     padding: 0 4px;
 }
 
-.ingredient-row {
+
+.form-ingredient-row {
     display: grid;
-    grid-template-columns: minmax(140px, 2fr) minmax(70px, 1fr) minmax(60px, 1fr) 90px 90px 40px;
+    grid-template-columns: 30px minmax(140px, 2fr) minmax(70px, 1fr) minmax(60px, 1fr) 90px 90px 40px;
     gap: 8px;
     align-items: center;
-    min-width: 600px;
+    min-width: 630px;
     /* Match header */
 }
 
@@ -162,9 +163,13 @@ h3 {
 }
 
 /* Reset margins for inputs inside grid */
-.ingredient-row .input-field,
+.form-ingredient-row .input-field,
 .step-row .input-field {
     margin: 0;
+}
+
+.step-row .input-group {
+    margin-bottom: 0;
 }
 
 /* Consistent delete button */

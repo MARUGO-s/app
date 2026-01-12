@@ -1,10 +1,27 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from './Button';
 import { Input } from './Input';
 import { Card } from './Card';
 import { purchasePriceService } from '../services/purchasePriceService';
 import './RecipeForm.css'; // Reuse basic styles
 import './RecipeFormBread.css'; // Add specialized styles
+
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+} from '@dnd-kit/core';
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    verticalListSortingStrategy,
+    useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 export const RecipeFormBread = ({ formData, setFormData }) => {
     // Local state for calculation convenience, synced with parent formData
@@ -108,14 +125,14 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
     const addFlour = () => {
         setFormData(prev => ({
             ...prev,
-            flours: [...(prev.flours || []), { name: '', quantity: '', unit: 'g', cost: '' }]
+            flours: [...(prev.flours || []), { id: crypto.randomUUID(), name: '', quantity: '', unit: 'g', cost: '' }]
         }));
     };
 
     const addIngredient = () => {
         setFormData(prev => ({
             ...prev,
-            breadIngredients: [...(prev.breadIngredients || []), { name: '', quantity: '', unit: 'g', cost: '' }]
+            breadIngredients: [...(prev.breadIngredients || []), { id: crypto.randomUUID(), name: '', quantity: '', unit: 'g', cost: '' }]
         }));
     };
 
@@ -143,13 +160,60 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
         setFilteredSuggestions([]);
     };
 
-    // Provide initial structure if empty
+    // DnD Sensors
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
+
+    const handleDragEnd = (event) => {
+        const { active, over } = event;
+
+        if (active.id !== over.id) {
+            setFormData((prev) => {
+                const isFlour = prev.flours.some((item) => item.id === active.id);
+                const field = isFlour ? 'flours' : 'breadIngredients';
+
+                const oldIndex = prev[field].findIndex((item) => item.id === active.id);
+                const newIndex = prev[field].findIndex((item) => item.id === over.id);
+
+                if (oldIndex !== -1 && newIndex !== -1) {
+                    return {
+                        ...prev,
+                        [field]: arrayMove(prev[field], oldIndex, newIndex),
+                    };
+                }
+                return prev;
+            });
+        }
+    };
+
+    // Provide initial structure if empty and ensure all items have IDs
     useEffect(() => {
         if (!formData.flours) {
-            setFormData(prev => ({ ...prev, flours: [{ name: '', quantity: '', unit: 'g', cost: '' }] }));
+            setFormData(prev => ({ ...prev, flours: [{ id: crypto.randomUUID(), name: '', quantity: '', unit: 'g', cost: '' }] }));
+        } else {
+            // Ensure all flours have IDs
+            const floursWithIds = formData.flours.map(flour =>
+                flour.id ? flour : { ...flour, id: crypto.randomUUID() }
+            );
+            if (JSON.stringify(floursWithIds) !== JSON.stringify(formData.flours)) {
+                setFormData(prev => ({ ...prev, flours: floursWithIds }));
+            }
         }
+
         if (!formData.breadIngredients) {
-            setFormData(prev => ({ ...prev, breadIngredients: [{ name: '', quantity: '', unit: 'g', cost: '' }] }));
+            setFormData(prev => ({ ...prev, breadIngredients: [{ id: crypto.randomUUID(), name: '', quantity: '', unit: 'g', cost: '' }] }));
+        } else {
+            // Ensure all breadIngredients have IDs
+            const ingredientsWithIds = formData.breadIngredients.map(ing =>
+                ing.id ? ing : { ...ing, id: crypto.randomUUID() }
+            );
+            if (JSON.stringify(ingredientsWithIds) !== JSON.stringify(formData.breadIngredients)) {
+                setFormData(prev => ({ ...prev, breadIngredients: ingredientsWithIds }));
+            }
         }
     }, []);
 
@@ -163,6 +227,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
 
                 <div className="bread-scroll-wrapper">
                     <div className="bread-grid-header">
+                        <span></span> {/* Handle */}
                         <span>粉の種類</span>
                         <span>重量 (g)</span>
                         <span className="text-center">%</span>
@@ -172,103 +237,37 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                     </div>
 
                     <div className="bread-grid-body">
-                        {(formData.flours || []).map((item, i) => (
-                            <div key={`flour-${i}`} className="bread-row">
-                                <div style={{ position: 'relative', zIndex: activeSuggestion?.type === 'flour' && activeSuggestion?.index === i ? 100 : 'auto' }}>
-                                    <Input
-                                        value={item.name}
-                                        onChange={(e) => handleFlourChange(i, 'name', e.target.value)}
-                                        onFocus={() => {
-                                            if (item.name.trim()) {
-                                                const matchVal = item.name.toLowerCase();
-                                                const matches = allIngredientNames.filter(n => n.toLowerCase().includes(matchVal));
-                                                setFilteredSuggestions(matches.slice(0, 10));
-                                                setActiveSuggestion({ type: 'flour', index: i });
-                                            }
-                                        }}
-                                        onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
-                                        placeholder="例: 強力粉"
-                                        className="bread-input name"
-                                        autoComplete="off"
+                        <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={handleDragEnd}
+                            id="flours-dnd"
+                        >
+                            <SortableContext
+                                items={formData.flours || []}
+                                strategy={verticalListSortingStrategy}
+                            >
+                                {(formData.flours || []).map((item, i) => (
+                                    <FlourItem
+                                        key={item.id}
+                                        id={item.id}
+                                        index={i}
+                                        item={item}
+                                        onChange={handleFlourChange}
+                                        onRemove={removeFlour}
+                                        onSuggestionSelect={handleSuggestionSelect}
+                                        activeSuggestion={activeSuggestion}
+                                        filteredSuggestions={filteredSuggestions}
+                                        setActiveSuggestion={setActiveSuggestion}
+                                        setFilteredSuggestions={setFilteredSuggestions}
+                                        handleSuggestionSelect={handleSuggestionSelect}
+                                        allIngredientNames={allIngredientNames}
+                                        calculatePercentage={calculatePercentage}
+                                        floursLength={(formData.flours || []).length}
                                     />
-                                    {activeSuggestion && activeSuggestion.type === 'flour' && activeSuggestion.index === i && filteredSuggestions.length > 0 && (
-                                        <ul style={{
-                                            position: 'absolute',
-                                            top: '100%',
-                                            left: 0,
-                                            right: 0,
-                                            backgroundColor: 'white',
-                                            border: '1px solid #ccc',
-                                            borderRadius: '0 0 4px 4px',
-                                            maxHeight: '150px',
-                                            overflowY: 'auto',
-                                            zIndex: 1000,
-                                            padding: 0,
-                                            margin: 0,
-                                            listStyle: 'none',
-                                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                                        }}>
-                                            {filteredSuggestions.map((suggestion, idx) => (
-                                                <li
-                                                    key={idx}
-                                                    onMouseDown={() => handleSuggestionSelect('flour', i, suggestion)}
-                                                    style={{
-                                                        padding: '8px 12px',
-                                                        cursor: 'pointer',
-                                                        borderBottom: idx < filteredSuggestions.length - 1 ? '1px solid #f0f0f0' : 'none',
-                                                        fontSize: '14px',
-                                                        color: '#333'
-                                                    }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
-                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                                                >
-                                                    {suggestion}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    )}
-                                </div>
-                                <Input
-                                    type="number"
-                                    value={item.quantity}
-                                    onChange={(e) => handleFlourChange(i, 'quantity', e.target.value)}
-                                    placeholder="0"
-                                    className="bread-input qty"
-                                />
-                                <div className="bread-percent">
-                                    {calculatePercentage(item.quantity)}%
-                                </div>
-                                <div>
-                                    <Input
-                                        type="number"
-                                        value={item.purchaseCost || ''}
-                                        onChange={(e) => handleFlourChange(i, 'purchaseCost', e.target.value)}
-                                        placeholder={item.purchaseCostRef ? `Ref: ¥${item.purchaseCostRef}` : "仕入れ"}
-                                        className="bread-input cost"
-                                        style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '' }}
-                                        min="0"
-                                        title={item.purchaseCostRef ? `参考価格: ¥${item.purchaseCostRef}` : "No data"}
-                                    />
-                                    {item.purchaseCostRef && (
-                                        <div style={{ fontSize: '10px', color: '#666', lineHeight: '1.2', marginTop: '2px', wordBreak: 'break-all' }}>
-                                            ¥{item.purchaseCostRef} {item.vendorRef && `(${item.vendorRef})`}
-                                        </div>
-                                    )}
-                                </div>
-                                <Input
-                                    type="number"
-                                    value={item.cost || ''}
-                                    onChange={(e) => handleFlourChange(i, 'cost', e.target.value)}
-                                    placeholder="原価"
-                                    className="bread-input cost"
-                                    style={{ width: '100%' }}
-                                    min="0"
-                                />
-                                {(formData.flours || []).length > 1 && (
-                                    <button type="button" className="bread-remove" onClick={() => removeFlour(i)}>×</button>
-                                )}
-                            </div>
-                        ))}
+                                ))}
+                            </SortableContext>
+                        </DndContext>
                     </div>
                 </div>
                 <Button type="button" variant="secondary" size="sm" onClick={addFlour} block style={{ marginTop: '0.5rem' }}>+ 粉を追加</Button>
@@ -284,6 +283,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
 
 
                     <div className="bread-grid-header">
+                        <span></span> {/* Handle */}
                         <span>材料名</span>
                         <span>重量 (g)</span>
                         <span className="text-center">%</span>
@@ -293,105 +293,310 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                     </div>
 
                     <div className="bread-grid-body">
-                        {(formData.breadIngredients || []).map((item, i) => (
-                            <div key={`ing-${i}`} className="bread-row">
-                                <div style={{ position: 'relative', zIndex: activeSuggestion?.type === 'ingredient' && activeSuggestion?.index === i ? 100 : 'auto' }}>
-                                    <Input
-                                        value={item.name}
-                                        onChange={(e) => handleIngredientChange(i, 'name', e.target.value)}
-                                        onFocus={() => {
-                                            if (item.name.trim()) {
-                                                const matchVal = item.name.toLowerCase();
-                                                const matches = allIngredientNames.filter(n => n.toLowerCase().includes(matchVal));
-                                                setFilteredSuggestions(matches.slice(0, 10));
-                                                setActiveSuggestion({ type: 'ingredient', index: i });
-                                            }
-                                        }}
-                                        onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
-                                        placeholder="例: 塩"
-                                        className="bread-input name"
-                                        autoComplete="off"
+                        <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={handleDragEnd}
+                            id="breadIngredients-dnd"
+                        >
+                            <SortableContext
+                                items={formData.breadIngredients || []}
+                                strategy={verticalListSortingStrategy}
+                            >
+                                {(formData.breadIngredients || []).map((item, i) => (
+                                    <BreadIngredientItem
+                                        key={item.id}
+                                        id={item.id}
+                                        index={i}
+                                        item={item}
+                                        onChange={handleIngredientChange}
+                                        onRemove={removeIngredient}
+                                        onSuggestionSelect={handleSuggestionSelect}
+                                        activeSuggestion={activeSuggestion}
+                                        filteredSuggestions={filteredSuggestions}
+                                        setActiveSuggestion={setActiveSuggestion}
+                                        setFilteredSuggestions={setFilteredSuggestions}
+                                        handleSuggestionSelect={handleSuggestionSelect}
+                                        allIngredientNames={allIngredientNames}
+                                        calculatePercentage={calculatePercentage}
                                     />
-                                    {activeSuggestion && activeSuggestion.type === 'ingredient' && activeSuggestion.index === i && filteredSuggestions.length > 0 && (
-                                        <ul style={{
-                                            position: 'absolute',
-                                            top: '100%',
-                                            left: 0,
-                                            right: 0,
-                                            backgroundColor: 'white',
-                                            border: '1px solid #ccc',
-                                            borderRadius: '0 0 4px 4px',
-                                            maxHeight: '150px',
-                                            overflowY: 'auto',
-                                            zIndex: 1000,
-                                            padding: 0,
-                                            margin: 0,
-                                            listStyle: 'none',
-                                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                                        }}>
-                                            {filteredSuggestions.map((suggestion, idx) => (
-                                                <li
-                                                    key={idx}
-                                                    onMouseDown={() => handleSuggestionSelect('ingredient', i, suggestion)}
-                                                    style={{
-                                                        padding: '8px 12px',
-                                                        cursor: 'pointer',
-                                                        borderBottom: idx < filteredSuggestions.length - 1 ? '1px solid #f0f0f0' : 'none',
-                                                        fontSize: '14px',
-                                                        color: '#333'
-                                                    }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
-                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                                                >
-                                                    {suggestion}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    )}
-                                </div>
-                                <Input
-                                    type="number"
-                                    value={item.quantity}
-                                    onChange={(e) => handleIngredientChange(i, 'quantity', e.target.value)}
-                                    placeholder="0"
-                                    className="bread-input qty"
-                                />
-                                <div className="bread-percent">
-                                    {calculatePercentage(item.quantity)}%
-                                </div>
-                                <div>
-                                    <Input
-                                        type="number"
-                                        value={item.purchaseCost || ''}
-                                        onChange={(e) => handleIngredientChange(i, 'purchaseCost', e.target.value)}
-                                        placeholder={item.purchaseCostRef ? `Ref: ¥${item.purchaseCostRef}` : "仕入れ"}
-                                        className="bread-input cost"
-                                        style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '' }}
-                                        min="0"
-                                        title={item.purchaseCostRef ? `参考価格: ¥${item.purchaseCostRef}` : "No data"}
-                                    />
-                                    {item.purchaseCostRef && (
-                                        <div style={{ fontSize: '10px', color: '#666', lineHeight: '1.2', marginTop: '2px', wordBreak: 'break-all' }}>
-                                            ¥{item.purchaseCostRef} {item.vendorRef && `(${item.vendorRef})`}
-                                        </div>
-                                    )}
-                                </div>
-                                <Input
-                                    type="number"
-                                    value={item.cost || ''}
-                                    onChange={(e) => handleIngredientChange(i, 'cost', e.target.value)}
-                                    placeholder="原価"
-                                    className="bread-input cost"
-                                    style={{ width: '100%' }}
-                                    min="0"
-                                />
-                                <button type="button" className="bread-remove" onClick={() => removeIngredient(i)}>×</button>
-                            </div>
-                        ))}
+                                ))}
+                            </SortableContext>
+                        </DndContext>
                     </div>
                 </div>
                 <Button type="button" variant="secondary" size="sm" onClick={addIngredient} block style={{ marginTop: '0.5rem' }}>+ 材料を追加</Button>
             </Card >
         </div >
+    );
+};
+
+// Wrapper for Sortable Hook (Flour Items)
+const FlourItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, activeSuggestion, filteredSuggestions, setActiveSuggestion, setFilteredSuggestions, handleSuggestionSelect, allIngredientNames, calculatePercentage, floursLength }) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging
+    } = useSortable({ id: id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+        position: 'relative',
+        zIndex: isDragging ? 999 : 'auto',
+        backgroundColor: 'white'
+    };
+
+    return (
+        <div ref={setNodeRef} style={style} className="bread-row">
+            <div
+                {...attributes}
+                {...listeners}
+                className="bread-drag-handle"
+                style={{
+                    cursor: 'grab',
+                    padding: '0 0.5rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ccc',
+                    height: '100%',
+                    touchAction: 'none'
+                }}
+            >
+                ⋮⋮
+            </div>
+            <div style={{ position: 'relative', zIndex: activeSuggestion?.type === 'flour' && activeSuggestion?.index === index ? 100 : 'auto' }}>
+                <Input
+                    value={item.name}
+                    onChange={(e) => onChange(index, 'name', e.target.value)}
+                    onFocus={() => {
+                        if (item.name.trim()) {
+                            const matchVal = item.name.toLowerCase();
+                            const matches = allIngredientNames.filter(n => n.toLowerCase().includes(matchVal));
+                            setFilteredSuggestions(matches.slice(0, 10));
+                            setActiveSuggestion({ type: 'flour', index: index });
+                        }
+                    }}
+                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
+                    placeholder="例: 強力粉"
+                    className="bread-input name"
+                    autoComplete="off"
+                />
+                {activeSuggestion && activeSuggestion.type === 'flour' && activeSuggestion.index === index && filteredSuggestions.length > 0 && (
+                    <ul style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        backgroundColor: 'white',
+                        border: '1px solid #ccc',
+                        borderRadius: '0 0 4px 4px',
+                        maxHeight: '150px',
+                        overflowY: 'auto',
+                        zIndex: 1000,
+                        padding: 0,
+                        margin: 0,
+                        listStyle: 'none',
+                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                    }}>
+                        {filteredSuggestions.map((suggestion, idx) => (
+                            <li
+                                key={idx}
+                                onMouseDown={() => handleSuggestionSelect('flour', index, suggestion)}
+                                style={{
+                                    padding: '8px 12px',
+                                    cursor: 'pointer',
+                                    borderBottom: idx < filteredSuggestions.length - 1 ? '1px solid #f0f0f0' : 'none',
+                                    fontSize: '14px',
+                                    color: '#333'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                            >
+                                {suggestion}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+            <Input
+                type="number"
+                value={item.quantity}
+                onChange={(e) => onChange(index, 'quantity', e.target.value)}
+                placeholder="0"
+                className="bread-input qty"
+            />
+            <div className="bread-percent">
+                {calculatePercentage(item.quantity)}%
+            </div>
+            <div>
+                <Input
+                    type="number"
+                    value={item.purchaseCost || ''}
+                    onChange={(e) => onChange(index, 'purchaseCost', e.target.value)}
+                    placeholder={item.purchaseCostRef ? `Ref: ¥${item.purchaseCostRef}` : "仕入れ"}
+                    className="bread-input cost"
+                    style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '' }}
+                    min="0"
+                    title={item.purchaseCostRef ? `参考価格: ¥${item.purchaseCostRef}` : "No data"}
+                />
+                {item.purchaseCostRef && (
+                    <div style={{ fontSize: '10px', color: '#666', lineHeight: '1.2', marginTop: '2px', wordBreak: 'break-all' }}>
+                        ¥{item.purchaseCostRef} {item.vendorRef && `(${item.vendorRef})`}
+                    </div>
+                )}
+            </div>
+            <Input
+                type="number"
+                value={item.cost || ''}
+                onChange={(e) => onChange(index, 'cost', e.target.value)}
+                placeholder="原価"
+                className="bread-input cost"
+                style={{ width: '100%' }}
+                min="0"
+            />
+            {floursLength > 1 && (
+                <button type="button" className="bread-remove" onClick={() => onRemove(index)}>×</button>
+            )}
+        </div>
+    );
+};
+
+// Wrapper for Sortable Hook (Bread Ingredients)
+const BreadIngredientItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, activeSuggestion, filteredSuggestions, setActiveSuggestion, setFilteredSuggestions, handleSuggestionSelect, allIngredientNames, calculatePercentage }) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging
+    } = useSortable({ id: id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+        position: 'relative',
+        zIndex: isDragging ? 999 : 'auto',
+        backgroundColor: 'white'
+    };
+
+    return (
+        <div ref={setNodeRef} style={style} className="bread-row">
+            <div
+                {...attributes}
+                {...listeners}
+                className="bread-drag-handle"
+                style={{
+                    cursor: 'grab',
+                    padding: '0 0.5rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ccc',
+                    height: '100%',
+                    touchAction: 'none'
+                }}
+            >
+                ⋮⋮
+            </div>
+            <div style={{ position: 'relative', zIndex: activeSuggestion?.type === 'ingredient' && activeSuggestion?.index === index ? 100 : 'auto' }}>
+                <Input
+                    value={item.name}
+                    onChange={(e) => onChange(index, 'name', e.target.value)}
+                    onFocus={() => {
+                        if (item.name.trim()) {
+                            const matchVal = item.name.toLowerCase();
+                            const matches = allIngredientNames.filter(n => n.toLowerCase().includes(matchVal));
+                            setFilteredSuggestions(matches.slice(0, 10));
+                            setActiveSuggestion({ type: 'ingredient', index: index });
+                        }
+                    }}
+                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
+                    placeholder="例: 塩"
+                    className="bread-input name"
+                    autoComplete="off"
+                />
+                {activeSuggestion && activeSuggestion.type === 'ingredient' && activeSuggestion.index === index && filteredSuggestions.length > 0 && (
+                    <ul style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        backgroundColor: 'white',
+                        border: '1px solid #ccc',
+                        borderRadius: '0 0 4px 4px',
+                        maxHeight: '150px',
+                        overflowY: 'auto',
+                        zIndex: 1000,
+                        padding: 0,
+                        margin: 0,
+                        listStyle: 'none',
+                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                    }}>
+                        {filteredSuggestions.map((suggestion, idx) => (
+                            <li
+                                key={idx}
+                                onMouseDown={() => handleSuggestionSelect('ingredient', index, suggestion)}
+                                style={{
+                                    padding: '8px 12px',
+                                    cursor: 'pointer',
+                                    borderBottom: idx < filteredSuggestions.length - 1 ? '1px solid #f0f0f0' : 'none',
+                                    fontSize: '14px',
+                                    color: '#333'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                            >
+                                {suggestion}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+            <Input
+                type="number"
+                value={item.quantity}
+                onChange={(e) => onChange(index, 'quantity', e.target.value)}
+                placeholder="0"
+                className="bread-input qty"
+            />
+            <div className="bread-percent">
+                {calculatePercentage(item.quantity)}%
+            </div>
+            <div>
+                <Input
+                    type="number"
+                    value={item.purchaseCost || ''}
+                    onChange={(e) => onChange(index, 'purchaseCost', e.target.value)}
+                    placeholder={item.purchaseCostRef ? `Ref: ¥${item.purchaseCostRef}` : "仕入れ"}
+                    className="bread-input cost"
+                    style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '' }}
+                    min="0"
+                    title={item.purchaseCostRef ? `参考価格: ¥${item.purchaseCostRef}` : "No data"}
+                />
+                {item.purchaseCostRef && (
+                    <div style={{ fontSize: '10px', color: '#666', lineHeight: '1.2', marginTop: '2px', wordBreak: 'break-all' }}>
+                        ¥{item.purchaseCostRef} {item.vendorRef && `(${item.vendorRef})`}
+                    </div>
+                )}
+            </div>
+            <Input
+                type="number"
+                value={item.cost || ''}
+                onChange={(e) => onChange(index, 'cost', e.target.value)}
+                placeholder="原価"
+                className="bread-input cost"
+                style={{ width: '100%' }}
+                min="0"
+            />
+            <button type="button" className="bread-remove" onClick={() => onRemove(index)}>×</button>
+        </div>
     );
 };

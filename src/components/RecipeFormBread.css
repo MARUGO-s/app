@@ -52,14 +52,14 @@
 .bread-grid-header {
     display: grid;
     /* Use minmax to ensure columns have a sensible minimum width even if squashed */
-    grid-template-columns: minmax(140px, 2fr) minmax(80px, 1fr) 50px 90px 90px 30px;
+    grid-template-columns: 30px minmax(140px, 2fr) minmax(80px, 1fr) 50px 90px 90px 30px;
     gap: 4px;
     padding: 0 4px;
     margin-bottom: 8px;
     font-size: 0.8rem;
     font-weight: bold;
     color: var(--color-text-muted);
-    min-width: 600px;
+    min-width: 630px;
     /* Force minimum width to prevent collapse */
 }
 
@@ -69,11 +69,11 @@
 
 .bread-row {
     display: grid;
-    grid-template-columns: minmax(140px, 2fr) minmax(80px, 1fr) 50px 90px 90px 30px;
+    grid-template-columns: 30px minmax(140px, 2fr) minmax(80px, 1fr) 50px 90px 90px 30px;
     gap: 4px;
     align-items: center;
     margin-bottom: 8px;
-    min-width: 600px;
+    min-width: 630px;
     /* Match header min-width */
 }
 

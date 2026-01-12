@@ -18,7 +18,7 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                     <Card
                         key={recipe.id}
                         hoverable
-                        className={`recipe-card ${isSelected ? 'selected' : ''}`}
+                        className={`recipe-card ${isSelected ? 'selected' : ''} ${recipe.type === 'bread' ? 'recipe-card--bread' : ''}`}
                         onClick={() => {
                             if (isSelectMode) {
                                 onToggleSelection(recipe.id);

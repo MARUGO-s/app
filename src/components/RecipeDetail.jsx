@@ -20,9 +20,25 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
     const [translationCache, setTranslationCache] = React.useState({}); // { [langCode]: recipeObj }
     const [currentLang, setCurrentLang] = React.useState('ORIGINAL'); // 'ORIGINAL' is source text
     const [isTranslating, setIsTranslating] = React.useState(false);
+    const [showOriginal, setShowOriginal] = React.useState(true); // Default to showing original
 
     // Determines which data to show
     const displayRecipe = currentLang === 'ORIGINAL' ? recipe : (translationCache[currentLang] || recipe);
+
+    const renderText = (text, originalText, isLongText = false) => {
+        if (currentLang === 'ORIGINAL' || !showOriginal || !originalText || text === originalText) {
+            return text;
+        }
+        return (
+            <>
+                {text}
+                {isLongText ? <br /> : ' '}
+                <span className="original-text-sub" style={{ opacity: 0.6, fontSize: '0.85em', fontWeight: 'normal' }}>
+                    ({originalText})
+                </span>
+            </>
+        );
+    };
 
 
     const toggleStep = (index) => {
@@ -68,8 +84,6 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
         if (onView && recipe && !isDeleted) {
             onView(recipe.id);
         }
-        // Reset translation on recipe change
-        setTranslationCache({});
         // Reset translation on recipe change
         setTranslationCache({});
         setCurrentLang('ORIGINAL');
@@ -152,7 +166,7 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
             )}
 
             <div className="recipe-detail__header">
-                <Button variant="ghost" onClick={onBack} size="sm">← 戻る</Button>
+                <Button variant="secondary" onClick={onBack} size="sm">← 戻る</Button>
                 {!isDeleted && (
                     <div className="recipe-detail__actions">
                         <select
@@ -169,6 +183,17 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                 </option>
                             ))}
                         </select>
+                        {currentLang !== 'ORIGINAL' && (
+                            <label style={{ display: 'flex', alignItems: 'center', marginRight: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', userSelect: 'none' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={showOriginal}
+                                    onChange={(e) => setShowOriginal(e.target.checked)}
+                                    style={{ marginRight: '4px' }}
+                                />
+                                原文表示
+                            </label>
+                        )}
                         <Button variant="secondary" size="sm" onClick={() => window.print()}>🖨️ 印刷 / PDF</Button>
                         <Button variant="secondary" size="sm" onClick={onEdit}>編集</Button>
                         <Button variant="danger" size="sm" onClick={handleDeleteClick} style={{ marginLeft: '0.5rem' }}>削除</Button>
@@ -194,25 +219,25 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
             </div>
 
             <div className="recipe-detail__title-card glass-panel">
-                <h1>{displayRecipe.title}</h1>
-                <p className="recipe-detail__desc">{displayRecipe.description}</p>
+                <h1>{renderText(displayRecipe.title, recipe.title)}</h1>
+                <p className="recipe-detail__desc">{renderText(displayRecipe.description, recipe.description, true)}</p>
                 <div className="recipe-detail__meta">
                     {displayRecipe.course && (
                         <div className="meta-item">
                             <span className="meta-label">コース</span>
-                            <span className="meta-value">{displayRecipe.course}</span>
+                            <span className="meta-value">{renderText(displayRecipe.course, recipe.course)}</span>
                         </div>
                     )}
                     {displayRecipe.category && (
                         <div className="meta-item">
                             <span className="meta-label">カテゴリー</span>
-                            <span className="meta-value">{displayRecipe.category}</span>
+                            <span className="meta-value">{renderText(displayRecipe.category, recipe.category)}</span>
                         </div>
                     )}
                     {displayRecipe.storeName && (
                         <div className="meta-item">
                             <span className="meta-label">店舗名</span>
-                            <span className="meta-value">{displayRecipe.storeName}</span>
+                            <span className="meta-value">{renderText(displayRecipe.storeName, recipe.storeName)}</span>
                         </div>
                     )}
                     <div className="meta-item">
@@ -269,20 +294,25 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {flours.map((item, i) => (
-                                                                <tr key={`f-${i}`}>
-                                                                    <td>
-                                                                        <div className="ingredient-name">
-                                                                            <input type="checkbox" id={`flour-${i}`} />
-                                                                            <label htmlFor={`flour-${i}`}>{item.name}</label>
-                                                                        </div>
-                                                                    </td>
-                                                                    <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{item.quantity}</td>
-                                                                    <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-primary)' }}>{calcPercent(item.quantity)}%</td>
-                                                                    <td style={{ textAlign: 'right', color: '#666' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
-                                                                    <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
-                                                                </tr>
-                                                            ))}
+                                                            {flours.map((item, i) => {
+                                                                const originalItem = recipe.flours?.[i] || {};
+                                                                return (
+                                                                    <tr key={i}>
+                                                                        <td>
+                                                                            <div className="ingredient-name">
+                                                                                <input type="checkbox" id={`flour-${i}`} />
+                                                                                <label htmlFor={`flour-${i}`}>{renderText(item.name, originalItem?.name)}</label>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{item.quantity}</td>
+                                                                        <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-primary)' }}>
+                                                                            {calcPercent(item.quantity)}%
+                                                                        </td>
+                                                                        <td style={{ textAlign: 'right', color: '#666' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
+                                                                        <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
+                                                                    </tr>
+                                                                );
+                                                            })}
                                                         </tbody>
                                                     </table>
                                                 </div>
@@ -308,20 +338,25 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {others.map((item, i) => (
-                                                                <tr key={`o-${i}`}>
-                                                                    <td>
-                                                                        <div className="ingredient-name">
-                                                                            <input type="checkbox" id={`other-${i}`} />
-                                                                            <label htmlFor={`other-${i}`}>{item.name}</label>
-                                                                        </div>
-                                                                    </td>
-                                                                    <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{item.quantity}</td>
-                                                                    <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-text-muted)' }}>{calcPercent(item.quantity)}%</td>
-                                                                    <td style={{ textAlign: 'right', color: '#666' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
-                                                                    <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
-                                                                </tr>
-                                                            ))}
+                                                            {others.map((item, i) => {
+                                                                const originalItem = recipe.breadIngredients?.[i] || {};
+                                                                return (
+                                                                    <tr key={i}>
+                                                                        <td>
+                                                                            <div className="ingredient-name">
+                                                                                <input type="checkbox" id={`ingredient-${i}`} />
+                                                                                <label htmlFor={`ingredient-${i}`}>{renderText(item.name, originalItem?.name)}</label>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{item.quantity}</td>
+                                                                        <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-text-muted)' }}>
+                                                                            {calcPercent(item.quantity)}%
+                                                                        </td>
+                                                                        <td style={{ textAlign: 'right', color: '#666' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
+                                                                        <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
+                                                                    </tr>
+                                                                );
+                                                            })}
                                                         </tbody>
                                                     </table>
 
@@ -363,20 +398,26 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {ingredients.map((ing, i) => (
-                                                <tr key={i} className="ingredient-row">
-                                                    <td>
-                                                        <div className="ingredient-name">
-                                                            <input type="checkbox" id={`ing-${i}`} />
-                                                            <label htmlFor={`ing-${i}`}>{typeof ing === 'string' ? ing : ing.name}</label>
-                                                        </div>
-                                                    </td>
-                                                    <td style={{ textAlign: 'right', paddingRight: '0.5rem' }}>{ing.quantity}</td>
-                                                    <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
-                                                    <td style={{ textAlign: 'right', color: '#666' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
-                                                    <td style={{ textAlign: 'right' }}>{ing.cost ? `¥${ing.cost}` : '-'}</td>
-                                                </tr>
-                                            ))}
+                                            {ingredients.map((ing, i) => {
+                                                const originalIng = recipe.ingredients?.[i];
+                                                const displayRef = typeof ing === 'string' ? ing : ing.name;
+                                                const originalRef = originalIng ? (typeof originalIng === 'string' ? originalIng : originalIng.name) : '';
+
+                                                return (
+                                                    <tr key={i} className="ingredient-row">
+                                                        <td>
+                                                            <div className="ingredient-name">
+                                                                <input type="checkbox" id={`ing-${i}`} />
+                                                                <label htmlFor={`ing-${i}`}>{renderText(displayRef, originalRef)}</label>
+                                                            </div>
+                                                        </td>
+                                                        <td style={{ textAlign: 'right', paddingRight: '0.5rem' }}>{ing.quantity}</td>
+                                                        <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
+                                                        <td style={{ textAlign: 'right', color: '#666' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
+                                                        <td style={{ textAlign: 'right' }}>{ing.cost ? `¥${ing.cost}` : '-'}</td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                     <div style={{
@@ -407,7 +448,7 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                     onClick={() => toggleStep(i)}
                                 >
                                     <div className="step-number">{i + 1}</div>
-                                    <p className="step-text">{step}</p>
+                                    <p className="step-text">{renderText(step, recipe.steps?.[i], true)}</p>
                                 </Card>
                             ))}
                         </div>

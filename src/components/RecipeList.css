@@ -77,7 +77,13 @@
     flex-direction: column;
     flex: 1;
     background-color: #d96026;
+    /* Default Orange */
     color: white;
+}
+
+.recipe-card--bread .recipe-card__content {
+    background-color: #a0785a;
+    /* Bread/Wheat Brown */
 }
 
 .recipe-title {
