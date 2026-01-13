@@ -21,7 +21,7 @@ const SortableRecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, 
         transform: CSS.Transform.toString(transform),
         transition,
         opacity: isDragging ? 0.5 : 1,
-        touchAction: 'none',
+        touchAction: 'pan-y',
         height: '100%',
         outline: 'none',
         cursor: disableDrag ? 'default' : 'grab'
