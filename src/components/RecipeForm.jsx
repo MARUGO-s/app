@@ -12,7 +12,8 @@ import {
     DndContext,
     closestCenter,
     KeyboardSensor,
-    PointerSensor,
+    MouseSensor,
+    TouchSensor,
     useSensor,
     useSensors,
 } from '@dnd-kit/core';
@@ -296,7 +297,13 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
 
     // DnD Sensors
     const sensors = useSensors(
-        useSensor(PointerSensor),
+        useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
+        useSensor(TouchSensor, {
+            activationConstraint: {
+                delay: 1000,
+                tolerance: 5,
+            },
+        }),
         useSensor(KeyboardSensor, {
             coordinateGetter: sortableKeyboardCoordinates,
         })
