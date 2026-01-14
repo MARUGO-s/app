@@ -127,7 +127,7 @@ const SortableIngredientItem = ({
                                     handleSuggestionSelect(groupId, index, suggestion);
                                     setShowSuggestions(false);
                                 }}
-                                style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}
+                                style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', color: '#000' }}
                                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
                                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
                             >
