@@ -7,6 +7,7 @@ import {
     TouchSensor,
     useSensor,
     useSensors,
+    useDroppable,
     DragOverlay,
     defaultDropAnimationSideEffects
 } from '@dnd-kit/core';
@@ -170,8 +171,8 @@ const SortableIngredientItem = ({
 
 // --- Sortable Section Component ---
 const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, children }) => {
-    // Only sortable logic for sections if we implement section reordering. 
-    // For now simplistic layout.
+    const { setNodeRef } = useDroppable({ id: section.id });
+
     return (
         <Card className="ingredient-section mb-md" style={{ border: '1px solid #e0e0e0', boxShadow: 'none' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '0.5rem' }}>
@@ -201,7 +202,7 @@ const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, 
                 <span></span>
             </div>
 
-            <div className="section-ingredients-list" style={{ minHeight: '50px', transition: 'min-height 0.2s', paddingBottom: '10px' }}>
+            <div ref={setNodeRef} className="section-ingredients-list" style={{ minHeight: '50px', transition: 'min-height 0.2s', paddingBottom: '10px' }}>
                 {children}
                 {section.items.length === 0 && (
                     <div style={{ padding: '10px', textAlign: 'center', color: '#aaa', fontSize: '0.85rem', border: '1px dashed #ddd', borderRadius: '4px' }}>

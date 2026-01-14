@@ -7,6 +7,7 @@ import {
     TouchSensor,
     useSensor,
     useSensors,
+    useDroppable,
     DragOverlay,
     defaultDropAnimationSideEffects
 } from '@dnd-kit/core';
