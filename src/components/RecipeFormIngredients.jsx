@@ -9,7 +9,8 @@ import {
     useSensors,
     useDroppable,
     DragOverlay,
-    defaultDropAnimationSideEffects
+    defaultDropAnimationSideEffects,
+    pointerWithin
 } from '@dnd-kit/core';
 import {
     arrayMove,
@@ -102,7 +103,7 @@ const SortableIngredientItem = ({
                 {...attributes}
                 {...listeners}
                 className="ingredient-drag-handle"
-                style={{ cursor: 'grab', padding: '0 0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccc' }}
+                style={{ cursor: 'grab', padding: '0 0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccc', touchAction: 'none' }}
             >
                 ⋮⋮
             </div>
@@ -465,7 +466,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
     return (
         <DndContext
             sensors={sensors}
-            collisionDetection={closestCenter}
+            collisionDetection={pointerWithin}
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
         >

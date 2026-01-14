@@ -9,7 +9,8 @@ import {
     useSensors,
     useDroppable,
     DragOverlay,
-    defaultDropAnimationSideEffects
+    defaultDropAnimationSideEffects,
+    pointerWithin
 } from '@dnd-kit/core';
 import {
     arrayMove,
@@ -344,7 +345,7 @@ export const RecipeFormSteps = ({ formData, setFormData }) => {
     return (
         <DndContext
             sensors={sensors}
-            collisionDetection={closestCenter}
+            collisionDetection={pointerWithin}
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
         >
