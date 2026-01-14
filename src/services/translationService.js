@@ -34,14 +34,17 @@ export const translationService = {
         } else {
             const ingredients = recipe.ingredients || [];
             ingredients.forEach(ing => {
-                textsToTranslate.push(typeof ing === 'string' ? ing : ing.name);
+                const text = typeof ing === 'string' ? ing : (ing.name || "");
+                textsToTranslate.push(text);
             });
             stepsStart = ingredientsStart + ingredients.length;
         }
 
         const steps = recipe.steps || [];
         steps.forEach(step => {
-            textsToTranslate.push(step);
+            // Handle step as object (new format) or string (legacy)
+            const text = typeof step === 'object' && step !== null ? (step.text || "") : (step || "");
+            textsToTranslate.push(text);
         });
 
         if (textsToTranslate.length === 0) return recipe;
@@ -77,7 +80,13 @@ export const translationService = {
             }
 
             // Map steps back
-            newRecipe.steps = steps.map((_, i) => translatedTexts[stepsStart + i]);
+            newRecipe.steps = steps.map((originalStep, i) => {
+                const translatedText = translatedTexts[stepsStart + i];
+                if (typeof originalStep === 'object' && originalStep !== null) {
+                    return { ...originalStep, text: translatedText };
+                }
+                return translatedText;
+            });
 
             return newRecipe;
 
