@@ -715,7 +715,7 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                     }}>
                                         <span style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>合計原価:</span>
                                         <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>
-                                            ¥{ingredients.reduce((sum, ing) => sum + (getScaledCost(ing.cost, multiplier) || 0), 0).toLocaleString()}
+                                            ¥{ingredients.reduce((sum, ing) => sum + (parseInt(getScaledCost(ing.cost, multiplier), 10) || 0), 0).toLocaleString()}
                                         </span>
                                     </div>
                                 </>

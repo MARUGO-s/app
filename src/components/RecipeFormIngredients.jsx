@@ -201,8 +201,13 @@ const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, 
                 <span></span>
             </div>
 
-            <div className="section-ingredients-list">
+            <div className="section-ingredients-list" style={{ minHeight: '50px', transition: 'min-height 0.2s', paddingBottom: '10px' }}>
                 {children}
+                {section.items.length === 0 && (
+                    <div style={{ padding: '10px', textAlign: 'center', color: '#aaa', fontSize: '0.85rem', border: '1px dashed #ddd', borderRadius: '4px' }}>
+                        ここに材料をドロップ
+                    </div>
+                )}
             </div>
         </Card>
     );
