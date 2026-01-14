@@ -175,9 +175,9 @@
         background: white !important;
         background-color: white !important;
         color: black;
-        font-size: 9pt;
+        font-size: 8pt;
         /* Smaller font for 1 page */
-        line-height: 1.25;
+        line-height: 1.2;
     }
 
     .app-header,
@@ -274,14 +274,14 @@
     }
 
     .ingredients-table th {
-        font-size: 8pt;
-        padding: 2px 4px;
+        font-size: 7pt;
+        padding: 1px 4px;
         border-bottom: 1px solid #000;
     }
 
     .ingredients-table td {
-        font-size: 8.5pt;
-        padding: 2px 4px;
+        font-size: 7.5pt;
+        padding: 1px 4px;
         border-bottom: 1px dotted #ccc;
     }
 
