@@ -92,11 +92,12 @@ serve(async (req) => {
         const recipe = {
             title: "",
             description: "",
-            ingredients: [] as { name: string, quantity: string, unit: string }[],
-            steps: [] as string[]
+            ingredients: [] as { name: string, quantity: string, unit: string, group?: string }[],
+            steps: [] as { text: string, group?: string }[]
         };
 
         let currentSection = 'unknown'; // title, ingredients, steps
+        let currentGroup = ''; // Track ingredient group (e.g. 'A', 'Sauce')
 
         // Assumption: Title is usually the first line or largest text (not checking font size here for simplicity)
         if (lines.length > 0) {
@@ -172,6 +173,17 @@ serve(async (req) => {
                     let namePart = "";
                     let qtyPart = "";
                     let unitPart = "";
+                    let groupPart = currentGroup; // Use current tracked group
+
+                    // Pre-check: Is this line actually a GROUP HEADER? 
+                    // Heuristic: Short, No Digits, Ends with colon? or just short text
+                    const hasDigits = /\d/.test(line);
+                    // allow some length, but not too long. prevent sentence-like descriptions.
+                    if (!hasDigits && line.length < 20 && !/。$/.test(line)) {
+                        // Likely a group header! e.g. "Sauce:" or "For the filling"
+                        currentGroup = line.replace(/[:：]/g, '').trim();
+                        continue; // Skip adding this as ingredient, just update group
+                    }
 
                     // Strategy 1: Check if line STARTS with Quantity+Unit (Orphaned Quantity or "Qty Name")
                     const startMatch = line.match(/^([\d\.\/]+)\s*([a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF%]+)(.*)$/);
@@ -180,66 +192,36 @@ serve(async (req) => {
                     if (startsWithUnit && startMatch) {
                         const q = startMatch[1];
                         const u = startMatch[2];
-                        // startMatch[3] is the remainder. 
+
+                        // Check if we check for merge... (existing logic usually good)
 
                         // Check if we should merge with the LAST ingredient (if it has name but no qty)
                         const lastIng = recipe.ingredients.length > 0 ? recipe.ingredients[recipe.ingredients.length - 1] : null;
-                        if (lastIng && !lastIng.quantity && lastIng.name) {
+                        if (lastIng && !lastIng.quantity && lastIng.name && (!lastIng.group || lastIng.group === groupPart)) {
+                            // Only merge if group matches or looks safe
                             lastIng.quantity = q;
                             lastIng.unit = u;
-                            // The remainder *might* be part of the unit or the name, but usually it's garbage or " (75%)"
-                            // For now, we assume the line was primarily quantity.
                             continue;
                         }
 
-                        // Check if we can merge with the last line of DESCRIPTION (orphaned name)
-                        if (recipe.description) {
-                            const descLines = recipe.description.trim().split('\n');
-                            if (descLines.length > 0) {
-                                const lastDesc = descLines[descLines.length - 1].trim();
-                                // Heuristic: Short and not a sentence
-                                if (lastDesc.length < 20 && !/[。\.]$/.test(lastDesc)) {
-                                    namePart = lastDesc;
-                                    // Remove from description
-                                    descLines.pop();
-                                    recipe.description = descLines.join('\n');
-
-                                    // Add new ingredient
-                                    recipe.ingredients.push({
-                                        name: namePart,
-                                        quantity: q,
-                                        unit: u
-                                    });
-                                    continue;
-                                }
-                            }
-                        }
-
-                        // If no merge target, treat as standard parsed line (maybe "200g Pork")
-                        // If remainder exists, it might be the name
+                        // Normal add
                         const remainder = startMatch[3].trim();
                         if (remainder.length > 0 && !/^[\(\)0-9%\s]+$/.test(remainder)) {
-                            // E.g. "200g Pork"
                             namePart = remainder;
                             qtyPart = q;
                             unitPart = u;
                         } else {
-                            // Just quantity? e.g. "200 g"
-                            // Add as is (empty name)
                             qtyPart = q;
                             unitPart = u;
                         }
-
                     } else {
-                        // Strategy 2: End-of-line Quantity (Standard "Name Quantity")
-                        // Updated regex to include parentheses in unit/tail
+                        // Strategy 2: End-of-line Quantity
                         const lastPartMatch = line.match(/[\d\.\/]+[\s]*[a-zA-Z\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF%\(\)\s]+$/);
 
                         if (lastPartMatch) {
                             const qtyString = lastPartMatch[0];
                             namePart = line.substring(0, line.length - qtyString.length).replace(/[\.…]+$/, '').trim();
 
-                            // Parse qtyString onto val + unit
                             const valMatch = qtyString.match(/^([\d\.\/]+)\s*(.*)$/);
                             if (valMatch) {
                                 qtyPart = valMatch[1];
@@ -256,7 +238,8 @@ serve(async (req) => {
                     recipe.ingredients.push({
                         name: namePart,
                         quantity: qtyPart,
-                        unit: unitPart
+                        unit: unitPart,
+                        group: groupPart
                     });
                 }
             } else if (currentSection === 'steps') {

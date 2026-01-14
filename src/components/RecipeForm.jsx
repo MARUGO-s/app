@@ -5,6 +5,8 @@ import { Input } from './Input';
 import { Card } from './Card';
 import { STORE_LIST } from '../constants';
 import { RecipeFormBread } from './RecipeFormBread';
+import { RecipeFormIngredients } from './RecipeFormIngredients';
+import { RecipeFormSteps } from './RecipeFormSteps';
 import { purchasePriceService } from '../services/purchasePriceService';
 import './RecipeForm.css';
 
@@ -27,222 +29,9 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 // Internal Sortable Item Component
-const SortableStepItem = ({ id, index, value, onChange, onRemove, listeners, attributes, setNodeRef, transform, transition, isDragging }) => {
-    const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.5 : 1,
-        marginBottom: '0.5rem',
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: '0.5rem',
-        backgroundColor: 'white',
-        position: 'relative',
-        zIndex: isDragging ? 999 : 'auto',
-    };
 
-    return (
-        <div ref={setNodeRef} style={style} className="step-row">
-            <div
-                {...attributes}
-                {...listeners}
-                className="step-drag-handle"
-                style={{
-                    cursor: 'grab',
-                    padding: '0.5rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#ccc',
-                    alignSelf: 'stretch',
-                    touchAction: 'none'
-                }}
-            >
-                ⋮⋮
-            </div>
-            <div className="step-count">{index + 1}</div>
-            <div style={{ flex: 1 }}>
-                <Input
-                    textarea
-                    value={value}
-                    onChange={(e) => onChange(index, e.target.value)}
-                    placeholder={`手順 ${index + 1}...`}
-                    style={{ minHeight: '80px' }}
-                />
-            </div>
-            <div className="remove-button-cell">
-                <button
-                    type="button"
-                    className="icon-btn-delete"
-                    onClick={() => onRemove(index)}
-                    title="削除"
-                >✕</button>
-            </div>
-        </div>
-    );
-};
 
-const SortableIngredientItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, activeSuggestionRow, filteredSuggestions, setActiveSuggestionRow, setFilteredSuggestions, handleSuggestionSelect, listeners, attributes, setNodeRef, transform, transition, isDragging, allIngredientNames }) => {
-    const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.5 : 1,
-        position: 'relative',
-        zIndex: isDragging ? 999 : 'auto',
-        backgroundColor: 'white' // Ensure visibility when dragging
-    };
 
-    const inputRef = useRef(null);
-    const [dropdownStyle, setDropdownStyle] = useState({});
-
-    useEffect(() => {
-        if (activeSuggestionRow === index && filteredSuggestions.length > 0 && inputRef.current) {
-            const updatePosition = () => {
-                const rect = inputRef.current.getBoundingClientRect();
-                setDropdownStyle({
-                    position: 'fixed',
-                    top: `${rect.bottom}px`,
-                    left: `${rect.left}px`,
-                    width: `${rect.width}px`,
-                    backgroundColor: 'white',
-                    border: '1px solid #ccc',
-                    borderRadius: '0 0 4px 4px',
-                    maxHeight: '150px',
-                    overflowY: 'auto',
-                    zIndex: 9999, // Very high z-index
-                    padding: 0,
-                    margin: 0,
-                    listStyle: 'none',
-                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                });
-            };
-
-            updatePosition();
-            // Update on scroll or resize
-            window.addEventListener('scroll', updatePosition, true);
-            window.addEventListener('resize', updatePosition);
-
-            return () => {
-                window.removeEventListener('scroll', updatePosition, true);
-                window.removeEventListener('resize', updatePosition);
-            };
-        }
-    }, [activeSuggestionRow, index, filteredSuggestions.length]);
-
-    return (
-        <div ref={setNodeRef} style={style} className="form-ingredient-row">
-            <div
-                {...attributes}
-                {...listeners}
-                className="ingredient-drag-handle"
-                style={{
-                    cursor: 'grab',
-                    padding: '0 0.5rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#ccc',
-                    height: '100%',
-                    touchAction: 'none'
-                }}
-            >
-                ⋮⋮
-            </div>
-            <div className="ingredient-name" style={{ position: 'relative' }} ref={inputRef}>
-                <Input
-                    value={item.name}
-                    onChange={(e) => onChange(index, e.target.value, 'ingredients', 'name')}
-                    onFocus={() => {
-                        if (item.name.trim()) {
-                            const matchVal = item.name.toLowerCase();
-                            const matches = allIngredientNames.filter(n => n.toLowerCase().includes(matchVal));
-                            setFilteredSuggestions(matches.slice(0, 10));
-                            setActiveSuggestionRow(index);
-                        }
-                    }}
-                    onBlur={() => {
-                        setTimeout(() => setActiveSuggestionRow(null), 200);
-                    }}
-                    placeholder="材料名"
-                    style={{ width: '100%' }}
-                    autoComplete="off"
-                />
-                {activeSuggestionRow === index && filteredSuggestions.length > 0 && createPortal(
-                    <ul style={dropdownStyle}>
-                        {filteredSuggestions.map((suggestion, idx) => (
-                            <li
-                                key={idx}
-                                onMouseDown={() => handleSuggestionSelect(index, suggestion)}
-                                style={{
-                                    padding: '8px 12px',
-                                    cursor: 'pointer',
-                                    borderBottom: idx < filteredSuggestions.length - 1 ? '1px solid #f0f0f0' : 'none',
-                                    fontSize: '14px',
-                                    color: '#333'
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                            >
-                                {suggestion}
-                            </li>
-                        ))}
-                    </ul>,
-                    document.body
-                )}
-            </div>
-            <div className="ingredient-qty">
-                <Input
-                    value={item.quantity}
-                    onChange={(e) => onChange(index, e.target.value, 'ingredients', 'quantity')}
-                    placeholder="0"
-                    style={{ width: '100%' }}
-                />
-            </div>
-            <div className="ingredient-unit">
-                <Input
-                    value={item.unit}
-                    onChange={(e) => onChange(index, e.target.value, 'ingredients', 'unit')}
-                    placeholder="単位"
-                    style={{ width: '100%' }}
-                />
-            </div>
-            <div className="ingredient-cost">
-                <Input
-                    type="number"
-                    value={item.purchaseCost}
-                    onChange={(e) => onChange(index, e.target.value, 'ingredients', 'purchaseCost')}
-                    placeholder={item.purchaseCostRef ? `Ref` : "仕入れ"}
-                    style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '' }}
-                    min="0"
-                    title={item.purchaseCostRef ? `参考: ¥${item.purchaseCostRef}${item.vendorRef ? ` (${item.vendorRef})` : ''}` : "No data"}
-                />
-                {item.purchaseCostRef && (
-                    <div style={{ fontSize: '10px', color: '#666', lineHeight: '1.2', marginTop: '2px', wordBreak: 'break-all', textAlign: 'center' }}>
-                        ¥{item.purchaseCostRef}
-                    </div>
-                )}
-            </div>
-            <div className="ingredient-cost">
-                <Input
-                    type="number"
-                    value={item.cost}
-                    onChange={(e) => onChange(index, e.target.value, 'ingredients', 'cost')}
-                    placeholder="原価"
-                    style={{ width: '100%' }}
-                    min="0"
-                />
-            </div>
-            <div className="remove-button-cell">
-                <button
-                    type="button"
-                    className="icon-btn-delete"
-                    onClick={() => onRemove(index)}
-                    title="削除"
-                >✕</button>
-            </div>
-        </div>
-    );
-}
 
 
 export const RecipeForm = ({ onSave, onCancel, initialData }) => {
@@ -264,17 +53,91 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         loadPrices();
     }, []);
 
-    // Transform initial steps string array to object array with IDs
-    const initialSteps = (safeInitialData.steps || ['']).map(step => ({
-        id: crypto.randomUUID(),
-        text: step
-    }));
+    // Transform initial steps and extract groups (similar to ingredients)
+    const processedInitialSteps = useMemo(() => {
+        const steps = safeInitialData.steps || [''];
+        let stepGroups = safeInitialData.stepGroups || [];
 
-    // Transform initial ingredients to have IDs
-    const initialIngredients = (safeInitialData.ingredients || [{ name: '', quantity: '', unit: '', cost: '', purchaseCost: '' }]).map(ing => {
-        const base = typeof ing === 'string' ? { name: ing, quantity: '', unit: '', cost: '', purchaseCost: '' } : { ...ing, cost: ing.cost || '', purchaseCost: ing.purchaseCost || '' };
-        return { ...base, id: base.id || crypto.randomUUID() };
-    });
+        // If no explicit groups but steps have 'group' property (from import)
+        // Steps might be strings or objects here
+        const hasStepGroups = steps.some(s => typeof s === 'object' && s.group);
+
+        if (stepGroups.length === 0 && hasStepGroups) {
+            const groupMap = new Map();
+            steps.forEach(s => {
+                if (typeof s === 'object' && s.group && !groupMap.has(s.group)) {
+                    groupMap.set(s.group, crypto.randomUUID());
+                }
+            });
+            stepGroups = Array.from(groupMap.entries()).map(([name, id]) => ({ id, name }));
+        }
+
+        const finalSteps = steps.map(s => {
+            // Handle string or object
+            const text = typeof s === 'string' ? s : s.text || '';
+            const id = (typeof s === 'object' && s.id) ? s.id : crypto.randomUUID();
+
+            let groupId = (typeof s === 'object') ? s.groupId : undefined;
+            const groupName = (typeof s === 'object') ? s.group : undefined;
+
+            if (!groupId && groupName && stepGroups.length > 0) {
+                const grp = stepGroups.find(g => g.name === groupName);
+                if (grp) groupId = grp.id;
+            }
+
+            return { id, text, groupId };
+        });
+
+        return { steps: finalSteps, stepGroups };
+    }, [safeInitialData]);
+
+    const initialSteps = processedInitialSteps.steps;
+    const initialStepGroups = processedInitialSteps.stepGroups;
+
+    // Transform initial ingredients and extract groups if present (for imported recipes)
+    const processedInitialData = useMemo(() => {
+        const ingredients = safeInitialData.ingredients || [{ name: '', quantity: '', unit: '', cost: '', purchaseCost: '' }];
+        let groups = safeInitialData.ingredientGroups || [];
+
+        // If no explicit groups but ingredients have 'group' property (from import)
+        if (groups.length === 0 && ingredients.some(i => i.group)) {
+            const groupMap = new Map(); // Name -> ID
+            // Create groups
+            ingredients.forEach(i => {
+                if (i.group && !groupMap.has(i.group)) {
+                    groupMap.set(i.group, crypto.randomUUID());
+                }
+            });
+
+            // Build group array
+            groups = Array.from(groupMap.entries()).map(([name, id]) => ({ id, name }));
+
+            // Assign groupIds to ingredients
+            // Note: Ingredients without group will go to default (handled by RecipeFormIngredients) or we can make a default Main group
+            if (groupMap.size > 0 && ingredients.some(i => !i.group)) {
+                // Ensure there is a default group if we have mixed content?
+                // Usually import is all grouped or not.
+            }
+        }
+
+        const finalIngredients = ingredients.map(ing => {
+            const base = typeof ing === 'string' ? { name: ing, quantity: '', unit: '', cost: '', purchaseCost: '' } : { ...ing, cost: ing.cost || '', purchaseCost: ing.purchaseCost || '' };
+
+            // Map group name to ID if applicable
+            let groupId = base.groupId;
+            if (!groupId && base.group && groups.length > 0) {
+                const grp = groups.find(g => g.name === base.group);
+                if (grp) groupId = grp.id;
+            }
+
+            return { ...base, id: base.id || crypto.randomUUID(), groupId };
+        });
+
+        return { ingredients: finalIngredients, ingredientGroups: groups };
+    }, [safeInitialData]);
+
+    const initialIngredients = processedInitialData.ingredients;
+    const initialIngredientGroups = processedInitialData.ingredientGroups;
 
     const [formData, setFormData] = useState({
         title: safeInitialData.title || '',
@@ -284,7 +147,9 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         storeName: safeInitialData.storeName || '',
         servings: safeInitialData.servings || '',
         ingredients: initialIngredients,
+        ingredientGroups: initialIngredientGroups,
         steps: initialSteps, // Use transformed steps
+        stepGroups: initialStepGroups,
         tags: safeInitialData.tags || [''],
         course: safeInitialData.course || '',
         category: safeInitialData.category || '',
@@ -472,11 +337,29 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         e.preventDefault();
         // Basic validation could go here
 
-        // Remove IDs and temporary properties before saving if desired, 
-        // though Supabase JSONB can handle extra props. 
-        // For 'steps', we MUST convert back to string array.
-        // For 'ingredients', let's clean it up to keep DB clean.
-        const cleanedIngredients = formData.ingredients.map(({ id, ...rest }) => rest);
+        let finalIngredients = [];
+        let finalGroups = [];
+
+        if (formData.type === 'bread') {
+            finalIngredients = formData.ingredients.map(({ id, ...rest }) => rest);
+        } else {
+            // Reconstruct ingredients from sections
+            const sections = formData.ingredientSections || []; // Should be populated
+
+            // If never populated (e.g. immediate submit without render?), fallback to ingredients
+            if (sections.length === 0 && formData.ingredients.length > 0) {
+                finalIngredients = formData.ingredients.map(({ id, ...rest }) => rest);
+            } else {
+                finalIngredients = sections.flatMap(section =>
+                    section.items.map(item => ({
+                        ...item,
+                        groupId: section.id,
+                    }))
+                ).map(({ id, ...rest }) => rest); // Remove UI IDs
+
+                finalGroups = sections.map(s => ({ id: s.id, name: s.name }));
+            }
+        }
 
         // Automatically derive tags from course and category
         const tagSet = new Set([formData.course, formData.category].filter(val => val && val.trim()));
@@ -485,13 +368,37 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         }
         const derivedTags = Array.from(tagSet);
 
+        // Process Steps Sections
+        let finalSteps = [];
+        let finalStepGroups = [];
+        const stepSections = formData.stepSections || [];
+
+        if (stepSections.length === 0 && formData.steps.length > 0) {
+            // Fallback if no sections loaded/edited (though they should be init on mount)
+            // Ensure steps are objects if possible or strings
+            finalSteps = formData.steps.map(s => typeof s === 'string' ? { text: s } : s);
+        } else {
+            finalSteps = stepSections.flatMap(section =>
+                section.items.map(item => ({
+                    text: item.text,
+                    groupId: section.id
+                }))
+            );
+            finalStepGroups = stepSections.map(s => ({ id: s.id, name: s.name }));
+        }
+
         onSave({
             ...formData,
-            ingredients: cleanedIngredients,
-            steps: formData.steps.map(s => s.text), // Convert back to string array
-            image: formData.imageFile || formData.image, // Pass file if selected, otherwise string
-            id: safeInitialData.id || Date.now(), // preserve ID on edit or new one on create
-            tags: derivedTags
+            ingredients: finalIngredients,
+            ingredientGroups: finalGroups,
+            steps: finalSteps, // Now passing objects with groupId instead of strings!
+            stepGroups: finalStepGroups,
+            image: formData.imageFile || formData.image,
+            id: safeInitialData.id || Date.now(),
+            tags: derivedTags,
+            // Clean up temporary UI state
+            ingredientSections: undefined,
+            stepSections: undefined,
         });
     };
 
@@ -715,26 +622,18 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                     <div className="form-row-3">
                         <div className="form-group">
                             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>店舗名</label>
-                            <select
+                            <Input
                                 id="storeName"
                                 value={formData.storeName}
                                 onChange={handleChange}
-                                style={{
-                                    display: 'block',
-                                    width: '100%',
-                                    padding: '0.75rem',
-                                    fontSize: '1rem',
-                                    border: '1px solid #ddd',
-                                    borderRadius: '8px',
-                                    backgroundColor: 'white',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                <option value="">店舗を選択</option>
+                                placeholder="店舗名を入力または選択"
+                                list="store-options"
+                            />
+                            <datalist id="store-options">
                                 {STORE_LIST.map(store => (
-                                    <option key={store} value={store}>{store}</option>
+                                    <option key={store} value={store} />
                                 ))}
-                            </select>
+                            </datalist>
                         </div>
                         <Input
                             label="分量"
@@ -788,78 +687,17 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                         {formData.type === 'bread' ? (
                             <RecipeFormBread formData={formData} setFormData={setFormData} />
                         ) : (
-                            <div className="recipe-scroll-wrapper">
-                                <div className="recipe-list-header">
-                                    <span></span> {/* Handle */}
-                                    <span>材料名</span>
-                                    <span>分量</span>
-                                    <span>単位</span>
-                                    <span style={{ textAlign: 'center' }}>仕入れ</span>
-                                    <span style={{ textAlign: 'center' }}>原価</span>
-                                    <span></span>
-                                </div>
-                                <div className="dynamic-list">
-                                    <DndContext
-                                        sensors={sensors}
-                                        collisionDetection={closestCenter}
-                                        onDragEnd={handleDragEnd}
-                                        id="ingredients-dnd"
-                                    >
-                                        <SortableContext
-                                            items={formData.ingredients}
-                                            strategy={verticalListSortingStrategy}
-                                        >
-                                            {(formData.ingredients || []).map((item, i) => (
-                                                <IngredientItem
-                                                    key={item.id}
-                                                    id={item.id}
-                                                    index={i}
-                                                    item={item}
-                                                    onChange={handleArrayChange}
-                                                    onRemove={() => removeArrayItem(i, 'ingredients')}
-                                                    onSuggestionSelect={handleSuggestionSelect}
-                                                    activeSuggestionRow={activeSuggestionRow}
-                                                    filteredSuggestions={filteredSuggestions}
-                                                    setActiveSuggestionRow={setActiveSuggestionRow}
-                                                    setFilteredSuggestions={setFilteredSuggestions}
-                                                    handleSuggestionSelect={handleSuggestionSelect}
-                                                    allIngredientNames={allIngredientNames}
-                                                />
-                                            ))}
-                                        </SortableContext>
-                                    </DndContext>
-                                    <Button type="button" variant="secondary" size="sm" onClick={() => addArrayItem('ingredients')} block>+ 材料を追加</Button>
-                                </div>
-                            </div>
+                            <RecipeFormIngredients
+                                formData={formData}
+                                setFormData={setFormData}
+                                priceList={priceList}
+                            />
                         )}
                     </Card>
 
                     <Card>
                         <h3>作り方</h3>
-                        <div className="dynamic-list">
-                            <DndContext
-                                sensors={sensors}
-                                collisionDetection={closestCenter}
-                                onDragEnd={handleDragEnd}
-                            >
-                                <SortableContext
-                                    items={formData.steps}
-                                    strategy={verticalListSortingStrategy}
-                                >
-                                    {(formData.steps || []).map((item, i) => (
-                                        <StepItem
-                                            key={item.id}
-                                            id={item.id}
-                                            index={i}
-                                            value={item.text}
-                                            onChange={handleArrayChange}
-                                            onRemove={() => removeArrayItem(i, 'steps')}
-                                        />
-                                    ))}
-                                </SortableContext>
-                            </DndContext>
-                            <Button type="button" variant="secondary" size="sm" onClick={() => addArrayItem('steps')} block>+ 作り方を追加</Button>
-                        </div>
+                        <RecipeFormSteps formData={formData} setFormData={setFormData} />
                     </Card>
 
 
@@ -869,65 +707,6 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
     );
 };
 
-// Wrapper for Sortable Hook (Ingredients)
-const IngredientItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, activeSuggestionRow, filteredSuggestions, setActiveSuggestionRow, setFilteredSuggestions, handleSuggestionSelect, allIngredientNames }) => {
-    const {
-        attributes,
-        listeners,
-        setNodeRef,
-        transform,
-        transition,
-        isDragging
-    } = useSortable({ id: id });
 
-    return (
-        <SortableIngredientItem
-            id={id}
-            index={index}
-            item={item}
-            onChange={onChange}
-            onRemove={onRemove}
-            onSuggestionSelect={onSuggestionSelect}
-            activeSuggestionRow={activeSuggestionRow}
-            filteredSuggestions={filteredSuggestions}
-            setActiveSuggestionRow={setActiveSuggestionRow}
-            setFilteredSuggestions={setFilteredSuggestions}
-            handleSuggestionSelect={handleSuggestionSelect}
-            listeners={listeners}
-            attributes={attributes}
-            setNodeRef={setNodeRef}
-            transform={transform}
-            transition={transition}
-            isDragging={isDragging}
-            allIngredientNames={allIngredientNames}
-        />
-    );
-}
 
-// Wrapper for Sortable Hook
-const StepItem = ({ id, index, value, onChange, onRemove }) => {
-    const {
-        attributes,
-        listeners,
-        setNodeRef,
-        transform,
-        transition,
-        isDragging
-    } = useSortable({ id: id });
 
-    return (
-        <SortableStepItem
-            id={id}
-            index={index}
-            value={value}
-            onChange={(idx, val) => onChange(idx, val, 'steps')}
-            onRemove={onRemove}
-            listeners={listeners}
-            attributes={attributes}
-            setNodeRef={setNodeRef}
-            transform={transform}
-            transition={transition}
-            isDragging={isDragging}
-        />
-    );
-}

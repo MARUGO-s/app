@@ -123,59 +123,63 @@ Deno.serve(async (req) => {
         '作り方', '手順', '工程', '調理方法', 'レシピ' // JP
       ];
 
-      // --- Helper: Find List by Headers ---
-      const findListByHeader = (keywords: string[]): string[] => {
-        const results: string[] = [];
+      // --- Helper: Find List by Headers (Enhanced for Groups) ---
+      const findListByHeader = (keywords: string[]): { text: string, group?: string }[] => {
+        const results: { text: string, group?: string }[] = [];
 
         // Find all headers (h1-h6, strong, div with class title)
         const headers = $('h1, h2, h3, h4, h5, h6, strong, b, .title, .header, p');
 
-        let bestHeader: any = null;
-        let minDepth = 999;
+        let rootHeader: any = null;
 
         headers.each((_, el) => {
+          if (rootHeader) return; // Only find first main header
           const text = $(el).text().toLowerCase().trim();
-          // Check exact match or "contains" with reasonable length to avoid false positives (e.g. "Instructions for Microwave" in footer)
           const isMatch = keywords.some(k => text === k || (text.includes(k) && text.length < 30));
           if (isMatch) {
-            // Heuristic: Prefer headers higher up in the document structure but deep enough to be content? 
-            // Actually, just find the first robust match that is followed by a list.
-            if (!bestHeader) bestHeader = $(el);
+            rootHeader = $(el);
           }
         });
 
-        if (bestHeader) {
-          // Look for existing semantic lists nearby
-          let nextEl = bestHeader.next();
+        if (rootHeader) {
+          // Look for lists properly
+          let nextEl = rootHeader.next();
+          let currentGroup = '';
           let attempts = 0;
-          while (nextEl.length && attempts < 8) {
+          // Look ahead more aggressively for multiple sections
+          // e.g. Header -> List -> SubHeader -> List
+          while (nextEl.length && attempts < 20) {
+
+            // Check for Sub-headers (Simple heuristic: H3-H6 or Strong immediately causing a new section)
+            // Only if we already have some items or it's clearly a subhead
+            if (nextEl.is('h3, h4, h5, h6, strong, b, .group-name')) {
+              const subHeadText = nextEl.text().trim();
+              // Avoid empty or giant headers
+              if (subHeadText && subHeadText.length < 50) {
+                currentGroup = subHeadText.replace(/[:：]/g, '');
+              }
+            }
+
             // Check for UL/OL directly
             if (nextEl.is('ul, ol')) {
               nextEl.find('li').each((_, li) => {
-                results.push($(li).text().trim());
+                const t = $(li).text().trim();
+                if (t) results.push({ text: t, group: currentGroup });
               });
-              return results;
             }
-
-            // Check for nested lists inside the next element
-            const nestedList = nextEl.find('ul, ol');
-            if (nestedList.length) {
-              nestedList.first().find('li').each((_, li) => {
-                results.push($(li).text().trim());
-              });
-              return results;
-            }
-
-            // Check for div-based lists (divs with class 'item', 'step', 'ingredient')
-            // Or just paragraphs that look like steps (start with numbers)
-            if (nextEl.is('div, section, article')) {
-              // Try to find repeating child structures
-              const potentialItems = nextEl.children();
-              if (potentialItems.length > 1) {
-                // If many children, treat as list?
-                // This is risky. Let's look for specific classes if possible.
+            // Check for nested lists
+            else {
+              const nestedList = nextEl.find('ul, ol');
+              if (nestedList.length) {
+                nestedList.each((_, list) => {
+                  $(list).find('li').each((_, li) => {
+                    const t = $(li).text().trim();
+                    if (t) results.push({ text: t, group: currentGroup });
+                  });
+                });
               }
             }
+            // Note: skipping div-based parsing for now to keep it safe, ensuring we don't grab garbage.
 
             nextEl = nextEl.next();
             attempts++;
@@ -184,15 +188,20 @@ Deno.serve(async (req) => {
 
         // Fallback: Check for specific class names if header search failure
         if (results.length === 0) {
-          // Generic class search based on keywords (e.g. .ingredients-list)
           const keywordRoot = keywords[0]; // 'ingredients' or 'instructions'
           const selector = `[class*="${keywordRoot}"], [id*="${keywordRoot}"]`;
           $(selector).each((_, el) => {
-            if (results.length > 0) return; // Stop if found
+            if (results.length > 0 && results.some(r => r.group !== 'Fallback')) return; // Stop if we found better/other results??
+
+            // Try to find a previous header for this list?
+            let groupName = 'Main';
+            const prev = $(el).prev();
+            if (prev.is('h3, h4, h5, h6')) groupName = prev.text().trim() || 'Main';
+
             if ($(el).is('ul, ol')) {
-              $(el).find('li').each((_, li) => results.push($(li).text().trim()));
+              $(el).find('li').each((_, li) => results.push({ text: $(li).text().trim(), group: groupName }));
             } else {
-              $(el).find('li').each((_, li) => results.push($(li).text().trim()));
+              $(el).find('li').each((_, li) => results.push({ text: $(li).text().trim(), group: groupName }));
             }
           });
         }
@@ -201,20 +210,27 @@ Deno.serve(async (req) => {
       };
 
       // --- D. Ingredients Extraction ---
-      let ingredients = findListByHeader(INGREDIENT_KEYWORDS);
-      // Fallback for Marmiton/Specific sites if generic fails (example logic)
-      if (ingredients.length === 0) {
-        // Try looking for lists with 'ingredient' in class name explicitly
+      let rawIngredients = findListByHeader(INGREDIENT_KEYWORDS);
+      // Fallback for Marmiton/Specific sites if generic fails
+      if (rawIngredients.length === 0) {
         $('.ingredient, .ingredients, .recipe-ingredients, .m-ingredient').each((_, el) => {
           const txt = $(el).text().trim();
-          if (txt && txt.length > 2) ingredients.push(txt);
+          if (txt && txt.length > 2) rawIngredients.push({ text: txt });
         });
       }
 
-      // --- E. Steps Extraction ---
-      let steps = findListByHeader(STEP_KEYWORDS);
-      if (steps.length === 0) {
-        // Try looking for lists with 'instruction'/'step' in class name explicitly
+      // --- E. Steps Extraction (Keep simple string[] for now or update if needed) ---
+      // For steps, we often don't need strict grouping as much as ingredients, but we can reuse logic
+      let rawSteps = findListByHeader(STEP_KEYWORDS);
+      let steps: string[] = [];
+      if (rawSteps.length > 0) {
+        steps = rawSteps.map(s => {
+          // Combine group if present? e.g. "Sauce: Step 1"
+          if (s.group && s.group !== 'Main') return `【${s.group}】 ${s.text}`;
+          return s.text;
+        });
+      } else {
+        // Fallback
         $('.instruction, .instructions, .recipe-instructions, .step, .preparation').each((_, el) => {
           const txt = $(el).text().trim();
           if (txt && txt.length > 5) steps.push(txt);
@@ -226,7 +242,7 @@ Deno.serve(async (req) => {
           name: title,
           description,
           image,
-          recipeIngredient: ingredients,
+          recipeIngredient: rawIngredients, // Now Array<{text, group?}>
           recipeInstructions: steps
         };
       }
@@ -319,7 +335,19 @@ Deno.serve(async (req) => {
         ? recipeData.recipeIngredient
         : (typeof recipeData.recipeIngredient === 'string' ? [recipeData.recipeIngredient] : []))
         .filter((i: any) => i) // Remove nulls
-        .map((ing: any) => typeof ing === 'string' ? parseIngredient(ing) : { name: ing.name || '', quantity: ing.quantity || '', unit: ing.unit || '' }),
+        .map((ing: any) => {
+          const rawText = typeof ing === 'string' ? ing : ing.text;
+          const group = typeof ing === 'object' ? ing.group : 'Main';
+          const parsed = parseIngredient(rawText);
+
+          // Add group to result if present and not default
+          // Note: The frontend expects 'group' property? or we just use 'group'
+          // Let's add 'group' to the return object
+          return {
+            ...parsed,
+            group: (group && group !== 'Main') ? group : undefined
+          };
+        }),
       steps: Array.isArray(recipeData.recipeInstructions)
         ? recipeData.recipeInstructions.map((step: any) => step.text || step.name || step).flat()
         : (typeof recipeData.recipeInstructions === 'string' ? [recipeData.recipeInstructions] : []),

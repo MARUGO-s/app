@@ -264,15 +264,52 @@ export const recipeService = {
 const toDbFormat = (recipe) => {
     let ingredientsToSave = recipe.ingredients || [];
 
-    // PACKING STRATEGY:
-    // If bread mode, pack everything into 'ingredients' JSON to avoid schema changes.
-    // Structure: [ { _meta: true, type: 'bread' }, ...flours(w/ _group='flour'), ...others(w/ _group='other') ]
+    // Consolidate Meta
+    const metaItem = {
+        _meta: true,
+        type: recipe.type || 'normal'
+    };
+
+    if (recipe.ingredientGroups && recipe.ingredientGroups.length > 0) {
+        metaItem.groups = recipe.ingredientGroups;
+    }
+
+    if (recipe.stepGroups && recipe.stepGroups.length > 0) {
+        // Calculate step counts per group to allow reconstruction
+        // Expecting recipe.stepGroups to be [{id, name}] 
+        // AND recipe.steps to be flattened array.
+        // BUT we need to know how many steps in each group.
+        // Problem: recipe.stepGroups passed from Form only has {id, name}.
+        // The Form passed flattened steps strings.
+        // The Form logic I wrote:
+        // finalSteps = stepSections.flatMap(...) -> objects {text, groupId}
+        // So recipe.steps coming in HAS groupId! 
+        // Excellent.
+
+        const stepsWithGroups = recipe.steps || [];
+        const groupCounts = recipe.stepGroups.map(g => ({
+            ...g,
+            count: stepsWithGroups.filter(s => s.groupId === g.id).length
+        }));
+        metaItem.stepGroups = groupCounts;
+    }
+
+    // PACKING INGREDIENTS
     if (recipe.type === 'bread') {
-        const metaItem = { _meta: true, type: 'bread' };
         const packedFlours = (recipe.flours || []).map(f => ({ ...f, _group: 'flour' }));
         const packedOthers = (recipe.breadIngredients || []).map(i => ({ ...i, _group: 'other' }));
         ingredientsToSave = [metaItem, ...packedFlours, ...packedOthers];
+    } else {
+        // Normal
+        // Ensure meta is first
+        // If meta was already added in previous logic, remove it? 
+        // No, current logic constructs new list.
+        ingredientsToSave = [metaItem, ...ingredientsToSave];
     }
+
+    // STEPS: Save as plain strings
+    // If steps are objects (which they should be now), map to text.
+    const stepsToSave = (recipe.steps || []).map(s => (typeof s === 'string' ? s : s.text));
 
     // Explicitly whitelist columns to avoid sending unknown fields
     return {
@@ -284,9 +321,8 @@ const toDbFormat = (recipe) => {
         category: recipe.category,
         store_name: recipe.storeName, // Map camelCase to snake_case
         ingredients: ingredientsToSave,
-        steps: recipe.steps || [],
+        steps: stepsToSave,
         tags: recipe.tags || []
-        // Note: prep_time and cook_time are omitted as they are no longer used
     }
 }
 
@@ -295,6 +331,8 @@ const fromDbFormat = (recipe) => {
     let type = 'normal';
     let flours = [];
     let breadIngredients = [];
+    let ingredientGroups = [];
+    let stepGroups = [];
     let cleanIngredients = rawIngs;
 
     // UNPACKING STRATEGY:
@@ -303,14 +341,58 @@ const fromDbFormat = (recipe) => {
         const meta = rawIngs[0];
         type = meta.type || 'normal';
 
+        if (meta.groups) {
+            ingredientGroups = meta.groups;
+        }
+
+        if (meta.stepGroups) {
+            stepGroups = meta.stepGroups;
+        }
+
         // Filter out meta
         const dataItems = rawIngs.slice(1);
 
-        flours = dataItems.filter(i => i._group === 'flour').map(({ _group: _GROUP, ...i }) => i);
-        breadIngredients = dataItems.filter(i => i._group === 'other').map(({ _group: _GROUP, ...i }) => i);
+        if (type === 'bread') {
+            flours = dataItems.filter(i => i._group === 'flour').map(({ _group: _GROUP, ...i }) => i);
+            breadIngredients = dataItems.filter(i => i._group === 'other').map(({ _group: _GROUP, ...i }) => i);
+            // For standard views, we might want a combined list
+            cleanIngredients = [...flours, ...breadIngredients];
+        } else {
+            cleanIngredients = dataItems;
+        }
+    }
 
-        // For standard views, we might want a combined list
-        cleanIngredients = [...flours, ...breadIngredients];
+    // Reconstruct Steps with Group IDs if stepGroups have counts
+    let stepsWithIds = recipe.steps || [];
+    if (stepGroups.length > 0 && Array.isArray(stepsWithIds)) {
+        let currentIndex = 0;
+        stepsWithIds = stepsWithIds.map(text => ({ text })); // wrap first
+
+        // Assign groupIds
+        const newSteps = [];
+        stepGroups.forEach(group => {
+            const count = group.count || 0;
+            for (let i = 0; i < count; i++) {
+                if (currentIndex < stepsWithIds.length) {
+                    newSteps.push({
+                        ...stepsWithIds[currentIndex],
+                        text: stepsWithIds[currentIndex].text, // ensure text property
+                        groupId: group.id
+                    });
+                    currentIndex++;
+                }
+            }
+        });
+
+        // Add remaining as orphans (shouldn't happen if logic is correct)
+        while (currentIndex < stepsWithIds.length) {
+            newSteps.push({
+                ...stepsWithIds[currentIndex],
+                groupId: 'default' // or null
+            });
+            currentIndex++;
+        }
+        stepsWithIds = newSteps;
     }
 
     return {
@@ -321,7 +403,10 @@ const fromDbFormat = (recipe) => {
         type,
         flours,
         breadIngredients,
-        ingredients: cleanIngredients // Ensure list views still see something
+        ingredientGroups,
+        stepGroups,
+        ingredients: cleanIngredients,
+        steps: stepsWithIds.length > 0 && typeof stepsWithIds[0] === 'object' ? stepsWithIds : recipe.steps // Return objects if grouped
     }
 }
 

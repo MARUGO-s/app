@@ -131,6 +131,28 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
     };
 
     const [targetTotal, setTargetTotal] = React.useState('');
+    const [multiplier, setMultiplier] = React.useState('1'); // Generic multiplier for normal recipes
+
+    // Multiplier Helpers
+    const getScaledQty = (qty, multStr) => {
+        const mult = parseFloat(multStr);
+        if (!mult || mult === 1) return qty;
+
+        const numericQty = parseFloat(qty);
+        if (isNaN(numericQty)) return qty; // Return original text if not number (e.g. "適量")
+
+        // Format logic: if integer, show integer, else 1 decimal
+        const scaled = numericQty * mult;
+        return Number.isInteger(scaled) ? scaled.toString() : scaled.toFixed(1);
+    };
+
+    const getScaledCost = (cost, multStr) => {
+        const mult = parseFloat(multStr);
+        if (!mult || mult === 1) return cost;
+        const numericCost = parseInt(cost);
+        if (isNaN(numericCost)) return cost;
+        return Math.round(numericCost * mult);
+    };
 
     // Swipe to back logic
     const touchStartRef = React.useRef(null);
@@ -516,39 +538,172 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                 </div>
                             ) : (
                                 <>
-                                    <table className="ingredients-table">
-                                        <thead>
-                                            <tr>
-                                                <th style={{ width: '40%' }}>材料名</th>
-                                                <th style={{ width: '20%', textAlign: 'right', paddingRight: '0.5rem' }}>分量</th>
-                                                <th style={{ width: '15%', paddingLeft: '0.5rem' }}>単位</th>
-                                                <th style={{ width: '15%', textAlign: 'right' }}>仕入れ</th>
-                                                <th style={{ width: '15%', textAlign: 'right' }}>原価</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {ingredients.map((ing, i) => {
-                                                const originalIng = recipe.ingredients?.[i];
-                                                const displayRef = typeof ing === 'string' ? ing : ing.name;
-                                                const originalRef = originalIng ? (typeof originalIng === 'string' ? originalIng : originalIng.name) : '';
+                                    {/* Normal Recipe Scaling UI */}
+                                    <div style={{
+                                        background: '#f8f9fa',
+                                        color: '#333', // Ensure text is dark on light background
+                                        padding: '0.8rem',
+                                        borderRadius: '6px',
+                                        marginBottom: '1rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '1rem',
+                                        border: '1px solid #e9ecef'
+                                    }}>
+                                        <label htmlFor="multiplier-input" style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#333' }}>分量倍率:</label>
+                                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '1.2rem', fontWeight: 'bold', marginRight: '4px', color: '#333' }}>×</span>
+                                            <input
+                                                id="multiplier-input"
+                                                type="number"
+                                                min="0.1"
+                                                step="0.1"
+                                                value={multiplier}
+                                                onChange={(e) => setMultiplier(e.target.value)}
+                                                style={{
+                                                    width: '60px',
+                                                    padding: '4px',
+                                                    fontSize: '1rem',
+                                                    fontWeight: 'bold',
+                                                    textAlign: 'center',
+                                                    borderRadius: '4px',
+                                                    border: '1px solid #ced4da',
+                                                    background: '#fff',
+                                                    color: '#333'
+                                                }}
+                                            />
+                                        </div>
+                                        {parseFloat(multiplier) !== 1 && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setMultiplier('1')}
+                                                style={{
+                                                    fontSize: '0.8rem',
+                                                    padding: '2px 8px',
+                                                    height: 'auto',
+                                                    color: '#555',
+                                                    borderColor: '#ccc',
+                                                    background: '#fff'
+                                                }}
+                                            >
+                                                リセット
+                                            </Button>
+                                        )}
+                                    </div>
+
+                                    {(() => {
+                                        // Grouping Logic
+                                        const groups = displayRecipe.ingredientGroups && displayRecipe.ingredientGroups.length > 0
+                                            ? displayRecipe.ingredientGroups
+                                            : null;
+
+                                        if (groups) {
+                                            return groups.map((group) => {
+                                                const groupIngredients = ingredients.filter(ing => ing.groupId === group.id);
+                                                if (groupIngredients.length === 0) return null;
 
                                                 return (
-                                                    <tr key={i} className="ingredient-row">
-                                                        <td>
-                                                            <div className="ingredient-name">
-                                                                <input type="checkbox" id={`ing-${i}`} />
-                                                                <label htmlFor={`ing-${i}`}>{renderText(displayRef, originalRef)}</label>
-                                                            </div>
-                                                        </td>
-                                                        <td style={{ textAlign: 'right', paddingRight: '0.5rem' }}>{ing.quantity}</td>
-                                                        <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
-                                                        <td style={{ textAlign: 'right', color: '#666' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
-                                                        <td style={{ textAlign: 'right' }}>{ing.cost ? `¥${ing.cost}` : '-'}</td>
-                                                    </tr>
+                                                    <div key={group.id} style={{ marginBottom: '1.5rem' }}>
+                                                        <h3 style={{
+                                                            fontSize: '1rem',
+                                                            borderBottom: '2px solid var(--color-border)',
+                                                            paddingBottom: '0.5rem',
+                                                            marginBottom: '0.5rem',
+                                                            marginTop: '0.5rem',
+                                                            color: 'var(--color-text-main)'
+                                                        }}>
+                                                            {group.name}
+                                                        </h3>
+                                                        <table className="ingredients-table">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th style={{ width: '40%' }}>材料名</th>
+                                                                    <th style={{ width: '20%', textAlign: 'right', paddingRight: '0.5rem' }}>分量</th>
+                                                                    <th style={{ width: '15%', paddingLeft: '0.5rem' }}>単位</th>
+                                                                    <th style={{ width: '15%', textAlign: 'right' }}>仕入れ</th>
+                                                                    <th style={{ width: '15%', textAlign: 'right' }}>原価</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {groupIngredients.map((ing, i) => {
+                                                                    // Find original index for reference
+                                                                    const originalIndex = ingredients.indexOf(ing);
+                                                                    const originalIng = recipe.ingredients?.[originalIndex];
+                                                                    const displayRef = typeof ing === 'string' ? ing : ing.name;
+                                                                    const originalRef = originalIng ? (typeof originalIng === 'string' ? originalIng : originalIng.name) : '';
+
+                                                                    const scaledQty = getScaledQty(ing.quantity, multiplier);
+                                                                    const scaledCost = getScaledCost(ing.cost, multiplier);
+                                                                    const isScaled = String(multiplier) !== '1';
+
+                                                                    return (
+                                                                        <tr key={i} className="ingredient-row">
+                                                                            <td>
+                                                                                <div className="ingredient-name">
+                                                                                    <input type="checkbox" id={`ing-${group.id}-${i}`} />
+                                                                                    <label htmlFor={`ing-${group.id}-${i}`}>{renderText(displayRef, originalRef)}</label>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td style={{ textAlign: 'right', paddingRight: '0.5rem', fontWeight: isScaled ? 'bold' : 'normal', color: isScaled ? 'var(--color-primary)' : 'inherit' }}>
+                                                                                {scaledQty}
+                                                                            </td>
+                                                                            <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
+                                                                            <td style={{ textAlign: 'right', color: '#666' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
+                                                                            <td style={{ textAlign: 'right' }}>{scaledCost ? `¥${scaledCost}` : '-'}</td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
                                                 );
-                                            })}
-                                        </tbody>
-                                    </table>
+                                            });
+                                        }
+
+                                        // Legacy Flat View
+                                        return (
+                                            <table className="ingredients-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th style={{ width: '40%' }}>材料名</th>
+                                                        <th style={{ width: '20%', textAlign: 'right', paddingRight: '0.5rem' }}>分量</th>
+                                                        <th style={{ width: '15%', paddingLeft: '0.5rem' }}>単位</th>
+                                                        <th style={{ width: '15%', textAlign: 'right' }}>仕入れ</th>
+                                                        <th style={{ width: '15%', textAlign: 'right' }}>原価</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {ingredients.map((ing, i) => {
+                                                        const originalIng = recipe.ingredients?.[i];
+                                                        const displayRef = typeof ing === 'string' ? ing : ing.name;
+                                                        const originalRef = originalIng ? (typeof originalIng === 'string' ? originalIng : originalIng.name) : '';
+
+                                                        const scaledQty = getScaledQty(ing.quantity, multiplier);
+                                                        const scaledCost = getScaledCost(ing.cost, multiplier);
+                                                        const isScaled = String(multiplier) !== '1';
+
+                                                        return (
+                                                            <tr key={i} className="ingredient-row">
+                                                                <td>
+                                                                    <div className="ingredient-name">
+                                                                        <input type="checkbox" id={`ing-${i}`} />
+                                                                        <label htmlFor={`ing-${i}`}>{renderText(displayRef, originalRef)}</label>
+                                                                    </div>
+                                                                </td>
+                                                                <td style={{ textAlign: 'right', paddingRight: '0.5rem', fontWeight: isScaled ? 'bold' : 'normal', color: isScaled ? 'var(--color-primary)' : 'inherit' }}>
+                                                                    {scaledQty}
+                                                                </td>
+                                                                <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
+                                                                <td style={{ textAlign: 'right', color: '#666' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
+                                                                <td style={{ textAlign: 'right' }}>{scaledCost ? `¥${scaledCost}` : '-'}</td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        );
+                                    })()}
                                     <div style={{
                                         marginTop: '1.5rem',
                                         paddingTop: '1rem',
@@ -560,7 +715,7 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                     }}>
                                         <span style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>合計原価:</span>
                                         <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>
-                                            ¥{ingredients.reduce((sum, ing) => sum + (parseInt(ing.cost) || 0), 0).toLocaleString()}
+                                            ¥{ingredients.reduce((sum, ing) => sum + (getScaledCost(ing.cost, multiplier) || 0), 0).toLocaleString()}
                                         </span>
                                     </div>
                                 </>
@@ -569,18 +724,80 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                     </section>
                     <section className="detail-section">
                         <h2>作り方</h2>
-                        <div className="steps-list">
-                            {steps.map((step, i) => (
-                                <Card
-                                    key={i}
-                                    className={`step-card ${completedSteps.has(i) ? 'is-completed' : ''}`}
-                                    onClick={() => toggleStep(i)}
-                                >
-                                    <div className="step-number">{i + 1}</div>
-                                    <p className="step-text">{renderText(step, recipe.steps?.[i], true)}</p>
-                                </Card>
-                            ))}
-                        </div>
+                        {(() => {
+                            const stepGroups = displayRecipe.stepGroups && displayRecipe.stepGroups.length > 0 ? displayRecipe.stepGroups : null;
+
+                            if (stepGroups) {
+                                return (
+                                    <div className="steps-container">
+                                        {stepGroups.map(group => {
+                                            const groupSteps = steps.filter(s => {
+                                                const sGroupId = typeof s === 'object' ? s.groupId : null;
+                                                return sGroupId === group.id;
+                                            });
+
+                                            if (groupSteps.length === 0) return null;
+
+                                            return (
+                                                <div key={group.id} className="step-group" style={{ marginBottom: '2rem' }}>
+                                                    <h3 style={{
+                                                        fontSize: '1.1rem',
+                                                        marginBottom: '1rem',
+                                                        color: 'var(--color-text-main)',
+                                                        borderLeft: '4px solid var(--color-primary)',
+                                                        paddingLeft: '10px'
+                                                    }}>
+                                                        {group.name}
+                                                    </h3>
+                                                    <div className="steps-list">
+                                                        {groupSteps.map((step, i) => {
+                                                            // Find original index relative to full list for correct translation mapping logic if needed
+                                                            const originalIndex = steps.indexOf(step);
+                                                            const stepText = typeof step === 'object' ? step.text : step;
+                                                            const originalStep = recipe.steps?.[originalIndex];
+                                                            const originalText = typeof originalStep === 'object' ? originalStep.text : originalStep;
+
+                                                            return (
+                                                                <Card
+                                                                    key={i}
+                                                                    className={`step-card ${completedSteps.has(originalIndex) ? 'is-completed' : ''}`}
+                                                                    onClick={() => toggleStep(originalIndex)}
+                                                                >
+                                                                    <div className="step-number">{originalIndex + 1}</div>
+                                                                    <p className="step-text">{renderText(stepText, originalText, true)}</p>
+                                                                </Card>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            }
+
+                            // Legacy Flat List
+                            return (
+                                <div className="steps-list">
+                                    {steps.map((step, i) => {
+                                        const stepText = typeof step === 'object' ? step.text : step;
+                                        const originalStep = recipe.steps?.[i];
+                                        const originalText = typeof originalStep === 'object' ? originalStep.text : originalStep;
+
+                                        return (
+                                            <Card
+                                                key={i}
+                                                className={`step-card ${completedSteps.has(i) ? 'is-completed' : ''}`}
+                                                onClick={() => toggleStep(i)}
+                                            >
+                                                <div className="step-number">{i + 1}</div>
+                                                <p className="step-text">{renderText(stepText, originalText, true)}</p>
+                                            </Card>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })()}
                     </section>
                 </div>
             </div >
