@@ -244,14 +244,32 @@
         font-size: 8pt;
     }
 
-    /* Force Single Column for Print to prevent overlap */
+    /* Force 2-Column Flexbox for Print (Grid overlap fix) */
     .recipe-detail__main {
-        display: block !important;
-        margin-top: 0.5rem;
+        display: flex !important;
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 2%;
+        /* Gap between columns */
+        margin-top: 0.2rem;
+        clear: both;
+        /* Ensure it clears the float */
+    }
+
+    /* Target direct children specifically */
+    .recipe-detail__main>.detail-section:first-child {
+        width: 44%;
+        /* Ingredients Column */
+    }
+
+    .recipe-detail__main>.detail-section:last-child {
+        width: 54%;
+        /* Steps Column */
+        padding-left: 0;
     }
 
     .detail-section {
-        margin-bottom: 1.5rem;
+        margin-bottom: 0.5rem;
         page-break-inside: avoid;
     }
 
