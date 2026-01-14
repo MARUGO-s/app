@@ -92,6 +92,8 @@ const SortableStepItem = ({
 
 // --- Sortable Section Component ---
 const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, children }) => {
+    const { setNodeRef } = useDroppable({ id: section.id });
+
     return (
         <Card className="step-section mb-md" style={{ border: '1px solid #e0e0e0', boxShadow: 'none' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '0.5rem' }}>
@@ -111,7 +113,7 @@ const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, 
                 </div>
             </div>
 
-            <div className="section-steps-list" style={{ minHeight: '50px', transition: 'min-height 0.2s', paddingBottom: '10px' }}>
+            <div ref={setNodeRef} className="section-steps-list" style={{ minHeight: '50px', transition: 'min-height 0.2s', paddingBottom: '10px' }}>
                 {children}
                 {section.items.length === 0 && (
                     <div style={{ padding: '10px', textAlign: 'center', color: '#aaa', fontSize: '0.85rem', border: '1px dashed #ddd', borderRadius: '4px' }}>
