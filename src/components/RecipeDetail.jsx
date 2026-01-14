@@ -148,9 +148,9 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
 
     const getScaledCost = (cost, multStr) => {
         const mult = parseFloat(multStr);
-        if (!mult || mult === 1) return cost;
-        const numericCost = parseInt(cost);
-        if (isNaN(numericCost)) return cost;
+        const numericCost = parseInt(cost, 10);
+        if (isNaN(numericCost)) return 0;
+        if (!mult) return numericCost;
         return Math.round(numericCost * mult);
     };
 
