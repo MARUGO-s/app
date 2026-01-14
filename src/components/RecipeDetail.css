@@ -244,15 +244,15 @@
         font-size: 8pt;
     }
 
-    /* Force 2-Column Grid for Print */
+    /* Force Single Column for Print to prevent overlap */
     .recipe-detail__main {
-        display: grid !important;
-        grid-template-columns: 40% 55%;
-        /* Adjusted balance */
-        gap: 1rem;
-        align-items: start;
+        display: block !important;
         margin-top: 0.5rem;
-        clear: both;
+    }
+
+    .detail-section {
+        margin-bottom: 1.5rem;
+        page-break-inside: avoid;
     }
 
     .detail-section h2 {
