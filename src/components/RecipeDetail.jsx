@@ -81,6 +81,7 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
     };
 
     React.useEffect(() => {
+        window.scrollTo(0, 0);
         if (onView && recipe && !isDeleted) {
             onView(recipe.id);
         }
