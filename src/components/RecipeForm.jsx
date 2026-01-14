@@ -580,13 +580,42 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                             >
                                 {formData.image ? (
                                     <>
-                                        <div style={{ width: '100%', height: '200px', backgroundColor: '#f0f0f0' }}>
+                                        <div style={{ width: '100%', height: '200px', backgroundColor: '#f0f0f0', position: 'relative' }}>
                                             <img
                                                 src={formData.image}
                                                 alt="プレビュー"
                                                 style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isDragActive ? 0.5 : 1 }}
                                                 onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.textContent = '画像読み込みエラー'; }}
                                             />
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    setFormData(prev => ({ ...prev, image: '', imageFile: null }));
+                                                }}
+                                                style={{
+                                                    position: 'absolute',
+                                                    top: '8px',
+                                                    right: '8px',
+                                                    background: 'rgba(0,0,0,0.6)',
+                                                    color: 'white',
+                                                    border: 'none',
+                                                    borderRadius: '50%',
+                                                    width: '28px',
+                                                    height: '28px',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    fontSize: '16px',
+                                                    lineHeight: 1,
+                                                    zIndex: 10 // Ensure it's above the file input
+                                                }}
+                                                title="画像を削除"
+                                            >
+                                                ×
+                                            </button>
                                         </div>
                                         <div style={{ padding: '0.5rem', fontSize: '0.8rem', color: '#666' }}>
                                             クリックして変更、または画像をドロップ
@@ -608,9 +637,32 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                         width: '100%',
                                         height: '100%',
                                         opacity: 0,
-                                        cursor: 'pointer'
+                                        cursor: 'pointer',
+                                        display: formData.image ? 'none' : 'block' // hide input if image exists so click goes to parent or we need to ensure input is still clickable for change? 
+                                        // Actually if we want "Click to change", input must be active. 
+                                        // But if we have a delete button on top, we need to make sure input doesn't capture that click. 
+                                        // The delete button stopPropagation handles that. 
+                                        // But if input is on top of everything, it will capture click even for delete button visually under it if z-index is high.
+                                        // Let's adjust z-index or handle input differently.
                                     }}
                                 />
+                                {formData.image && (
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleImageChange}
+                                        style={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            width: '100%',
+                                            height: '100%',
+                                            opacity: 0,
+                                            cursor: 'pointer',
+                                            zIndex: 1 // Lower than delete button
+                                        }}
+                                    />
+                                )}
                             </div>
 
                         </div>

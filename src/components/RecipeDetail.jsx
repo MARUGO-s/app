@@ -132,6 +132,30 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
 
     const [targetTotal, setTargetTotal] = React.useState('');
 
+    // Swipe to back logic
+    const touchStartRef = React.useRef(null);
+    const touchEndRef = React.useRef(null);
+
+    const onTouchStart = (e) => {
+        touchEndRef.current = null;
+        touchStartRef.current = e.targetTouches[0].clientX;
+    };
+
+    const onTouchMove = (e) => {
+        touchEndRef.current = e.targetTouches[0].clientX;
+    };
+
+    const onTouchEnd = () => {
+        if (!touchStartRef.current || !touchEndRef.current) return;
+        const distance = touchStartRef.current - touchEndRef.current;
+        const isLeftEdge = touchStartRef.current < 50;
+        const isRightSwipe = distance < -100;
+
+        if (isLeftEdge && isRightSwipe) {
+            onBack();
+        }
+    };
+
     if (!recipe) return null;
 
     // Safety check for array rendering
@@ -139,7 +163,12 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
     const steps = displayRecipe.steps || [];
 
     return (
-        <div className="recipe-detail fade-in">
+        <div
+            className="recipe-detail fade-in"
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+        >
             {showHardDeleteConfirm && (
                 <div className="modal-overlay fade-in" style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,

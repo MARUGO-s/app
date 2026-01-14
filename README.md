@@ -1,16 +1,71 @@
-# React + Vite
+# Recipe Keeper (レシピキーパー) 🍳
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+お気に入りのレシピを管理し、原価計算やベーカーズパーセントにも対応した高機能なレシピ管理アプリです。
+PCとスマートフォンの両方で快適に利用できるように設計されています。
 
-Currently, two official plugins are available:
+## ✨ 主な機能
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **レシピ管理**: レシピの登録、編集、削除、閲覧
+- **柔軟な入力フォーム**:
+  - **通常モード**: 一般的な料理のレシピ登録
+  - **パン (Baker's %)**: ベーカーズパーセントに対応した専門的な入力モード
+- **レスポンシブデザイン**:
+  - **PC**: 3カラムの効率的なレイアウト (一覧 / 詳細 / 編集)
+  - **スマホ**: 直感的なモバイル最適化UI
+- **並び替え & 整理**:ドラッグ＆ドロップによる直感的な並び替え（スマホ対応）
+- **原価計算**: 材料費と分量から原価を自動計算
+- **データ管理**:
+  - 画像やテキストからのインポート機能
+  - バックアップデータのインポート/エクスポート
+- **履歴 & フィルタ**: 「最近見たレシピ」機能や、店舗・カテゴリ・タグによる絞り込み
 
-## React Compiler
+## 📱 アプリの使い方
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 1. レシピの追加
+画面右上の **`+ レシピ追加`** ボタンから新規作成ができます。
 
-## Expanding the ESLint configuration
+#### 入力モードの選択
+- **通常**: 一般的な料理用。材料名、分量、単位を入力します。
+- **パン (Baker's %)**: パン作り用。
+  - **粉類 (100%)**: パンの基準となる粉を入力します。
+  - **その他材料**: 粉に対するパーセンテージ (%) で分量を管理できます。
+  - **加水率などの自動計算**: 入力された値に基づいて自動計算されます。
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### 2. レシピの整理 (並び替え)
+レシピカードをドラッグ＆ドロップすることで、お好みの順番に並び替えることができます。
+- **PC**: マウスでクリックしてそのままドラッグ。
+- **スマートフォン**: カードを **1秒間長押し** するとドラッグモードになり、移動できます（誤操作防止のため）。
+
+### 3. データ管理
+右上のメニュー、またはサイドバーの **`📊 データ管理`** からアクセスできます。
+- **仕入れマスタ**: よく使う材料の仕入れ価格を登録しておくと、レシピ作成時に原価が自動計算されます。
+- **バックアップ**: レシピデータをJSONファイルとしてダウンロード（保存）したり、復元したりできます。
+
+### 4. 便利な機能
+- **画像登録**: 料理の完成写真を登録して、視覚的に管理できます。
+- **タグ・カテゴリ**: 「メイン」「デザート」などのカテゴリや、任意のタグで整理可能。
+- **削除と復元**: 削除したレシピは一度「ゴミ箱」に入り、そこから完全に削除するか、復元するか選べます。
+
+## 🛠 技術スタック
+
+- **Frontend**: React, Vite
+- **Styling**: Native CSS (Mobile First Design)
+- **Database / Backend**: Supabase
+- **Drag & Drop**: @dnd-kit (Sortable, Core, Modifiers)
+- **Deployment**: GitHub Pages
+
+## 📲 インストール方法 (開発者向け)
+
+```bash
+# クローン
+git clone <repository-url>
+
+# 依存関係のインストール
+npm install
+
+# 開発サーバーの起動
+npm run dev
+```
+
+---
+Create by MARUGO-s
