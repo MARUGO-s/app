@@ -261,7 +261,15 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                 原文表示
                             </label>
                         )}
-                        <Button variant="secondary" size="sm" onClick={() => window.print()}>🖨️ 印刷 / PDF</Button>
+                        <Button variant="secondary" size="sm" onClick={() => {
+                            // Check for iOS Standalone mode (Home Screen app)
+                            const isIOSStandalone = window.navigator.standalone === true;
+                            if (isIOSStandalone) {
+                                alert("iPhoneのホーム画面アプリモードでは印刷がサポートされていません。\nSafariで開き直してから印刷してください。");
+                                return;
+                            }
+                            window.print();
+                        }}>🖨️ 印刷 / PDF</Button>
                         <Button variant="secondary" size="sm" onClick={onEdit}>編集</Button>
                         <Button variant="danger" size="sm" onClick={handleDeleteClick} style={{ marginLeft: '0.5rem' }}>削除</Button>
                         <Button variant="primary" size="sm">クッキングモード</Button>
