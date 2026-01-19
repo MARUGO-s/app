@@ -1,0 +1,147 @@
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+
+.fade-in {
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.import-modal-card {
+    width: 90%;
+    max-width: 500px;
+    padding: 1.5rem;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.import-modal-card h3.modal-title {
+    margin-top: 0;
+    margin-bottom: 0.8rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid #eee;
+    color: hsl(var(--color-primary));
+}
+
+.import-mode-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 0.8rem;
+}
+
+.tab-btn {
+    padding: 6px 14px;
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+
+.tab-btn.active.tab-import-web {
+    background-color: #e3f2fd;
+    color: #1976d2;
+    border-color: #bbdefb;
+    font-weight: bold;
+}
+
+.tab-btn.active.tab-import-image {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    border-color: #c8e6c9;
+    font-weight: bold;
+}
+
+.import-url-input {
+    width: 100%;
+    padding: 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.95rem;
+    margin: 0.5rem 0 1rem;
+    box-sizing: border-box;
+}
+
+.import-url-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(239, 83, 80, 0.2);
+}
+
+.error-text {
+    color: var(--color-danger);
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.8rem;
+    margin-top: 0.5rem;
+}
+
+.image-upload-wrapper {
+    margin: 1rem 0;
+    text-align: center;
+}
+
+.image-upload-input {
+    display: none;
+}
+
+.image-upload-label {
+    display: block;
+    padding: 2rem;
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    cursor: pointer;
+    background: #f9f9f9;
+    color: #666;
+    transition: all 0.2s ease;
+}
+
+.image-upload-label.drag-active {
+    border-color: var(--color-primary);
+    background: #f0f9ff;
+    color: var(--color-primary);
+}
+
+.image-upload-preview {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 4px;
+}

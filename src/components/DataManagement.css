@@ -1,0 +1,255 @@
+/* DataManagement.css */
+
+.dashboard-container {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    padding-bottom: 2rem;
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 0 1rem;
+}
+
+@media (min-width: 750px) {
+    .dashboard-container {
+        height: calc(100vh - 100px);
+        padding-bottom: 0;
+    }
+}
+
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #eee;
+}
+
+.dashboard-content {
+    display: grid;
+    grid-template-columns: 1fr;
+    height: auto;
+    gap: 1.5rem;
+    flex: 1;
+    min-height: 0;
+}
+
+@media (min-width: 750px) {
+    .dashboard-content {
+        grid-template-columns: 320px 1fr 320px;
+    }
+}
+
+/* Sidebar Styling */
+.dashboard-sidebar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    overflow-y: visible;
+    padding-right: 2px;
+}
+
+@media (min-width: 750px) {
+    .dashboard-sidebar {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        overflow-y: auto;
+    }
+}
+
+.sidebar-card {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 1.25rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    flex: 1;
+    min-width: 250px;
+}
+
+@media (min-width: 750px) {
+    .sidebar-card {
+        flex: none;
+        min-width: 0;
+    }
+}
+
+.sidebar-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #000;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Main Area Styling */
+.dashboard-main {
+    display: flex;
+    flex-direction: column;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+    /* Contain the table scroll */
+    min-width: 0;
+    /* Critical for grid item to shrink properly */
+}
+
+.main-toolbar {
+    padding: 1rem;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8f9fa;
+}
+
+.search-bar {
+    width: 300px;
+}
+
+/* Enterprise Table Styling */
+.table-wrapper {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+}
+
+.enterprise-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    /* Dense font */
+    color: #333;
+}
+
+.enterprise-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.enterprise-table th {
+    background-color: #f1f3f5;
+    color: #495057;
+    font-weight: 600;
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid #dee2e6;
+    border-right: 1px solid #f1f3f5;
+    /* Subtle separator */
+    white-space: nowrap;
+    user-select: none;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.enterprise-table th:hover {
+    background-color: #e9ecef;
+}
+
+.enterprise-table td {
+    padding: 6px 12px;
+    border-bottom: 1px solid #eee;
+    vertical-align: middle;
+}
+
+.enterprise-table tr:nth-child(even) {
+    background-color: #fcfcfc;
+}
+
+.enterprise-table tr:hover {
+    background-color: #f1f8ff;
+    /* Light blue hover */
+}
+
+.col-number {
+    font-family: 'SF Mono', 'Roboto Mono', Menlo, monospace;
+    text-align: right;
+}
+
+.col-date {
+    white-space: nowrap;
+    width: 120px;
+}
+
+.no-data {
+    text-align: center;
+    padding: 3rem;
+    color: #adb5bd;
+    font-size: 0.9rem;
+}
+
+/* Sidebar Components specific overrides */
+.upload-area {
+    margin-bottom: 1rem;
+    color: #000;
+}
+
+/* Custom File Input Button Style */
+.csv-input::file-selector-button {
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    padding: 4px 12px;
+    margin-right: 10px;
+    background-color: #f9f9f9;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    color: #333;
+}
+
+.csv-input::file-selector-button:hover {
+    background-color: #e0e0e0;
+}
+
+.file-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 0.85rem;
+    color: #000;
+}
+
+.file-list-item:last-child {
+    border-bottom: none;
+}
+
+.file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 180px;
+    color: #000;
+    font-weight: 500;
+}
+
+/* Status Message compact */
+.status-msg {
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    border-radius: 4px;
+}
+
+.status-msg.success {
+    background: #d3f9d8;
+    color: #2b8a3e;
+}
+
+.status-msg.error {
+    background: #ffe3e3;
+    color: #c92a2a;
+}
+
+.status-msg.info {
+    background: #e7f5ff;
+    color: #1864ab;
+}
+
