@@ -9,6 +9,7 @@ import { DataManagement } from './components/DataManagement';
 import { Card } from './components/Card';
 import { Button } from './components/Button';
 import { RecentRecipes } from './components/RecentRecipes';
+import { LevainGuide } from './components/LevainGuide';
 import { recipeService } from './services/recipeService';
 import { STORE_LIST } from './constants';
 import './App.css';
@@ -52,6 +53,8 @@ function App() {
 
   useEffect(() => {
     loadRecipes();
+    loadTrashCount();
+    loadRecentHistory();
     loadTrashCount();
     loadRecentHistory();
   }, []);
@@ -147,7 +150,6 @@ function App() {
       (selectedTag === 'recent' && recentIds.includes(recipe.id)) ||
       (recipe.tags && recipe.tags.includes(selectedTag)) ||
       (recipe.category && recipe.category === selectedTag) || // Assuming 'category' is a single string, not an array
-      (recipe.course && recipe.course === selectedTag) || // Assuming 'course' is a single string
       (recipe.storeName && recipe.storeName === selectedTag);
 
     // 2. Search Query Filter
@@ -169,6 +171,11 @@ function App() {
     // Navigate to detail view
     setSearchParams({ view: 'detail', id: recipe.id });
   };
+  // ... (omitting middle parts for tool brevity if possible, but replace_file_content is contiguous.
+  // Actually I need to remove the button in the return statement too. This tool call might be too split.)
+  // I will do two separate edits or one big one if they are close. 
+  // The logic is around line 150. The button is around line 590. 
+  // I should use multi_replace for this.
 
   const handleDeleteRecipe = async (recipe, isRestore = false) => {
     try {
@@ -507,6 +514,9 @@ function App() {
                         <Button variant="secondary" onClick={() => { setSearchParams({ view: 'data' }); setIsMenuOpen(false); }}>
                           <span style={{ marginRight: '8px' }}>📊</span> データ管理
                         </Button>
+                        <Button variant="secondary" onClick={() => { setSearchParams({ view: 'levain-guide' }); setIsMenuOpen(false); }}>
+                          <span style={{ marginRight: '8px' }}>📖</span> ルヴァンガイド
+                        </Button>
 
                         <div className="menu-divider"></div>
                       </>
@@ -590,8 +600,6 @@ function App() {
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>
-
-
 
             <div className="view-mode-toggle" style={{ marginLeft: '16px', display: 'flex', gap: '8px', borderLeft: '1px solid #ccc', paddingLeft: '16px' }}>
               <button
@@ -708,6 +716,10 @@ function App() {
 
       {currentView === 'data' && (
         <DataManagement onBack={() => setSearchParams({ view: 'list' })} />
+      )}
+
+      {currentView === 'levain-guide' && (
+        <LevainGuide onBack={() => setSearchParams({ view: 'list' })} />
       )}
     </Layout>
   );

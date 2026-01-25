@@ -545,7 +545,15 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                     value={formData.category}
                                     onChange={handleChange}
                                     placeholder="例: ソース, 付け合わせ"
+                                    list="category-options"
                                 />
+                                <datalist id="category-options">
+                                    <option value="ドレッシング" />
+                                    <option value="ソース" />
+                                    <option value="飾り" />
+                                    <option value="付け合わせ" />
+                                    <option value="お菓子" />
+                                </datalist>
                             </div>
                         </div>
                         <Input

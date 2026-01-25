@@ -378,6 +378,105 @@ Deno.serve(async (req) => {
     }
 
     // ---------------------------------------------------------
+    // Site-Specific Logic: Ouchi Ristrante
+    // ---------------------------------------------------------
+    // ---------------------------------------------------------
+    // Site-Specific Logic: Ouchi Ristrante
+    // ---------------------------------------------------------
+    if (!recipeData && url.includes('ouchi-ristrante.com')) {
+      console.log("Detecting Ouchi Ristrante URL...");
+      const title = $('h1').text().trim();
+
+      // Ingredients: Look for "レシピ" or "材料" header
+      const ingredients: any[] = [];
+      const ingredientHeaders = $('h2, h3, h4').filter((_, el) => {
+        const t = $(el).text().trim();
+        return t.includes('レシピ') || t.includes('材料');
+      });
+
+      if (ingredientHeaders.length > 0) {
+        const header = ingredientHeaders.first();
+        // The content is usually in the next P or DIV, possibly separated by bullets '・'
+        let contentEl = header.next();
+        let attempts = 0;
+        let foundText = '';
+
+        while (attempts < 8 && contentEl.length > 0) {
+          const text = contentEl.text().trim();
+          // Case 1: PRE tag (Markdown code block style used by this author)
+          if (contentEl.is('pre')) {
+            foundText = text;
+            break;
+          }
+
+          // Case 2: P tag with many bullets
+          // Check if this looks like an ingredient list (has bullets or newlines)
+          if ((text.match(/・/g) || []).length >= 2) {
+            foundText = text;
+            break;
+          }
+          contentEl = contentEl.next();
+          attempts++;
+        }
+
+        // Parse the found text
+        if (foundText) {
+          // Split by interpuncts or newlines
+          // Also clean up common surrounding weirdness
+          const rawLines = foundText.split(/[\n\r・]+/).map(s => s.trim()).filter(s => s);
+          rawLines.forEach(line => {
+            // Ignore empty or weird header-like lines
+            if (line.length < 2) return;
+            // Use parseIngredient helper
+            ingredients.push(parseIngredient(line));
+          });
+        }
+      }
+
+      // Steps: Look for "作り方"
+      const steps: string[] = [];
+      const stepHeader = $('h2, h3, h4').filter((_, el) => $(el).text().includes('作り方')).first();
+
+      if (stepHeader.length > 0) {
+        // Iterate siblings until next header
+        let next = stepHeader.next();
+        while (next.length > 0) {
+          if (next.is('h2, h3')) break; // Stop at next major header
+
+          const text = next.text().trim();
+
+          // Only take things that look like steps (starting with number)
+          // The site uses "1. ...", "2. ..."
+          // Also ensure we don't pick up garbage spacers
+          if (/^\d+\./.test(text) && text.length > 5) {
+            // Clean up leading numbers if desired, but keeping them is fine too.
+            steps.push(text);
+          }
+          // Fallback for non-numbered but likely steps (long P tags)
+          else if (next.is('p') && text.length > 20 && !text.includes('レシピブログ')) {
+            steps.push(text);
+          }
+
+          next = next.next();
+        }
+      }
+
+      const description = $('meta[property="og:description"]').attr('content') || '';
+      const image = $('meta[property="og:image"]').attr('content') || '';
+
+      if (title && (ingredients.length > 0 || steps.length > 0)) {
+        recipeData = {
+          name: title,
+          description,
+          image,
+          recipeIngredient: ingredients,
+          recipeInstructions: steps,
+          recipeYield: ''
+        };
+      }
+    }
+
+    // ---------------------------------------------------------
     // Strategy 2: Universal HTML Parsing (Fallback)
     // ---------------------------------------------------------
     if (!recipeData) {

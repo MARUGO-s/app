@@ -224,6 +224,7 @@
     }
 
     /* Reset layout containers */
+    #root,
     .app-layout,
     .app-main,
     .container {
@@ -235,6 +236,7 @@
         height: auto !important;
         min-height: 0 !important;
         overflow: visible !important;
+        display: block !important;
     }
 
     .recipe-detail {
@@ -243,6 +245,7 @@
         max-width: 100%;
         margin: 0;
         position: relative;
+        display: block !important;
     }
 
     /* Print Header Layout */
@@ -371,22 +374,34 @@
     }
 
     .step-number {
-        border: 1px solid black;
+        border: none;
         color: black !important;
-        background: white !important;
-        width: 18px;
-        height: 18px;
-        font-size: 8pt;
+        background: transparent !important;
+        width: 24px;
+        height: auto;
+        font-size: 11pt;
+        font-weight: bold;
+        display: block;
+        text-align: left;
+        border-radius: 0;
     }
 
     .steps-list {
         gap: 0;
+        display: block;
+        /* Ensure it's not grid in print if inherited */
     }
 
     .step-card {
+        display: flex !important;
+        align-items: baseline;
+        /* Align text baselines */
         gap: 0.5rem;
         padding: 0.2rem 0 !important;
-        margin-bottom: 0.2rem !important;
+        margin-bottom: 0.5rem !important;
+        /* Slightly more space between steps */
+        break-inside: avoid;
+        /* Try to keep step content together */
     }
 
     .step-text {
@@ -396,7 +411,7 @@
 
     .ingredients-table td {
         padding: 2px 0;
-        font-size: 9pt;
+        font-size: 8pt;
         border-bottom: 1px dotted #ccc;
     }
 
@@ -408,117 +423,119 @@
 }
 
 /* --- Restored Screen Styles --- */
+@media screen {
 
-.ingredients-list,
-.steps-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
+    .ingredients-list,
+    .steps-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
 
-.ingredients-card,
-.step-card {
-    border: none;
-    box-shadow: none;
-    background: transparent;
-    padding: 0;
-}
+    .ingredients-card,
+    .step-card {
+        border: none;
+        box-shadow: none;
+        background: transparent;
+        padding: 0;
+    }
 
-.ingredients-table {
-    width: 100%;
-    border-collapse: collapse;
-}
+    .ingredients-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
 
-.ingredients-table th {
-    text-align: left;
-    padding: var(--space-sm);
-    border-bottom: 2px solid hsl(var(--color-border));
-    font-size: 0.85rem;
-    color: hsl(var(--color-text-muted));
-}
+    .ingredients-table th {
+        text-align: left;
+        padding: var(--space-sm);
+        border-bottom: 2px solid hsl(var(--color-border));
+        font-size: 0.85rem;
+        color: hsl(var(--color-text-muted));
+    }
 
-.ingredients-table td {
-    padding: var(--space-sm) 0;
-    border-bottom: 1px solid hsl(var(--color-border));
-    font-size: 0.95rem;
-}
+    .ingredients-table td {
+        padding: var(--space-sm) 0;
+        border-bottom: 1px solid hsl(var(--color-border));
+        font-size: 0.95rem;
+    }
 
-.ingredient-name {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    width: 100%;
-    cursor: pointer;
-}
+    .ingredient-name {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        width: 100%;
+        cursor: pointer;
+    }
 
-.ingredient-name label {
-    flex: 1;
-    cursor: pointer;
-    padding: 4px 0;
-}
+    .ingredient-name label {
+        flex: 1;
+        cursor: pointer;
+        padding: 4px 0;
+    }
 
-.ingredient-row:last-child td {
-    border-bottom: none;
-}
+    .ingredient-row:last-child td {
+        border-bottom: none;
+    }
 
-/* Steps Screen Layout */
-.steps-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-md);
-}
+    /* Steps Screen Layout */
+    .steps-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-md);
+    }
 
-.step-card {
-    display: flex;
-    gap: var(--space-md);
-    align-items: flex-start;
-    background: hsl(var(--color-bg-surface));
-    padding: var(--space-md);
-    border-radius: var(--radius-md);
-    border: 1px solid hsl(var(--color-border));
-    color: #333;
-    /* Resurrected to ensure contrast on white cards */
-    cursor: pointer;
-    transition: all 0.2s;
-}
+    .step-card {
+        display: flex;
+        gap: var(--space-md);
+        align-items: flex-start;
+        background: hsl(var(--color-bg-surface));
+        padding: var(--space-md);
+        border-radius: var(--radius-md);
+        border: 1px solid hsl(var(--color-border));
+        color: #333;
+        /* Resurrected to ensure contrast on white cards */
+        cursor: pointer;
+        transition: all 0.2s;
+    }
 
-.step-card.is-completed .step-text {
-    text-decoration: line-through;
-    color: #888;
-}
+    .step-card.is-completed .step-text {
+        text-decoration: line-through;
+        color: #888;
+    }
 
-.step-card:hover {
-    border-color: hsl(var(--color-primary));
-}
+    .step-card:hover {
+        border-color: hsl(var(--color-primary));
+    }
 
-.step-number {
-    background: hsl(var(--color-primary));
-    color: white;
-    width: 24px;
-    height: 24px;
-    font-size: 0.8rem;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    flex-shrink: 0;
-    border: none;
-}
+    .step-number {
+        background: hsl(var(--color-primary));
+        color: white;
+        width: 24px;
+        height: 24px;
+        font-size: 0.8rem;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        flex-shrink: 0;
+        border: none;
+    }
 
-/* Desktop override for step-card padding/margin if needed, currently reusing mobile */
+    /* Desktop override for step-card padding/margin if needed, currently reusing mobile */
 
-.recipe-detail-dates {
-    margin-top: 1rem;
-    display: flex;
-    justify-content: flex-end;
-    gap: 1rem;
-    font-size: 0.8rem;
-    color: hsl(var(--color-text-muted));
-    border-top: 1px dotted hsl(var(--color-border));
-    padding-top: 0.5rem;
-}
+    .recipe-detail-dates {
+        margin-top: 1rem;
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        font-size: 0.8rem;
+        color: hsl(var(--color-text-muted));
+        border-top: 1px dotted hsl(var(--color-border));
+        padding-top: 0.5rem;
+    }
 
-.print-only {
-    display: none;
+    .print-only {
+        display: none;
+    }
 }

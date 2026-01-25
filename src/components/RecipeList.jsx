@@ -132,11 +132,21 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
     const decorationRecipes = nonSauce.filter(r => isDecoration(r));
     const nonDecoration = nonSauce.filter(r => !isDecoration(r));
 
+    // Dressing (New)
+    const isDressing = (r) => {
+        const cat = r.category || '';
+        const tags = r.tags || [];
+        return /ドレッシング|Dressing|ヴィネグレット|Vinaigrette|マヨネーズ|Mayonnaise/i.test(cat) ||
+            tags.some(t => /ドレッシング|Dressing|ヴィネグレット|Vinaigrette|マヨネーズ|Mayonnaise/i.test(t));
+    };
+    const dressingRecipes = nonDecoration.filter(r => isDressing(r));
+    const nonDressing = nonDecoration.filter(r => !isDressing(r));
+
     // Dessert
-    const dessertRecipes = nonDecoration.filter(r => isDessert(r));
+    const dessertRecipes = nonDressing.filter(r => isDessert(r));
 
     // Cooking (Rest)
-    const cookingRecipes = nonDecoration.filter(r => !isDessert(r));
+    const cookingRecipes = nonDressing.filter(r => !isDessert(r));
 
     // Dynamic limit based on screen width
     // Mobile/Tablet (< 1024px): 8 items
@@ -227,6 +237,7 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
             {renderSection("パン", breadRecipes, "🍞", "bread")}
             {renderSection("デザート", dessertRecipes, "🍰", "dessert")}
             {renderSection("ソース", sauceRecipes, "🥣", "sauce")}
+            {renderSection("ドレッシング", dressingRecipes, "🥗", "dressing")}
             {renderSection("飾り", decorationRecipes, "✨", "decoration")}
 
             {/* Fallback if no recipes at all */}
