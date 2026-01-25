@@ -11,7 +11,7 @@ export const Layout = ({ children }) => {
         <div className="app-layout">
             <header className="app-header">
                 <div className="container app-header__content">
-                    <img src={`${import.meta.env.BASE_URL}header-logo.png`} alt="Recipe Management" className="app-logo-image" />
+                    <img src={`${import.meta.env.BASE_URL}header-logo.png`} alt="recipe management" className="app-logo-image" />
                 </div>
             </header>
             <main className="container app-main">
@@ -19,7 +19,7 @@ export const Layout = ({ children }) => {
             </main>
             <footer className="app-footer">
                 <div className="container">
-                    <p>© 2024 Recipe Management (レシピマネジメント)</p>
+                    <p>© 2026 recipe management</p>
                 </div>
             </footer>
         </div>
