@@ -423,6 +423,11 @@ function App() {
     setSelectedRecipeIds(new Set(allIds));
   };
 
+  const handleDuplicate = (newRecipe) => {
+    setRecipes([newRecipe, ...recipes]);
+    setSearchParams({ view: 'edit', id: newRecipe.id });
+  };
+
   return (
 
     <Layout>
@@ -682,6 +687,7 @@ function App() {
           onDelete={handleDeleteRecipe}
           onView={addToHistory}
           onHardDelete={handleHardDeleteRecipe}
+          onDuplicate={handleDuplicate}
         />
       )}
 

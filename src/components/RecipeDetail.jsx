@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from './Button';
 import { Card } from './Card';
 import { translationService } from '../services/translationService';
+import { recipeService } from '../services/recipeService';
 import { SUPPORTED_LANGUAGES } from '../constants';
 import './RecipeDetail.css';
 import QRCode from "react-qr-code";
@@ -12,13 +13,13 @@ const formatDate = (dateString) => {
     return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
 };
 
-export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, isDeleted, onView }) => {
+export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, isDeleted, onView, onDuplicate }) => {
     const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+    const [showDuplicateConfirm, setShowDuplicateConfirm] = React.useState(false);
     const [showHardDeleteConfirm, setShowHardDeleteConfirm] = React.useState(false);
     const [completedSteps, setCompletedSteps] = React.useState(new Set());
 
-    // Translation State
-    const [translationCache, setTranslationCache] = React.useState({}); // { [langCode]: recipeObj }
+    const [translationCache, setTranslationCache] = React.useState({}); // {[langCode]: recipeObj }
     const [currentLang, setCurrentLang] = React.useState('ORIGINAL'); // 'ORIGINAL' is source text
     const [isTranslating, setIsTranslating] = React.useState(false);
     const [showOriginal, setShowOriginal] = React.useState(true); // Default to showing original
@@ -40,7 +41,6 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
             </>
         );
     };
-
 
     const toggleStep = (index) => {
         const next = new Set(completedSteps);
@@ -131,6 +131,25 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
         setShowHardDeleteConfirm(false);
     };
 
+    const handleDuplicateClick = () => {
+        setShowDuplicateConfirm(true);
+    };
+
+    const confirmDuplicate = async () => {
+        setShowDuplicateConfirm(false);
+        try {
+            const newRecipe = await recipeService.duplicateRecipe(recipe);
+            if (onDuplicate) onDuplicate(newRecipe);
+        } catch (e) {
+            console.error("Duplication failed", e);
+            alert("複製に失敗しました。");
+        }
+    };
+
+    const cancelDuplicate = () => {
+        setShowDuplicateConfirm(false);
+    };
+
     const [targetTotal, setTargetTotal] = React.useState('');
     const [multiplier, setMultiplier] = React.useState('1'); // Generic multiplier for normal recipes
 
@@ -192,15 +211,34 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
         >
+            {showDuplicateConfirm && (
+                <div className="modal-overlay fade-in" style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                    <Card style={{ width: '90%', maxWidth: '400px', padding: '1.5rem', color: '#333' }}>
+                        <h3 style={{ marginTop: 0, color: 'var(--color-primary)' }}>レシピの複製</h3>
+                        <p style={{ margin: '1rem 0', color: '#333' }}>
+                            このレシピのコピーを作成しますか？
+                        </p>
+                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+                            <Button variant="ghost" onClick={cancelDuplicate}>キャンセル</Button>
+                            <Button variant="primary" onClick={confirmDuplicate}>複製する</Button>
+                        </div>
+                    </Card>
+                </div>
+            )}
+
             {showHardDeleteConfirm && (
                 <div className="modal-overlay fade-in" style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
                     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
                     display: 'flex', alignItems: 'center', justifyContent: 'center'
                 }}>
-                    <Card style={{ width: '90%', maxWidth: '400px', padding: '1.5rem', border: '2px solid var(--color-danger)' }}>
+                    <Card style={{ width: '90%', maxWidth: '400px', padding: '1.5rem', border: '2px solid var(--color-danger)', color: '#333' }}>
                         <h3 style={{ marginTop: 0, color: 'var(--color-danger)' }}>⚠️ 完全に削除しますか？</h3>
-                        <p style={{ margin: '1rem 0' }}>
+                        <p style={{ margin: '1rem 0', color: '#333' }}>
                             この操作は取り消せません。<br />
                             永久に削除され、二度と復元できなくなります。
                         </p>
@@ -218,9 +256,9 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
                     display: 'flex', alignItems: 'center', justifyContent: 'center'
                 }}>
-                    <Card style={{ width: '90%', maxWidth: '400px', padding: '1.5rem' }}>
+                    <Card style={{ width: '90%', maxWidth: '400px', padding: '1.5rem', color: '#333' }}>
                         <h3 style={{ marginTop: 0, color: 'var(--color-danger)' }}>レシピの削除</h3>
-                        <p style={{ margin: '1rem 0' }}>
+                        <p style={{ margin: '1rem 0', color: '#333' }}>
                             本当にこのレシピを削除しますか？<br />
                             <small style={{ color: '#666' }}>（削除済みアイテムとしてゴミ箱に移動します）</small>
                         </p>
@@ -270,6 +308,7 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                             }
                             window.print();
                         }}>🖨️ 印刷 / PDF</Button>
+                        <Button variant="secondary" size="sm" onClick={handleDuplicateClick}>複製</Button>
                         <Button variant="secondary" size="sm" onClick={onEdit}>編集</Button>
                         <Button variant="danger" size="sm" onClick={handleDeleteClick} style={{ marginLeft: '0.5rem' }}>削除</Button>
                         <Button variant="primary" size="sm">クッキングモード</Button>

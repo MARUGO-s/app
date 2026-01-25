@@ -118,6 +118,56 @@ export const recipeService = {
         return fromDbFormat({ ...data, recipe_sources: sourceUrl ? [{ url: sourceUrl }] : [] })
     },
 
+    async duplicateRecipe(recipe) {
+        // 1. Prepare copy data
+        const { id, created_at, updated_at, image, ...recipeData } = recipe;
+
+        // Append " (Copy)" to title to distinguish
+        recipeData.title = `${recipeData.title} (コピー)`;
+
+        // Handle image: ideally we should copy the image file in storage too, 
+        // but for now we can reuse the same image URL if it's public.
+        // Or duplicate the file? Duplicating file prevents deletion issues if original is deleted.
+        // For simple MVP: reuse link? No, if original is deleted, image is gone.
+        // Let's try to copy the image if it exists.
+
+        let newImageUrl = null;
+        if (image) {
+            try {
+                // Extract filename from URL
+                const fileName = image.split('/').pop();
+                // We need to fetch the blob? Or use Supabase copy command?
+                // Supabase storage has copy? Yes. move/copy.
+
+                // But we don't know the exact path structure in bucket just from URL perfectly always?
+                // Our schema uses flat filenames usually.
+                const newFileName = `copy-${Date.now()}-${fileName}`;
+
+                const { error: copyError } = await supabase.storage
+                    .from('recipe-images')
+                    .copy(fileName, newFileName);
+
+                if (!copyError) {
+                    const { data } = supabase.storage
+                        .from('recipe-images')
+                        .getPublicUrl(newFileName);
+                    newImageUrl = data.publicUrl;
+                } else {
+                    console.warn("Image copy failed, using original URL:", copyError);
+                    newImageUrl = image; // Fallback
+                }
+            } catch (e) {
+                console.warn("Image copy logic error:", e);
+                newImageUrl = image;
+            }
+        }
+
+        recipeData.image = newImageUrl;
+
+        // 2. Insert as new recipe
+        return await this.createRecipe(recipeData);
+    },
+
     async fetchDeletedRecipes() {
         const { data, error } = await supabase
             .from('deleted_recipes')
