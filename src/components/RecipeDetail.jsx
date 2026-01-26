@@ -100,7 +100,42 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
         );
     };
 
-    // ... (toggleStep, handleLanguageChange kept same)
+    const handleLanguageChange = async (e) => {
+        const langCode = e.target.value;
+        setCurrentLang(langCode);
+
+        if (langCode === 'ORIGINAL') {
+            return;
+        }
+
+        if (translationCache[langCode]) {
+            return;
+        }
+
+        setIsTranslating(true);
+        try {
+            const translated = await translationService.translateRecipe(recipe, langCode);
+            setTranslationCache(prev => ({ ...prev, [langCode]: translated }));
+        } catch (err) {
+            console.error(err);
+            alert("翻訳に失敗しました");
+            setCurrentLang('ORIGINAL');
+        } finally {
+            setIsTranslating(false);
+        }
+    };
+
+    const toggleStep = (index) => {
+        setCompletedSteps(prev => {
+            const next = new Set(prev);
+            if (next.has(index)) {
+                next.delete(index);
+            } else {
+                next.add(index);
+            }
+            return next;
+        });
+    };
 
     React.useEffect(() => {
         window.scrollTo(0, 0);
