@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { supabase } from '../supabase';
+import { userService } from '../services/userService';
 
 const AuthContext = createContext(null);
 
@@ -41,6 +42,9 @@ export const AuthProvider = ({ children }) => {
             // Revert to safe object structure to prevent crash
             const userData = { id: userId };
             setUser(userData);
+
+            // Fire and forget last login update
+            userService.updateLastLogin(userId).catch(err => console.error(err));
 
             if (rememberMe) {
                 localStorage.setItem('recipe_app_user', JSON.stringify(userData));

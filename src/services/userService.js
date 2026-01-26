@@ -83,5 +83,14 @@ export const userService = {
 
         if (error) throw error;
         return true;
+    },
+
+    async updateLastLogin(userId) {
+        const { error } = await supabase
+            .from('app_users')
+            .update({ last_login_at: new Date() })
+            .eq('id', userId);
+
+        if (error) console.error("Failed to update last login", error);
     }
 };

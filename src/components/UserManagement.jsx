@@ -53,6 +53,62 @@ export const UserManagement = ({ onBack }) => {
         }
     };
 
+    const admins = users.filter(u => u.id === 'admin');
+    const regulars = users.filter(u => u.id !== 'admin');
+
+    const UserCard = ({ user, isAdmin }) => (
+        <Card key={user.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', backgroundColor: 'white' }}>
+            <div>
+                <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#333' }}>
+                    {user.id} {isAdmin && <span style={{ fontSize: '0.8rem', backgroundColor: '#e0e0e0', padding: '2px 6px', borderRadius: '4px', marginLeft: '6px', color: '#555' }}>管理者</span>}
+                </div>
+                <div style={{ fontSize: '0.85rem', color: '#666' }}>
+                    登録: {new Date(user.created_at).toLocaleString()}
+                </div>
+                <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+                    最終ログイン: {user.last_login_at ? new Date(user.last_login_at).toLocaleString() : '---'}
+                </div>
+                <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+                    レシピ数: <strong>{user.recipeCount || 0}</strong>
+                </div>
+                <div style={{ fontSize: '0.8rem', color: '#999', marginTop: '4px' }}>
+                    Pass: {user.password}
+                </div>
+            </div>
+
+            {!isAdmin && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', color: '#555' }}>
+                        <input
+                            type="checkbox"
+                            checked={user.show_master_recipes || false}
+                            onChange={async (e) => {
+                                const newVal = e.target.checked;
+                                // 1. Update Local State immediately
+                                setUsers(prev => prev.map(u => u.id === user.id ? { ...u, show_master_recipes: newVal } : u));
+
+                                // 2. Save to LocalStorage
+                                try {
+                                    const key = `user_prefs_${user.id}`;
+                                    const prefs = JSON.parse(localStorage.getItem(key) || '{}');
+                                    prefs.show_master_recipes = newVal;
+                                    localStorage.setItem(key, JSON.stringify(prefs));
+                                } catch (err) { console.error(err); }
+
+                                // 3. Update DB
+                                try {
+                                    await userService.updateUser(user.id, { show_master_recipes: newVal });
+                                } catch (err) { console.error(err); }
+                            }}
+                        />
+                        マスターレシピ表示
+                    </label>
+                    <Button variant="danger" onClick={() => setDeleteTarget(user)}>削除</Button>
+                </div>
+            )}
+        </Card>
+    );
+
     return (
         <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', height: '100%', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', color: 'var(--text-color)' }}>
@@ -61,12 +117,10 @@ export const UserManagement = ({ onBack }) => {
             </div>
 
             {error && (
-                <div style={{ padding: '10px', backgroundColor: '#ffebee', color: '#c62828', borderRadius: '4px', marginBottom: '20px' }}>
-                    {error}
-                </div>
+                <div style={{ padding: '10px', backgroundColor: '#ffebee', color: '#c62828', borderRadius: '4px', marginBottom: '20px' }}>{error}</div>
             )}
 
-            {/* Custom Delete Confirmation Modal */}
+            {/* Delete Modal */}
             {deleteTarget && (
                 <div className="modal-overlay" style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -90,71 +144,28 @@ export const UserManagement = ({ onBack }) => {
             {loading ? (
                 <div style={{ textAlign: 'center', padding: '20px' }}>読み込み中...</div>
             ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {users.map(user => (
-                        <Card key={user.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', backgroundColor: 'white' }}>
-                            <div>
-                                <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#333' }}>{user.id}</div>
-                                <div style={{ fontSize: '0.85rem', color: '#666' }}>
-                                    登録日: {new Date(user.created_at).toLocaleString()}
-                                </div>
-                                <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
-                                    レシピ数: <strong>{user.recipeCount || 0}</strong>
-                                </div>
-                                <div style={{ fontSize: '0.8rem', color: '#999', marginTop: '4px' }}>
-                                    Pass: {user.password}
-                                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+                    {admins.length > 0 && (
+                        <div>
+                            <h3 style={{ borderBottom: '2px solid var(--color-primary)', paddingBottom: '0.5rem', marginBottom: '1rem', color: 'var(--color-primary)' }}>管理者</h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {admins.map(u => <UserCard key={u.id} user={u} isAdmin={true} />)}
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', color: '#555' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={user.show_master_recipes || false}
-                                        onChange={async (e) => {
-                                            const newVal = e.target.checked;
-
-                                            // 1. Update Local State immediately
-                                            setUsers(users.map(u => u.id === user.id ? { ...u, show_master_recipes: newVal } : u));
-
-                                            // 2. Save to LocalStorage (Reliable fallback)
-                                            try {
-                                                const key = `user_prefs_${user.id}`;
-                                                const prefs = JSON.parse(localStorage.getItem(key) || '{}');
-                                                prefs.show_master_recipes = newVal;
-                                                localStorage.setItem(key, JSON.stringify(prefs));
-                                                console.log(`Saved preference to LocalStorage for ${user.id}:`, prefs);
-                                            } catch (err) {
-                                                console.error("LocalStorage save failed", err);
-                                            }
-
-                                            // 3. Update DB
-                                            try {
-                                                await userService.updateUser(user.id, { show_master_recipes: newVal });
-                                            } catch (err) {
-                                                console.error("DB update failed:", err);
-                                                // LocalStorage is already updated above, so UI is fine.
-                                            }
-                                        }}
-                                        disabled={user.id === 'admin'}
-                                    />
-                                    マスターレシピ表示
-                                </label>
-                                <Button
-                                    variant="danger"
-                                    onClick={() => setDeleteTarget(user)} // Open modal
-                                    disabled={user.id === 'admin'} // Prevent self-delete or admin delete
-                                >
-                                    削除
-                                </Button>
-                            </div>
-                        </Card>
-                    ))}
-
-                    {users.length === 0 && (
-                        <div style={{ textAlign: 'center', padding: '20px', color: '#666', backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: '8px' }}>
-                            ユーザーがいません
                         </div>
                     )}
+
+                    <div>
+                        <h3 style={{ borderBottom: '2px solid #ddd', paddingBottom: '0.5rem', marginBottom: '1rem', color: 'var(--text-color)' }}>登録ユーザー</h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {regulars.length > 0 ? (
+                                regulars.map(u => <UserCard key={u.id} user={u} isAdmin={false} />)
+                            ) : (
+                                <div style={{ textAlign: 'center', padding: '20px', color: '#666', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+                                    一般ユーザーはいません
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

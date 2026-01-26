@@ -26,6 +26,28 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
     const [isTranslating, setIsTranslating] = React.useState(false);
     const [showOriginal, setShowOriginal] = React.useState(true); // Default to showing original
 
+    // Scaling State
+    const [targetTotal, setTargetTotal] = React.useState(''); // For Bread
+    const [multiplier, setMultiplier] = React.useState(1);    // For Normal
+
+    // Helper for Normal Recipe Scaling
+    const getScaledQty = (qty, mult) => {
+        if (!qty) return '';
+        const num = parseFloat(qty);
+        if (isNaN(num)) return qty;
+        // Float precision handling could be better but simple for now
+        const val = num * parseFloat(mult);
+        // Avoid .00 if integer
+        return Number.isInteger(val) ? val.toString() : val.toFixed(1).replace(/\.0$/, '');
+    };
+
+    const getScaledCost = (cost, mult) => {
+        if (!cost) return '';
+        const num = parseInt(cost, 10);
+        if (isNaN(num)) return cost;
+        return Math.round(num * parseFloat(mult)).toString();
+    };
+
     // Determines which data to show
     const displayRecipe = currentLang === 'ORIGINAL' ? recipe : (translationCache[currentLang] || recipe);
 
