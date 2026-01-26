@@ -457,11 +457,15 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         }
 
         // Automatically derive tags from course and category
-        const tagSet = new Set([formData.course, formData.category].filter(val => val && val.trim()));
+        const tagSet = new Set(formData.tags || []); // Start with existing tags to preserve 'owner:*' etc.
+        if (formData.course) tagSet.add(formData.course);
+        if (formData.category) tagSet.add(formData.category);
         if (formData.type === 'bread') {
             tagSet.add('パン');
         }
-        const derivedTags = Array.from(tagSet);
+
+        // Remove empty strings
+        const derivedTags = Array.from(tagSet).filter(Boolean);
 
         // Process Steps Sections
         let finalSteps = [];

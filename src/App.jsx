@@ -268,15 +268,17 @@ function AppContent() {
       let savedRecipe;
       let effectiveIsEdit = isEdit;
 
-      // Protection: If editing a Master Recipe and user is NOT the owner, force Create mode (Copy on Write)
-      if (isEdit && recipe.tags && user.id !== 'yoshito' && user.id !== 'admin') {
-        const isMaster = recipe.tags.some(t => t === 'owner:yoshito');
-        if (isMaster) {
-          console.log("Editing Master Recipe as non-owner. Switching to Create mode (Copy).");
+      // Protection: Copy-on-Write for Shared Recipes
+      // If user is not the owner (and not admin), force Create mode (Duplicate)
+      if (isEdit && user.id !== 'admin') {
+        const ownerTag = recipe.tags?.find(t => t.startsWith('owner:'));
+        const isOwner = ownerTag === `owner:${user.id}`;
+
+        // If it has an owner tag and I am NOT the owner, I cannot overwrite it.
+        // stricter: If I am NOT the confirmed owner, FORCE copy. (Protects legacy/admin recipes without tags)
+        if (!isOwner) {
+          console.log(`Editing Recipe (Owner Tag: ${ownerTag || 'None'}) as ${user.id}. Not the owner. Switching to Create mode (Copy).`);
           effectiveIsEdit = false;
-          // Clean ID to ensure new creation
-          // recipe object passed here might have ID, createRecipe handles stripping it, 
-          // but we treat logic as 'create'
         }
       }
 
