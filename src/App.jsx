@@ -10,8 +10,11 @@ import { Card } from './components/Card';
 import { Button } from './components/Button';
 import { RecentRecipes } from './components/RecentRecipes';
 import { LevainGuide } from './components/LevainGuide';
+import { UserManagement } from './components/UserManagement';
 import { recipeService } from './services/recipeService';
 import { STORE_LIST } from './constants';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { LoginPage } from './components/LoginPage';
 import './App.css';
 
 import {
@@ -28,7 +31,8 @@ import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
 
-function App() {
+function AppContent() {
+  const { user, logout, loading: authLoading } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -129,7 +133,7 @@ function App() {
   const loadRecipes = async () => {
     try {
       setLoading(true);
-      const data = await recipeService.fetchRecipes();
+      const data = await recipeService.fetchRecipes(user);
       setRecipes(data || []);
     } catch (error) {
       console.error("Failed to fetch recipes:", error);
@@ -142,6 +146,22 @@ function App() {
   const allCourses = [...new Set(recipes.map(r => r.course).filter(Boolean))];
   const allCategories = [...new Set(recipes.map(r => r.category).filter(Boolean))];
 
+  // Calculate counts
+  const storeCounts = recipes.reduce((acc, r) => {
+    if (r.storeName) acc[r.storeName] = (acc[r.storeName] || 0) + 1;
+    return acc;
+  }, {});
+
+  const courseCounts = recipes.reduce((acc, r) => {
+    if (r.course) acc[r.course] = (acc[r.course] || 0) + 1;
+    return acc;
+  }, {});
+
+  const categoryCounts = recipes.reduce((acc, r) => {
+    if (r.category) acc[r.category] = (acc[r.category] || 0) + 1;
+    return acc;
+  }, {});
+
   // Filter recipes based on Tag/Category/Store AND Search Query
   const filteredRecipes = recipes.filter(recipe => {
     // 1. Tag/Category/Store Filter
@@ -149,7 +169,7 @@ function App() {
       selectedTag === 'すべて' ||
       (selectedTag === 'recent' && recentIds.includes(recipe.id)) ||
       (recipe.tags && recipe.tags.includes(selectedTag)) ||
-      (recipe.category && recipe.category === selectedTag) || // Assuming 'category' is a single string, not an array
+      (recipe.category && recipe.category === selectedTag) ||
       (recipe.storeName && recipe.storeName === selectedTag);
 
     // 2. Search Query Filter
@@ -165,20 +185,22 @@ function App() {
 
   const isDragEnabled = selectedTag === 'すべて' && !searchQuery.trim() && currentView === 'list';
 
-
-
   const handleSelectRecipe = (recipe) => {
     // Navigate to detail view
     setSearchParams({ view: 'detail', id: recipe.id });
   };
-  // ... (omitting middle parts for tool brevity if possible, but replace_file_content is contiguous.
-  // Actually I need to remove the button in the return statement too. This tool call might be too split.)
-  // I will do two separate edits or one big one if they are close. 
-  // The logic is around line 150. The button is around line 590. 
-  // I should use multi_replace for this.
 
   const handleDeleteRecipe = async (recipe, isRestore = false) => {
     try {
+      // Protection: master recipe check
+      if (recipe.tags && user.id !== 'yoshito' && user.id !== 'admin') {
+        const isMaster = recipe.tags.some(t => t === 'owner:yoshito');
+        if (isMaster) {
+          alert("マスターレシピは削除できません。");
+          return;
+        }
+      }
+
       if (isRestore) {
         await recipeService.restoreRecipe(recipe.id);
         // Refresh deleted list or move back to main list
@@ -244,14 +266,28 @@ function App() {
   const handleSaveRecipe = async (recipe, isEdit) => {
     try {
       let savedRecipe;
-      if (isEdit) {
-        savedRecipe = await recipeService.updateRecipe(recipe);
+      let effectiveIsEdit = isEdit;
+
+      // Protection: If editing a Master Recipe and user is NOT the owner, force Create mode (Copy on Write)
+      if (isEdit && recipe.tags && user.id !== 'yoshito' && user.id !== 'admin') {
+        const isMaster = recipe.tags.some(t => t === 'owner:yoshito');
+        if (isMaster) {
+          console.log("Editing Master Recipe as non-owner. Switching to Create mode (Copy).");
+          effectiveIsEdit = false;
+          // Clean ID to ensure new creation
+          // recipe object passed here might have ID, createRecipe handles stripping it, 
+          // but we treat logic as 'create'
+        }
+      }
+
+      if (effectiveIsEdit) {
+        savedRecipe = await recipeService.updateRecipe(recipe, user);
         setRecipes(recipes.map(r => r.id === savedRecipe.id ? savedRecipe : r));
         // selectedRecipe updates automatically via URL derivation if ID matches
         // But if ID changed (unlikely for update), we'd need to redirect.
         // Assuming ID stays same.
       } else {
-        savedRecipe = await recipeService.createRecipe(recipe);
+        savedRecipe = await recipeService.createRecipe(recipe, user);
         // Add to TOP or BOTTOM? 
         // Logic: if other items have order_index, ideally we should set safe order_index.
         // But newly created might have null.
@@ -261,10 +297,12 @@ function App() {
         setRecipes([savedRecipe, ...recipes]);
       }
       // Navigate
-      if (isEdit) {
+      if (effectiveIsEdit) {
         setSearchParams({ view: 'detail', id: savedRecipe.id });
       } else {
-        setSearchParams({ view: 'list' });
+        // Even if originally edit, if we created new, go to list or detail of NEW one
+        // User probably expects to see the new one.
+        setSearchParams({ view: 'detail', id: savedRecipe.id }); // Better UX: Show the new recipe
       }
 
     } catch (error) {
@@ -363,30 +401,22 @@ function App() {
     setShowBulkDeleteConfirm(false);
     try {
       setLoading(true);
-      // Process sequentially
-      for (const id of selectedRecipeIds) {
-        if (currentView === 'trash') {
-          await recipeService.hardDeleteRecipe(id);
-        } else {
-          await recipeService.deleteRecipe(id);
-        }
-      }
-
-      // Update UI
-      setRecipes(recipes.filter(r => !selectedRecipeIds.has(r.id)));
-      loadTrashCount();
-      setIsSelectMode(false);
-      setSelectedRecipeIds(new Set());
-      alert("削除しました。");
-
       if (currentView === 'trash') {
-        loadDeletedRecipes();
+        await Promise.all(Array.from(selectedRecipeIds).map(id => recipeService.hardDeleteRecipe(id)));
+        fetchTrash();
+      } else {
+        await Promise.all(Array.from(selectedRecipeIds).map(id => recipeService.deleteRecipe(id)));
+        setRecipes(recipes.filter(r => !selectedRecipeIds.has(r.id)));
+        loadTrashCount();
       }
+      setSelectedRecipeIds(new Set());
+      setIsSelectMode(false);
+      alert("削除しました。");
 
     } catch (error) {
       console.error("Bulk delete failed", error);
       alert("一部の削除に失敗した可能性があります。");
-      if (currentView === 'trash') loadDeletedRecipes();
+      if (currentView === 'trash') fetchTrash();
       else loadRecipes();
     } finally {
       setLoading(false);
@@ -406,11 +436,11 @@ function App() {
       setIsSelectMode(false);
       setSelectedRecipeIds(new Set());
       alert("復元しました。");
-      loadDeletedRecipes();
+      fetchTrash();
     } catch (error) {
       console.error("Bulk restore failed", error);
       alert("一部の復元に失敗した可能性があります。");
-      loadDeletedRecipes();
+      fetchTrash();
     } finally {
       setLoading(false);
     }
@@ -427,6 +457,17 @@ function App() {
     setRecipes([newRecipe, ...recipes]);
     setSearchParams({ view: 'edit', id: newRecipe.id });
   };
+
+  useEffect(() => {
+    if (currentView === 'trash') {
+      fetchTrash();
+    } else if (user) { // Only load if user exists
+      loadRecipes();
+    }
+  }, [currentView, user]);
+
+  if (authLoading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading...</div>;
+  if (!user) return <LoginPage />;
 
   return (
 
@@ -456,7 +497,14 @@ function App() {
       {(currentView === 'list' || currentView === 'trash') && (
         <>
           <div className="container-header">
-            <h2 className="section-title">{currentView === 'trash' ? 'ゴミ箱 (削除済み)' : ''}</h2>
+            <h2 className="section-title">
+              {currentView === 'trash' ? 'ゴミ箱 (削除済み)' : `レシピ一覧`}
+              {currentView === 'list' && (
+                <span style={{ fontSize: '0.8em', marginLeft: '8px', color: '#666', fontWeight: 'normal' }}>
+                  ({recipes.length})
+                </span>
+              )}
+            </h2>
             <div className="header-actions">
               {(currentView === 'list' || currentView === 'trash') ? (
                 <>
@@ -523,6 +571,12 @@ function App() {
                           <span style={{ marginRight: '8px' }}>📖</span> ルヴァンガイド
                         </Button>
 
+                        {user?.id === 'admin' && (
+                          <Button variant="secondary" onClick={() => { setSearchParams({ view: 'users' }); setIsMenuOpen(false); }}>
+                            <span style={{ marginRight: '8px' }}>👥</span> ユーザー管理
+                          </Button>
+                        )}
+
                         <div className="menu-divider"></div>
                       </>
                     )}
@@ -539,11 +593,19 @@ function App() {
                       </Button>
                     )}
 
-                    {currentView === 'trash' && (
-                      <Button variant="ghost" onClick={() => { handleSwitchToMain(); setIsMenuOpen(false); }}>
-                        <span style={{ marginRight: '8px' }}>🏠</span> 一覧に戻る
-                      </Button>
+                    <Button variant="ghost" onClick={() => { handleSwitchToMain(); setIsMenuOpen(false); }}>
+                      <span style={{ marginRight: '8px' }}>🏠</span> 一覧に戻る
+                    </Button>
                     )}
+
+                    <div className="menu-divider"></div>
+
+                    <Button variant="ghost" onClick={() => {
+                      logout();
+                      setIsMenuOpen(false);
+                    }}>
+                      <span style={{ marginRight: '8px' }}>🚪</span> ログアウト
+                    </Button>
                   </div>
 
                   {/* Backdrop for closing menu */}
@@ -580,7 +642,7 @@ function App() {
             >
               <option value="">店舗</option>
               {STORE_LIST.map(store => (
-                <option key={store} value={store}>{store}</option>
+                <option key={store} value={store}>{store} ({storeCounts[store] || 0})</option>
               ))}
             </select>
 
@@ -591,7 +653,7 @@ function App() {
             >
               <option value="">コース</option>
               {allCourses.sort().map(course => (
-                <option key={course} value={course}>{course}</option>
+                <option key={course} value={course}>{course} ({courseCounts[course] || 0})</option>
               ))}
             </select>
 
@@ -602,7 +664,7 @@ function App() {
             >
               <option value="">カテゴリー</option>
               {allCategories.sort().map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
+                <option key={cat} value={cat}>{cat} ({categoryCounts[cat] || 0})</option>
               ))}
             </select>
 
@@ -630,6 +692,7 @@ function App() {
             recipes.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '2rem', color: '#888' }}>
                 {currentView === 'trash' ? 'ゴミ箱は空です' : 'レシピがありません'}
+                {selectedTag !== 'すべて' && <p>条件を変更して検索してください</p>}
               </div>
             ) : (
               <div className="main-content-wrapper">
@@ -724,12 +787,24 @@ function App() {
         <DataManagement onBack={() => setSearchParams({ view: 'list' })} />
       )}
 
+
       {currentView === 'levain-guide' && (
         <LevainGuide onBack={() => setSearchParams({ view: 'list' })} />
       )}
+
+      {currentView === 'users' && user?.id === 'admin' && (
+        <UserManagement onBack={() => setSearchParams({ view: 'list' })} />
+      )}
     </Layout>
   );
+}
 
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
 }
 
 export default App;

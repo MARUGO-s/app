@@ -1,7 +1,9 @@
 import { supabase } from '../supabase'
 
 export const recipeService = {
-    async fetchRecipes() {
+    async fetchRecipes(currentUser) {
+        let allRecipes = [];
+
         try {
             const { data, error } = await supabase
                 .from('recipes')
@@ -10,20 +12,109 @@ export const recipeService = {
                 .order('created_at', { ascending: false })
 
             if (error) throw error
-            return data.map(fromDbFormat)
-        } catch (error) {
-            console.warn("Primary fetch failed (likely missing order_index), using fallback:", error);
-            const { data, error: retryError } = await supabase
-                .from('recipes')
-                .select('*')
-                .order('created_at', { ascending: false })
+            allRecipes = data.map(fromDbFormat);
 
-            if (retryError) {
-                console.error("Fallback fetch failed:", retryError);
-                throw retryError;
+        } catch (error) {
+            console.warn("Supabase fetch failed, falling back to LocalStorage:", error);
+            // 2. Fallback to LocalStorage
+            try {
+                const localData = localStorage.getItem('local_recipes');
+                if (localData) {
+                    allRecipes = JSON.parse(localData).map(r => typeof fromDbFormat === 'function' ? fromDbFormat(r) : r);
+                }
+            } catch (e) {
+                console.error("LocalStorage read error:", e);
+                allRecipes = [];
             }
-            return data.map(fromDbFormat)
         }
+
+        // 3. Apply Filtering Logic (App-side RLS)
+        if (!currentUser) {
+            console.warn("fetchRecipes: No currentUser, returning empty list.");
+            return [];
+        }
+
+        console.log("fetchRecipes: Filtering for user:", currentUser);
+
+        // Fetch user preference dynamically
+        // Fetch user preference (DB + LocalStorage Fallback)
+        let showMaster = false;
+
+        // 1. Try LocalStorage first (since we know DB might fail)
+        const localKey = `user_prefs_${currentUser.id}`;
+        try {
+            const localPrefs = JSON.parse(localStorage.getItem(localKey) || '{}');
+            if (localPrefs.show_master_recipes !== undefined) {
+                showMaster = localPrefs.show_master_recipes === true;
+                console.log("Using LocalStorage preference:", showMaster);
+            }
+        } catch (e) { console.warn("Local preference read error", e); }
+
+        // 2. Fetch from DB (Source of Truth)
+        try {
+            const { data: userPref } = await supabase
+                .from('app_users')
+                .select('show_master_recipes')
+                .eq('id', currentUser.id)
+                .single();
+            if (userPref && userPref.show_master_recipes !== null) {
+                showMaster = userPref.show_master_recipes === true;
+            }
+        } catch (e) {
+            console.warn("Failed to fetch user preference from DB", e);
+        }
+
+        return allRecipes.filter(recipe => {
+            // Admin sees ALL recipes
+            if (currentUser.id === 'admin') return true;
+
+            const tags = recipe.tags || [];
+            // Check for owner tag
+            const ownerTag = tags.find(t => t && t.startsWith('owner:'));
+
+            // Log for debugging
+            console.log(`Recipe ${recipe.title} tags:`, tags, "OwnerTag:", ownerTag);
+
+            // If NO owner tag, it's implied Master Recipe (Legacy data)
+            if (!ownerTag) {
+                const isPublic = tags.includes('public');
+                if (isPublic) return true;
+
+                // It is a Master Recipe (Untagged)
+                if (showMaster) {
+                    console.log("Visible (Master/Implicit)");
+                    return true;
+                }
+                // Determine if hidden
+                return false;
+            }
+
+            // If owner tag exists, it MUST match the current user OR have 'public' tag
+            const isOwner = ownerTag === `owner:${currentUser.id}`;
+            const isPublic = tags.includes('public');
+
+            // MASTER RECIPE LOGIC
+            const isMasterRecipe = ownerTag === 'owner:yoshito';
+            // showMaster is already determined above
+
+            if (isOwner || isPublic) {
+                return true;
+            }
+
+            // Allow master recipes if enabled for this user
+            if (isMasterRecipe && showMaster) {
+                return true;
+            }
+
+            //console.log(`Hidden. Owner: ${ownerTag}, User: ${currentUser.id}`);
+            return false;
+        });
+    },
+
+    // Helper to standardise filtering (can be used internally if needed)
+    _filterRecipesInApp(allRecipes, currentUser) {
+        // ... (kept for compatibility if referenced elsewhere, but logic is inline above for clarity)
+        return this.fetchRecipes(currentUser);
     },
 
     async uploadImage(file) {
@@ -44,7 +135,8 @@ export const recipeService = {
         return data.publicUrl;
     },
 
-    async createRecipe(recipe) {
+    async createRecipe(recipe, currentUser) {
+        console.log("createRecipe called with user:", currentUser);
         const { id: _ID, created_at: _CREATED_AT, sourceUrl, ...recipeData } = recipe
 
         // Handle image upload if a File object is provided
@@ -52,95 +144,153 @@ export const recipeService = {
             recipeData.image = await this.uploadImage(recipeData.image);
         }
 
-        const payload = toDbFormat(recipeData)
-
-        const { data, error } = await supabase
-            .from('recipes')
-            .insert([payload])
-            .select()
-            .single()
-
-        if (error) throw error
-
-        // Handle Source URL
-        if (sourceUrl) {
-            const { error: sourceError } = await supabase
-                .from('recipe_sources')
-                .insert([{
-                    recipe_id: data.id,
-                    url: sourceUrl
-                }]);
-
-            if (sourceError) console.error("Failed to save source URL:", sourceError);
-        }
-
-        return fromDbFormat({ ...data, recipe_sources: sourceUrl ? [{ url: sourceUrl }] : [] })
-    },
-
-    async updateRecipe(recipe) {
-        const { id: _ID, created_at: _CREATED_AT, sourceUrl, ...recipeData } = recipe
-
-        // Handle image upload if a File object is provided
-        if (recipeData.image instanceof File) {
-            recipeData.image = await this.uploadImage(recipeData.image);
+        // Add Owner Tag
+        if (currentUser) {
+            const tags = recipeData.tags || [];
+            // Remove any existing owner tags to be safe (though create shouldn't have them)
+            const cleanTags = tags.filter(t => !t.startsWith('owner:'));
+            recipeData.tags = [...cleanTags, `owner:${currentUser.id}`];
+            console.log("Added owner tag. New tags:", recipeData.tags);
+        } else {
+            console.warn("createRecipe: No currentUser provided! Recipe will be public.");
         }
 
         const payload = toDbFormat(recipeData)
 
-        const { data, error } = await supabase
-            .from('recipes')
-            .update(payload)
-            .eq('id', recipe.id) // Use recipe.id here since we stripped it from recipeData
-            .select()
-            .single()
+        try {
+            const { data, error } = await supabase
+                .from('recipes')
+                .insert([payload])
+                .select()
+                .single()
 
-        if (error) throw error
+            if (error) throw error
 
-        // Handle Source URL Update
-        // Strategy: Delete existing and insert new one if exists. 
-        // This ensures clean state for the single-URL UI model.
-        if (sourceUrl !== undefined) {
-            // 1. Delete existing
-            await supabase.from('recipe_sources').delete().eq('recipe_id', recipe.id);
-
-            // 2. Insert if has value
+            // Handle Source URL
             if (sourceUrl) {
                 const { error: sourceError } = await supabase
                     .from('recipe_sources')
                     .insert([{
-                        recipe_id: recipe.id,
+                        recipe_id: data.id,
                         url: sourceUrl
                     }]);
-                if (sourceError) console.error("Failed to update source URL:", sourceError);
-            }
-        }
 
-        return fromDbFormat({ ...data, recipe_sources: sourceUrl ? [{ url: sourceUrl }] : [] })
+                if (sourceError) console.error("Failed to save source URL:", sourceError);
+            }
+
+            return fromDbFormat({ ...data, recipe_sources: sourceUrl ? [{ url: sourceUrl }] : [] })
+
+        } catch (error) {
+            console.warn("Supabase create failed, using LocalStorage fallback:", error);
+
+            const newId = Date.now();
+            const newRecipe = {
+                ...recipeData,
+                id: newId,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                // Ensure tags exist
+                tags: recipeData.tags || []
+            };
+
+            // Ensure payload format matches what fetchRecipes expects (snake_case likely stored in local)
+            // But we can store it in whatever format, as long as fetchRecipes handles it. 
+            // Let's store it as the DB would (snake_case) to be consistent.
+            const dbLike = toDbFormat(newRecipe);
+            dbLike.id = newId; // toDbFormat might clean id? make sure it's there.
+            dbLike.created_at = newRecipe.created_at;
+
+            console.log("Saving to LocalStorage:", dbLike);
+
+            // LocalStorage Save
+            try {
+                const localData = localStorage.getItem('local_recipes');
+                const recipes = localData ? JSON.parse(localData) : [];
+                recipes.push(dbLike);
+                localStorage.setItem('local_recipes', JSON.stringify(recipes));
+                console.log("Saved to LocalStorage success. Total recipes:", recipes.length);
+            } catch (e) {
+                console.error("Failed to save to LocalStorage:", e);
+                throw error; // If both fail, throw original
+            }
+
+            return fromDbFormat(dbLike);
+        }
     },
 
-    async duplicateRecipe(recipe) {
+    async updateRecipe(recipe) {
+        // Update doesn't change owner usually, preserving existing tags including owner
+        const { id: _ID, created_at: _CREATED_AT, sourceUrl, ...recipeData } = recipe
+
+        // Handle image upload if a File object is provided
+        if (recipeData.image instanceof File) {
+            recipeData.image = await this.uploadImage(recipeData.image);
+        }
+
+        const payload = toDbFormat(recipeData)
+
+        try {
+            const { data, error } = await supabase
+                .from('recipes')
+                .update(payload)
+                .eq('id', recipe.id)
+                .select()
+                .single()
+
+            if (error) throw error
+
+            // Handle Source URL Update
+            if (sourceUrl !== undefined) {
+                await supabase.from('recipe_sources').delete().eq('recipe_id', recipe.id);
+                if (sourceUrl) {
+                    const { error: sourceError } = await supabase
+                        .from('recipe_sources')
+                        .insert([{
+                            recipe_id: recipe.id,
+                            url: sourceUrl
+                        }]);
+                    if (sourceError) console.error("Failed to update source URL:", sourceError);
+                }
+            }
+
+            return fromDbFormat({ ...data, recipe_sources: sourceUrl ? [{ url: sourceUrl }] : [] })
+
+        } catch (error) {
+            console.warn("Supabase update failed, using LocalStorage fallback:", error);
+
+            const localData = localStorage.getItem('local_recipes');
+            if (localData) {
+                let recipes = JSON.parse(localData);
+                const index = recipes.findIndex(r => r.id == recipe.id);
+
+                if (index !== -1) {
+                    // Update
+                    const updated = {
+                        ...recipes[index],
+                        ...payload,
+                        updated_at: new Date().toISOString()
+                    };
+                    recipes[index] = updated;
+                    localStorage.setItem('local_recipes', JSON.stringify(recipes));
+                    return fromDbFormat(updated);
+                }
+            }
+            throw error;
+        }
+    },
+
+    async duplicateRecipe(recipe, currentUser) {
         // 1. Prepare copy data
         const { id, created_at, updated_at, image, ...recipeData } = recipe;
 
         // Append " (Copy)" to title to distinguish
         recipeData.title = `${recipeData.title} (コピー)`;
 
-        // Handle image: ideally we should copy the image file in storage too, 
-        // but for now we can reuse the same image URL if it's public.
-        // Or duplicate the file? Duplicating file prevents deletion issues if original is deleted.
-        // For simple MVP: reuse link? No, if original is deleted, image is gone.
-        // Let's try to copy the image if it exists.
-
+        // Handle image duplication (reuse URL or copy file)
         let newImageUrl = null;
         if (image) {
             try {
-                // Extract filename from URL
                 const fileName = image.split('/').pop();
-                // We need to fetch the blob? Or use Supabase copy command?
-                // Supabase storage has copy? Yes. move/copy.
-
-                // But we don't know the exact path structure in bucket just from URL perfectly always?
-                // Our schema uses flat filenames usually.
                 const newFileName = `copy-${Date.now()}-${fileName}`;
 
                 const { error: copyError } = await supabase.storage
@@ -154,7 +304,7 @@ export const recipeService = {
                     newImageUrl = data.publicUrl;
                 } else {
                     console.warn("Image copy failed, using original URL:", copyError);
-                    newImageUrl = image; // Fallback
+                    newImageUrl = image;
                 }
             } catch (e) {
                 console.warn("Image copy logic error:", e);
@@ -164,8 +314,8 @@ export const recipeService = {
 
         recipeData.image = newImageUrl;
 
-        // 2. Insert as new recipe
-        return await this.createRecipe(recipeData);
+        // 2. Insert as new recipe (will add owner tag in createRecipe)
+        return await this.createRecipe(recipeData, currentUser);
     },
 
     async fetchDeletedRecipes() {
@@ -188,42 +338,58 @@ export const recipeService = {
     },
 
     async deleteRecipe(id) {
-        // 1. Get the recipe to be deleted
-        const { data: recipe, error: fetchError } = await supabase
-            .from('recipes')
-            .select('*')
-            .eq('id', id)
-            .single()
+        try {
+            // 1. Get the recipe to be deleted
+            const { data: recipe, error: fetchError } = await supabase
+                .from('recipes')
+                .select('*')
+                .eq('id', id)
+                .single()
 
-        if (fetchError) throw fetchError
+            if (fetchError) throw fetchError
 
-        // 2. Insert into deleted_recipes
-        const { error: insertError } = await supabase
-            .from('deleted_recipes')
-            .insert([{
-                original_id: recipe.id,
-                title: recipe.title,
-                description: recipe.description,
-                image: recipe.image,
-                prep_time: recipe.prep_time,
-                cook_time: recipe.cook_time,
-                servings: recipe.servings,
-                tags: recipe.tags,
-                ingredients: recipe.ingredients,
-                steps: recipe.steps,
-                created_at: recipe.created_at
-            }])
+            // 2. Insert into deleted_recipes
+            const { error: insertError } = await supabase
+                .from('deleted_recipes')
+                .insert([{
+                    original_id: recipe.id,
+                    title: recipe.title,
+                    description: recipe.description,
+                    image: recipe.image,
+                    prep_time: recipe.prep_time,
+                    cook_time: recipe.cook_time,
+                    servings: recipe.servings,
+                    tags: recipe.tags,
+                    ingredients: recipe.ingredients,
+                    steps: recipe.steps,
+                    created_at: recipe.created_at
+                }])
 
-        if (insertError) throw insertError
+            if (insertError) throw insertError
 
-        // 3. Delete from recipes
-        const { error: deleteError } = await supabase
-            .from('recipes')
-            .delete()
-            .eq('id', id)
+            // 3. Delete from recipes
+            const { error: deleteError } = await supabase
+                .from('recipes')
+                .delete()
+                .eq('id', id)
 
-        if (deleteError) throw deleteError
-        return true
+            if (deleteError) throw deleteError
+            return true
+
+        } catch (error) {
+            console.warn("Supabase delete failed, using LocalStorage fallback:", error);
+            const localData = localStorage.getItem('local_recipes');
+            if (localData) {
+                let recipes = JSON.parse(localData);
+                const initialLength = recipes.length;
+                recipes = recipes.filter(r => r.id != id);
+                if (recipes.length < initialLength) {
+                    localStorage.setItem('local_recipes', JSON.stringify(recipes));
+                    return true;
+                }
+            }
+            throw error;
+        }
     },
 
     async restoreRecipe(id) { // id in deleted_recipes
