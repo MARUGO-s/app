@@ -3,6 +3,7 @@ import { Button } from './Button';
 import { Input } from './Input';
 import { Card } from './Card';
 import { purchasePriceService } from '../services/purchasePriceService';
+import { unitConversionService } from '../services/unitConversionService';
 import './RecipeForm.css'; // Reuse basic styles
 import './RecipeFormBread.css'; // Add specialized styles
 
@@ -22,6 +23,7 @@ import {
     useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import UnitConversionModal from './UnitConversionModal';
 
 export const RecipeFormBread = ({ formData, setFormData }) => {
     // Local state for calculation convenience, synced with parent formData
@@ -36,12 +38,26 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
     const [activeSuggestion, setActiveSuggestion] = useState(null); // { type: 'flour'|'ingredient', index: number }
     const [filteredSuggestions, setFilteredSuggestions] = useState([]);
 
+    // Helper Modal State
+    const [conversionModal, setConversionModal] = useState({
+        isOpen: false,
+        type: null, // 'flour' | 'ingredient'
+        index: null
+    });
+
+    // Unit Conversion Cache
+    const [conversionMap, setConversionMap] = useState(new Map());
+
     useEffect(() => {
-        const loadPrices = async () => {
-            const prices = await purchasePriceService.fetchPriceList();
+        const loadData = async () => {
+            const [prices, conversions] = await Promise.all([
+                purchasePriceService.fetchPriceList(),
+                unitConversionService.getAllConversions()
+            ]);
             setPriceList(prices);
+            setConversionMap(conversions);
         };
-        loadPrices();
+        loadData();
     }, []);
 
     // Helper to calculate total flour weight
@@ -81,9 +97,67 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
 
                 newFlours[index].purchaseCostRef = price;
                 newFlours[index].vendorRef = vendor;
+
+                // Check for saved conversion
+                const conv = conversionMap.get(value);
+                if (conv && conv.packetSize) {
+                    // Normalize cost: Price / PacketSize (if unit is compatible)
+                    // If conv has lastPrice, maybe use that? Or prefer current CSV price?
+                    // Let's use CSV price as base because it's latest market rate,
+                    // but apply the stored packet size conversation.
+                    // If unit is 'g'/'ml', app expects cost per 1000 units.
+                    // If packetUnit match 'g'/'ml', then (Price / Size) * 1000.
+                    let normalized = 0;
+                    if (['g', 'ml', 'cc', 'ｇ'].includes(conv.packetUnit)) {
+                        normalized = (price / conv.packetSize) * 1000;
+                    } else {
+                        // per unit (e.g. per kg, per bottle)
+                        // If app unit is 'g' but stored is 'kg'.
+                        // Wait, RecipeFormBread assumes 'cost' is either per 1kg (if g) or per 1 unit.
+                        // If stored unit is 'kg', 25kg bag.
+                        // Price is for 25kg. Normalized should be per 1kg?
+                        // Yes because 1kg = 1000g.
+                        // If stored is 'kg', then Price / Size = cost per kg.
+                        // Which matches cost per 1000g.
+                        // So (Price / Size) is correct for 'kg' -> 'g'.
+                        normalized = price / conv.packetSize;
+                    }
+
+                    newFlours[index].purchaseCost = Math.round(normalized * 100) / 100;
+                    newFlours[index].unit = 'g'; // Default to g for flour
+                } else if (!newFlours[index].purchaseCost) {
+                    // No conversion, just raw price (maybe it's already per kg?)
+                    newFlours[index].purchaseCost = price;
+                }
             } else {
                 newFlours[index].purchaseCostRef = null;
                 newFlours[index].vendorRef = null;
+            }
+        }
+
+        // Auto-Calc Cost logic (Cost = Qty * PurchaseCost)
+        // Assumption: If unit is 'g' or 'ｇ', Purchase Cost is per 1kg (1000g).
+        // Otherwise, simply Qty * PurchaseCost.
+        if (['quantity', 'purchaseCost', 'name', 'isAlcohol'].includes(field) || field === 'name') {
+            // Re-evaluate cost for this row
+            // Note: 'value' is the NEW value for 'field'. But we already set it in newFlours[index].
+            const item = newFlours[index];
+            const qty = parseFloat(item.quantity);
+            const pCost = parseFloat(item.purchaseCost);
+
+            if (!isNaN(qty) && !isNaN(pCost)) {
+                let calculated = 0;
+                // Bread flours usually 'g'.
+                if (item.unit === 'g' || item.unit === 'ｇ' || !item.unit) {
+                    calculated = (qty / 1000) * pCost;
+                } else {
+                    calculated = qty * pCost;
+                }
+                // Round to 2 decimals
+                const rounded = Math.round(calculated * 100) / 100;
+                if (rounded !== item.cost) {
+                    newFlours[index].cost = rounded;
+                }
             }
         }
 
@@ -114,25 +188,75 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
 
                 newIngs[index].purchaseCostRef = price;
                 newIngs[index].vendorRef = vendor;
+
+                // Check for saved conversion
+                const conv = conversionMap.get(value);
+                if (conv && conv.packetSize) {
+                    let normalized = 0;
+                    // Logic:
+                    // If PacketUnit is 'g'/'ml', Price is for X g. Normalized (per 1000g) = (Price/Size)*1000.
+                    // If PacketUnit is 'kg'/'L', Price is for X kg. Normalized (per 1kg) = Price/Size.
+                    // If PacketUnit is 'pcs'/'bag', Price is for X pcs. Normalized (per 1pc) = Price/Size.
+
+                    if (['g', 'ml', 'cc', 'ｇ'].includes(conv.packetUnit)) {
+                        normalized = (price / conv.packetSize) * 1000;
+                        newIngs[index].unit = 'g';
+                    } else if (['kg', 'l', 'ｋｇ'].includes(conv.packetUnit.toLowerCase())) {
+                        normalized = price / conv.packetSize;
+                        newIngs[index].unit = 'g'; // Assume kg -> g usage
+                    } else {
+                        // other units (pcs, packs)
+                        normalized = price / conv.packetSize;
+                        newIngs[index].unit = conv.packetUnit; // Use the unit (e.g. '個')
+                    }
+
+                    newIngs[index].purchaseCost = Math.round(normalized * 100) / 100;
+                } else if (!newIngs[index].purchaseCost) {
+                    newIngs[index].purchaseCost = price;
+                }
             } else {
                 newIngs[index].purchaseCostRef = null;
                 newIngs[index].vendorRef = null;
             }
         }
+
+        // Auto-Calc Cost logic
+        if (['quantity', 'purchaseCost', 'name', 'isAlcohol'].includes(field) || field === 'name') {
+            const item = newIngs[index];
+            const qty = parseFloat(item.quantity);
+            const pCost = parseFloat(item.purchaseCost);
+
+            if (!isNaN(qty) && !isNaN(pCost)) {
+                let calculated = 0;
+                // Check unit
+                const u = item.unit ? item.unit.trim().toLowerCase() : 'g'; // default to g for bread ings if empty?
+                if (u === 'g' || u === 'ｇ') {
+                    calculated = (qty / 1000) * pCost;
+                } else {
+                    calculated = qty * pCost;
+                }
+                // Round to 2 decimals
+                const rounded = Math.round(calculated * 100) / 100;
+                if (rounded !== item.cost) {
+                    newIngs[index].cost = rounded;
+                }
+            }
+        }
+
         setFormData(prev => ({ ...prev, breadIngredients: newIngs }));
     };
 
     const addFlour = () => {
         setFormData(prev => ({
             ...prev,
-            flours: [...(prev.flours || []), { id: crypto.randomUUID(), name: '', quantity: '', unit: 'g', cost: '' }]
+            flours: [...(prev.flours || []), { id: crypto.randomUUID(), name: '', quantity: '', unit: 'g', cost: '', isAlcohol: false }]
         }));
     };
 
     const addIngredient = () => {
         setFormData(prev => ({
             ...prev,
-            breadIngredients: [...(prev.breadIngredients || []), { id: crypto.randomUUID(), name: '', quantity: '', unit: 'g', cost: '' }]
+            breadIngredients: [...(prev.breadIngredients || []), { id: crypto.randomUUID(), name: '', quantity: '', unit: 'g', cost: '', isAlcohol: false }]
         }));
     };
 
@@ -217,6 +341,73 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
         }
     }, []);
 
+    const handleConversionApply = (normalizedCost, normalizedUnit, packetPrice, packetSize) => {
+        const { type, index } = conversionModal;
+
+        setFormData(prev => {
+            if (type === 'flour') {
+                const newFlours = [...prev.flours];
+                const item = {
+                    ...newFlours[index],
+                    purchaseCost: normalizedCost,
+                    unit: normalizedUnit,
+                    purchase_cost: packetPrice, // Store raw input
+                    content_amount: packetSize  // Store raw input
+                };
+
+                // Re-calculate cost immediately
+                const qty = parseFloat(item.quantity);
+                const pCost = parseFloat(normalizedCost);
+                if (!isNaN(qty) && !isNaN(pCost)) {
+                    let calculated = 0;
+                    if (normalizedUnit === 'g' || normalizedUnit === 'ｇ') {
+                        calculated = (qty / 1000) * pCost;
+                    } else {
+                        calculated = qty * pCost;
+                    }
+                    item.cost = Math.round(calculated * 100) / 100;
+                }
+                newFlours[index] = item;
+                // Reload conversions to update cache
+                unitConversionService.getAllConversions().then(map => setConversionMap(map));
+                return { ...prev, flours: newFlours };
+            } else if (type === 'ingredient') {
+                const newIngs = [...prev.breadIngredients];
+                const item = {
+                    ...newIngs[index],
+                    purchaseCost: normalizedCost,
+                    unit: normalizedUnit,
+                    purchase_cost: packetPrice, // Store raw input
+                    content_amount: packetSize  // Store raw input
+                };
+
+                // Re-calculate cost immediately
+                const qty = parseFloat(item.quantity);
+                const pCost = parseFloat(normalizedCost);
+                if (!isNaN(qty) && !isNaN(pCost)) {
+                    let calculated = 0;
+                    if (normalizedUnit === 'g' || normalizedUnit === 'ｇ') {
+                        calculated = (qty / 1000) * pCost;
+                    } else {
+                        calculated = qty * pCost;
+                    }
+                    item.cost = Math.round(calculated * 100) / 100;
+                }
+                newIngs[index] = item;
+                // Reload conversions
+                unitConversionService.getAllConversions().then(map => setConversionMap(map));
+                return { ...prev, breadIngredients: newIngs };
+            }
+            return prev;
+        });
+    };
+
+    const activeItem = conversionModal.isOpen && conversionModal.index !== null
+        ? (conversionModal.type === 'flour'
+            ? formData.flours[conversionModal.index]
+            : formData.breadIngredients[conversionModal.index])
+        : null;
+
     return (
         <div className="bread-form">
             <Card className="mb-md bread-card" style={{ position: 'relative', zIndex: 10 }}>
@@ -233,6 +424,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                         <span className="text-center">%</span>
                         <span style={{ textAlign: 'center' }}>仕入れ</span>
                         <span style={{ textAlign: 'center' }}>原価</span>
+                        <span style={{ textAlign: 'center' }}>酒</span>
                         <span></span>
                     </div>
 
@@ -264,6 +456,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                                         allIngredientNames={allIngredientNames}
                                         calculatePercentage={calculatePercentage}
                                         floursLength={(formData.flours || []).length}
+                                        onOpenConversion={() => setConversionModal({ isOpen: true, type: 'flour', index: i })}
                                     />
                                 ))}
                             </SortableContext>
@@ -287,8 +480,10 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                         <span>材料名</span>
                         <span>重量 (g)</span>
                         <span className="text-center">%</span>
+
                         <span style={{ textAlign: 'center' }}>仕入れ</span>
                         <span style={{ textAlign: 'center' }}>原価</span>
+                        <span style={{ textAlign: 'center' }}>酒</span>
                         <span></span>
                     </div>
 
@@ -319,6 +514,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                                         handleSuggestionSelect={handleSuggestionSelect}
                                         allIngredientNames={allIngredientNames}
                                         calculatePercentage={calculatePercentage}
+                                        onOpenConversion={() => setConversionModal({ isOpen: true, type: 'ingredient', index: i })}
                                     />
                                 ))}
                             </SortableContext>
@@ -327,12 +523,28 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                 </div>
                 <Button type="button" variant="secondary" size="sm" onClick={addIngredient} block style={{ marginTop: '0.5rem' }}>+ 材料を追加</Button>
             </Card >
-        </div >
+            <div style={{ textAlign: 'center', marginTop: '1rem', marginBottom: '2rem' }}>
+                <Button variant="secondary" onClick={() => window.history.back()} style={{ width: '120px' }}>閉じる</Button>
+            </div>
+
+            {/* Conversion Modal */}
+            <UnitConversionModal
+                isOpen={conversionModal.isOpen}
+                onClose={() => setConversionModal({ isOpen: false, type: null, index: null })}
+                onApply={handleConversionApply}
+                ingredientName={activeItem?.name || ''}
+                currentCost={activeItem?.purchaseCost}
+                currentQuantity={activeItem?.quantity}
+                unit={activeItem?.unit || 'g'}
+                initialPurchaseCost={activeItem?.purchase_cost}
+                initialContentAmount={activeItem?.content_amount}
+            />
+        </div>
     );
 };
 
 // Wrapper for Sortable Hook (Flour Items)
-const FlourItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, activeSuggestion, filteredSuggestions, setActiveSuggestion, setFilteredSuggestions, handleSuggestionSelect, allIngredientNames, calculatePercentage, floursLength }) => {
+const FlourItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, activeSuggestion, filteredSuggestions, setActiveSuggestion, setFilteredSuggestions, handleSuggestionSelect, allIngredientNames, calculatePercentage, floursLength, onOpenConversion }) => {
     const {
         attributes,
         listeners,
@@ -438,6 +650,7 @@ const FlourItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, ac
             </div>
             <Input
                 type="number"
+                step="any"
                 value={item.quantity}
                 onChange={(e) => onChange(index, 'quantity', e.target.value)}
                 placeholder="0"
@@ -446,25 +659,39 @@ const FlourItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, ac
             <div className="bread-percent">
                 {calculatePercentage(item.quantity)}%
             </div>
-            <div>
+            <div style={{ position: 'relative' }}>
                 <Input
                     type="number"
+                    step="any"
                     value={item.purchaseCost || ''}
                     onChange={(e) => onChange(index, 'purchaseCost', e.target.value)}
                     placeholder={item.purchaseCostRef ? `Ref: ¥${item.purchaseCostRef}` : "仕入れ"}
                     className="bread-input cost"
-                    style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '' }}
+                    style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '', paddingRight: '20px' }}
                     min="0"
                     title={item.purchaseCostRef ? `参考価格: ¥${item.purchaseCostRef}` : "No data"}
                 />
+                <button
+                    type="button"
+                    onClick={onOpenConversion}
+                    style={{
+                        position: 'absolute', right: 2, top: '50%', transform: 'translateY(-50%)',
+                        background: 'none', border: 'none', cursor: 'pointer', color: '#666', fontSize: '1rem', padding: '0 4px', lineHeight: 1
+                    }}
+                    title="原価計算アシスト"
+                >
+                    🧮
+                </button>
                 {item.purchaseCostRef && (
                     <div style={{ fontSize: '10px', color: '#666', lineHeight: '1.2', marginTop: '2px', wordBreak: 'break-all' }}>
                         ¥{item.purchaseCostRef} {item.vendorRef && `(${item.vendorRef})`}
                     </div>
                 )}
             </div>
+
             <Input
                 type="number"
+                step="any"
                 value={item.cost || ''}
                 onChange={(e) => onChange(index, 'cost', e.target.value)}
                 placeholder="原価"
@@ -472,15 +699,25 @@ const FlourItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, ac
                 style={{ width: '100%' }}
                 min="0"
             />
-            {floursLength > 1 && (
-                <button type="button" className="bread-remove" onClick={() => onRemove(index)}>×</button>
-            )}
-        </div>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <input
+                    type="checkbox"
+                    checked={item.isAlcohol || false}
+                    onChange={(e) => onChange(index, 'isAlcohol', e.target.checked)}
+                    title="酒類 (10%税)"
+                />
+            </div>
+            {
+                floursLength > 1 && (
+                    <button type="button" className="bread-remove" onClick={() => onRemove(index)}>×</button>
+                )
+            }
+        </div >
     );
 };
 
 // Wrapper for Sortable Hook (Bread Ingredients)
-const BreadIngredientItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, activeSuggestion, filteredSuggestions, setActiveSuggestion, setFilteredSuggestions, handleSuggestionSelect, allIngredientNames, calculatePercentage }) => {
+const BreadIngredientItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, activeSuggestion, filteredSuggestions, setActiveSuggestion, setFilteredSuggestions, handleSuggestionSelect, allIngredientNames, calculatePercentage, onOpenConversion }) => {
     const {
         attributes,
         listeners,
@@ -586,6 +823,7 @@ const BreadIngredientItem = ({ id, index, item, onChange, onRemove, onSuggestion
             </div>
             <Input
                 type="number"
+                step="any"
                 value={item.quantity}
                 onChange={(e) => onChange(index, 'quantity', e.target.value)}
                 placeholder="0"
@@ -594,25 +832,39 @@ const BreadIngredientItem = ({ id, index, item, onChange, onRemove, onSuggestion
             <div className="bread-percent">
                 {calculatePercentage(item.quantity)}%
             </div>
-            <div>
+            <div style={{ position: 'relative' }}>
                 <Input
                     type="number"
+                    step="any"
                     value={item.purchaseCost || ''}
                     onChange={(e) => onChange(index, 'purchaseCost', e.target.value)}
                     placeholder={item.purchaseCostRef ? `Ref: ¥${item.purchaseCostRef}` : "仕入れ"}
                     className="bread-input cost"
-                    style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '' }}
+                    style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '', paddingRight: '20px' }}
                     min="0"
                     title={item.purchaseCostRef ? `参考価格: ¥${item.purchaseCostRef}` : "No data"}
                 />
+                <button
+                    type="button"
+                    onClick={onOpenConversion}
+                    style={{
+                        position: 'absolute', right: 2, top: '50%', transform: 'translateY(-50%)',
+                        background: 'none', border: 'none', cursor: 'pointer', color: '#666', fontSize: '1rem', padding: '0 4px', lineHeight: 1
+                    }}
+                    title="原価計算アシスト"
+                >
+                    🧮
+                </button>
                 {item.purchaseCostRef && (
                     <div style={{ fontSize: '10px', color: '#666', lineHeight: '1.2', marginTop: '2px', wordBreak: 'break-all' }}>
                         ¥{item.purchaseCostRef} {item.vendorRef && `(${item.vendorRef})`}
                     </div>
                 )}
             </div>
+
             <Input
                 type="number"
+                step="any"
                 value={item.cost || ''}
                 onChange={(e) => onChange(index, 'cost', e.target.value)}
                 placeholder="原価"
@@ -620,7 +872,15 @@ const BreadIngredientItem = ({ id, index, item, onChange, onRemove, onSuggestion
                 style={{ width: '100%' }}
                 min="0"
             />
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <input
+                    type="checkbox"
+                    checked={item.isAlcohol || false}
+                    onChange={(e) => onChange(index, 'isAlcohol', e.target.checked)}
+                    title="酒類 (10%税)"
+                />
+            </div>
             <button type="button" className="bread-remove" onClick={() => onRemove(index)}>×</button>
-        </div>
+        </div >
     );
 };

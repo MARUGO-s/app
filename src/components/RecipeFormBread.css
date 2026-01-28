@@ -52,11 +52,12 @@
 .bread-grid-header {
     display: grid;
     /* Use minmax to ensure columns have a sensible minimum width even if squashed */
-    grid-template-columns: 24px minmax(100px, 2fr) minmax(60px, 1fr) 44px 80px 80px 30px;
-    gap: 4px;
-    padding: 0 4px;
+    /* Compact mobile grid */
+    grid-template-columns: 24px minmax(70px, 3fr) minmax(50px, 1fr) 36px 65px 65px 26px 26px;
+    gap: 2px;
+    padding: 0 2px;
     margin-bottom: 8px;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     font-weight: bold;
     color: var(--color-text-muted);
     min-width: 0;
@@ -64,7 +65,7 @@
 
 @media (min-width: 989px) {
     .bread-grid-header {
-        grid-template-columns: 30px 1fr 90px 60px 90px 90px 30px;
+        grid-template-columns: 30px 1fr 90px 60px 90px 90px 30px 30px;
         min-width: 700px;
     }
 }
@@ -75,8 +76,9 @@
 
 .bread-row {
     display: grid;
-    grid-template-columns: 24px minmax(100px, 2fr) minmax(60px, 1fr) 44px 80px 80px 30px;
-    gap: 4px;
+    /* Compact mobile grid */
+    grid-template-columns: 24px minmax(70px, 3fr) minmax(50px, 1fr) 36px 65px 65px 26px 26px;
+    gap: 2px;
     align-items: center;
     margin-bottom: 8px;
     min-width: 0;
@@ -84,7 +86,7 @@
 
 @media (min-width: 989px) {
     .bread-row {
-        grid-template-columns: 30px 1fr 90px 60px 90px 90px 30px;
+        grid-template-columns: 30px 1fr 90px 60px 90px 90px 30px 30px;
         min-width: 700px;
     }
 }
@@ -131,13 +133,29 @@
     font-size: 1rem;
 }
 
+/* Mobile font adjustment for ALL inputs in the grid */
+.bread-row input {
+    font-size: 0.85rem !important;
+    padding: 4px 2px !important;
+    /* Tight padding */
+}
+
 .bread-input.name input {
     font-family: inherit;
     /* Name can be normal font */
+    /* Smaller font on mobile to fit more text */
+    font-size: 0.85rem;
+    letter-spacing: -0.5px;
 }
 
 .bread-input.name {
     position: relative;
+}
+
+/* Adjust input padding for compactness */
+.bread-row .input-field {
+    padding: 4px 4px;
+    font-size: 0.85rem;
 }
 
 .bread-percent {

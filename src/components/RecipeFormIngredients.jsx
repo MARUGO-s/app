@@ -23,7 +23,10 @@ import { CSS } from '@dnd-kit/utilities';
 import { Button } from './Button';
 import { Input } from './Input';
 import { Card } from './Card';
+
 import { createPortal } from 'react-dom';
+import UnitConversionModal from './UnitConversionModal';
+import { unitConversionService } from '../services/unitConversionService';
 
 // --- Sortable Item Component ---
 const SortableIngredientItem = ({
@@ -35,7 +38,9 @@ const SortableIngredientItem = ({
     onRemove,
     handleSuggestionSelect,
     allIngredientNames,
-    priceList
+
+    priceList,
+    onOpenConversion,
 }) => {
     const {
         attributes,
@@ -145,15 +150,27 @@ const SortableIngredientItem = ({
             <div className="ingredient-unit">
                 <Input value={item.unit} onChange={(e) => onChange(groupId, index, 'unit', e.target.value)} placeholder="単位" style={{ width: '100%' }} />
             </div>
-            <div className="ingredient-cost">
+            <div className="ingredient-cost" style={{ position: 'relative' }}>
                 <Input
                     type="number"
                     value={item.purchaseCost}
                     onChange={(e) => onChange(groupId, index, 'purchaseCost', e.target.value)}
+                    step="0.01"
                     placeholder={item.purchaseCostRef ? "Ref" : ""}
-                    style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '' }}
+                    style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '', paddingRight: '20px' }}
                     title={item.purchaseCostRef ? `参考: ¥${item.purchaseCostRef}${item.vendorRef ? ` (${item.vendorRef})` : ''}` : "No data"}
                 />
+                <button
+                    type="button"
+                    onClick={onOpenConversion}
+                    style={{
+                        position: 'absolute', right: 2, top: '50%', transform: 'translateY(-50%)',
+                        background: 'none', border: 'none', cursor: 'pointer', color: '#666', fontSize: '1rem', padding: '0 4px', lineHeight: 1
+                    }}
+                    title="原価計算アシスト"
+                >
+                    🧮
+                </button>
                 {item.purchaseCostRef && (
                     <div style={{ fontSize: '10px', color: '#666', lineHeight: '1.2', marginTop: '2px', wordBreak: 'break-all', textAlign: 'center' }}>
                         ¥{item.purchaseCostRef}
@@ -161,7 +178,15 @@ const SortableIngredientItem = ({
                 )}
             </div>
             <div className="ingredient-cost">
-                <Input type="number" value={item.cost} onChange={(e) => onChange(groupId, index, 'cost', e.target.value)} placeholder="" style={{ width: '100%' }} />
+                <Input type="number" step="0.01" value={item.cost} onChange={(e) => onChange(groupId, index, 'cost', e.target.value)} placeholder="" style={{ width: '100%' }} />
+            </div>
+            <div className="ingredient-alcohol" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <input
+                    type="checkbox"
+                    checked={item.isAlcohol || false}
+                    onChange={(e) => onChange(groupId, index, 'isAlcohol', e.target.checked)}
+                    title="酒類 (10%税)"
+                />
             </div>
             <div className="remove-button-cell">
                 <button type="button" className="icon-btn-delete" onClick={() => onRemove(groupId, index)}>✕</button>
@@ -201,6 +226,7 @@ const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, 
                 <span>単位</span>
                 <span style={{ textAlign: 'center' }}>仕入れ</span>
                 <span style={{ textAlign: 'center' }}>原価</span>
+                <span style={{ textAlign: 'center' }}>酒</span>
                 <span></span>
             </div>
 
@@ -219,6 +245,20 @@ const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, 
 
 export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
     const allIngredientNames = Array.from(priceList.keys());
+
+    // Unit Conversion Cache
+    const [conversionMap, setConversionMap] = useState(new Map());
+
+    useEffect(() => {
+        unitConversionService.getAllConversions().then(map => setConversionMap(map));
+    }, []);
+
+    // Helper Modal State
+    const [conversionModal, setConversionModal] = useState({
+        isOpen: false,
+        groupId: null,
+        index: null
+    });
 
     // Initialize sections from formData
     // We expect formData to have ingredientSections OR we build it from ingredients/ingredientGroups
@@ -347,6 +387,53 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
         }
     };
 
+    const handleConversionApply = (normalizedCost, normalizedUnit, packetPrice, packetSize) => {
+        const { groupId, index } = conversionModal;
+        if (groupId !== null && index !== null) {
+            setFormData(prev => {
+                const newSections = prev.ingredientSections.map(s => {
+                    if (s.id !== groupId) return s;
+
+                    const newItems = [...s.items];
+                    const newItem = {
+                        ...newItems[index],
+                        purchaseCost: normalizedCost,
+                        unit: normalizedUnit,
+                        purchase_cost: packetPrice, // Store raw
+                        content_amount: packetSize  // Store raw
+                    };
+
+                    // Recalculate cost
+                    const qty = parseFloat(newItem.quantity);
+                    const pCost = parseFloat(normalizedCost);
+
+                    if (!isNaN(qty) && !isNaN(pCost)) {
+                        let cost = 0;
+                        const u = normalizedUnit ? normalizedUnit.trim().toLowerCase() : '';
+                        if (u === 'g' || u === 'ｇ') {
+                            cost = ((qty / 1000) * pCost);
+                        } else {
+                            cost = (qty * pCost);
+                        }
+                        newItem.cost = Math.round(cost * 100) / 100;
+                    }
+
+                    newItems[index] = newItem;
+                    return { ...s, items: newItems };
+                });
+
+                // Reload conversions
+                unitConversionService.getAllConversions().then(map => setConversionMap(map));
+
+                return { ...prev, ingredientSections: newSections };
+            });
+        }
+    };
+
+    const activeItem = conversionModal.isOpen && conversionModal.groupId !== null && conversionModal.index !== null
+        ? sections.find(s => s.id === conversionModal.groupId)?.items[conversionModal.index]
+        : null;
+
     const handleItemChange = (groupId, index, field, value) => {
         setFormData(prev => {
             const newSections = prev.ingredientSections.map(s => {
@@ -357,7 +444,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                 newItems[index] = newItem;
 
                 // Calculation Logic
-                if (['quantity', 'purchaseCost', 'unit', 'name'].includes(field)) {
+                if (['quantity', 'purchaseCost', 'unit', 'name', 'isAlcohol'].includes(field)) {
                     // Cost Calc
                     const qty = parseFloat(newItem.quantity);
                     const pCost = parseFloat(newItem.purchaseCost);
@@ -366,12 +453,22 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                         let cost = 0;
                         const u = newItem.unit ? newItem.unit.trim().toLowerCase() : '';
                         if (u === 'g' || u === 'ｇ') {
-                            cost = Math.round((qty / 1000) * pCost);
+                            // Keep decimals, round to 2 places for storage if preferred, or keep raw
+                            // User asked for 2 decimal places input. Calculation should arguably follow suit or standard yen rounding?
+                            // Usually yen is integer, but for internal calc... let's keep precision then round?
+                            // Plan said: "Change cost display from Integer to 2 decimal places"
+                            // Let's store as float.
+                            cost = ((qty / 1000) * pCost);
                         } else {
-                            cost = Math.round(qty * pCost);
+                            cost = (qty * pCost);
                         }
-                        if (cost !== newItem.cost) {
-                            newItem.cost = cost;
+
+                        // Rounding strategy: formatted string or number?
+                        // Let's round to 2 decimals for the field value to avoid long floats
+                        const roundedCost = Math.round(cost * 100) / 100;
+
+                        if (roundedCost !== newItem.cost) {
+                            newItem.cost = roundedCost;
                             newItems[index] = newItem;
                         }
                     }
@@ -387,19 +484,40 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
 
                         newItem.purchaseCostRef = price;
                         newItem.vendorRef = vendor;
-                        if (!newItem.purchaseCost) newItem.purchaseCost = price;
-                        if (!newItem.unit && unit) newItem.unit = unit;
+
+                        // Check for saved conversion
+                        const conv = conversionMap.get(value);
+                        if (conv && conv.packetSize) {
+                            let normalized = 0;
+                            if (['g', 'ml', 'cc', 'ｇ'].includes(conv.packetUnit)) {
+                                normalized = (price / conv.packetSize) * 1000;
+                                newItem.unit = 'g';
+                            } else if (['kg', 'l', 'ｋｇ'].includes(conv.packetUnit.toLowerCase())) {
+                                normalized = price / conv.packetSize;
+                                newItem.unit = 'g'; // kg -> g
+                            } else {
+                                normalized = price / conv.packetSize;
+                                newItem.unit = conv.packetUnit;
+                            }
+                            newItem.purchaseCost = Math.round(normalized * 100) / 100;
+                        } else {
+                            // No conversion, use raw
+                            if (!newItem.purchaseCost) newItem.purchaseCost = price;
+                            if (!newItem.unit && unit) newItem.unit = unit;
+                        }
 
                         // Re-calc cost after autofill
                         const qty = parseFloat(newItem.quantity);
                         const pCost = parseFloat(newItem.purchaseCost);
                         if (!isNaN(qty) && !isNaN(pCost)) {
                             const u = newItem.unit ? newItem.unit.trim().toLowerCase() : '';
+                            let cost = 0;
                             if (u === 'g' || u === 'ｇ') {
-                                newItem.cost = Math.round((qty / 1000) * pCost);
+                                cost = (qty / 1000) * pCost;
                             } else {
-                                newItem.cost = Math.round(qty * pCost);
+                                cost = qty * pCost;
                             }
+                            newItem.cost = Math.round(cost * 100) / 100;
                         }
                     } else {
                         newItem.purchaseCostRef = null;
@@ -431,7 +549,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
     };
 
     const handleAddItem = (groupId) => {
-        const newItem = { id: crypto.randomUUID(), name: '', quantity: '', unit: '', cost: '', purchaseCost: '' };
+        const newItem = { id: crypto.randomUUID(), name: '', quantity: '', unit: '', cost: '', purchaseCost: '', isAlcohol: false };
         setFormData(prev => ({
             ...prev,
             ingredientSections: prev.ingredientSections.map(s => {
@@ -492,6 +610,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                                     handleSuggestionSelect={handleSuggestionSelect}
                                     allIngredientNames={allIngredientNames}
                                     priceList={priceList}
+                                    onOpenConversion={() => setConversionModal({ isOpen: true, groupId: section.id, index: index })}
                                 />
                             ))}
                             <Button
@@ -519,6 +638,19 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
             <DragOverlay dropAnimation={{ sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.5' } } }) }}>
                 {null /* Minimal overlay, or render item preview */}
             </DragOverlay>
+
+            {/* Conversion Modal */}
+            <UnitConversionModal
+                isOpen={conversionModal.isOpen}
+                onClose={() => setConversionModal({ isOpen: false, groupId: null, index: null })}
+                onApply={handleConversionApply}
+                ingredientName={activeItem?.name || ''}
+                currentCost={activeItem?.purchaseCost}
+                currentQuantity={activeItem?.quantity}
+                unit={activeItem?.unit || 'g'}
+                initialPurchaseCost={activeItem?.purchase_cost}
+                initialContentAmount={activeItem?.content_amount}
+            />
         </DndContext>
     );
 };

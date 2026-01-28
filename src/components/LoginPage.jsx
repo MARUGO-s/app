@@ -228,6 +228,7 @@ export const LoginPage = () => {
                             value={userId}
                             onChange={(e) => setUserId(e.target.value)}
                             placeholder="ユーザーID"
+                            autoComplete="username"
                             style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '1rem', color: '#333', backgroundColor: '#fff' }}
                             required
                         />
@@ -240,6 +241,7 @@ export const LoginPage = () => {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             placeholder="パスワード"
+                            autoComplete={isLoginMode ? "current-password" : "new-password"}
                             style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '1rem', color: '#333', backgroundColor: '#fff' }}
                             required
                         />

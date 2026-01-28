@@ -598,7 +598,7 @@ function AppContent() {
                     <Button variant="ghost" onClick={() => { handleSwitchToMain(); setIsMenuOpen(false); }}>
                       <span style={{ marginRight: '8px' }}>🏠</span> 一覧に戻る
                     </Button>
-                    )}
+
 
                     <div className="menu-divider"></div>
 

@@ -30,6 +30,10 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
     const [targetTotal, setTargetTotal] = React.useState(''); // For Bread
     const [multiplier, setMultiplier] = React.useState(1);    // For Normal
 
+    // Profit Calculator State
+    const [salesPrice, setSalesPrice] = React.useState('');
+    const [calcServings, setCalcServings] = React.useState('');
+
     // Helper for Normal Recipe Scaling
     const getScaledQty = (qty, mult) => {
         if (!qty) return '';
@@ -43,9 +47,14 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
 
     const getScaledCost = (cost, mult) => {
         if (!cost) return '';
-        const num = parseInt(cost, 10);
+        const num = parseFloat(cost);
         if (isNaN(num)) return cost;
-        return Math.round(num * parseFloat(mult)).toString();
+        // Round to 2 decimals for display consistency? Or integer for yen?
+        // User wants decimal input, but maybe integer display scaled?
+        // Let's keep decimal precision for accurate totals, verify display later.
+        // If the cost is small (e.g. 0.5), scaling by 1 should be 0.5.
+        // parseInt was truncating 0.5 to 0.
+        return (num * parseFloat(mult)).toFixed(2).replace(/\.00$/, '');
     };
 
     // Determines which data to show
@@ -163,6 +172,16 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [recipe.id, recipe.title]);
 
+    // Initialize calcServings when recipe changes
+    React.useEffect(() => {
+        if (recipe && recipe.servings) {
+            setCalcServings(recipe.servings.toString());
+        } else {
+            setCalcServings('');
+        }
+        setSalesPrice('');
+    }, [recipe]);
+
     // ... (handlers kept same)
 
     const handleDeleteClick = () => {
@@ -237,6 +256,93 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
     };
 
     if (!recipe) return null;
+
+    // --- Helper for Profit Calculation UI ---
+    // Note: totalCost passed here usually represents Tax Excluded (sum of ingredients).
+    // We will apply 8% tax (consumption tax for food ingredients) to get the "Actual Cost".
+    const renderProfitCalculator = (totalCostTaxIncluded) => {
+        // totalCostTaxIncluded is already tax included
+        const costNum = Math.round(parseFloat(totalCostTaxIncluded));
+        const priceNum = parseFloat(salesPrice);
+        const servingsNum = parseFloat(calcServings);
+
+        let costRate = null;
+        let totalSales = null;
+
+        if (!isNaN(costNum) && !isNaN(priceNum) && !isNaN(servingsNum) && priceNum > 0 && servingsNum > 0) {
+            totalSales = priceNum * servingsNum;
+            costRate = (costNum / totalSales) * 100;
+        }
+
+        return (
+            <div className="profit-calculator screen-only" style={{
+                marginTop: '1rem',
+                padding: '1rem',
+                backgroundColor: '#f8f9fa',
+                borderRadius: '8px',
+                border: '1px solid #e9ecef'
+            }}>
+                <h4 style={{ margin: '0 0 0.8rem 0', fontSize: '1rem', color: '#555', borderBottom: '1px solid #ddd', paddingBottom: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>💰 原価率シミュレーター <small style={{ fontSize: '0.7em', fontWeight: 'normal' }}>(税込計算)</small></span>
+                    <span style={{ fontSize: '0.7em', fontWeight: 'normal' }}>※原価は材料ごとに税率(8% or 10%)を適用</span>
+                </h4>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#666' }}>販売価格 (1個/1人)</label>
+                        <div style={{ position: 'relative' }}>
+                            <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#888' }}>¥</span>
+                            <input
+                                type="number"
+                                value={salesPrice}
+                                onChange={(e) => setSalesPrice(e.target.value)}
+                                placeholder="0"
+                                style={{
+                                    padding: '6px 6px 6px 20px',
+                                    width: '100px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #ccc',
+                                    fontSize: '1rem'
+                                }}
+                            />
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#666' }}>個数 (人分)</label>
+                        <input
+                            type="number"
+                            value={calcServings}
+                            onChange={(e) => setCalcServings(e.target.value)}
+                            placeholder="0"
+                            style={{
+                                padding: '6px',
+                                width: '60px',
+                                borderRadius: '4px',
+                                border: '1px solid #ccc',
+                                fontSize: '1rem',
+                                textAlign: 'center'
+                            }}
+                        />
+                    </div>
+
+                    {costRate !== null && (
+                        <div style={{
+                            marginLeft: 'auto',
+                            padding: '8px 12px',
+                            background: costRate > 40 ? '#ffebee' : '#e8f5e9',
+                            borderRadius: '6px',
+                            border: `1px solid ${costRate > 40 ? '#ffcdd2' : '#c8e6c9'}`,
+                            textAlign: 'right'
+                        }}>
+                            <div style={{ fontSize: '0.8rem', color: '#666' }}>予想売上: ¥{totalSales.toLocaleString()}</div>
+                            <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: costRate > 40 ? '#d32f2f' : '#2e7d32' }}>
+                                原価率: {costRate.toFixed(1)}%
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    };
 
     // Safety check for array rendering
     const ingredients = displayRecipe.ingredients || [];
@@ -662,13 +768,42 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                         <span style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>合計原価:</span>
                                                         <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>
                                                             ¥{(() => {
-                                                                const flourCost = flours.reduce((sum, item) => sum + (parseInt(item.cost) || 0), 0);
-                                                                const otherCost = others.reduce((sum, item) => sum + (parseInt(item.cost) || 0), 0);
-                                                                const total = flourCost + otherCost;
-                                                                return Math.round(total * scaleFactor).toLocaleString();
+                                                                // Calculate Total Tax Included
+                                                                // Iterate all items, apply tax rate per item, then sum
+                                                                // Note: 'item.cost' is Tax Excluded unit cost * qty? No, in bread form logic:
+                                                                // item.cost = (qty/1000 * purchaseCost). This is Tax Excluded Total for that item.
+
+                                                                const calcTaxedCost = (items) => {
+                                                                    return items.reduce((sum, item) => {
+                                                                        const rawCost = parseFloat(item.cost) || 0;
+                                                                        const taxRate = item.isAlcohol ? 1.10 : 1.08;
+                                                                        // Scale applies to the raw cost (which depends on Quantity)
+                                                                        const scaledCost = rawCost * scaleFactor;
+                                                                        return sum + (scaledCost * taxRate);
+                                                                    }, 0);
+                                                                }
+
+                                                                const totalTaxIncluded = calcTaxedCost(flours) + calcTaxedCost(others);
+                                                                return Math.round(totalTaxIncluded).toLocaleString();
                                                             })()}
+
                                                         </span>
+                                                        <span style={{ fontSize: '0.75rem', color: '#666', marginLeft: '8px' }}>(税込)</span>
                                                     </div>
+
+                                                    {/* Profit Calculator for Bread */}
+                                                    {(() => {
+                                                        const calcTaxedCost = (items) => {
+                                                            return items.reduce((sum, item) => {
+                                                                const rawCost = parseFloat(item.cost) || 0;
+                                                                const taxRate = item.isAlcohol ? 1.10 : 1.08;
+                                                                const scaledCost = rawCost * scaleFactor;
+                                                                return sum + (scaledCost * taxRate);
+                                                            }, 0);
+                                                        }
+                                                        const total = calcTaxedCost(flours) + calcTaxedCost(others);
+                                                        return renderProfitCalculator(total);
+                                                    })()}
                                                 </div>
                                             </>
                                         );
@@ -789,7 +924,10 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                                             </td>
                                                                             <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
                                                                             <td style={{ textAlign: 'right', color: '#666' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
-                                                                            <td style={{ textAlign: 'right' }}>{scaledCost ? `¥${scaledCost}` : '-'}</td>
+                                                                            <td style={{ textAlign: 'right' }}>
+                                                                                {scaledCost ? `¥${scaledCost}` : '-'}
+                                                                                {ing.isAlcohol && <span style={{ fontSize: '0.7em', color: '#d35400', marginLeft: '2px' }}>(酒)</span>}
+                                                                            </td>
                                                                         </tr>
                                                                     );
                                                                 })}
@@ -835,7 +973,10 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                                 </td>
                                                                 <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
                                                                 <td style={{ textAlign: 'right', color: '#666' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
-                                                                <td style={{ textAlign: 'right' }}>{scaledCost ? `¥${scaledCost}` : '-'}</td>
+                                                                <td style={{ textAlign: 'right' }}>
+                                                                    {scaledCost ? `¥${scaledCost}` : '-'}
+                                                                    {ing.isAlcohol && <span style={{ fontSize: '0.7em', color: '#d35400', marginLeft: '2px' }}>(酒)</span>}
+                                                                </td>
                                                             </tr>
                                                         );
                                                     })}
@@ -854,9 +995,39 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                     }}>
                                         <span style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>合計原価:</span>
                                         <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>
-                                            ¥{ingredients.reduce((sum, ing) => sum + (parseInt(getScaledCost(ing.cost, multiplier), 10) || 0), 0).toLocaleString()}
+                                            ¥{(() => {
+                                                const calcTaxedCost = (items) => {
+                                                    return items.reduce((sum, item) => {
+                                                        const rawCost = parseFloat(item.cost) || 0;
+                                                        const taxRate = item.isAlcohol ? 1.10 : 1.08;
+                                                        const scaledCost = getScaledCost(rawCost, multiplier);
+                                                        // getScaledCost returns string fixed(2). Parse back.
+                                                        const scCostVal = parseFloat(scaledCost) || 0;
+
+                                                        // Tax applied to SCALED cost
+                                                        return sum + (scCostVal * taxRate);
+                                                    }, 0);
+                                                }
+                                                return Math.round(calcTaxedCost(ingredients)).toLocaleString();
+                                            })()}
                                         </span>
+                                        <span style={{ fontSize: '0.75rem', color: '#666' }}>(税込)</span>
                                     </div>
+                                    <p style={{ textAlign: 'right', fontSize: '0.75rem', color: '#666', marginTop: '0.5rem' }}>※原価は材料ごとに税率(8% or 10%)を適用</p>
+
+                                    {/* Profit Calculator for Normal Recipe */}
+                                    {(() => {
+                                        const calcTaxedCost = (items) => {
+                                            return items.reduce((sum, item) => {
+                                                const rawCost = parseFloat(item.cost) || 0;
+                                                const taxRate = item.isAlcohol ? 1.10 : 1.08;
+                                                const scaledCost = parseFloat(getScaledCost(rawCost, multiplier)) || 0;
+                                                return sum + (scaledCost * taxRate);
+                                            }, 0);
+                                        }
+                                        const total = calcTaxedCost(ingredients);
+                                        return renderProfitCalculator(total);
+                                    })()}
                                 </>
                             )}
                         </Card>

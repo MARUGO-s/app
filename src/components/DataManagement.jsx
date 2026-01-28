@@ -145,7 +145,11 @@ export const DataManagement = ({ onBack }) => {
                         </div>
                         <div className="upload-area">
                             <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem' }}>
-                                仕入れCSV (Shift-JIS)
+                                仕入れCSV (Shift-JIS)<br />
+                                <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                                    ※ 形式1: 「材料名, 単価, 単位, 業者」<br />
+                                    ※ 形式2: 業務用システム出力 (12.csv)
+                                </span>
                             </p>
                             <input
                                 type="file"
