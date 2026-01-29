@@ -518,52 +518,51 @@
             // カテゴリーフィルター関数
             function filterByCategory(category) {
                 currentCategory = category;
-                qaItems.forEach(item => {
-                    const itemCategory = item.dataset.category;
-                    if (category === 'all') {
-                        item.classList.remove('hidden');
-                    } else {
-                        if (itemCategory === category) {
-                            item.classList.remove('hidden');
-                        } else {
-                            item.classList.add('hidden');
-                        }
-                    }
-                });
-                applySearchFilter();
+                updateDisplay();
             }
 
             // 検索フィルター関数
             function applySearchFilter() {
-                const searchTerm = searchInput.value.toLowerCase().trim();
-                currentSearchTerm = searchTerm;
-                
+                currentSearchTerm = searchInput.value.toLowerCase().trim();
+                updateDisplay();
+            }
+
+            // 表示を更新する統合関数
+            function updateDisplay() {
                 qaItems.forEach(item => {
-                    if (item.classList.contains('hidden')) {
-                        return; // カテゴリーフィルターで非表示のものはスキップ
+                    const itemCategory = item.dataset.category;
+                    let shouldShow = true;
+                    
+                    // カテゴリーフィルターを適用
+                    if (currentCategory !== 'all' && itemCategory !== currentCategory) {
+                        shouldShow = false;
                     }
                     
-                    if (!searchTerm) {
-                        return; // 検索語がない場合は表示
+                    // 検索フィルターを適用（カテゴリーフィルターで表示される場合のみ）
+                    if (shouldShow && currentSearchTerm) {
+                        try {
+                            const questionElement = item.querySelector('.question span');
+                            const answerElement = item.querySelector('.answer');
+                            
+                            if (questionElement && answerElement) {
+                                const question = questionElement.textContent.toLowerCase();
+                                const answer = answerElement.textContent.toLowerCase();
+                                const isMatch = question.includes(currentSearchTerm) || answer.includes(currentSearchTerm);
+                                
+                                if (!isMatch) {
+                                    shouldShow = false;
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Error filtering item:', e);
+                        }
                     }
                     
-                    try {
-                        const questionElement = item.querySelector('.question span');
-                        const answerElement = item.querySelector('.answer');
-                        
-                        if (!questionElement || !answerElement) {
-                            return;
-                        }
-                        
-                        const question = questionElement.textContent.toLowerCase();
-                        const answer = answerElement.textContent.toLowerCase();
-                        const isMatch = question.includes(searchTerm) || answer.includes(searchTerm);
-                        
-                        if (!isMatch) {
-                            item.classList.add('hidden');
-                        }
-                    } catch (e) {
-                        console.warn('Error filtering item:', e);
+                    // 表示/非表示を設定
+                    if (shouldShow) {
+                        item.classList.remove('hidden');
+                    } else {
+                        item.classList.add('hidden');
                     }
                 });
             }
@@ -589,8 +588,7 @@
                     
                     const category = btn.dataset.category;
                     filterByCategory(category);
-                    searchInput.value = '';
-                    currentSearchTerm = '';
+                    // 検索はクリアしない（カテゴリーフィルターと組み合わせて使えるように）
                 });
             });
 
@@ -604,7 +602,7 @@
                     if (e.key === 'Escape') {
                         searchInput.value = '';
                         currentSearchTerm = '';
-                        filterByCategory(currentCategory);
+                        updateDisplay();
                     }
                 });
             }
