@@ -37,26 +37,16 @@
         }
 
         header h1 {
-            font-size: 28px;
-            margin-bottom: 8px;
+            font-size: 2.5em;
+            margin-bottom: 10px;
             font-weight: 700;
             color: #1a1a1a;
         }
 
         header p {
-            font-size: 14px;
+            font-size: 1.1em;
             color: #ff8c00;
             font-weight: 600;
-        }
-
-        header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            font-weight: 700;
-        }
-
-        header p {
-            font-size: 1.1em;
             opacity: 0.9;
         }
 
@@ -132,10 +122,8 @@
             padding: 20px;
             background: #fafafa;
             border-radius: 6px;
-            display: none;
             transition: all 0.2s;
             border: 1px solid #f0f0f0;
-            border-left: 4px solid #ff8c00;
         }
 
         .qa-item:hover {
@@ -144,12 +132,8 @@
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
         }
 
-        .qa-item.show {
-            display: block;
-        }
-
-        .qa-item.all-show {
-            display: block;
+        .qa-item.hidden {
+            display: none;
         }
 
         .question {
@@ -162,6 +146,7 @@
             align-items: center;
             padding: 10px 0;
             transition: color 0.2s;
+            user-select: none;
         }
 
         .question:hover {
@@ -172,6 +157,8 @@
             font-size: 18px;
             transition: transform 0.3s;
             color: #ff8c00;
+            flex-shrink: 0;
+            margin-left: 10px;
         }
 
         .qa-item.active .toggle-icon {
@@ -202,22 +189,6 @@
             }
         }
 
-        .qa-item.active .answer {
-            display: block;
-            animation: slideDown 0.3s ease-out;
-        }
-
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
         .highlight {
             background: #fff5f0;
             padding: 16px;
@@ -227,7 +198,6 @@
             color: #333333;
             font-size: 13px;
             border: 1px solid #ffe8d6;
-            border-left: 4px solid #ff8c00;
         }
 
         .highlight strong {
@@ -528,46 +498,120 @@
     </div>
 
     <script>
-        const qaItems = document.querySelectorAll('.qa-item');
-        const categoryBtns = document.querySelectorAll('.category-btn');
-        const searchInput = document.getElementById('searchInput');
+        (function() {
+            'use strict';
+            
+            const qaItems = document.querySelectorAll('.qa-item');
+            const categoryBtns = document.querySelectorAll('.category-btn');
+            const searchInput = document.getElementById('searchInput');
+            
+            let currentCategory = 'all';
+            let currentSearchTerm = '';
 
-        // Q&Aのクリックで開閉
-        qaItems.forEach(item => {
-            item.querySelector('.question').addEventListener('click', () => {
-                item.classList.toggle('active');
-            });
-        });
-
-        // カテゴリーフィルター
-        categoryBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                categoryBtns.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-
-                const category = btn.dataset.category;
+            // 初期化：すべて表示
+            function initializeDisplay() {
                 qaItems.forEach(item => {
+                    item.classList.remove('hidden');
+                });
+            }
+
+            // カテゴリーフィルター関数
+            function filterByCategory(category) {
+                currentCategory = category;
+                qaItems.forEach(item => {
+                    const itemCategory = item.dataset.category;
                     if (category === 'all') {
-                        item.classList.add('all-show');
+                        item.classList.remove('hidden');
                     } else {
-                        item.classList.toggle('show', item.dataset.category === category);
-                        item.classList.remove('all-show');
+                        if (itemCategory === category) {
+                            item.classList.remove('hidden');
+                        } else {
+                            item.classList.add('hidden');
+                        }
                     }
                 });
-                searchInput.value = '';
-            });
-        });
+                applySearchFilter();
+            }
 
-        // 検索機能
-        searchInput.addEventListener('input', (e) => {
-            const searchTerm = e.target.value.toLowerCase();
+            // 検索フィルター関数
+            function applySearchFilter() {
+                const searchTerm = searchInput.value.toLowerCase().trim();
+                currentSearchTerm = searchTerm;
+                
+                qaItems.forEach(item => {
+                    if (item.classList.contains('hidden')) {
+                        return; // カテゴリーフィルターで非表示のものはスキップ
+                    }
+                    
+                    if (!searchTerm) {
+                        return; // 検索語がない場合は表示
+                    }
+                    
+                    try {
+                        const questionElement = item.querySelector('.question span');
+                        const answerElement = item.querySelector('.answer');
+                        
+                        if (!questionElement || !answerElement) {
+                            return;
+                        }
+                        
+                        const question = questionElement.textContent.toLowerCase();
+                        const answer = answerElement.textContent.toLowerCase();
+                        const isMatch = question.includes(searchTerm) || answer.includes(searchTerm);
+                        
+                        if (!isMatch) {
+                            item.classList.add('hidden');
+                        }
+                    } catch (e) {
+                        console.warn('Error filtering item:', e);
+                    }
+                });
+            }
+
+            // Q&Aのクリックで開閉
             qaItems.forEach(item => {
-                const question = item.querySelector('.question span').textContent.toLowerCase();
-                const answer = item.querySelector('.answer').textContent.toLowerCase();
-                const isMatch = question.includes(searchTerm) || answer.includes(searchTerm);
-                item.style.display = searchTerm === '' || isMatch ? 'block' : 'none';
+                const questionElement = item.querySelector('.question');
+                if (questionElement) {
+                    questionElement.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        item.classList.toggle('active');
+                    });
+                }
             });
-        });
+
+            // カテゴリーフィルター
+            categoryBtns.forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    categoryBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    
+                    const category = btn.dataset.category;
+                    filterByCategory(category);
+                    searchInput.value = '';
+                    currentSearchTerm = '';
+                });
+            });
+
+            // 検索機能
+            if (searchInput) {
+                searchInput.addEventListener('input', function(e) {
+                    applySearchFilter();
+                });
+                
+                searchInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape') {
+                        searchInput.value = '';
+                        currentSearchTerm = '';
+                        filterByCategory(currentCategory);
+                    }
+                });
+            }
+
+            // 初期化
+            initializeDisplay();
+        })();
     </script>
 </body>
 </html>
