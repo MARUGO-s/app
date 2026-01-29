@@ -595,6 +595,20 @@
             // 検索機能
             if (searchInput) {
                 searchInput.addEventListener('input', function(e) {
+                    const searchTerm = searchInput.value.trim();
+                    
+                    // 検索語が入力された場合は「すべて表示」タブをアクティブにする
+                    if (searchTerm) {
+                        categoryBtns.forEach(btn => {
+                            if (btn.dataset.category === 'all') {
+                                btn.classList.add('active');
+                            } else {
+                                btn.classList.remove('active');
+                            }
+                        });
+                        currentCategory = 'all';
+                    }
+                    
                     applySearchFilter();
                 });
                 
