@@ -1,0 +1,12 @@
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100  181k    0     0  100  181k      0   134k  0:00:01  0:00:01 --:--:--  134k100  181k    0     0  100  181k      0  79017  0:00:02  0:00:02 --:--:-- 79026data: {"type":"log","message":"🚀 画像解析プロセスを開始しました..."}
+
+data: {"type":"log","message":"📸 画像を受信しました。解析準備中..."}
+
+data: {"type":"log","message":"🤖 Gemini (最新AI) を検出しました。手書き文字の解析を試みます..."}
+
+data: {"type":"log","message":"⏳ Gemini APIに問い合わせ中..."}
+
+100  181k    0   373  100  181k    106  52940  0:00:03  0:00:03 --:--:-- 53061100  181k    0   373  100  181k     94  47192  0:00:03  0:00:03 --:--:-- 47281
+curl: (92) HTTP/2 stream 1 was not closed cleanly: INTERNAL_ERROR (err 2)

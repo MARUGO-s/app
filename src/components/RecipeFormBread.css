@@ -1,0 +1,190 @@
+/* Bread Form Styles */
+.bread-card {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--color-border);
+    max-width: 100%;
+    overflow: hidden;
+    /* Ensure content obeys border radius and width */
+    min-width: 0;
+    /* Prevent flex item expansion */
+}
+
+.bread-form {
+    width: 100%;
+    max-width: 100%;
+    /* Changed from 100vw to be safer in nested contexts */
+    overflow-x: hidden;
+    /* Prevent page scroll */
+    min-width: 0;
+    /* Prevent flex item expansion */
+}
+
+.bread-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-sm);
+    border-bottom: 2px solid var(--color-primary);
+    padding-bottom: 4px;
+}
+
+.bread-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--color-text-main);
+}
+
+.bread-badge {
+    background: var(--color-primary);
+    color: white;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: bold;
+}
+
+.bread-subtitle {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+}
+
+/* Grid Layout */
+.bread-grid-header {
+    display: grid;
+    /* Use minmax to ensure columns have a sensible minimum width even if squashed */
+    /* Compact mobile grid */
+    grid-template-columns: 24px minmax(70px, 3fr) minmax(50px, 1fr) 36px 65px 65px 26px 26px;
+    gap: 2px;
+    padding: 0 2px;
+    margin-bottom: 8px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    color: var(--color-text-muted);
+    min-width: 0;
+}
+
+@media (min-width: 989px) {
+    .bread-grid-header {
+        grid-template-columns: 30px 1fr 90px 60px 90px 90px 30px 30px;
+        min-width: 700px;
+    }
+}
+
+.text-center {
+    text-align: center;
+}
+
+.bread-row {
+    display: grid;
+    /* Compact mobile grid */
+    grid-template-columns: 24px minmax(70px, 3fr) minmax(50px, 1fr) 36px 65px 65px 26px 26px;
+    gap: 2px;
+    align-items: center;
+    margin-bottom: 8px;
+    min-width: 0;
+}
+
+@media (min-width: 989px) {
+    .bread-row {
+        grid-template-columns: 30px 1fr 90px 60px 90px 90px 30px 30px;
+        min-width: 700px;
+    }
+}
+
+/* Scroll Wrapper */
+.bread-scroll-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    padding-bottom: 8px;
+}
+
+@media (max-width: 749px) {
+    .bread-scroll-wrapper {
+        width: calc(100% + 32px);
+        margin-left: -16px;
+        margin-right: -16px;
+        padding: 0 16px;
+    }
+}
+
+/* Inputs override */
+.bread-input {
+    margin: 0 !important;
+    /* Override default input margin */
+}
+
+/* Remove wrapper margin for inputs in grid */
+.bread-row .input-group {
+    margin-bottom: 0;
+    width: 100%;
+}
+
+.bread-row .input-field {
+    padding: 4px 6px;
+    font-size: 0.9rem;
+}
+
+.bread-input input {
+    /* Make inputs look a bit more "technical" */
+    font-family: monospace;
+    font-size: 1rem;
+}
+
+/* Mobile font adjustment for ALL inputs in the grid */
+.bread-row input {
+    font-size: 0.85rem !important;
+    padding: 4px 2px !important;
+    /* Tight padding */
+}
+
+.bread-input.name input {
+    font-family: inherit;
+    /* Name can be normal font */
+    /* Smaller font on mobile to fit more text */
+    font-size: 0.85rem;
+    letter-spacing: -0.5px;
+}
+
+.bread-input.name {
+    position: relative;
+}
+
+/* Adjust input padding for compactness */
+.bread-row .input-field {
+    padding: 4px 4px;
+    font-size: 0.85rem;
+}
+
+.bread-percent {
+    text-align: center;
+    font-weight: bold;
+    color: var(--color-primary);
+    font-size: 0.8rem;
+}
+
+.bread-remove {
+    background: none;
+    border: none;
+    color: #ff4d4d;
+    font-size: 1.2rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.bread-remove:hover {
+    color: #ff0000;
+}
+
+/* Responsive */
+@media (min-width: 750px) {
+    .bread-percent {
+        font-size: 0.9rem;
+    }
+}

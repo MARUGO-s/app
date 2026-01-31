@@ -1,0 +1,541 @@
+.recipe-detail {
+    padding-bottom: var(--space-xl);
+}
+
+.recipe-detail__header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+    border-bottom: 1px solid hsl(var(--color-border));
+    padding-bottom: var(--space-sm);
+}
+
+.recipe-detail__actions {
+    display: flex;
+    gap: var(--space-sm);
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    /* for scrollbar spacing */
+    -webkit-overflow-scrolling: touch;
+}
+
+.recipe-detail__actions button,
+.recipe-detail__actions select {
+    flex-shrink: 0;
+}
+
+@media (min-width: 750px) {
+    .recipe-detail__header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        gap: var(--space-sm);
+    }
+
+    .recipe-detail__actions {
+        width: auto;
+        overflow-x: visible;
+        padding-bottom: 0;
+    }
+}
+
+/* Image now separate from title */
+.recipe-detail__hero {
+    height: 200px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin-bottom: var(--space-md);
+    border: 1px solid hsl(var(--color-border));
+}
+
+.recipe-detail__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Title is just normal flow now */
+.recipe-detail__title-card {
+    position: static;
+    transform: none;
+    width: 100%;
+    padding: 0;
+    margin-bottom: var(--space-lg);
+    background: transparent;
+    border: none;
+    text-align: left;
+}
+
+.recipe-detail__title-card h1 {
+    font-size: 2rem;
+    margin-bottom: var(--space-xs);
+    color: hsl(var(--color-text-main));
+    background: none;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+}
+
+.recipe-detail__desc {
+    color: hsl(var(--color-text-muted));
+    margin-bottom: var(--space-md);
+    font-size: 1rem;
+}
+
+.recipe-detail__meta {
+    display: flex;
+    gap: var(--space-xl);
+    border: 1px solid hsl(var(--color-border));
+    background: hsl(var(--color-bg-surface));
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+}
+
+.meta-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.meta-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: #666;
+    font-weight: 600;
+}
+
+.meta-value {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #000;
+}
+
+.recipe-detail__main {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-lg);
+    align-items: start;
+}
+
+@media (min-width: 750px) {
+    .recipe-detail__main {
+        grid-template-columns: 1fr 1fr;
+        /* 2 columns for Ingredients vs Steps */
+        gap: var(--space-xl);
+    }
+}
+
+.recipe-detail__content {
+    /* Removed grid from here */
+    width: 100%;
+}
+
+/* Compact Desktop Hero */
+@media (min-width: 1024px) {
+    .recipe-detail__hero {
+        height: 180px;
+        /* Even smaller for desktop efficiency */
+        width: 280px;
+        float: left;
+        margin-right: var(--space-lg);
+        margin-bottom: var(--space-md);
+    }
+
+    .recipe-detail__header {
+        /* Compact header */
+        padding-bottom: 0;
+        border-bottom: none;
+        margin-bottom: var(--space-md);
+    }
+
+    .recipe-detail__title-card h1 {
+        margin-top: 0;
+        font-size: 1.8rem;
+    }
+
+    /* Clear float after hero section */
+    .recipe-detail__title-card::after {
+        content: "";
+        display: table;
+        clear: both;
+    }
+}
+
+/* Print Styles - Optimized for Visibility & Compactness */
+@media print {
+    @page {
+        margin: 0;
+        size: auto;
+    }
+
+    body {
+        padding: 10mm;
+    }
+
+    :root {
+        --color-bg-base: white !important;
+        --color-bg-surface: white !important;
+        --color-text-main: black !important;
+        --color-primary: black !important;
+        --color-secondary: white !important;
+        --color-border: black !important;
+    }
+
+    * {
+        color: black !important;
+        background: white !important;
+        text-shadow: none !important;
+        filter: none !important;
+        box-shadow: none !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* Hide non-printable elements */
+    header,
+    footer,
+    .app-footer,
+    .no-print,
+    .fab-add,
+    .print-button,
+    .share-button-container,
+    .recipe-form-actions,
+    .bottom-nav,
+    button {
+        display: none !important;
+    }
+
+    html,
+    body {
+        margin: 0;
+        padding: 0;
+        background: white !important;
+        width: 100%;
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        color: black !important;
+    }
+
+    @page {
+        margin: 10mm;
+        size: auto;
+    }
+
+    /* Reset layout containers */
+    #root,
+    .app-layout,
+    .app-main,
+    .container {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        background: white !important;
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        display: block !important;
+    }
+
+    .recipe-detail {
+        padding: 0;
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        position: relative;
+        display: block !important;
+    }
+
+    /* Print Header Layout */
+    .recipe-detail__hero {
+        display: block !important;
+        height: 80px;
+        width: 120px;
+        float: left;
+        margin-right: 1rem;
+        margin-bottom: 0.2rem;
+        border: none;
+    }
+
+    /* Hide checkboxes specifically */
+    input[type="checkbox"] {
+        display: none !important;
+    }
+
+    /* Hide google translate bar if that's what it is, or any select */
+    select {
+        display: none !important;
+    }
+
+    .print-qr-container {
+        position: absolute !important;
+        top: 0;
+        right: 0;
+        margin: 0 !important;
+        /* align-items: flex-end !important; */
+        z-index: 10;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-end !important;
+    }
+
+    .print-qr-container a {
+        background: none !important;
+        color: black !important;
+        text-decoration: none !important;
+        font-size: 8pt !important;
+    }
+
+    .recipe-detail__title-card {
+        padding: 0;
+        margin-bottom: 0.5rem;
+        border: none;
+        background: none;
+        text-align: left;
+    }
+
+    .recipe-title {
+        font-size: 16pt;
+        color: black !important;
+        margin-bottom: 0.2rem;
+    }
+
+    .recipe-detail__desc {
+        font-size: 9pt;
+        margin-bottom: 0.3rem;
+        color: black !important;
+        padding: 0;
+    }
+
+    .recipe-detail__meta {
+        font-size: 8pt;
+        gap: 0.5rem;
+        color: black !important;
+        padding: 0;
+        border: none;
+    }
+
+    .recipe-detail-dates {
+        display: none !important;
+    }
+
+    /* Layout: Float-based for better Print Pagination support */
+    .recipe-detail__main {
+        display: block !important;
+        width: 100%;
+        margin-top: 0;
+    }
+
+    .recipe-detail__main::after {
+        content: "";
+        display: table;
+        clear: both;
+    }
+
+    .recipe-detail__main>.detail-section:first-child {
+        float: left;
+        width: 44%;
+        /* Ingredients */
+    }
+
+    .recipe-detail__main>.detail-section:last-child {
+        float: right;
+        width: 53%;
+        /* Steps */
+    }
+
+    /* Force Breaks */
+    .card,
+    .step-card,
+    .ingredients-card {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+
+    h2 {
+        font-size: 11pt;
+        border-bottom: 1px solid black;
+        color: black !important;
+        break-after: avoid;
+        page-break-after: avoid;
+        margin-bottom: 0.3rem;
+        margin-top: 0;
+    }
+
+    th,
+    td,
+    .step-text,
+    label {
+        color: black !important;
+    }
+
+    .step-number {
+        border: none;
+        color: black !important;
+        background: transparent !important;
+        width: 24px;
+        height: auto;
+        font-size: 11pt;
+        font-weight: bold;
+        display: block;
+        text-align: left;
+        border-radius: 0;
+    }
+
+    .steps-list {
+        gap: 0;
+        display: block;
+        /* Ensure it's not grid in print if inherited */
+    }
+
+    .step-card {
+        display: flex !important;
+        align-items: baseline;
+        /* Align text baselines */
+        gap: 0.5rem;
+        padding: 0.2rem 0 !important;
+        margin-bottom: 0.5rem !important;
+        /* Slightly more space between steps */
+        break-inside: avoid;
+        /* Try to keep step content together */
+    }
+
+    .step-text {
+        font-size: 9pt;
+        line-height: 1.3;
+    }
+
+    .ingredients-table td {
+        padding: 2px 0;
+        font-size: 8pt;
+        border-bottom: 1px dotted #ccc;
+    }
+
+    .ingredients-table th {
+        padding: 2px 0;
+        font-size: 8pt;
+        border-bottom: 1px solid black;
+    }
+}
+
+/* --- Restored Screen Styles --- */
+@media screen {
+
+    .ingredients-list,
+    .steps-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .ingredients-card,
+    .step-card {
+        border: none;
+        box-shadow: none;
+        background: transparent;
+        padding: 0;
+    }
+
+    .ingredients-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .ingredients-table th {
+        text-align: left;
+        padding: var(--space-sm);
+        border-bottom: 2px solid hsl(var(--color-border));
+        font-size: 0.85rem;
+        color: hsl(var(--color-text-muted));
+    }
+
+    .ingredients-table td {
+        padding: var(--space-sm) 0;
+        border-bottom: 1px solid hsl(var(--color-border));
+        font-size: 0.95rem;
+    }
+
+    .ingredient-name {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        width: 100%;
+        cursor: pointer;
+    }
+
+    .ingredient-name label {
+        flex: 1;
+        cursor: pointer;
+        padding: 4px 0;
+    }
+
+    .ingredient-row:last-child td {
+        border-bottom: none;
+    }
+
+    /* Steps Screen Layout */
+    .steps-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-md);
+    }
+
+    .step-card {
+        display: flex;
+        gap: var(--space-md);
+        align-items: flex-start;
+        background: hsl(var(--color-bg-surface));
+        padding: var(--space-md);
+        border-radius: var(--radius-md);
+        border: 1px solid hsl(var(--color-border));
+        color: #333;
+        /* Resurrected to ensure contrast on white cards */
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .step-card.is-completed .step-text {
+        text-decoration: line-through;
+        color: #888;
+    }
+
+    .step-card:hover {
+        border-color: hsl(var(--color-primary));
+    }
+
+    .step-number {
+        background: hsl(var(--color-primary));
+        color: white;
+        width: 24px;
+        height: 24px;
+        font-size: 0.8rem;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        flex-shrink: 0;
+        border: none;
+    }
+
+    /* Desktop override for step-card padding/margin if needed, currently reusing mobile */
+
+    .recipe-detail-dates {
+        margin-top: 1rem;
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        font-size: 0.8rem;
+        color: hsl(var(--color-text-muted));
+        border-top: 1px dotted hsl(var(--color-border));
+        padding-top: 0.5rem;
+    }
+
+    .print-only {
+        display: none;
+    }
+}

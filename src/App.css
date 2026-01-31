@@ -1,0 +1,478 @@
+.container-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-lg);
+}
+
+.section-title {
+  font-size: 2rem;
+  /* More restrained */
+  margin: 0;
+  color: hsl(var(--color-text-main));
+  /* Solid color */
+}
+
+/* App specific global overrides or layout can go here */
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+
+}
+
+/* Search Bar Styles */
+.search-container {
+  margin-bottom: var(--space-md);
+  position: relative;
+}
+
+.search-input {
+  width: 100%;
+  padding: 12px 16px;
+  padding-left: 40px;
+  /* Space for icon */
+  border: 1px solid hsl(var(--color-border));
+  border-radius: var(--radius-full);
+  font-size: 1rem;
+  background-color: white;
+  color: #333333;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: hsl(var(--color-primary));
+  box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.2);
+}
+
+.search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: hsl(var(--color-text-muted));
+  font-size: 1.2rem;
+  pointer-events: none;
+}
+
+/* Tag Filter Styles */
+.tag-filter-container {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid transparent;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #353535;
+  /* Match body bg */
+  padding-top: var(--space-md);
+  /* Add padding for visual breathing room when stuck */
+}
+
+.store-filter-select {
+  padding: 6px 12px;
+  border: 1px solid hsl(var(--color-border));
+  border-radius: var(--radius-full);
+  background-color: white;
+  font-size: 0.85rem;
+  color: #333;
+  /* Dark text for white background */
+  cursor: pointer;
+  height: 32px;
+  /* Match button height approx */
+}
+
+.tag-divider {
+  width: 1px;
+  height: 24px;
+  background-color: hsl(var(--color-border));
+  margin: 0 var(--space-xs);
+}
+
+.tag-filter-btn {
+  background: transparent;
+  border: 1px solid hsl(var(--color-border));
+  border-radius: var(--radius-full);
+  padding: 6px 16px;
+  font-size: 0.85rem;
+  color: hsl(var(--color-text-muted));
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-family-main);
+  background-color: white;
+  color: #555;
+  /* Dark gray for contrast on white */
+}
+
+.tag-filter-btn:hover {
+  border-color: hsl(var(--color-primary));
+  color: hsl(var(--color-primary));
+}
+
+.tag-filter-btn.active {
+  background: hsl(var(--color-primary));
+  color: white;
+  border-color: hsl(var(--color-primary));
+  font-weight: 500;
+}
+
+/* Sidebar Layout Logic - Mobile First */
+.main-content-wrapper {
+  display: flex;
+  gap: var(--space-lg);
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.recipe-list-container {
+  flex: 1;
+  min-width: 0;
+  /* Prevent flex child overflow */
+}
+
+.sidebar-right {
+  width: 100%;
+  margin-top: var(--space-lg);
+  position: static;
+}
+
+.recent-list-wrapper {
+  width: 100%;
+  margin-bottom: var(--space-md);
+}
+
+.recent-list {
+  display: flex;
+  flex-direction: row;
+  /* Horizontal scroll on mobile */
+  overflow-x: auto;
+  padding-bottom: 8px;
+  gap: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.recent-item {
+  width: 120px;
+  /* Slightly smaller for mobile top list */
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.recent-thumbnail {
+  width: 100%;
+  height: 80px;
+  /* Smaller thumbnail */
+}
+
+@media (min-width: 750px) {
+  .main-content-wrapper {
+    flex-direction: row-reverse;
+  }
+
+  .sidebar-right {
+    width: 240px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 20px;
+    margin-top: 0;
+  }
+
+  .recent-list-wrapper {
+    width: 260px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 20px;
+    align-self: flex-start;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    margin-bottom: 0;
+  }
+
+  .recent-list {
+    flex-direction: column;
+    gap: var(--space-sm);
+    overflow-x: visible;
+  }
+
+  .recent-item {
+    width: 100%;
+    flex-direction: row;
+    gap: var(--space-sm);
+  }
+
+  .recent-thumbnail {
+    width: 80px;
+    height: 60px;
+  }
+}
+
+/* Base styles for desktop/mobile */
+.mobile-menu-toggle {
+  display: none;
+}
+
+.trash-badge {
+  margin-left: 6px;
+  background-color: #e74c3c;
+  color: white;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.secondary-actions {
+  display: contents;
+  /* On desktop, act as if this container doesn't exist to keep layout */
+}
+
+/* Hide empty section title (main view) to allow buttons to shift left when title is absent */
+.section-title:empty {
+  display: none;
+}
+
+.menu-divider {
+  display: none;
+  /* Hide on desktop */
+}
+
+/* Header & Navigation - Mobile First */
+.container-header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.section-title {
+  font-size: 1.5rem;
+  text-align: left;
+}
+
+.header-actions {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.header-actions button {
+  margin: 0 !important;
+  justify-content: center;
+  font-size: 0.85rem;
+}
+
+/* Make filter container fit all items without scrolling */
+.tag-filter-container {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+  margin-bottom: var(--space-lg);
+  padding-bottom: 8px;
+  border-bottom: 1px solid transparent;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #353535;
+  padding-top: var(--space-md);
+  overflow-x: hidden;
+  justify-content: space-between;
+}
+
+.tag-filter-btn,
+.store-filter-select {
+  flex: 1;
+  min-width: 0;
+  padding: 0 2px;
+  font-size: 0.75rem;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border: 1px solid hsl(var(--color-border));
+  border-radius: var(--radius-full);
+  background-color: white;
+  color: #555;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tag-divider {
+  display: none;
+}
+
+@media (min-width: 750px) {
+  .container-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-lg);
+  }
+
+  .section-title {
+    font-size: 2rem;
+  }
+
+  .header-actions {
+    gap: var(--space-sm);
+  }
+
+  .tag-filter-container {
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    justify-content: flex-start;
+    overflow-x: visible;
+    padding-bottom: var(--space-md);
+  }
+
+  .tag-filter-btn {
+    padding: 6px 16px;
+    font-size: 0.85rem;
+    flex: none;
+    height: auto;
+  }
+
+  .store-filter-select {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    height: 32px;
+    flex: none;
+  }
+
+  .tag-divider {
+    display: block;
+    width: 1px;
+    height: 24px;
+    background-color: hsl(var(--color-border));
+    margin: 0 var(--space-xs);
+  }
+}
+
+/* Mobile Header Menu */
+.primary-action-btn {
+  flex: 1;
+  margin: 0 !important;
+}
+
+.mobile-menu-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  /* Slightly larger touch target */
+  height: 44px;
+  background: rgba(0, 0, 0, 0.2);
+  /* Subtle dark tint */
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  /* Thin white border */
+  border-radius: 50%;
+  /* Rounded touch area */
+  font-size: 1.5rem;
+  /* Larger icon */
+  cursor: pointer;
+  color: white;
+  /* Force white for visibility on dark header */
+  z-index: 1003;
+  transition: background-color 0.2s;
+}
+
+.mobile-menu-toggle:active {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.secondary-actions {
+  display: flex;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 250px;
+  height: 100vh;
+  background: #222;
+  /* Dark background */
+  color: #eee;
+  /* Light text */
+  /* Remove border radius for drawer feel */
+  border-radius: 0;
+  border-left: 1px solid #444;
+  /* Darker border */
+  padding: 1rem;
+  padding-top: 60px;
+  /* Space for close button if needed, or just visual breathing room */
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.15);
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 1002;
+  /* Higher than toggle */
+
+  /* Sliding animation */
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.secondary-actions.open {
+  transform: translateX(0);
+}
+
+/* Backdrop styles */
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  backdrop-filter: blur(2px);
+}
+
+.menu-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.secondary-actions button {
+  width: 100%;
+  margin: 0 !important;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 12px 16px;
+  color: #eee;
+  /* Light text */
+  border: none;
+  /* Flatten look */
+  background: transparent;
+  transition: background 0.2s;
+}
+
+.secondary-actions button:hover,
+.secondary-actions button:active {
+  background: rgba(255, 255, 255, 0.1);
+  /* Subtle highlight */
+  color: white;
+}
+
+.menu-divider {
+  display: block;
+  /* Show on mobile */
+  height: 1px;
+  background-color: #444;
+  margin: 8px 0;
+  width: 100%;
+}
+
+.danger-text {
+  color: #ff6b6b !important;
+  /* Lighter red for visibility on dark bg */
+}
