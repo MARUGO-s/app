@@ -333,7 +333,12 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                             border: `1px solid ${costRate > 40 ? '#ffcdd2' : '#c8e6c9'}`,
                             textAlign: 'right'
                         }}>
-                            <div style={{ fontSize: '0.8rem', color: '#666' }}>予想売上: ¥{totalSales.toLocaleString()}</div>
+                            <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '4px' }}>
+                                予想売上: ¥{totalSales.toLocaleString()}
+                            </div>
+                            <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '4px', fontWeight: 'bold' }}>
+                                粗利益: ¥{(totalSales - costNum).toLocaleString()}
+                            </div>
                             <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: costRate > 40 ? '#d32f2f' : '#2e7d32' }}>
                                 原価率: {costRate.toFixed(1)}%
                             </div>
