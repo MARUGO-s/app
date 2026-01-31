@@ -90,9 +90,23 @@ export const DataManagement = ({ onBack }) => {
 
         const result = await purchasePriceService.uploadPriceList(file);
 
-        setIsUploading(false);
         if (result.success) {
-            setStatus({ type: 'success', message: 'アップロード完了しました。' });
+            setStatus({ type: 'success', message: 'アップロード完了。レシピ原価を再計算しています...' });
+
+            // Trigger automatic cost update
+            try {
+                // Dynamic import to avoid circular dependency if any (safety)
+                const { recipeService } = await import('../services/recipeService');
+                const priceMap = await purchasePriceService.fetchPriceList(); // Fetch latest merged data
+
+                const updatedCount = await recipeService.updateRecipeCosts(priceMap);
+
+                setStatus({ type: 'success', message: `アップロード完了。${updatedCount}件のレシピ原価を更新しました。` });
+            } catch (e) {
+                console.error("Cost update failed", e);
+                setStatus({ type: 'warning', message: 'アップロードは完了しましたが、原価の自動更新に失敗しました。' });
+            }
+
             setFile(null);
             // Clear file input
             const fileInput = document.getElementById('csv-upload-input');
@@ -101,6 +115,7 @@ export const DataManagement = ({ onBack }) => {
         } else {
             setStatus({ type: 'error', message: `エラー: ${result.error.message}` });
         }
+        setIsUploading(false);
     };
 
     const handleDeleteFile = (fileName) => {

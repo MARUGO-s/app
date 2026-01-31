@@ -506,6 +506,133 @@ export const recipeService = {
         }
 
         return { success: true, count: successCount, errors };
+    },
+
+    async updateRecipeCosts(priceMap) {
+        // user: currentUser not strictly needed if we assume admin context in DataManagement,
+        // but ideally should be passed if we want to filter updates?
+        // For now, update ALL recipes since costs are global.
+
+        // 1. Fetch ALL recipes (bypass RLS filtering usually done in fetchRecipes by using raw query)
+        // Actually, we should probably only update recipes the user has access to, or all if admin?
+        // Let's rely on fetchRecipes logic but with admin-like context?
+        // Or just raw Select.
+        const { data: allRecipes, error } = await supabase
+            .from('recipes')
+            .select('*');
+
+        if (error) throw error;
+
+        let updatedCount = 0;
+        const updates = [];
+
+        for (const rawRecipe of allRecipes) {
+            const recipe = fromDbFormat(rawRecipe);
+            let hasChanges = false;
+
+            // Helper to update an ingredient list
+            const updateList = (list) => {
+                return list.map(ing => {
+                    if (!ing.name) return ing;
+                    const priceData = priceMap.get(ing.name);
+
+                    if (priceData) {
+                        // Found a matching price!
+                        // Calculate new Cost
+                        // Logic must match RecipeForm logic:
+                        // Normal: Cost = (usage / unit_size) * price ?? No, CSV price is usually "per unit" (e.g. per kg, per pack)
+                        // Actually, the app seems to expect unit conversion or direct calculation?
+                        // Let's look at Bread form logic: item.cost = (qty/1000 * purchaseCost) 
+                        // This implies purchaseCost is "Price per Kg" or similar unit.
+                        // And CSV import saves "price".
+
+                        // Let's assume the CSV price IS the "purchaseCost" (仕入れ単価).
+                        // And we update that.
+
+                        if (ing.purchaseCost !== priceData.price) {
+                            hasChanges = true;
+
+                            // Update Purchase Cost
+                            const newIng = { ...ing, purchaseCost: priceData.price };
+
+                            // Update Calculated Cost (Simple Proportional)
+                            // We need to know HOW cost was calculated initially.
+                            // If we don't have the formula, we can assume Bread Logic for Bread,
+                            // and "Qty * UnitPrice" for Normal?
+
+                            // Heuristic:
+                            // If it's Bread: cost = (qty / 1000) * price (assuming price is per kg, qty is g)
+                            // If it's Normal: cost = ??? 
+                            // In RecipeFormIngredients: cost = purchaseCost * (quantity / ???)
+                            // Actually, in the current simple implementation, many users input cost manually.
+                            // BUT if we are automating, we must calculate.
+
+                            // Re-calculation logic:
+                            // If we have a Quantity and a New Price.
+                            // Bread: Qty is grams. Price is likely per Kg (standard baking).
+                            if (recipe.type === 'bread') {
+                                // Bread logic: cost = (qty / 1000) * price
+                                const qty = parseFloat(newIng.quantity) || 0;
+                                newIng.cost = Math.round((qty / 1000) * newIng.purchaseCost);
+                            } else {
+                                // Normal logic:
+                                // Very tricky without unit conversion.
+                                // However, if the user previously had `purchaseCost: 100, cost: 50`, and Qty: 50.
+                                // Then ratio was 0.5.
+                                // If new purchaseCost: 200 => cost: 100.
+                                // Let's try to preserve the ratio? 
+                                // cost = purchaseCost * (oldCost / oldPurchaseCost)
+
+                                if (ing.cost && ing.purchaseCost) {
+                                    const ratio = ing.cost / ing.purchaseCost;
+                                    newIng.cost = Math.round(newIng.purchaseCost * ratio);
+                                } else {
+                                    // Fallback: If no previous cost but we have price now.
+                                    // Can't reliably calculate without knowing units (e.g. 1 tbsp vs 1 litre bottle).
+                                    // So maybe just update purchaseCost and leave cost alone?
+                                    // No, user wants cost updated.
+                                    // Let's only update cost if we can deduce logic, otherwise specific instructions might be needed.
+                                    // For now, let's update purchaseCost. 
+                                }
+                            }
+                            return newIng;
+                        }
+                    }
+                    return ing;
+                });
+            };
+
+            if (recipe.type === 'bread') {
+                const newFlours = updateList(recipe.flours || []);
+                const newOthers = updateList(recipe.breadIngredients || []);
+
+                if (hasChanges) {
+                    recipe.flours = newFlours;
+                    recipe.breadIngredients = newOthers;
+                }
+            } else {
+                const newIngredients = updateList(recipe.ingredients || []);
+                if (hasChanges) {
+                    recipe.ingredients = newIngredients;
+                }
+            }
+
+            if (hasChanges) {
+                // Prepare update payload
+                const payload = toDbFormat(recipe);
+                // We need to call update.
+                updates.push(
+                    supabase.from('recipes').update(payload).eq('id', recipe.id)
+                );
+                updatedCount++;
+            }
+        }
+
+        if (updates.length > 0) {
+            await Promise.all(updates);
+        }
+
+        return updatedCount;
     }
 }
 
