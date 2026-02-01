@@ -72,6 +72,8 @@ function AppContent() {
   });
 
   const PC_RECOMMEND_VIEWS = {
+    inventory: '在庫管理',
+    planner: '仕込みカレンダー',
     data: 'データ管理',
     users: 'ユーザー管理',
     'order-list': '発注リスト',
