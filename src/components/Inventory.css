@@ -1,0 +1,618 @@
+.inventory-container {
+    padding: 1rem;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.inventory-split-layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Left Panel: CSV Source */
+.inventory-left-panel {
+    width: 300px;
+    /* Fixed width */
+    background-color: #ffffff;
+    border-right: 1px solid #444;
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+    border-radius: 8px;
+    color: #333;
+    /* Force text color to dark for white background */
+}
+
+.inventory-csv-list {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.inventory-csv-list .section-title {
+    color: #333;
+    /* Ensure title is visible */
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+    font-weight: bold;
+}
+
+.csv-upload-section {
+    margin-bottom: 1rem;
+}
+
+/* File input text visibility */
+.file-input {
+    color: #333;
+}
+
+.csv-search {
+    margin-bottom: 0.5rem;
+}
+
+.csv-items-container {
+    flex: 1;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    background-color: #f9f9f9;
+    padding: 0.5rem;
+    border-radius: 4px;
+}
+
+.csv-draggable-item {
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    background-color: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: grab;
+    transition: transform 0.1s, box-shadow 0.1s;
+    user-select: none;
+    color: #333;
+    /* Ensure item text is dark */
+}
+
+.csv-draggable-item:hover {
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    background-color: #f0f8ff;
+}
+
+.csv-draggable-item:active {
+    cursor: grabbing;
+}
+
+.csv-item-name {
+    font-weight: bold;
+    font-size: 0.9rem;
+    color: #333;
+}
+
+.csv-item-details {
+    font-size: 0.8rem;
+    color: #666;
+}
+
+.empty-msg {
+    color: #666;
+    text-align: center;
+    margin-top: 2rem;
+}
+
+/* Right Panel: Inventory List */
+.inventory-right-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: #333;
+    /* Dark background for panel to match app theme if needed, or transparent */
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.inventory-list-droppable {
+    position: relative;
+    /* For overlay positioning */
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.highlight-drop {
+    border: 2px dashed #4a90e2;
+    background-color: rgba(74, 144, 226, 0.1);
+}
+
+/* Existing Styles (Keep or Adapt) */
+.inventory-edit-container {
+    max-width: 600px;
+    margin: 2rem auto;
+}
+
+.inventory-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+/* Header button row (responsive) */
+.inventory-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.inventory-header-actions__btn {
+    white-space: nowrap;
+}
+
+.inventory-header-actions__btn--compact {
+    padding: 4px 8px;
+    font-size: 0.85rem;
+}
+
+/* Controls bar (vendor/search/actions) */
+.inventory-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 1rem;
+    padding: 10px;
+    background-color: #eee;
+    border-radius: 4px;
+    color: #333;
+}
+
+.inventory-controls__row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.inventory-controls__field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 220px;
+    flex: 1 1 260px;
+}
+
+.inventory-controls__label {
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.inventory-controls__select {
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    font-size: 1rem;
+    min-width: 180px;
+    flex: 1 1 240px;
+}
+
+.inventory-controls__search {
+    min-width: 200px;
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    font-size: 1rem;
+    outline: none;
+    flex: 2 1 280px;
+}
+
+.inventory-controls__btn {
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.inventory-controls__btn[data-active="true"] {
+    background: #2ecc71;
+    color: white;
+    border-color: #27ae60;
+    font-weight: bold;
+}
+
+@media (max-width: 700px) {
+    .inventory-header-actions {
+        justify-content: stretch;
+    }
+
+    /* Make actions stack nicely on narrow screens */
+    .inventory-header-actions .btn {
+        flex: 1 1 calc(50% - 10px);
+    }
+
+    /* Big primary action takes full width */
+    .inventory-header-actions__btn--main {
+        flex: 1 1 100% !important;
+    }
+
+    /* コントロールバーを縦レイアウトに */
+    .inventory-controls {
+        padding: 8px;
+        gap: 8px;
+    }
+
+    .inventory-controls__row--filters {
+        flex-direction: column;
+        align-items: stretch;
+        /* Prevent the filters row from stretching tall */
+        flex: none;
+    }
+
+    .inventory-controls__field {
+        width: 100%;
+        min-width: 0;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        /* Desktop uses flex: 1 ...; on mobile this causes huge blank space */
+        flex: none;
+    }
+
+    .inventory-controls__label {
+        font-size: 0.85rem;
+    }
+
+    .inventory-controls__select,
+    .inventory-controls__search {
+        width: 100%;
+        min-width: 0;
+        flex: none;
+        height: 40px;
+        font-size: 0.9rem;
+        padding: 6px;
+    }
+
+    .inventory-controls__row--actions {
+        justify-content: stretch;
+        flex-wrap: wrap;
+    }
+
+    .inventory-controls__btn {
+        flex: 1 1 calc(50% - 5px);
+        min-width: 0;
+        padding: 8px 12px;
+        font-size: 0.85rem;
+    }
+
+    /* 棚卸し一覧ボタンは全幅 */
+    .inventory-controls__btn[data-active="true"] {
+        flex: 1 1 100%;
+    }
+}
+
+/* Mobile table compaction */
+@media (max-width: 700px) {
+
+    /* テーブルコンテナをスクロール可能に */
+    .inventory-table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* テーブル自体は最小幅を確保して横スクロール対応 */
+    .inventory-table {
+        min-width: 600px;
+        /* 最小幅を確保してレイアウト崩れを防ぐ */
+        table-layout: auto;
+    }
+
+    .inventory-table th,
+    .inventory-table td {
+        padding: 8px 6px;
+        font-size: 0.85rem;
+        white-space: nowrap;
+        /* テキストの折り返しを防ぐ */
+    }
+
+    /* 品名カラムだけは折り返しを許可 */
+    .inventory-table td:first-child {
+        word-break: break-word;
+        white-space: normal;
+        max-width: 180px;
+        min-width: 120px;
+    }
+
+    /* ヘッダーテキストが縦にならないようにする */
+    .inventory-table th {
+        white-space: nowrap;
+        font-size: 0.8rem;
+    }
+
+    .inventory-quantity-input {
+        width: 64px !important;
+        font-size: 0.9rem;
+    }
+
+    /* 各カラムに最小幅を設定 */
+    .inventory-table th:nth-child(2),
+    /* 仕入れ値 */
+    .inventory-table td:nth-child(2) {
+        min-width: 80px;
+    }
+
+    .inventory-table th:nth-child(3),
+    /* 単位 */
+    .inventory-table td:nth-child(3) {
+        min-width: 50px;
+    }
+
+    .inventory-table th:nth-child(4),
+    /* 在庫数 */
+    .inventory-table td:nth-child(4) {
+        min-width: 90px;
+    }
+
+    .inventory-table th:nth-child(5),
+    /* 在庫金額 */
+    .inventory-table td:nth-child(5) {
+        min-width: 90px;
+    }
+
+    .inventory-table th:nth-child(6),
+    /* 業者名 */
+    .inventory-table td:nth-child(6) {
+        min-width: 100px;
+        max-width: 150px;
+    }
+
+    .inventory-table th:nth-child(7),
+    /* アクション */
+    .inventory-table td:nth-child(7) {
+        min-width: 80px;
+    }
+}
+
+.inventory-table-container {
+    flex: 1;
+    overflow-y: auto;
+    background-color: #fff;
+    /* Table container white background */
+    border-radius: 4px;
+    overflow-anchor: none;
+    /* Prevent scroll jumps on content update */
+}
+
+.inventory-table {
+    width: 100%;
+    border-collapse: collapse;
+    color: #333;
+    /* Text inside table should be dark */
+}
+
+.inventory-table th,
+.inventory-table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.inventory-table th {
+    background-color: #f0f0f0;
+    /* Light grey header */
+    color: #333;
+    /* Dark text for header */
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+/* Hide number input steppers (▲▼) for inventory quantity */
+.inventory-quantity-input::-webkit-outer-spin-button,
+.inventory-quantity-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.inventory-quantity-input[type="number"] {
+    -moz-appearance: textfield;
+    /* Firefox */
+    appearance: textfield;
+}
+
+.inventory-table tr:hover {
+    background-color: #f5f5f5;
+}
+
+.low-stock {
+    background-color: #fff3e0;
+}
+
+.warning-badge {
+    background-color: #ffe0b2;
+    color: #e65100;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #333;
+    /* Ensure label text is dark */
+    font-weight: 500;
+}
+
+/* Ensure Input components inside form have dark text */
+.form-group input,
+.form-group select,
+.form-group textarea {
+    color: #333;
+}
+
+.form-row {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.form-row .form-group {
+    flex: 1;
+}
+
+.form-actions {
+    margin-top: 2rem;
+}
+
+@media print {
+    @page {
+        size: A4;
+        margin: 10mm;
+    }
+
+    body {
+        background: white;
+        font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+    }
+
+    /* Hide everything by default */
+    body * {
+        visibility: hidden;
+    }
+
+    /* Show only inventory container */
+    .inventory-container,
+    .inventory-container * {
+        visibility: visible;
+    }
+
+    /* Hide specific non-print elements */
+    .container-header,
+    .inventory-controls,
+    .inventory-left-panel,
+    .header-actions,
+    .inventory-tabs,
+    .dnd-context-overlay,
+    .inventory-table th:nth-child(7),
+    .inventory-table td:nth-child(7),
+    button {
+        display: none !important;
+    }
+
+    /* Layout Reset */
+    .inventory-container {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        background: white;
+    }
+
+    .inventory-split-layout {
+        display: block !important;
+        grid-template-columns: 1fr !important;
+    }
+
+    .inventory-right-panel {
+        padding: 0 !important;
+        border: none !important;
+        width: 100% !important;
+        background: transparent !important;
+    }
+
+    /* Table Styles */
+    .inventory-table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        font-size: 10px !important;
+        table-layout: fixed;
+    }
+
+    .inventory-table th,
+    .inventory-table td {
+        border: 1px solid #000 !important;
+        padding: 4px 6px !important;
+        color: #000 !important;
+        vertical-align: middle;
+    }
+
+    .inventory-table th {
+        background-color: transparent !important;
+        font-weight: normal;
+        text-align: left;
+    }
+
+    /* Column Widths */
+    .inventory-table th:nth-child(1),
+    .inventory-table td:nth-child(1) {
+        width: 35%;
+        text-align: left;
+    }
+
+    .inventory-table th:nth-child(2),
+    .inventory-table td:nth-child(2) {
+        width: 10%;
+        text-align: right;
+    }
+
+    .inventory-table th:nth-child(3),
+    .inventory-table td:nth-child(3) {
+        width: 5%;
+        text-align: center;
+    }
+
+    .inventory-table th:nth-child(4),
+    .inventory-table td:nth-child(4) {
+        width: 5%;
+        text-align: right;
+    }
+
+    .inventory-table th:nth-child(5),
+    .inventory-table td:nth-child(5) {
+        width: 10%;
+        text-align: right;
+    }
+
+    .inventory-table th:nth-child(6),
+    .inventory-table td:nth-child(6) {
+        width: 35%;
+        text-align: left;
+        font-size: 9px !important;
+    }
+
+    /* Input Styles - Hide in print, use print-only text instead */
+    .inventory-quantity-input.no-print {
+        display: none !important;
+    }
+
+    .print-only {
+        display: block !important;
+        text-align: right;
+        font-size: 10px;
+        width: 100%;
+    }
+
+    /* Remove extra elements */
+    .inventory-table span[style*="color: red"],
+    .inventory-container::before {
+        display: none !important;
+    }
+
+    tr {
+        break-inside: avoid;
+    }
+}

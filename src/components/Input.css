@@ -16,7 +16,8 @@
     border: 1px solid hsl(var(--color-border-dark));
     border-radius: var(--radius-md);
     padding: 0.5rem 0.75rem;
-    color: hsl(var(--color-text-main));
+    color: #333;
+    /* Ensuring dark text on white background */
     font-size: 0.95rem;
     font-family: inherit;
     transition: border-color var(--transition-fast);

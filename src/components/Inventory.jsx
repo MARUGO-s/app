@@ -1,0 +1,1251 @@
+import React, { useState, useEffect } from 'react';
+import { DndContext, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
+import { inventoryService } from '../services/inventoryService';
+import { purchasePriceService } from '../services/purchasePriceService';
+import { Button } from './Button';
+import { Card } from './Card';
+import { Input } from './Input';
+import { InventoryList } from './InventoryList';
+import './Inventory.css';
+import { Modal } from './Modal';
+import { useAuth } from '../contexts/AuthContext';
+
+export const Inventory = ({ onBack }) => {
+    const { user } = useAuth();
+    const userId = user?.id;
+    const [items, setItems] = useState([]);
+    const [snapshots, setSnapshots] = useState([]);
+    const [deletedSnapshots, setDeletedSnapshots] = useState([]);
+    const [csvData, setCsvData] = useState([]); // Master data from CSV
+    const [ignoredNames, setIgnoredNames] = useState(new Set()); // Ignored item names
+    const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
+
+    // Edit State
+    const [isEditing, setIsEditing] = useState(false);
+    const [editingItem, setEditingItem] = useState(null); // null = create
+
+    // Snapshot / Complete Modal State
+    const [snapshotModalOpen, setSnapshotModalOpen] = useState(false);
+    const [snapshotTitle, setSnapshotTitle] = useState('');
+    const [resetAfterSnapshot, setResetAfterSnapshot] = useState(true); // true = reset qty to 0, false = keep as-is
+
+    // Snapshot History Modal State
+    const [snapshotHistoryModalOpen, setSnapshotHistoryModalOpen] = useState(false);
+    const [selectedSnapshot, setSelectedSnapshot] = useState(null);
+    const [snapshotHistoryTab, setSnapshotHistoryTab] = useState('history'); // 'history' | 'trash'
+    const [snapshotConfirm, setSnapshotConfirm] = useState(null); // { title, message, onConfirm }
+    const [snapshotConfirmInput, setSnapshotConfirmInput] = useState('');
+
+    // Delete Modal State
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState(null);
+    const [excludedNames, setExcludedNames] = useState(new Set()); // only hide in current inventory check UI
+
+    // Reset Modal State
+    const [resetModalOpen, setResetModalOpen] = useState(false);
+    const [resetInput, setResetInput] = useState('');
+
+    // Completion Success Modal State
+    const [completeSuccessModalOpen, setCompleteSuccessModalOpen] = useState(false);
+
+    // Generic Notification State (for replacing alerts)
+    const [notification, setNotification] = useState(null); // { title, message, type }
+
+    // Sensors for DnD (activates on move of 8px to prevent accidental drag on click)
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8,
+            },
+        })
+    );
+
+    const [activeTab, setActiveTab] = useState('all'); // 'all', 'inventory-check', or vendor name
+    const [checkedItems, setCheckedItems] = useState(new Set()); // Set of IDs
+
+    useEffect(() => {
+        if (!userId) return;
+        loadData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [userId]);
+
+    const loadData = async (isSilent = false) => {
+        if (!isSilent) setLoading(true);
+        try {
+            const [inventoryData, csvList, ignored, snapshotList, deletedList] = await Promise.all([
+                inventoryService.getAll(userId),
+                purchasePriceService.getPriceListArray(),
+                inventoryService.getIgnoredItems(userId),
+                inventoryService.getSnapshots(userId),
+                inventoryService.getDeletedSnapshots(userId)
+            ]);
+            setItems(inventoryData);
+            setCsvData(csvList);
+            setIgnoredNames(ignored);
+            setSnapshots(snapshotList || []);
+            setDeletedSnapshots(deletedList || []);
+
+            // Initialize checkedItems with IDs of all existing inventory items
+            // This ensures the count in "棚卸し一覧 ({checkedItems.size})" is correct after reload
+            const existingIds = new Set(inventoryData.map(item => item.id));
+            setCheckedItems(existingIds);
+
+        } catch (error) {
+            console.error("Failed to load data:", error);
+        } finally {
+            if (!isSilent) setLoading(false);
+        }
+    };
+
+    const formatDateTime = (dateString) => {
+        if (!dateString) return '-';
+        const d = new Date(dateString);
+        if (Number.isNaN(d.getTime())) return String(dateString);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mi = String(d.getMinutes()).padStart(2, '0');
+        return `${yyyy}/${mm}/${dd} ${hh}:${mi}`;
+    };
+
+    const getSnapshotItemsArray = (snapshot) => {
+        const raw = snapshot?.items;
+        if (Array.isArray(raw)) return raw;
+        // jsonb might come back as object/nullable depending on DB state
+        if (!raw) return [];
+        return [];
+    };
+
+    const handleMoveSnapshotToTrash = (snapshot) => {
+        if (!snapshot?.id) return;
+        if (!userId) return;
+        setSnapshotConfirmInput('');
+        setSnapshotConfirm({
+            title: '削除の確認',
+            message: `「${snapshot.title || '棚卸し'}」をゴミ箱に移動しますか？\n（ゴミ箱から復元できます）`,
+            onConfirm: async () => {
+                try {
+                    await inventoryService.deleteSnapshotToTrash(userId, snapshot.id);
+                    await loadData(true);
+                    setNotification({ title: '完了', message: 'ゴミ箱に移動しました', type: 'success' });
+                } catch (e) {
+                    console.error(e);
+                    setNotification({ title: 'エラー', message: '削除(ゴミ箱移動)に失敗しました', type: 'error' });
+                } finally {
+                    setSnapshotConfirm(null);
+                }
+            }
+        });
+    };
+
+    const handleRestoreSnapshot = (deletedRow) => {
+        if (!deletedRow?.id) return;
+        if (!userId) return;
+        setSnapshotConfirmInput('');
+        setSnapshotConfirm({
+            title: '復元の確認',
+            message: `「${deletedRow.title || '棚卸し'}」を履歴に復元しますか？`,
+            onConfirm: async () => {
+                try {
+                    await inventoryService.restoreSnapshotFromTrash(userId, deletedRow.id);
+                    await loadData(true);
+                    setNotification({ title: '完了', message: '復元しました', type: 'success' });
+                } catch (e) {
+                    console.error(e);
+                    setNotification({ title: 'エラー', message: '復元に失敗しました', type: 'error' });
+                } finally {
+                    setSnapshotConfirm(null);
+                }
+            }
+        });
+    };
+
+    const handleHardDeleteSnapshot = (deletedRow) => {
+        if (!deletedRow?.id) return;
+        if (!userId) return;
+        setSnapshotConfirmInput('');
+        setSnapshotConfirm({
+            title: '⚠️ 完全削除の確認',
+            message: `「${deletedRow.title || '棚卸し'}」を完全に削除しますか？\nこの操作は取り消せません。\n\n確認のため delete と入力してください。`,
+            requireText: 'delete',
+            onConfirm: async () => {
+                try {
+                    await inventoryService.hardDeleteSnapshotFromTrash(userId, deletedRow.id);
+                    await loadData(true);
+                    setNotification({ title: '完了', message: '完全に削除しました', type: 'success' });
+                } catch (e) {
+                    console.error(e);
+                    setNotification({ title: 'エラー', message: '完全削除に失敗しました', type: 'error' });
+                } finally {
+                    setSnapshotConfirm(null);
+                }
+            }
+        });
+    };
+
+    const downloadSnapshotCsv = (snapshot) => {
+        if (!snapshot) return;
+        const list = getSnapshotItemsArray(snapshot);
+
+        const headers = ['品名', '仕入れ値', '単位', '在庫数', '在庫金額', '業者名'];
+        const rows = list.map((it) => {
+            const price = parseFloat(it?.price) || 0;
+            const qty = it?.quantity === '' ? 0 : (parseFloat(it?.quantity) || 0);
+            const total = Math.round(price * qty);
+            return [
+                it?.name ?? '',
+                price || '',
+                it?.unit ?? '',
+                it?.quantity ?? '',
+                total || '',
+                it?.vendor ?? '',
+            ];
+        });
+
+        const escapeCsv = (value) => {
+            const s = String(value ?? '');
+            if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+                return `"${s.replace(/"/g, '""')}"`;
+            }
+            return s;
+        };
+
+        const csvContent = [
+            headers.map(escapeCsv).join(','),
+            ...rows.map((r) => r.map(escapeCsv).join(',')),
+        ].join('\n');
+
+        const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+        const blob = new Blob([bom, csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+
+        const title = (snapshot.title || 'inventory_snapshot').toString().replace(/[\\/:*?"<>|]/g, '_');
+        const dateStr = (snapshot.snapshot_date ? new Date(snapshot.snapshot_date) : new Date())
+            .toISOString()
+            .slice(0, 10);
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `InventorySnapshot_${dateStr}_${title}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
+    // Merge Inventory and CSV Data
+    const mergedComponents = React.useMemo(() => {
+        const normalize = (str) => str ? str.toString().trim() : '';
+        const inventoryMap = new Map(items.map(i => [normalize(i.name), i]));
+        const merged = [...items];
+
+        csvData.forEach((csvItem, index) => {
+            const normalizedName = normalize(csvItem.name);
+            if (ignoredNames.has(csvItem.name) || ignoredNames.has(normalizedName)) return;
+
+            if (!inventoryMap.has(normalizedName)) {
+                merged.push({
+                    id: `phantom-${index}`,
+                    isPhantom: true,
+                    name: csvItem.name.trim(),
+                    quantity: '',
+                    unit: csvItem.unit || '',
+                    category: '',
+                    price: csvItem.price,
+                    vendor: csvItem.vendor,
+                    threshold: 0
+                });
+            }
+        });
+        return merged.filter(i => {
+            const name = normalize(i.name);
+            if (ignoredNames.has(i.name) || ignoredNames.has(name)) return false;
+            if (excludedNames.has(i.name) || excludedNames.has(name)) return false;
+            return true;
+        });
+    }, [items, csvData, ignoredNames, excludedNames]);
+
+    const handleDragEnd = (event) => {
+        const { active, over } = event;
+        if (over && over.id === 'inventory-list-droppable') {
+            const item = active.data.current.item;
+            if (active.data.current.type === 'csv-item') {
+                setEditingItem({
+                    name: item.name,
+                    price: item.price,
+                    unit: item.unit,
+                    category: '',
+                    threshold: 0,
+                    quantity: 0,
+                    vendor: item.vendor,
+                    isNewFromCsv: true
+                });
+                setIsEditing(true);
+            }
+        }
+    };
+
+    const handleSave = async (e) => {
+        e.preventDefault();
+        if (!userId) return;
+        const formData = new FormData(e.target);
+        const newItem = {
+            name: formData.get('name'),
+            quantity: parseFloat(formData.get('quantity')),
+            unit: formData.get('unit'),
+            category: formData.get('category'),
+            threshold: parseFloat(formData.get('threshold')),
+            vendor: editingItem.vendor || '',
+            price: editingItem.price || 0
+        };
+
+        try {
+            if (editingItem.id && !editingItem.isPhantom) {
+                await inventoryService.update(userId, { ...editingItem, ...newItem });
+            } else {
+                await inventoryService.add(userId, newItem);
+            }
+            setIsEditing(false);
+            setEditingItem(null);
+            loadData();
+        } catch (error) {
+            console.error("Failed to save item:", error);
+            setNotification({ title: 'エラー', message: '保存に失敗しました', type: 'error' });
+        }
+    };
+
+    const handleDelete = (item) => {
+        setItemToDelete(item);
+        setDeleteModalOpen(true);
+    };
+
+    const executeDelete = async () => {
+        if (!itemToDelete) return;
+        try {
+            // Only hide from the current inventory check list UI.
+            // Do NOT modify CSV source, and do NOT delete inventory master rows.
+            const normalize = (str) => str ? str.toString().trim() : '';
+            const name = normalize(itemToDelete?.name);
+            if (name) {
+                setExcludedNames(prev => {
+                    const next = new Set(prev);
+                    next.add(name);
+                    return next;
+                });
+            }
+            setDeleteModalOpen(false);
+            setItemToDelete(null);
+        } catch (error) {
+            console.error("Failed to delete/ignore item:", error);
+        }
+    };
+
+    const handleUpdateQuantity = async (id, newQuantity) => {
+        try {
+            if (!userId) return;
+            const item = mergedComponents.find(i => i.id === id);
+            if (!item) return;
+
+            if (item.isPhantom) {
+                const newItem = {
+                    name: item.name.trim(),
+                    quantity: newQuantity,
+                    unit: item.unit,
+                    category: item.category || '',
+                    price: item.price,
+                    vendor: item.vendor,
+                    threshold: 0
+                };
+                const added = await inventoryService.add(userId, newItem);
+                await loadData(true);
+                setCheckedItems(prev => {
+                    const newSet = new Set(prev);
+                    newSet.add(added.id);
+                    return newSet;
+                });
+            } else {
+                setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: newQuantity } : i));
+                setCheckedItems(prev => {
+                    const newSet = new Set(prev);
+                    newSet.add(id);
+                    return newSet;
+                });
+                await inventoryService.update(userId, { ...item, quantity: newQuantity });
+            }
+        } catch (e) {
+            console.error(e);
+            setNotification({ title: 'エラー', message: '更新に失敗しました', type: 'error' });
+            loadData();
+        }
+    };
+
+    const handleCompleteInventory = async () => {
+        if (!snapshotTitle) return;
+        if (!userId) return;
+        try {
+            const totalValue = items.reduce((sum, item) => sum + ((parseFloat(item.price) || 0) * (parseFloat(item.quantity) || 0)), 0);
+            await inventoryService.createSnapshot(userId, snapshotTitle, items, totalValue);
+            if (resetAfterSnapshot) {
+                await inventoryService.resetStockQuantities(userId);
+                await loadData();
+                setCheckedItems(new Set());
+            } else {
+                // Keep quantities as-is; just refresh history lists silently
+                await loadData(true);
+            }
+            setSnapshotModalOpen(false);
+            setCompleteSuccessModalOpen(true);
+        } catch (error) {
+            console.error("Failed to complete inventory:", error);
+            const msg =
+                error?.message ||
+                error?.error_description ||
+                (typeof error === 'string' ? error : null) ||
+                (() => { try { return JSON.stringify(error); } catch { return null; } })() ||
+                '完了処理に失敗しました';
+            setNotification({ title: 'エラー', message: `完了処理に失敗しました\n${msg}`, type: 'error' });
+        }
+    };
+
+
+    // CSV Export function
+    const handleDownloadCsv = () => {
+        // Define headers matching the print/list layout
+        const headers = ['品名', '仕入れ値', '単位', '在庫数', '在庫金額', '業者名'];
+
+        // Convert items to CSV rows
+        const rows = filteredItems.map(item => {
+            const price = parseFloat(item.price) || 0;
+            const quantity = item.quantity === '' ? 0 : (parseFloat(item.quantity) || 0);
+            const totalValue = Math.round(price * quantity);
+
+            return [
+                item.name,
+                price,
+                item.unit,
+                item.quantity, // Keep original input for quantity (might be empty string)
+                totalValue,
+                item.vendor || ''
+            ];
+        });
+
+        // Combine headers and rows
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(row => row.map(cell => {
+                // Handle special characters and quotes
+                const stringCell = String(cell ?? '');
+                if (stringCell.includes(',') || stringCell.includes('"') || stringCell.includes('\n')) {
+                    return `"${stringCell.replace(/"/g, '""')}"`;
+                }
+                return stringCell;
+            }).join(','))
+        ].join('\n');
+
+        // Add BOM for Excel compatibility
+        const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+        // Use standard MIME type
+        const blob = new Blob([bom, csvContent], { type: 'text/csv' });
+
+        // Create download link
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        const dateStr = new Date().toISOString().split('T')[0];
+
+        // Use English filename to ensure extension is preserved on all browsers/OS
+        link.href = url;
+        link.download = `Inventory_${dateStr}.csv`;
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        // Clean up
+        URL.revokeObjectURL(url);
+    };
+
+    const categories = [
+        '野菜', 'お肉', 'お魚', 'フルーツ', '粉類', '調味料類', '乾物',
+        'ワイン', 'スピリッツ', 'リキュール', 'ウイスキー', '焼酎'
+    ];
+
+    const uniqueVendors = [...new Set(mergedComponents.map(item => item.vendor).filter(v => v))].sort();
+    const hasNoVendorItems = mergedComponents.some(item => !item.vendor);
+
+    const filteredItems = mergedComponents.filter(item => {
+        // First filter by search query
+        if (!item.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+
+        // Then filter by tab
+        if (activeTab === 'all') return true;
+        if (activeTab === 'inventory-check') {
+            // Show items that are explicitly checked OR already saved in DB (not phantom)
+            // This ensures data persists in the list after reload
+            return checkedItems.has(item.id) || !item.isPhantom;
+        }
+        if (activeTab === 'other') return !item.vendor; // specific case for no vendor
+
+        // Vendor tab
+        return item.vendor === activeTab;
+    });
+
+    if (isEditing) {
+        return (
+            <div className="inventory-edit-container fade-in">
+                <div className="container-header">
+                    <h2 className="section-title">{editingItem && !editingItem.isNewFromCsv ? '在庫編集' : '新規在庫登録'}</h2>
+                </div>
+                <Card className="edit-form-card">
+                    <form onSubmit={handleSave}>
+                        <div className="form-group">
+                            <label>材料名</label>
+                            <Input name="name" defaultValue={editingItem?.name} required placeholder="例: 薄力粉" />
+                        </div>
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label>現在庫数</label>
+                                <Input name="quantity" type="number" step="0.01" defaultValue={editingItem?.quantity} required />
+                            </div>
+                            <div className="form-group">
+                                <label>単位</label>
+                                <Input name="unit" defaultValue={editingItem?.unit || 'g'} required placeholder="g, ml, 個..." />
+                            </div>
+                        </div>
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label>カテゴリー</label>
+                                <Input
+                                    name="category"
+                                    defaultValue={editingItem?.category}
+                                    list="category-list"
+                                    placeholder="選択または入力"
+                                    autoComplete="off"
+                                />
+                                <datalist id="category-list">
+                                    {categories.map(c => <option key={c} value={c} />)}
+                                </datalist>
+                            </div>
+                            <div className="form-group">
+                                <label>発注点 (これ以下でアラート)</label>
+                                <Input name="threshold" type="number" step="0.01" defaultValue={editingItem?.threshold || 0} />
+                            </div>
+                        </div>
+
+                        <div className="form-actions">
+                            <Button variant="ghost" type="button" onClick={() => { setIsEditing(false); setEditingItem(null); }}>キャンセル</Button>
+                            <Button variant="primary" type="submit">保存</Button>
+                        </div>
+                    </form>
+                </Card>
+            </div>
+        );
+    }
+
+    return (
+        <DndContext onDragEnd={handleDragEnd} sensors={sensors} autoScroll={false}>
+            <div className="inventory-container fade-in">
+                <div className="container-header">
+                    <h2 className="section-title">📦 在庫管理 (一括登録対応)</h2>
+                    <div className="header-actions inventory-header-actions">
+                        <Button variant="ghost" onClick={onBack}>← メニュー</Button>
+                        <Button
+                            variant="danger"
+                            className="inventory-header-actions__btn inventory-header-actions__btn--compact"
+                            onClick={() => {
+                                setResetInput('');
+                                setResetModalOpen(true);
+                            }}
+                        >
+                            🗑️ データリセット
+                        </Button>
+
+                        <Button
+                            variant="primary"
+                            className="inventory-header-actions__btn inventory-header-actions__btn--main"
+                            style={{ backgroundColor: '#2ecc71', borderColor: '#27ae60' }}
+                            onClick={() => {
+                                const today = new Date();
+                                setSnapshotTitle(`${today.getFullYear()}年${today.getMonth() + 1}月 棚卸し`);
+                                setResetAfterSnapshot(true);
+                                setSnapshotModalOpen(true);
+                            }}
+                        >
+                            🎉 棚卸し完了
+                        </Button>
+
+                        <Button
+                            variant="secondary"
+                            className="inventory-header-actions__btn"
+                            onClick={() => {
+                                setSelectedSnapshot(null);
+                                setSnapshotHistoryTab('history');
+                                setSnapshotHistoryModalOpen(true);
+                            }}
+                            title="保存済みの棚卸し履歴を表示"
+                        >
+                            📜 履歴
+                        </Button>
+
+                        <Button
+                            variant="primary"
+                            className="inventory-header-actions__btn"
+                            onClick={() => { setEditingItem(null); setIsEditing(true); }}
+                        >
+                            + アイテム追加
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="inventory-split-layout">
+                    {/* Inventory List (Full Width) */}
+                    <div className="inventory-right-panel" style={{ paddingLeft: 0, borderLeft: 'none' }}>
+                        <div className="inventory-controls">
+                            <div className="inventory-controls__row inventory-controls__row--filters">
+                                <div className="inventory-controls__field">
+                                    <label className="inventory-controls__label">業者選択:</label>
+                                    <select
+                                        className="inventory-controls__select"
+                                        value={activeTab === 'inventory-check' ? '' : activeTab}
+                                        onChange={(e) => {
+                                            if (e.target.value) setActiveTab(e.target.value);
+                                        }}
+                                    >
+                                <option value="" disabled>業者を選択してください</option>
+                                <optgroup label="業者リスト">
+                                    {uniqueVendors.map(vendor => (
+                                        <option key={vendor} value={vendor}>{vendor}</option>
+                                    ))}
+                                    {hasNoVendorItems && <option value="other">その他</option>}
+                                </optgroup>
+                                    </select>
+                                </div>
+
+                                <input
+                                    className="inventory-controls__search"
+                                    placeholder="🔍 在庫検索..."
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                />
+                            </div>
+
+                            <div className="inventory-controls__row inventory-controls__row--actions">
+                                <button
+                                    className="inventory-controls__btn"
+                                    onClick={() => setActiveTab('inventory-check')}
+                                    data-active={activeTab === 'inventory-check' ? 'true' : 'false'}
+                                >
+                                    ✅ 棚卸し一覧 ({checkedItems.size})
+                                </button>
+
+                                <button
+                                    className="inventory-controls__btn"
+                                    onClick={handleDownloadCsv}
+                                    title="CSVダウンロード"
+                                >
+                                    📥 CSV出力 (.csv)
+                                </button>
+
+                                {activeTab === 'inventory-check' && (
+                                    <button
+                                        className="inventory-controls__btn"
+                                        onClick={() => window.print()}
+                                        title="印刷 / PDF保存"
+                                    >
+                                        🖨️ 印刷
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        <InventoryList
+                            items={filteredItems}
+                            loading={loading}
+                            onSearch={setSearchQuery}
+                            searchQuery={searchQuery}
+                            onEdit={(item) => { setEditingItem(item); setIsEditing(true); }}
+                            onDelete={handleDelete}
+                            onUpdateQuantity={handleUpdateQuantity}
+                        />
+                    </div>
+                </div>
+
+                {/* Snapshot Confirmation Modal */}
+                <Modal
+                    isOpen={snapshotModalOpen}
+                    onClose={() => setSnapshotModalOpen(false)}
+                    title="🎉 棚卸し完了の確認"
+                    size="small"
+                >
+                    <div style={{ color: '#333' }}>
+                        <p style={{ fontSize: '1rem', marginBottom: '1rem', lineHeight: '1.6' }}>
+                            現在の入力内容を保存し、今月の棚卸しを完了しますか？
+                        </p>
+                        <div style={{ background: '#e3f2fd', padding: '10px', borderRadius: '4px', marginBottom: '1.5rem', fontSize: '0.9rem', color: '#0d47a1' }}>
+                            <strong>実行内容:</strong><br />
+                            1. 現在の在庫状況を「履歴」として保存します。<br />
+                            2. {resetAfterSnapshot ? (
+                                <><strong>全ての在庫数(手入力)を0にリセット</strong>し、来月の入力準備をします。</>
+                            ) : (
+                                <><strong>在庫数はそのまま保持</strong>します。（リセットしません）</>
+                            )}<br />
+                            （※マスタデータは消えません）
+                        </div>
+
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', userSelect: 'none' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={resetAfterSnapshot}
+                                    onChange={(e) => setResetAfterSnapshot(e.target.checked)}
+                                />
+                                <span style={{ fontSize: '0.95rem', color: '#333' }}>
+                                    在庫数を<strong>0にリセット</strong>する
+                                </span>
+                            </label>
+                            <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '6px', lineHeight: 1.4 }}>
+                                オフにすると、保存だけ行い在庫数は変更しません。
+                            </div>
+                        </div>
+
+                        <div style={{ marginBottom: '20px' }}>
+                            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                                保存名 (タイトル)
+                            </label>
+                            <input
+                                type="text"
+                                value={snapshotTitle}
+                                onChange={(e) => setSnapshotTitle(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '10px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #ccc',
+                                    fontSize: '1rem'
+                                }}
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                            <button
+                                onClick={() => setSnapshotModalOpen(false)}
+                                style={{
+                                    padding: '8px 16px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #ccc',
+                                    background: '#f5f5f5',
+                                    color: '#333',
+                                    cursor: 'pointer',
+                                    fontSize: '0.9rem'
+                                }}
+                            >
+                                キャンセル
+                            </button>
+                            <button
+                                onClick={handleCompleteInventory}
+                                style={{
+                                    padding: '8px 16px',
+                                    borderRadius: '4px',
+                                    border: 'none',
+                                    background: '#2ecc71',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                    fontSize: '0.9rem',
+                                    fontWeight: 'bold'
+                                }}
+                            >
+                                {resetAfterSnapshot ? '確定してリセット' : '確定して保存'}
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+
+                {/* Snapshot History Modal */}
+                <Modal
+                    isOpen={snapshotHistoryModalOpen}
+                    onClose={() => setSnapshotHistoryModalOpen(false)}
+                    title="📜 棚卸し履歴"
+                    size="large"
+                >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                        <div style={{ color: '#555', fontSize: '0.9rem' }}>
+                            {snapshotHistoryTab === 'history'
+                                ? <>保存済み: <strong>{snapshots.length}</strong> 件</>
+                                : <>ゴミ箱: <strong>{deletedSnapshots.length}</strong> 件</>
+                            }
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setSnapshotHistoryTab('history')}
+                                    style={{
+                                        padding: '6px 10px',
+                                        borderRadius: '6px',
+                                        border: '1px solid #ccc',
+                                        background: snapshotHistoryTab === 'history' ? '#111' : '#fff',
+                                        color: snapshotHistoryTab === 'history' ? '#fff' : '#333',
+                                        cursor: 'pointer',
+                                        fontWeight: 'bold',
+                                        fontSize: '0.85rem'
+                                    }}
+                                >
+                                    履歴
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSnapshotHistoryTab('trash')}
+                                    style={{
+                                        padding: '6px 10px',
+                                        borderRadius: '6px',
+                                        border: '1px solid #ccc',
+                                        background: snapshotHistoryTab === 'trash' ? '#111' : '#fff',
+                                        color: snapshotHistoryTab === 'trash' ? '#fff' : '#333',
+                                        cursor: 'pointer',
+                                        fontWeight: 'bold',
+                                        fontSize: '0.85rem'
+                                    }}
+                                >
+                                    ゴミ箱
+                                </button>
+                            </div>
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => loadData(true)}
+                                title="最新のデータを読み込み直します"
+                            >
+                                ↻ 更新
+                            </Button>
+                        </div>
+                    </div>
+
+                    {snapshotHistoryTab === 'history' && snapshots.length === 0 ? (
+                        <div style={{ color: '#666', textAlign: 'center', padding: '24px 0' }}>
+                            棚卸し履歴がありません（「棚卸し完了」で保存されます）
+                        </div>
+                    ) : snapshotHistoryTab === 'trash' && deletedSnapshots.length === 0 ? (
+                        <div style={{ color: '#666', textAlign: 'center', padding: '24px 0' }}>
+                            ゴミ箱は空です
+                        </div>
+                    ) : (
+                        <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                    <tr style={{ background: '#f0f0f0' }}>
+                                        <th style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                                            {snapshotHistoryTab === 'trash' ? '削除日' : '日付'}
+                                        </th>
+                                        <th style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', textAlign: 'left' }}>タイトル</th>
+                                        <th style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', whiteSpace: 'nowrap' }}>件数</th>
+                                        <th style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', whiteSpace: 'nowrap' }}>在庫金額</th>
+                                        <th style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', width: '120px' }}></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(snapshotHistoryTab === 'history' ? snapshots : deletedSnapshots).map((s) => {
+                                        const itemCount = getSnapshotItemsArray(s).length;
+                                        const totalValue = Math.round(parseFloat(s.total_value) || 0);
+                                        const key = snapshotHistoryTab === 'trash' ? `trash-${s.id}` : s.id;
+                                        const dateLabel = snapshotHistoryTab === 'trash'
+                                            ? formatDateTime(s.deleted_at)
+                                            : formatDateTime(s.snapshot_date);
+
+                                        return (
+                                            <tr key={key} style={{ borderBottom: '1px solid #eee' }}>
+                                                <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>{dateLabel}</td>
+                                                <td style={{ padding: '10px' }}>{s.title || '-'}</td>
+                                                <td style={{ padding: '10px', textAlign: 'right' }}>{itemCount.toLocaleString()}</td>
+                                                <td style={{ padding: '10px', textAlign: 'right' }}>¥{totalValue.toLocaleString()}</td>
+                                                <td style={{ padding: '10px', textAlign: 'right' }}>
+                                                    {snapshotHistoryTab === 'history' ? (
+                                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="sm"
+                                                                onClick={() => downloadSnapshotCsv(s)}
+                                                                disabled={itemCount === 0}
+                                                                title={itemCount === 0 ? 'items が空のためCSV出力できません' : 'この棚卸しをCSVでダウンロード'}
+                                                            >
+                                                                📥 CSV
+                                                            </Button>
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="sm"
+                                                                onClick={() => setSelectedSnapshot(s)}
+                                                            >
+                                                                詳細
+                                                            </Button>
+                                                            <Button
+                                                                variant="danger"
+                                                                size="sm"
+                                                                onClick={() => handleMoveSnapshotToTrash(s)}
+                                                                title="ゴミ箱に移動"
+                                                            >
+                                                                削除
+                                                            </Button>
+                                                        </div>
+                                                    ) : (
+                                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="sm"
+                                                                onClick={() => downloadSnapshotCsv(s)}
+                                                                disabled={itemCount === 0}
+                                                            >
+                                                                📥 CSV
+                                                            </Button>
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="sm"
+                                                                onClick={() => setSelectedSnapshot(s)}
+                                                            >
+                                                                詳細
+                                                            </Button>
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="sm"
+                                                                onClick={() => handleRestoreSnapshot(s)}
+                                                                title="履歴に復元"
+                                                            >
+                                                                復元
+                                                            </Button>
+                                                            <Button
+                                                                variant="danger"
+                                                                size="sm"
+                                                                onClick={() => handleHardDeleteSnapshot(s)}
+                                                                title="ゴミ箱から完全削除"
+                                                            >
+                                                                完全削除
+                                                            </Button>
+                                                        </div>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </Modal>
+
+                {/* Snapshot Confirm Modal */}
+                <Modal
+                    isOpen={!!snapshotConfirm}
+                    onClose={() => setSnapshotConfirm(null)}
+                    title={snapshotConfirm?.title || '確認'}
+                    size="small"
+                >
+                    <div style={{ color: '#333' }}>
+                        <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{snapshotConfirm?.message}</p>
+
+                        {snapshotConfirm?.requireText && (
+                            <div style={{ marginTop: '14px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                                    確認のため <span style={{ fontFamily: 'monospace', background: '#eee', padding: '2px 4px' }}>{snapshotConfirm.requireText}</span> と入力してください
+                                </label>
+                                <input
+                                    type="text"
+                                    value={snapshotConfirmInput}
+                                    onChange={(e) => setSnapshotConfirmInput(e.target.value)}
+                                    placeholder={snapshotConfirm.requireText}
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px',
+                                        borderRadius: '4px',
+                                        border: '1px solid #ccc',
+                                        fontSize: '1rem'
+                                    }}
+                                />
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                            <Button variant="ghost" onClick={() => setSnapshotConfirm(null)}>キャンセル</Button>
+                            <Button
+                                variant="danger"
+                                disabled={!!snapshotConfirm?.requireText && snapshotConfirmInput !== snapshotConfirm.requireText}
+                                onClick={() => snapshotConfirm?.onConfirm && snapshotConfirm.onConfirm()}
+                            >
+                                実行
+                            </Button>
+                        </div>
+                    </div>
+                </Modal>
+
+                {/* Snapshot Detail Modal */}
+                <Modal
+                    isOpen={!!selectedSnapshot}
+                    onClose={() => setSelectedSnapshot(null)}
+                    title={selectedSnapshot ? `📦 ${selectedSnapshot.title || '棚卸し詳細'}` : '📦 棚卸し詳細'}
+                    size="large"
+                >
+                    {(() => {
+                        const s = selectedSnapshot;
+                        if (!s) return null;
+                        const list = getSnapshotItemsArray(s);
+                        const totalValue = Math.round(parseFloat(s.total_value) || 0);
+
+                        const rows = [...list].sort((a, b) => {
+                            const aName = (a?.name || '').toString();
+                            const bName = (b?.name || '').toString();
+                            return aName.localeCompare(bName, 'ja');
+                        });
+
+                        return (
+                            <div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '12px', color: '#555', fontSize: '0.9rem' }}>
+                                    <div>日付: <strong>{formatDateTime(s.snapshot_date)}</strong></div>
+                                    <div>件数: <strong>{rows.length.toLocaleString()}</strong></div>
+                                    <div style={{ marginLeft: 'auto' }}>在庫金額: <strong>¥{totalValue.toLocaleString()}</strong></div>
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '12px' }}>
+                                    <Button variant="secondary" size="sm" onClick={() => downloadSnapshotCsv(s)}>
+                                        📥 CSV出力 (.csv)
+                                    </Button>
+                                </div>
+
+                                {rows.length === 0 ? (
+                                    <div style={{ color: '#666', textAlign: 'center', padding: '24px 0' }}>
+                                        この棚卸しデータに items が保存されていません
+                                    </div>
+                                ) : (
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                            <thead>
+                                                <tr style={{ background: '#f0f0f0' }}>
+                                                    <th style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', textAlign: 'left' }}>品名</th>
+                                                    <th style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', whiteSpace: 'nowrap' }}>仕入れ値</th>
+                                                    <th style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', textAlign: 'left', whiteSpace: 'nowrap' }}>単位</th>
+                                                    <th style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', whiteSpace: 'nowrap' }}>在庫数</th>
+                                                    <th style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', whiteSpace: 'nowrap' }}>在庫金額</th>
+                                                    <th style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', textAlign: 'left', whiteSpace: 'nowrap' }}>業者名</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {rows.map((it, idx) => {
+                                                    const price = parseFloat(it?.price) || 0;
+                                                    const qty = it?.quantity === '' ? 0 : (parseFloat(it?.quantity) || 0);
+                                                    const rowTotal = Math.round(price * qty);
+                                                    return (
+                                                        <tr key={it?.id || `${it?.name || 'item'}-${idx}`} style={{ borderBottom: '1px solid #eee' }}>
+                                                            <td style={{ padding: '10px' }}>{it?.name || '-'}</td>
+                                                            <td style={{ padding: '10px', textAlign: 'right' }}>{price ? `¥${Math.round(price).toLocaleString()}` : '-'}</td>
+                                                            <td style={{ padding: '10px' }}>{it?.unit || '-'}</td>
+                                                            <td style={{ padding: '10px', textAlign: 'right' }}>{qty ? qty.toLocaleString() : '0'}</td>
+                                                            <td style={{ padding: '10px', textAlign: 'right' }}>{rowTotal ? `¥${rowTotal.toLocaleString()}` : '-'}</td>
+                                                            <td style={{ padding: '10px' }}>{it?.vendor || '-'}</td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
+                </Modal>
+
+                {/* Delete Confirmation Modal */}
+                <Modal
+                    isOpen={deleteModalOpen}
+                    onClose={() => setDeleteModalOpen(false)}
+                    title="削除の確認"
+                    size="small"
+                >
+                    <div style={{ color: '#333' }}>
+                        <p style={{ fontSize: '1.1rem', marginBottom: '1rem', lineHeight: '1.6' }}>
+                            「<strong>{itemToDelete?.name}</strong>」をリストから削除しますか？
+                        </p>
+                        <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+                            この操作は<strong>棚卸し一覧（現在の画面）から一時的に非表示</strong>にするだけです。<br />
+                            CSVファイルや在庫マスタのデータは変更しません（次回以降は通常どおり表示されます）。
+                        </p>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                            <button
+                                onClick={() => setDeleteModalOpen(false)}
+                                style={{
+                                    padding: '8px 16px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #ccc',
+                                    background: '#f5f5f5',
+                                    color: '#333',
+                                    cursor: 'pointer',
+                                    fontSize: '0.9rem'
+                                }}
+                            >
+                                キャンセル
+                            </button>
+                            <button
+                                onClick={executeDelete}
+                                style={{
+                                    padding: '8px 16px',
+                                    borderRadius: '4px',
+                                    border: 'none',
+                                    background: '#d32f2f',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                    fontSize: '0.9rem',
+                                    fontWeight: 'bold'
+                                }}
+                            >
+                                この一覧から除外
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+
+                {/* Reset Confirmation Modal */}
+                <Modal
+                    isOpen={resetModalOpen}
+                    onClose={() => setResetModalOpen(false)}
+                    title="⚠️ データリセットの確認"
+                    size="small"
+                >
+                    <div style={{ color: '#333' }}>
+                        <p style={{ fontSize: '1rem', marginBottom: '1rem', lineHeight: '1.6', color: '#d32f2f', fontWeight: 'bold' }}>
+                            本当にすべての在庫データを削除しますか？
+                        </p>
+                        <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+                            この操作は取り消せません。<br />
+                            CSV由来の入力データも含め、すべての在庫数がリセットされます。<br />
+                            <span style={{ fontSize: '0.8rem' }}>（※マスタデータ設定や除外設定は残ります）</span>
+                        </p>
+
+                        <div style={{ marginBottom: '20px' }}>
+                            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                                確認のため <span style={{ fontFamily: 'monospace', background: '#eee', padding: '2px 4px' }}>delete</span> と入力してください
+                            </label>
+                            <input
+                                type="text"
+                                value={resetInput}
+                                onChange={(e) => setResetInput(e.target.value)}
+                                placeholder="delete"
+                                style={{
+                                    width: '100%',
+                                    padding: '10px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #ccc',
+                                    fontSize: '1rem'
+                                }}
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                            <button
+                                onClick={() => setResetModalOpen(false)}
+                                style={{
+                                    padding: '8px 16px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #ccc',
+                                    background: '#f5f5f5',
+                                    color: '#333',
+                                    cursor: 'pointer',
+                                    fontSize: '0.9rem'
+                                }}
+                            >
+                                キャンセル
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (resetInput !== 'delete') return;
+                                    try {
+                                        if (!userId) return;
+                                        await inventoryService.clearAll(userId);
+                                        loadData();
+                                        setCheckedItems(new Set());
+                                        setResetModalOpen(false);
+                                        setNotification({ title: '完了', message: 'リセットしました', type: 'success' });
+                                    } catch (e) {
+                                        console.error(e);
+                                        setNotification({ title: 'エラー', message: 'リセットに失敗しました', type: 'error' });
+                                    }
+                                }}
+                                disabled={resetInput !== 'delete'}
+                                style={{
+                                    padding: '8px 16px',
+                                    borderRadius: '4px',
+                                    border: 'none',
+                                    background: resetInput === 'delete' ? '#d32f2f' : '#ccc',
+                                    color: 'white',
+                                    cursor: resetInput === 'delete' ? 'pointer' : 'not-allowed',
+                                    fontSize: '0.9rem',
+                                    fontWeight: 'bold',
+                                    transition: 'background 0.2s'
+                                }}
+                            >
+                                全削除を実行
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+
+                {/* Completion Success Modal */}
+                <Modal
+                    isOpen={completeSuccessModalOpen}
+                    onClose={() => setCompleteSuccessModalOpen(false)}
+                    title="🎉 棚卸し完了"
+                    size="small"
+                >
+                    <div style={{ color: '#333', textAlign: 'center', padding: '1rem' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✅</div>
+                        <h3 style={{ marginBottom: '1rem' }}>{snapshotTitle} を保存しました</h3>
+                        <p style={{ color: '#666', marginBottom: '1.5rem', lineHeight: '1.6' }}>
+                            現在の在庫状況を履歴に保存し、<br />
+                            すべての在庫数をリセットしました。
+                        </p>
+                        <button
+                            onClick={() => setCompleteSuccessModalOpen(false)}
+                            style={{
+                                padding: '8px 24px',
+                                borderRadius: '4px',
+                                border: 'none',
+                                background: '#2ecc71',
+                                color: 'white',
+                                cursor: 'pointer',
+                                fontSize: '1rem',
+                                fontWeight: 'bold'
+                            }}
+                        >
+                            OK
+                        </button>
+                    </div>
+                </Modal>
+
+                {/* Generic Notification Modal (replacing alerts) */}
+                <Modal
+                    isOpen={!!notification}
+                    onClose={() => setNotification(null)}
+                    title={notification?.title || 'お知らせ'}
+                    size="small"
+                >
+                    <div style={{ color: '#333', textAlign: 'center', padding: '1rem' }}>
+                        {notification?.type === 'success' && <div style={{ fontSize: '2rem', marginBottom: '10px' }}>✅</div>}
+                        {notification?.type === 'error' && <div style={{ fontSize: '2rem', marginBottom: '10px' }}>⚠️</div>}
+                        <p style={{ fontSize: '1.1rem', marginBottom: '1.5rem', lineHeight: '1.6' }}>
+                            {notification?.message}
+                        </p>
+                        <button
+                            onClick={() => setNotification(null)}
+                            style={{
+                                padding: '8px 24px',
+                                borderRadius: '4px',
+                                border: 'none',
+                                background: notification?.type === 'error' ? '#e74c3c' : '#2ecc71',
+                                color: 'white',
+                                cursor: 'pointer',
+                                fontSize: '1rem',
+                                fontWeight: 'bold'
+                            }}
+                        >
+                            OK
+                        </button>
+                    </div>
+                </Modal>
+            </div>
+        </DndContext>
+    );
+};

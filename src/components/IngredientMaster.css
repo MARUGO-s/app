@@ -1,0 +1,129 @@
+.ingredient-master-container {
+    padding: 1rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.master-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.master-header h3 {
+    margin: 0;
+    color: #fff;
+    font-size: 1.5rem;
+}
+
+.master-search {
+    margin-bottom: 1rem;
+    max-width: 400px;
+}
+
+.master-loading {
+    text-align: center;
+    padding: 2rem;
+    color: #666;
+}
+
+.master-table-wrapper {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    overflow-x: auto;
+}
+
+.master-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.master-table th,
+.master-table td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+    color: #1f2937;
+}
+
+.master-table th {
+    background: #f8f9fa;
+    font-weight: bold;
+    color: #111827;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.master-table tr.editing {
+    background-color: #fffbeb;
+}
+
+.master-table tr:hover:not(.editing) {
+    background-color: #f1f3f5;
+}
+
+.master-table input,
+.master-table .unit-select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.unit-select {
+    background: white;
+    cursor: pointer;
+}
+
+.normalized-cost {
+    font-weight: 600;
+    color: #D2691E;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.action-buttons button {
+    white-space: nowrap;
+}
+
+.master-info {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #e3f2fd;
+    border-radius: 8px;
+    border-left: 4px solid #2196f3;
+}
+
+.master-info p {
+    margin: 0;
+    color: #1565c0;
+    font-size: 0.9rem;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+    .master-table {
+        font-size: 0.85rem;
+    }
+
+    .master-table th,
+    .master-table td {
+        padding: 8px;
+    }
+
+    .action-buttons {
+        flex-direction: column;
+    }
+
+    .action-buttons button {
+        width: 100%;
+    }
+}

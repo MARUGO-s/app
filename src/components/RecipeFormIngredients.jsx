@@ -28,6 +28,8 @@ import { createPortal } from 'react-dom';
 import UnitConversionModal from './UnitConversionModal';
 import { unitConversionService } from '../services/unitConversionService';
 
+import { AutocompleteInput } from './AutocompleteInput';
+
 // --- Sortable Item Component ---
 const SortableIngredientItem = ({
     id,
@@ -36,10 +38,8 @@ const SortableIngredientItem = ({
     groupId,
     onChange,
     onRemove,
-    handleSuggestionSelect,
-    allIngredientNames,
+    handleSuggestionSelect, // Now accepts (groupId, index, itemObject)
 
-    priceList,
     onOpenConversion,
 }) => {
     const {
@@ -59,49 +59,6 @@ const SortableIngredientItem = ({
         zIndex: isDragging ? 999 : 'auto',
     };
 
-    // Suggestions State
-    const [filteredSuggestions, setFilteredSuggestions] = useState([]);
-    const [showSuggestions, setShowSuggestions] = useState(false);
-    const inputRef = React.useRef(null);
-    const [dropdownStyle, setDropdownStyle] = useState({});
-
-    useEffect(() => {
-        if (showSuggestions && filteredSuggestions.length > 0 && inputRef.current) {
-            const rect = inputRef.current.getBoundingClientRect();
-            setDropdownStyle({
-                position: 'fixed',
-                top: `${rect.bottom}px`,
-                left: `${rect.left}px`,
-                width: `${rect.width}px`,
-                maxHeight: '150px',
-                overflowY: 'auto',
-                backgroundColor: 'white',
-                border: '1px solid #ccc',
-                borderRadius: '0 0 4px 4px',
-                zIndex: 9999,
-                boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                listStyle: 'none',
-                padding: 0,
-                margin: 0
-            });
-        }
-    }, [showSuggestions, filteredSuggestions.length]);
-
-    const handleNameChange = (val) => {
-        onChange(groupId, index, 'name', val);
-        if (val.trim()) {
-            const matches = allIngredientNames.filter(n => n.toLowerCase().includes(val.toLowerCase())).slice(0, 10);
-            setFilteredSuggestions(matches);
-            setShowSuggestions(true);
-        } else {
-            setShowSuggestions(false);
-        }
-    };
-
-    const handleBlur = () => {
-        setTimeout(() => setShowSuggestions(false), 200);
-    };
-
     return (
         <div ref={setNodeRef} style={style} className="form-ingredient-row">
             <div
@@ -113,35 +70,13 @@ const SortableIngredientItem = ({
                 ⋮⋮
             </div>
 
-            <div className="ingredient-name" ref={inputRef}>
-                <Input
+            <div className="ingredient-name">
+                <AutocompleteInput
                     value={item.name}
-                    onChange={(e) => handleNameChange(e.target.value)}
-                    onFocus={() => item.name && handleNameChange(item.name)}
-                    onBlur={handleBlur}
+                    onChange={(e) => onChange(groupId, index, 'name', e.target.value)}
+                    onSelect={(selectedItem) => handleSuggestionSelect(groupId, index, selectedItem)}
                     placeholder="材料名"
-                    style={{ width: '100%' }}
-                    autoComplete="off"
                 />
-                {showSuggestions && filteredSuggestions.length > 0 && createPortal(
-                    <ul style={dropdownStyle}>
-                        {filteredSuggestions.map((suggestion, idx) => (
-                            <li
-                                key={idx}
-                                onMouseDown={() => {
-                                    handleSuggestionSelect(groupId, index, suggestion);
-                                    setShowSuggestions(false);
-                                }}
-                                style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', color: '#000' }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                            >
-                                {suggestion}
-                            </li>
-                        ))}
-                    </ul>,
-                    document.body
-                )}
             </div>
 
             <div className="ingredient-qty">
@@ -481,6 +416,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                         const price = typeof refData === 'object' ? refData.price : refData;
                         const vendor = typeof refData === 'object' ? refData.vendor : null;
                         const unit = typeof refData === 'object' ? refData.unit : null;
+                        const size = typeof refData === 'object' ? refData.size : null;
 
                         newItem.purchaseCostRef = price;
                         newItem.vendorRef = vendor;
@@ -501,9 +437,30 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                             }
                             newItem.purchaseCost = Math.round(normalized * 100) / 100;
                         } else {
-                            // No conversion, use raw
-                            if (!newItem.purchaseCost) newItem.purchaseCost = price;
-                            if (!newItem.unit && unit) newItem.unit = unit;
+                            // No conversion map, but check master size for auto-calculation
+                            let calculatedPrice = price;
+                            let calculatedUnit = unit;
+
+                            // If we have size and it's not a weight unit (which handled above ideally, but let's cover basic master data case)
+                            // or if conversion map didn't catch it
+                            if (size && size > 1) {
+                                // If unit implies standard weights, normalize to kg price?
+                                // Usually if unit is 'g', price is for 'size' grams.
+                                // Logic for g/ml is: (price / size) * 1000 = Price per kg/L
+                                if (['g', 'ml', 'cc', 'ｇ'].includes(unit)) {
+                                    calculatedPrice = (price / size) * 1000;
+                                    calculatedUnit = 'g';
+                                } else if (['kg', 'l', 'ｋｇ'].includes(unit ? unit.toLowerCase() : '')) {
+                                    calculatedPrice = price / size;
+                                    calculatedUnit = 'g';
+                                } else {
+                                    // For '個', '枚' etc. -> Calculate Unit Price
+                                    calculatedPrice = price / size;
+                                }
+                            }
+
+                            if (!newItem.purchaseCost) newItem.purchaseCost = Math.round(calculatedPrice * 100) / 100;
+                            if (!newItem.unit && calculatedUnit) newItem.unit = calculatedUnit;
                         }
 
                         // Re-calc cost after autofill
@@ -532,8 +489,89 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
         });
     };
 
-    const handleSuggestionSelect = (groupId, index, name) => {
-        handleItemChange(groupId, index, 'name', name);
+    const handleSuggestionSelect = (groupId, index, item) => {
+        // Apply selected item details
+        setFormData(prev => {
+            const newSections = prev.ingredientSections.map(s => {
+                if (s.id !== groupId) return s;
+
+                const newItems = [...s.items];
+                const newItem = { ...newItems[index] };
+
+                // Set Name
+                newItem.name = item.name;
+
+                // Set Price & Unit
+                // Logic adapted from handleItemChange but using the selected item directly
+                if (item.price) {
+                    newItem.purchaseCostRef = item.price;
+                    newItem.vendorRef = item.source === 'csv' ? 'CSV' : 'Master';
+
+                    if (item.source === 'manual') {
+                        // Calculate normalized cost if size is available
+                        if (item.size && item.size > 0) {
+                            if (['g', 'ml', 'cc', 'ｇ'].includes(item.unit)) {
+                                const normalized = (item.price / item.size) * 1000;
+                                newItem.purchaseCost = Math.round(normalized * 100) / 100;
+                                newItem.unit = 'g'; // Normalized to g
+                            } else if (['kg', 'l', 'ｋｇ'].includes(item.unit ? item.unit.toLowerCase() : '')) {
+                                const normalized = item.price / item.size;
+                                newItem.purchaseCost = Math.round(normalized * 100) / 100;
+                                newItem.unit = 'g';
+                            } else {
+                                // For '個', '枚' etc. -> Calculate Unit Price
+                                const unitPrice = item.price / item.size;
+                                newItem.purchaseCost = Math.round(unitPrice * 100) / 100;
+                                newItem.unit = item.unit;
+                            }
+                        } else {
+                            newItem.purchaseCost = item.price;
+                            newItem.unit = item.unit;
+                        }
+
+                    } else {
+                        // CSV Data or others
+                        const conv = conversionMap.get(item.name);
+                        if (conv && conv.packetSize) {
+                            let normalized = 0;
+                            if (['g', 'ml', 'cc', 'ｇ'].includes(conv.packetUnit)) {
+                                normalized = (item.price / conv.packetSize) * 1000;
+                                newItem.unit = 'g';
+                            } else if (['kg', 'l', 'ｋｇ'].includes(conv.packetUnit.toLowerCase())) {
+                                normalized = item.price / conv.packetSize;
+                                newItem.unit = 'g';
+                            } else {
+                                normalized = item.price / conv.packetSize;
+                                newItem.unit = conv.packetUnit;
+                            }
+                            newItem.purchaseCost = Math.round(normalized * 100) / 100;
+                        } else {
+                            // If csv item has basic size info we might want to use it too, typically CSV is per pack
+                            newItem.purchaseCost = item.price;
+                            newItem.unit = item.unit;
+                        }
+                    }
+                }
+
+                // Recalculate Cost
+                const qty = parseFloat(newItem.quantity);
+                const pCost = parseFloat(newItem.purchaseCost);
+                if (!isNaN(qty) && !isNaN(pCost)) {
+                    const u = newItem.unit ? newItem.unit.trim().toLowerCase() : '';
+                    let cost = 0;
+                    if (u === 'g' || u === 'ｇ') {
+                        cost = (qty / 1000) * pCost;
+                    } else {
+                        cost = qty * pCost;
+                    }
+                    newItem.cost = Math.round(cost * 100) / 100;
+                }
+
+                newItems[index] = newItem;
+                return { ...s, items: newItems };
+            });
+            return { ...prev, ingredientSections: newSections };
+        });
     };
 
     const handleRemoveItem = (groupId, index) => {
@@ -608,8 +646,6 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                                     onChange={handleItemChange}
                                     onRemove={handleRemoveItem}
                                     handleSuggestionSelect={handleSuggestionSelect}
-                                    allIngredientNames={allIngredientNames}
-                                    priceList={priceList}
                                     onOpenConversion={() => setConversionModal({ isOpen: true, groupId: section.id, index: index })}
                                 />
                             ))}
