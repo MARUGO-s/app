@@ -53,7 +53,7 @@ export const recipeService = {
         // 2. Fetch from DB (Source of Truth)
         try {
             const { data: userPref } = await supabase
-                .from('app_users')
+                .from('profiles')
                 .select('show_master_recipes')
                 .eq('id', currentUser.id)
                 .single();
@@ -64,9 +64,13 @@ export const recipeService = {
             console.warn("Failed to fetch user preference from DB", e);
         }
 
+        const isAdmin = currentUser.role === 'admin';
+        const userIds = [String(currentUser.id)];
+        if (currentUser.displayId) userIds.push(String(currentUser.displayId));
+
         return allRecipes.filter(recipe => {
             // Admin sees ALL recipes
-            if (currentUser.id === 'admin') return true;
+            if (isAdmin) return true;
 
             const tags = recipe.tags || [];
             // Check for owner tag
@@ -90,10 +94,11 @@ export const recipeService = {
             }
 
             // If owner tag exists, it MUST match the current user OR have 'public' tag
-            const isOwner = ownerTag === `owner:${currentUser.id}`;
+            const isOwner = !!ownerTag && userIds.some(id => ownerTag === `owner:${id}`);
             const isPublic = tags.includes('public');
 
             // MASTER RECIPE LOGIC
+            // Legacy master: owner:yoshito
             const isMasterRecipe = ownerTag === 'owner:yoshito';
             // showMaster is already determined above
 
