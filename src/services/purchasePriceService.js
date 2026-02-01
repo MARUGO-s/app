@@ -4,29 +4,45 @@ const BUCKET_NAME = 'app-data';
 // No fixed FILE_PATH anymore
 
 export const purchasePriceService = {
-    _cache: null,
+    _cacheByUserId: new Map(), // userId -> Map(name -> {price,...})
+
+    async _getCurrentUserId() {
+        const { data, error } = await supabase.auth.getUser();
+        if (error) throw error;
+        return data?.user?.id || null;
+    },
+
+    _getUserScopedPath(userId, fileName) {
+        // Always store under <auth_uid>/filename.csv
+        if (!userId) throw new Error('User ID is required');
+        const clean = String(fileName || '').replace(/^\/+/, '');
+        return `${userId}/${clean}`;
+    },
 
     /**
      * Clear the in-memory cache
      */
-    clearCache() {
-        this._cache = null;
+    clearCache(userId = null) {
+        if (userId) this._cacheByUserId.delete(userId);
+        else this._cacheByUserId.clear();
     },
 
     /**
      * Fetches the material price list from Supabase Storage.
      * Returns a Map where keys are material names and values are prices.
      */
-    async fetchPriceList() {
-        if (this._cache) {
-            return this._cache;
-        }
+    async fetchPriceList(userId = null) {
+        const effectiveUserId = userId || await this._getCurrentUserId();
+        if (!effectiveUserId) return new Map();
+
+        const cached = this._cacheByUserId.get(effectiveUserId);
+        if (cached) return cached;
 
         try {
             // 1. List all files
             const { data: files, error: listError } = await supabase.storage
                 .from(BUCKET_NAME)
-                .list();
+                .list(effectiveUserId);
 
             if (listError) {
                 console.warn('Failed to list price files:', listError.message);
@@ -43,9 +59,10 @@ export const purchasePriceService = {
             const promises = files
                 .filter(f => f.name.endsWith('.csv'))
                 .map(async (file) => {
+                    const path = this._getUserScopedPath(effectiveUserId, file.name);
                     const { data, error } = await supabase.storage
                         .from(BUCKET_NAME)
-                        .download(file.name);
+                        .download(path);
 
                     if (error) {
                         console.error(`Failed to download ${file.name}:`, error);
@@ -77,7 +94,7 @@ export const purchasePriceService = {
                 }
             }
 
-            this._cache = masterMap;
+            this._cacheByUserId.set(effectiveUserId, masterMap);
             return masterMap;
         } catch (err) {
             console.error('Error in fetchPriceList:', err);
@@ -88,11 +105,13 @@ export const purchasePriceService = {
     /**
      * Lists all uploaded CSV files.
      */
-    async getFileList() {
+    async getFileList(userId = null) {
         try {
+            const effectiveUserId = userId || await this._getCurrentUserId();
+            if (!effectiveUserId) return [];
             const { data, error } = await supabase.storage
                 .from(BUCKET_NAME)
-                .list();
+                .list(effectiveUserId);
 
             if (error) throw error;
             return data.filter(f => f.name.endsWith('.csv')) || [];
@@ -106,16 +125,19 @@ export const purchasePriceService = {
      * Uploads a CSV file to Supabase Storage.
      * @param {File} file 
      */
-    async uploadPriceList(file) {
+    async uploadPriceList(file, userId = null) {
         try {
+            const effectiveUserId = userId || await this._getCurrentUserId();
+            if (!effectiveUserId) throw new Error('ログインが必要です');
             // Use original filename, ensuring it's a CSV
             const fileName = file.name; // User wants to save multiples, so we trust reasonable unique names
 
-            this.clearCache();
+            this.clearCache(effectiveUserId);
+            const path = this._getUserScopedPath(effectiveUserId, fileName);
 
             const { data, error } = await supabase.storage
                 .from(BUCKET_NAME)
-                .upload(fileName, file, {
+                .upload(path, file, {
                     upsert: true,
                     contentType: 'text/csv'
                 });
@@ -131,12 +153,15 @@ export const purchasePriceService = {
     /**
      * Deletes the CSV file from Supabase Storage.
      */
-    async deletePriceFile(fileName) {
+    async deletePriceFile(fileName, userId = null) {
         try {
-            this.clearCache();
+            const effectiveUserId = userId || await this._getCurrentUserId();
+            if (!effectiveUserId) throw new Error('ログインが必要です');
+            this.clearCache(effectiveUserId);
+            const path = this._getUserScopedPath(effectiveUserId, fileName);
             const { data, error } = await supabase.storage
                 .from(BUCKET_NAME)
-                .remove([fileName]);
+                .remove([path]);
 
             if (error) throw error;
 
@@ -295,8 +320,8 @@ export const purchasePriceService = {
     /**
      * Helper to get price list as array for UI display
      */
-    async getPriceListArray() {
-        const map = await this.fetchPriceList();
+    async getPriceListArray(userId = null) {
+        const map = await this.fetchPriceList(userId);
         const array = [];
         for (const [name, data] of map.entries()) {
             if (typeof data === 'object') {
@@ -319,9 +344,9 @@ export const purchasePriceService = {
      * @param {string} name 
      * @returns {Promise<{price: number, unit: string, vendor: string}|null>}
      */
-    async getPrice(name) {
+    async getPrice(name, userId = null) {
         if (!name) return null;
-        const map = await this.fetchPriceList();
+        const map = await this.fetchPriceList(userId);
         return map.get(name) || null;
     }
 };

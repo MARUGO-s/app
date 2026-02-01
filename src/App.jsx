@@ -11,10 +11,17 @@ import { Button } from './components/Button';
 import { RecentRecipes } from './components/RecentRecipes';
 import { LevainGuide } from './components/LevainGuide';
 import { UserManagement } from './components/UserManagement';
+import { Inventory } from './components/Inventory';
+import { Planner } from './components/Planner';
+import { OrderList } from './components/OrderList';
 import { recipeService } from './services/recipeService';
+import { userService } from './services/userService';
 import { STORE_LIST } from './constants';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ToastProvider, useToast } from './contexts/ToastContext';
 import { LoginPage } from './components/LoginPage';
+import { PasswordResetPage } from './components/PasswordResetPage';
+import { Modal } from './components/Modal';
 import './App.css';
 
 import {
@@ -32,12 +39,16 @@ import {
 } from '@dnd-kit/sortable';
 
 function AppContent() {
-  const { user, logout, loading: authLoading } = useAuth();
+  const { user, logout, loading: authLoading, isPasswordRecovery } = useAuth();
+  const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [trashCount, setTrashCount] = useState(0);
   const [recentIds, setRecentIds] = useState([]);
+  const [authStuckFallback, setAuthStuckFallback] = useState(false);
+  const [profilesById, setProfilesById] = useState({});
+  const [profilesByDisplayId, setProfilesByDisplayId] = useState({});
 
   // Derived State from URL
   const currentView = searchParams.get('view') || 'list'; // 'list', 'detail', 'create', 'edit', 'data', 'trash'
@@ -54,14 +65,104 @@ function AppContent() {
   const [selectedRecipeIds, setSelectedRecipeIds] = useState(new Set());
   const [displayMode, setDisplayMode] = useState('normal'); // 'normal' | 'all'
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [pcRecommendModalView, setPcRecommendModalView] = useState(null); // null | view string
+  const [isMobileScreen, setIsMobileScreen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia?.('(max-width: 700px)')?.matches ?? false;
+  });
+
+  const PC_RECOMMEND_VIEWS = {
+    data: 'データ管理',
+    users: 'ユーザー管理',
+    'order-list': '発注リスト',
+  };
 
   useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mql = window.matchMedia('(max-width: 700px)');
+    const onChange = () => setIsMobileScreen(!!mql.matches);
+    onChange();
+    // Safari compatibility: addListener/removeListener
+    if (mql.addEventListener) mql.addEventListener('change', onChange);
+    else mql.addListener(onChange);
+    return () => {
+      if (mql.removeEventListener) mql.removeEventListener('change', onChange);
+      else mql.removeListener(onChange);
+    };
+  }, []);
+
+  // Show "PC recommended" modal when entering certain screens on mobile.
+  useEffect(() => {
+    if (!isMobileScreen) return;
+    if (!currentView) return;
+    if (!PC_RECOMMEND_VIEWS[currentView]) return;
+    if (typeof window === 'undefined') return;
+    const key = `pc-recommend-shown:${currentView}`;
+    try {
+      if (window.sessionStorage.getItem(key) === '1') return;
+      window.sessionStorage.setItem(key, '1');
+    } catch {
+      // ignore storage errors
+    }
+    setPcRecommendModalView(currentView);
+  }, [currentView, isMobileScreen]);
+
+  // If auth init gets stuck for some reason, don't trap the UI on Loading forever.
+  useEffect(() => {
+    if (!authLoading) {
+      setAuthStuckFallback(false);
+      return;
+    }
+    const t = setTimeout(() => setAuthStuckFallback(true), 3500);
+    return () => clearTimeout(t);
+  }, [authLoading]);
+
+  // Initial data load should run only after auth is resolved and user exists.
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) return;
     loadRecipes();
     loadTrashCount();
     loadRecentHistory();
-    loadTrashCount();
-    loadRecentHistory();
-  }, []);
+  }, [authLoading, user?.id]);
+
+  // Admin helper: load all profiles so we can show "which user's recipe" in UI.
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user || user.role !== 'admin') {
+      setProfilesById({});
+      setProfilesByDisplayId({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await userService.fetchAllProfiles();
+        if (cancelled) return;
+        const byId = {};
+        const byDisplay = {};
+        for (const p of list || []) {
+          if (p?.id) byId[String(p.id)] = p;
+          if (p?.display_id) byDisplay[String(p.display_id)] = p;
+        }
+        setProfilesById(byId);
+        setProfilesByDisplayId(byDisplay);
+      } catch (e) {
+        console.warn('Failed to load profiles for admin owner labels', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authLoading, user?.id, user?.role]);
+
+  const getRecipeOwnerLabel = (recipe) => {
+    const tags = recipe?.tags || [];
+    const ownerTag = tags.find(t => t && t.startsWith('owner:'));
+    if (!ownerTag) return '共有/旧データ';
+    const raw = String(ownerTag.slice('owner:'.length));
+    const p = profilesById[raw] || profilesByDisplayId[raw] || null;
+    if (p) return p.display_id || p.email || raw;
+    return raw.length > 12 ? `${raw.slice(0, 8)}…` : raw;
+  };
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
@@ -185,18 +286,18 @@ function AppContent() {
 
   const isDragEnabled = selectedTag === 'すべて' && !searchQuery.trim() && currentView === 'list';
 
-  const handleSelectRecipe = (recipe) => {
+  const handleSelectRecipe = (recipe, extraParams = {}) => {
     // Navigate to detail view
-    setSearchParams({ view: 'detail', id: recipe.id });
+    setSearchParams({ view: 'detail', id: recipe.id, ...extraParams });
   };
 
   const handleDeleteRecipe = async (recipe, isRestore = false) => {
     try {
       // Protection: master recipe check
-      if (recipe.tags && user.id !== 'yoshito' && user.id !== 'admin') {
+      if (recipe.tags && user.role !== 'admin' && user.displayId !== 'yoshito') {
         const isMaster = recipe.tags.some(t => t === 'owner:yoshito');
         if (isMaster) {
-          alert("マスターレシピは削除できません。");
+          toast.warning('マスターレシピは削除できません');
           return;
         }
       }
@@ -211,7 +312,7 @@ function AppContent() {
           setSearchParams({ view: 'trash' });
           loadDeletedRecipes();
         }
-        alert("レシピを復元しました。");
+        toast.success('レシピを復元しました');
       } else {
         await recipeService.deleteRecipe(recipe.id);
         setRecipes(recipes.filter(r => r.id !== recipe.id));
@@ -220,7 +321,7 @@ function AppContent() {
       }
     } catch (error) {
       console.error("Failed to delete/restore recipe:", error);
-      alert("操作に失敗しました。");
+      toast.error('操作に失敗しました');
     } finally {
       loadTrashCount();
     }
@@ -231,12 +332,12 @@ function AppContent() {
       await recipeService.hardDeleteRecipe(recipe.id);
       setRecipes(recipes.filter(r => r.id !== recipe.id));
       setSearchParams({ view: 'trash' });
-      alert("レシピを完全に削除しました。");
+      toast.success('レシピを完全に削除しました');
       loadDeletedRecipes(); // Reload list to reflect changes
       loadTrashCount(); // Update count
     } catch (error) {
       console.error("Failed to hard delete recipe:", error);
-      alert("完全に削除することに失敗しました。");
+      toast.error('完全に削除することに失敗しました');
     }
   };
 
@@ -270,9 +371,11 @@ function AppContent() {
 
       // Protection: Copy-on-Write for Shared Recipes
       // If user is not the owner (and not admin), force Create mode (Duplicate)
-      if (isEdit && user.id !== 'admin') {
+      if (isEdit && user.role !== 'admin') {
         const ownerTag = recipe.tags?.find(t => t.startsWith('owner:'));
-        const isOwner = ownerTag === `owner:${user.id}`;
+        const isOwner =
+          ownerTag === `owner:${user.id}` ||
+          (user.displayId && ownerTag === `owner:${user.displayId}`);
 
         // If it has an owner tag and I am NOT the owner, I cannot overwrite it.
         // stricter: If I am NOT the confirmed owner, FORCE copy. (Protects legacy/admin recipes without tags)
@@ -309,7 +412,7 @@ function AppContent() {
 
     } catch (error) {
       console.error("Failed to save recipe:", error);
-      alert(`保存に失敗しました。\nエラー: ${error.message || error.error_description || JSON.stringify(error)}`);
+      toast.error(`保存に失敗しました\nエラー: ${error.message || error.error_description || JSON.stringify(error)}`);
     }
   };
 
@@ -405,7 +508,7 @@ function AppContent() {
       setLoading(true);
       if (currentView === 'trash') {
         await Promise.all(Array.from(selectedRecipeIds).map(id => recipeService.hardDeleteRecipe(id)));
-        fetchTrash();
+        loadDeletedRecipes();
       } else {
         await Promise.all(Array.from(selectedRecipeIds).map(id => recipeService.deleteRecipe(id)));
         setRecipes(recipes.filter(r => !selectedRecipeIds.has(r.id)));
@@ -413,12 +516,12 @@ function AppContent() {
       }
       setSelectedRecipeIds(new Set());
       setIsSelectMode(false);
-      alert("削除しました。");
+      toast.success('削除しました');
 
     } catch (error) {
       console.error("Bulk delete failed", error);
-      alert("一部の削除に失敗した可能性があります。");
-      if (currentView === 'trash') fetchTrash();
+      toast.warning('一部の削除に失敗した可能性があります');
+      if (currentView === 'trash') loadDeletedRecipes();
       else loadRecipes();
     } finally {
       setLoading(false);
@@ -437,12 +540,12 @@ function AppContent() {
       loadTrashCount();
       setIsSelectMode(false);
       setSelectedRecipeIds(new Set());
-      alert("復元しました。");
-      fetchTrash();
+      toast.success('復元しました');
+      loadDeletedRecipes();
     } catch (error) {
       console.error("Bulk restore failed", error);
-      alert("一部の復元に失敗した可能性があります。");
-      fetchTrash();
+      toast.warning('一部の復元に失敗した可能性があります');
+      loadDeletedRecipes();
     } finally {
       setLoading(false);
     }
@@ -462,14 +565,17 @@ function AppContent() {
 
   useEffect(() => {
     if (currentView === 'trash') {
-      fetchTrash();
+      loadDeletedRecipes();
     } else if (user) { // Only load if user exists
       loadRecipes();
     }
   }, [currentView, user]);
 
-  if (authLoading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading...</div>;
+  if (authLoading && !authStuckFallback) {
+    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading...</div>;
+  }
   if (!user) return <LoginPage />;
+  if (isPasswordRecovery) return <PasswordResetPage />;
 
   return (
 
@@ -496,6 +602,42 @@ function AppContent() {
           </Card>
         </div>
       )}
+      {/* PC recommended warning on mobile for certain screens */}
+      <Modal
+        isOpen={!!pcRecommendModalView}
+        onClose={() => setPcRecommendModalView(null)}
+        title="PCでの利用を推奨します"
+        size="small"
+      >
+        <div style={{ color: '#333', lineHeight: 1.6 }}>
+          <p style={{ marginTop: 0 }}>
+            {PC_RECOMMEND_VIEWS[pcRecommendModalView] ? (
+              <>「<strong>{PC_RECOMMEND_VIEWS[pcRecommendModalView]}</strong>」はスマホだと表示が崩れる/操作しづらい場合があります。</>
+            ) : (
+              <>この画面はスマホだと表示が崩れる/操作しづらい場合があります。</>
+            )}
+          </p>
+          <p style={{ marginBottom: 0 }}>
+            可能なら<strong>PCで開いて</strong>操作してください。
+          </p>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '18px' }}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setPcRecommendModalView(null);
+                setSearchParams({ view: 'list' });
+              }}
+            >
+              一覧に戻る
+            </Button>
+            <Button variant="primary" onClick={() => setPcRecommendModalView(null)}>
+              OK
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {(currentView === 'list' || currentView === 'trash') && (
         <>
           <div className="container-header">
@@ -554,10 +696,57 @@ function AppContent() {
                     onClick={() => setIsMenuOpen(!isMenuOpen)}
                     aria-label="メニュー"
                   >
-                    {isMenuOpen ? '✕' : '☰'}
+                    ☰
                   </button>
 
                   <div className={`secondary-actions ${isMenuOpen ? 'open' : ''}`}>
+                    <button
+                      type="button"
+                      className="slide-menu-close"
+                      onClick={() => setIsMenuOpen(false)}
+                      aria-label="メニューを閉じる"
+                    >
+                      ✕
+                    </button>
+
+                    {/* Logged-in user indicator */}
+                    <div
+                      className="slide-menu-user"
+                      style={{
+                        marginBottom: '1rem',
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(255,255,255,0.25)',
+                        background: 'rgba(0,0,0,0.15)',
+                        color: 'white',
+                        fontSize: '0.9rem',
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                        <div style={{ fontWeight: 'bold' }}>
+                          ログイン: {user?.displayId || user?.email || (user?.id ? `${String(user.id).slice(0, 8)}…` : '---')}
+                        </div>
+                        {user?.role === 'admin' && (
+                          <span style={{
+                            fontSize: '0.75rem',
+                            padding: '2px 8px',
+                            borderRadius: '999px',
+                            background: 'rgba(255,255,255,0.2)',
+                            border: '1px solid rgba(255,255,255,0.25)',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            管理者
+                          </span>
+                        )}
+                      </div>
+                      {user?.email && user?.displayId && (
+                        <div style={{ opacity: 0.85, fontSize: '0.8rem', marginTop: '4px', wordBreak: 'break-all' }}>
+                          {user.email}
+                        </div>
+                      )}
+                    </div>
+
                     {currentView === 'list' && (
                       <>
                         <Button variant="secondary" onClick={() => { setImportMode('url'); setIsMenuOpen(false); }}>
@@ -566,18 +755,27 @@ function AppContent() {
                         <Button variant="secondary" onClick={() => { setImportMode('image'); setIsMenuOpen(false); }}>
                           <span style={{ marginRight: '8px' }}>📷</span> 画像から追加
                         </Button>
+                        <div className="menu-divider"></div>
+                        <Button variant="secondary" onClick={() => { setSearchParams({ view: 'inventory' }); setIsMenuOpen(false); }}>
+                          <span style={{ marginRight: '8px' }}>📦</span> 在庫管理
+                        </Button>
+                        <Button variant="secondary" onClick={() => { setSearchParams({ view: 'planner' }); setIsMenuOpen(false); }}>
+                          <span style={{ marginRight: '8px' }}>📅</span> 仕込みカレンダー
+                        </Button>
+                        <div className="menu-divider"></div>
                         <Button variant="secondary" onClick={() => { setSearchParams({ view: 'data' }); setIsMenuOpen(false); }}>
                           <span style={{ marginRight: '8px' }}>📊</span> データ管理
                         </Button>
-                        <Button variant="secondary" onClick={() => { setSearchParams({ view: 'levain-guide' }); setIsMenuOpen(false); }}>
-                          <span style={{ marginRight: '8px' }}>📖</span> ルヴァンガイド
-                        </Button>
 
-                        {user?.id === 'admin' && (
+                        {user?.role === 'admin' && (
                           <Button variant="secondary" onClick={() => { setSearchParams({ view: 'users' }); setIsMenuOpen(false); }}>
                             <span style={{ marginRight: '8px' }}>👥</span> ユーザー管理
                           </Button>
                         )}
+                        <div className="menu-divider"></div>
+                        <Button variant="secondary" onClick={() => { setSearchParams({ view: 'order-list' }); setIsMenuOpen(false); }}>
+                          <span style={{ marginRight: '8px' }}>🛒</span> 発注リスト
+                        </Button>
 
                         <div className="menu-divider"></div>
                       </>
@@ -723,6 +921,8 @@ function AppContent() {
                         onToggleSelection={handleToggleSelection}
                         disableDrag={!isDragEnabled}
                         displayMode={displayMode}
+                        showOwner={user?.role === 'admin'}
+                        ownerLabelFn={getRecipeOwnerLabel}
                       />
                     </DndContext>
                   ) : (
@@ -734,6 +934,8 @@ function AppContent() {
                       onToggleSelection={handleToggleSelection}
                       disableDrag={true} // Disable drag for trash/filtered views if accidentally here
                       displayMode={displayMode}
+                      showOwner={user?.role === 'admin'}
+                      ownerLabelFn={getRecipeOwnerLabel}
                     />
                   )}
                 </div>
@@ -746,9 +948,21 @@ function AppContent() {
       {currentView === 'detail' && selectedRecipe && (
         <RecipeDetail
           recipe={selectedRecipe}
+          ownerLabel={user?.role === 'admin' ? getRecipeOwnerLabel(selectedRecipe) : undefined}
           isDeleted={!!selectedRecipe.deletedAt}
-          onBack={() => selectedRecipe.deletedAt ? handleSwitchToTrash() : handleSwitchToMain()}
-          onEdit={() => setSearchParams({ view: 'edit', id: selectedRecipe.id })}
+          onBack={() => {
+            const from = searchParams.get('from');
+            if (from === 'planner') {
+              setSearchParams({ view: 'planner' });
+            } else if (selectedRecipe.deletedAt) {
+              handleSwitchToTrash();
+            } else {
+              handleSwitchToMain();
+            }
+          }}
+          backLabel={searchParams.get('from') === 'planner' ? '← カレンダーに戻る' : undefined}
+          onList={searchParams.get('from') === 'planner' ? handleSwitchToMain : undefined}
+          onEdit={() => setSearchParams({ view: 'edit', id: selectedRecipe.id, from: searchParams.get('from') })}
           onDelete={handleDeleteRecipe}
           onView={addToHistory}
           onHardDelete={handleHardDeleteRecipe}
@@ -785,7 +999,7 @@ function AppContent() {
         />
       )}
 
-      {currentView === 'data' && (
+      {(currentView === 'data' || currentView === 'data-management') && (
         <DataManagement onBack={() => setSearchParams({ view: 'list' })} />
       )}
 
@@ -794,8 +1008,23 @@ function AppContent() {
         <LevainGuide onBack={() => setSearchParams({ view: 'list' })} />
       )}
 
-      {currentView === 'users' && user?.id === 'admin' && (
+      {currentView === 'users' && user?.role === 'admin' && (
         <UserManagement onBack={() => setSearchParams({ view: 'list' })} />
+      )}
+
+      {currentView === 'inventory' && (
+        <Inventory onBack={() => setSearchParams({ view: 'list' })} />
+      )}
+
+      {currentView === 'planner' && (
+        <Planner
+          onBack={() => setSearchParams({ view: 'list' })}
+          onSelectRecipe={(r) => handleSelectRecipe(r, { from: 'planner' })}
+        />
+      )}
+
+      {currentView === 'order-list' && (
+        <OrderList onBack={() => setSearchParams({ view: 'list' })} />
       )}
     </Layout>
   );
@@ -803,9 +1032,11 @@ function AppContent() {
 
 function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ToastProvider>
   );
 }
 

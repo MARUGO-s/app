@@ -1,96 +1,66 @@
 import { supabase } from '../supabase';
 
 export const userService = {
-    async fetchAllUsers() {
-        const { data: users, error } = await supabase
-            .from('app_users')
-            .select('*')
+    async fetchAllProfiles() {
+        // Prefer selecting email if schema supports it; fallback for older DBs.
+        const res1 = await supabase
+            .from('profiles')
+            .select('id, display_id, email, role, show_master_recipes, created_at, updated_at')
             .order('created_at', { ascending: false });
 
-        if (error) throw error;
+        if (!res1.error) return res1.data || [];
 
-        // Use RPC to get accurate counts (bypass RLS)
-        const { data: counts, error: countError } = await supabase
-            .rpc('get_user_recipe_counts');
-
-        if (countError) {
-            console.error("Failed to fetch counts via RPC", countError);
-            return users.map(u => ({ ...u, recipeCount: 0 }));
+        if (String(res1.error.message || '').toLowerCase().includes('email')) {
+            const res2 = await supabase
+                .from('profiles')
+                .select('id, display_id, role, show_master_recipes, created_at, updated_at')
+                .order('created_at', { ascending: false });
+            if (res2.error) throw res2.error;
+            return res2.data || [];
         }
 
-        // Map counts to users
-        return users.map(user => {
-            const match = counts.find(c => c.user_id === user.id);
-            return {
-                ...user,
-                recipeCount: match ? match.count : 0
-            };
-        });
+        throw res1.error;
     },
 
-    async deleteUser(userId) {
-        const { error } = await supabase
-            .from('app_users')
-            .delete()
-            .eq('id', userId);
-
-        if (error) throw error;
-        return true;
-    },
-
-    async updateUser(userId, updates) {
-        const { data, error } = await supabase
-            .from('app_users')
+    async updateProfile(profileId, updates) {
+        const res1 = await supabase
+            .from('profiles')
             .update(updates)
-            .eq('id', userId)
-            // Select id and preference
-            .select('id, show_master_recipes')
+            .eq('id', profileId)
+            .select('id, display_id, email, role, show_master_recipes, created_at, updated_at')
             .single();
 
+        if (!res1.error) return res1.data;
+
+        if (String(res1.error.message || '').toLowerCase().includes('email')) {
+            const res2 = await supabase
+                .from('profiles')
+                .update(updates)
+                .eq('id', profileId)
+                .select('id, display_id, role, show_master_recipes, created_at, updated_at')
+                .single();
+            if (res2.error) throw res2.error;
+            return res2.data;
+        }
+
+        throw res1.error;
+    }
+    ,
+
+    async adminResetPassword(userId, newPassword) {
+        const { data, error } = await supabase.functions.invoke('admin-reset-password', {
+            body: { userId, newPassword }
+        });
         if (error) throw error;
+        if (data?.error) throw new Error(data.error);
         return data;
     },
 
-    // Password Recovery Methods
-    async getSecurityQuestion(userId) {
-        const { data, error } = await supabase
-            .from('app_users')
-            .select('secret_question')
-            .eq('id', userId)
-            .single();
-
-        if (error || !data) throw new Error("ユーザーが見つかりません");
-        return data.secret_question;
-    },
-
-    async verifySecurityAnswer(userId, answer) {
-        const { data, error } = await supabase
-            .from('app_users')
-            .select('secret_answer')
-            .eq('id', userId)
-            .single();
-
-        if (error || !data) throw new Error("ユーザーが見つかりません");
-        // Simple case-insensitive check could be nice, but strict for now
-        return data.secret_answer === answer;
-    },
-
-    async resetPassword(userId, newPassword) {
-        const { error } = await supabase
-            .from('app_users')
-            .update({ password: newPassword })
-            .eq('id', userId);
-
+    async sendPasswordResetEmail(email) {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.origin
+        });
         if (error) throw error;
         return true;
-    },
-
-    async updateLastLogin(userId) {
-        const { error } = await supabase
-            .from('app_users')
-            .update({ last_login_at: new Date() })
-            .eq('id', userId);
-
-        if (error) console.error("Failed to update last login", error);
     }
 };

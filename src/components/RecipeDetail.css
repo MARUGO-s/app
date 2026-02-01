@@ -39,6 +39,9 @@
         width: auto;
         overflow-x: visible;
         padding-bottom: 0;
+        flex-wrap: wrap;
+        /* Allow wrapping */
+        justify-content: flex-end;
     }
 }
 
@@ -503,6 +506,11 @@
         color: #888;
     }
 
+    .step-text {
+        font-size: 1rem;
+        line-height: 1.5;
+    }
+
     .step-card:hover {
         border-color: hsl(var(--color-primary));
     }
@@ -537,5 +545,236 @@
 
     .print-only {
         display: none;
+    }
+}
+
+/* レシピ印刷プレビューモーダル用スタイル */
+.print-preview-recipe {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.preview-header {
+    text-align: center;
+    border-bottom: 2px solid #e5e7eb;
+    padding-bottom: 16px;
+}
+
+.preview-header h2 {
+    margin: 0 0 12px 0;
+    font-size: 1.75rem;
+    color: #111827;
+}
+
+.preview-image {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 8px;
+    object-fit: cover;
+}
+
+.preview-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    background: #f9fafb;
+    padding: 16px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+}
+
+.preview-meta strong {
+    color: #374151;
+    margin-right: 4px;
+}
+
+.preview-description {
+    padding: 12px 16px;
+    background: #f3f4f6;
+    border-left: 4px solid hsl(var(--color-primary));
+    border-radius: 4px;
+}
+
+.preview-description p {
+    margin: 0;
+    color: #4b5563;
+    line-height: 1.6;
+}
+
+.preview-section {
+    margin-top: 8px;
+}
+
+.preview-section h3 {
+    font-size: 1.25rem;
+    margin: 0 0 16px 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e5e7eb;
+    color: #111827;
+}
+
+.preview-section h4 {
+    font-size: 1.1rem;
+    margin: 16px 0 12px 0;
+    color: #374151;
+}
+
+/* パンレシピ用スタイル */
+.preview-ingredients-bread {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.bread-group {
+    background: #f9fafb;
+    padding: 16px;
+    border-radius: 8px;
+}
+
+.preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+}
+
+.preview-table th,
+.preview-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e5e7eb;
+    text-align: left;
+}
+
+.preview-table th {
+    background: #f3f4f6;
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.9rem;
+}
+
+.preview-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* 通常レシピの材料スタイル */
+.preview-ingredients-normal {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.ingredient-group h4 {
+    margin: 0 0 8px 0;
+    color: #374151;
+    font-size: 1rem;
+}
+
+.ingredient-group ul,
+.preview-ingredients-normal>ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+}
+
+.ingredient-group li,
+.preview-ingredients-normal>ul>li {
+    padding: 8px 12px;
+    background: #f9fafb;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    color: #1f2937;
+}
+
+/* 作り方のスタイル */
+.preview-steps {
+    counter-reset: step-counter;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.preview-steps li {
+    position: relative;
+    padding-left: 48px;
+    line-height: 1.6;
+    color: #374151;
+    font-size: 0.95rem;
+}
+
+.preview-steps li::before {
+    counter-increment: step-counter;
+    content: counter(step-counter);
+    position: absolute;
+    left: 0;
+    top: 0;
+    background: hsl(var(--color-primary));
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 600px) {
+    .preview-header h2 {
+        font-size: 1.5rem;
+    }
+
+    .preview-meta {
+        grid-template-columns: 1fr;
+    }
+
+    .ingredient-group ul,
+    .preview-ingredients-normal>ul {
+        grid-template-columns: 1fr;
+    }
+
+    .preview-steps li {
+        padding-left: 40px;
+        font-size: 0.9rem;
+    }
+
+    .preview-steps li::before {
+        width: 28px;
+        height: 28px;
+        font-size: 0.85rem;
+    }
+}
+
+/* 印刷時のスタイル（モーダル内からの印刷用） */
+@media print {
+
+    .modal-overlay,
+    .modal-header,
+    .modal-actions {
+        display: none !important;
+    }
+
+    .modal-content {
+        box-shadow: none;
+        max-height: none;
+        border-radius: 0;
+    }
+
+    .print-preview-recipe {
+        padding: 0;
+    }
+
+    .preview-steps li::before {
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
     }
 }

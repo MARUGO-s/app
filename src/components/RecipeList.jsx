@@ -11,7 +11,7 @@ const formatDate = (dateString) => {
     return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
 };
 
-const SortableRecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggleSelection, disableDrag }) => {
+const SortableRecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggleSelection, disableDrag, showOwner, ownerLabelFn }) => {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: recipe.id,
         disabled: disableDrag
@@ -75,6 +75,9 @@ const SortableRecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, 
                     <p className="recipe-desc">{recipe.description}</p>
                     <div className="recipe-meta">
                         {recipe.storeName && <span>🏢 {recipe.storeName}</span>}
+                        {showOwner && typeof ownerLabelFn === 'function' && (
+                            <span className="recipe-owner">👤 {ownerLabelFn(recipe)}</span>
+                        )}
                         <div className="recipe-dates">
                             <span className="recipe-date">📅 登録: {formatDate(recipe.created_at)}</span>
                             {recipe.updated_at && (
@@ -106,7 +109,7 @@ const isDecoration = (recipe) => {
     return /飾り|デコ|Decor/i.test(recipe.category || '') || (recipe.tags && recipe.tags.some(t => /飾り|デコ|Decor/i.test(t)));
 };
 
-export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds, onToggleSelection, disableDrag, displayMode = 'normal' }) => {
+export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds, onToggleSelection, disableDrag, displayMode = 'normal', showOwner = false, ownerLabelFn }) => {
     const [expandedSections, setExpandedSections] = useState({});
 
     const toggleSection = (sectionKey) => {
@@ -222,6 +225,8 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                                     onSelectRecipe={onSelectRecipe}
                                     onToggleSelection={onToggleSelection}
                                     disableDrag={disableDrag}
+                                    showOwner={showOwner}
+                                    ownerLabelFn={ownerLabelFn}
                                 />
                             );
                         })}
