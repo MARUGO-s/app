@@ -431,6 +431,27 @@
   margin-top: 0.25rem;
 }
 
+.pc-recommend-note {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.pc-recommend-note__title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.pc-recommend-note__items {
+  font-size: 0.8rem;
+  opacity: 0.9;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
 .secondary-actions button {
   justify-content: flex-start !important;
   text-align: left;

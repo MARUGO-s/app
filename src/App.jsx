@@ -608,7 +608,7 @@ function AppContent() {
       <Modal
         isOpen={!!pcRecommendModalView}
         onClose={() => setPcRecommendModalView(null)}
-        title="PCでの利用を推奨します"
+        title="PCかタブレットでの利用を推奨します"
         size="small"
       >
         <div style={{ color: '#333', lineHeight: 1.6 }}>
@@ -620,7 +620,7 @@ function AppContent() {
             )}
           </p>
           <p style={{ marginBottom: 0 }}>
-            可能なら<strong>PCで開いて</strong>操作してください。
+            可能なら<strong>PCかタブレットで開いて</strong>操作してください。
           </p>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '18px' }}>
@@ -758,6 +758,14 @@ function AppContent() {
                           <span style={{ marginRight: '8px' }}>📷</span> 画像から追加
                         </Button>
                         <div className="menu-divider"></div>
+
+                        <div className="pc-recommend-note">
+                          <div className="pc-recommend-note__title">以下の操作はPCかタブレット推奨</div>
+                          <div className="pc-recommend-note__items">
+                            在庫管理 / 仕込みカレンダー / データ管理 / ユーザー管理 / 発注リスト
+                          </div>
+                        </div>
+
                         <Button variant="secondary" onClick={() => { setSearchParams({ view: 'inventory' }); setIsMenuOpen(false); }}>
                           <span style={{ marginRight: '8px' }}>📦</span> 在庫管理
                         </Button>
