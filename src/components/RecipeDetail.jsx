@@ -1,10 +1,12 @@
 import React from 'react';
 import { Button } from './Button';
 import { Card } from './Card';
+import { Modal } from './Modal';
 import { translationService } from '../services/translationService';
 import { recipeService } from '../services/recipeService';
 import { useAuth } from '../contexts/AuthContext';
 import { SUPPORTED_LANGUAGES } from '../constants';
+import { CookingMode } from './CookingMode';
 import './RecipeDetail.css';
 import QRCode from "react-qr-code";
 
@@ -14,17 +16,19 @@ const formatDate = (dateString) => {
     return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
 };
 
-export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, isDeleted, onView, onDuplicate }) => {
+export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onHardDelete, isDeleted, onView, onDuplicate, backLabel, onList }) => {
     const { user } = useAuth();
     const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
     const [showDuplicateConfirm, setShowDuplicateConfirm] = React.useState(false);
     const [showHardDeleteConfirm, setShowHardDeleteConfirm] = React.useState(false);
+    const [isCookingMode, setIsCookingMode] = React.useState(false);
     const [completedSteps, setCompletedSteps] = React.useState(new Set());
 
     const [translationCache, setTranslationCache] = React.useState({}); // {[langCode]: recipeObj }
     const [currentLang, setCurrentLang] = React.useState('ORIGINAL'); // 'ORIGINAL' is source text
     const [isTranslating, setIsTranslating] = React.useState(false);
     const [showOriginal, setShowOriginal] = React.useState(true); // Default to showing original
+    const [showPrintModal, setShowPrintModal] = React.useState(false);
 
     // Scaling State
     const [targetTotal, setTargetTotal] = React.useState(''); // For Bread
@@ -61,7 +65,10 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
     const displayRecipe = currentLang === 'ORIGINAL' ? recipe : (translationCache[currentLang] || recipe);
 
     const [isPublic, setIsPublic] = React.useState(recipe.tags?.includes('public') || false);
-    const isOwner = user?.id === 'admin' || (recipe.tags && recipe.tags.includes(`owner:${user?.id}`));
+    const isOwner =
+        user?.role === 'admin' ||
+        (recipe.tags && recipe.tags.includes(`owner:${user?.id}`)) ||
+        (user?.displayId && recipe.tags && recipe.tags.includes(`owner:${user.displayId}`));
     // If no owner tag, assume public/legacy, but for safety treat as owner if no tag present? 
     // Actually, logic in service says "No owner tag -> Visible". So let's say "Can Edit" if (No Owner OR Owner is Me OR Admin).
     const hasOwnerTag = recipe.tags && recipe.tags.some(t => t.startsWith('owner:'));
@@ -245,6 +252,7 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
     };
 
     const onTouchEnd = () => {
+        if (isCookingMode) return;
         if (!touchStartRef.current || !touchEndRef.current) return;
         const distance = touchStartRef.current - touchEndRef.current;
         const isLeftEdge = touchStartRef.current < 50;
@@ -351,7 +359,22 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
 
     // Safety check for array rendering
     const ingredients = displayRecipe.ingredients || [];
-    const steps = displayRecipe.steps || [];
+    // Normalization: Check if steps are hidden in ingredient groups (common in this app's data)
+    let normalizedSteps = displayRecipe.steps || [];
+
+    // If no standard steps, look for an ingredient group named "作り方" or similar
+    if (!normalizedSteps.length && displayRecipe.ingredientGroups) {
+        const stepGroup = displayRecipe.ingredientGroups.find(g => ['作り方', 'Steps', 'Method', '手順'].includes(g.name));
+        if (stepGroup) {
+            // Found a group that should be steps
+            const stepItems = ingredients.filter(ing => ing.groupId === stepGroup.id);
+            // Convert to simple strings or objects as expected by renderer
+            // Ingredient items usually have 'name' property
+            normalizedSteps = stepItems.map(item => typeof item === 'string' ? item : (item.name || item.text || ""));
+        }
+    }
+
+    const steps = normalizedSteps;
 
     return (
         <div
@@ -360,6 +383,13 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
         >
+            {isCookingMode && (
+                <CookingMode
+                    recipe={displayRecipe}
+                    steps={normalizedSteps}
+                    onClose={() => setIsCookingMode(false)}
+                />
+            )}
             {/* ... (modals kept same) */}
             {showDuplicateConfirm && (
                 <div className="modal-overlay fade-in" style={{
@@ -421,12 +451,17 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
             )}
 
             <div className="recipe-detail__header">
-                <Button variant="secondary" onClick={onBack} size="sm">← 戻る</Button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <Button variant="secondary" onClick={onBack} size="sm">{backLabel || "← 戻る"}</Button>
+                    {onList && (
+                        <Button variant="secondary" onClick={onList} size="sm">レシピ一覧</Button>
+                    )}
+                </div>
                 {!isDeleted && (
                     <div className="recipe-detail__actions">
 
                         {/* Public Toggle (Owner Only) */}
-                        {canEdit && (user?.id === 'yoshito' || user?.id === 'admin') && (
+                        {canEdit && (user?.displayId === 'yoshito' || user?.role === 'admin') && (
                             <div style={{ marginRight: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <label className="switch" style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                                     <input
@@ -480,15 +515,7 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                 原文表示
                             </label>
                         )}
-                        <Button variant="secondary" size="sm" onClick={() => {
-                            // Check for iOS Standalone mode (Home Screen app)
-                            const isIOSStandalone = window.navigator.standalone === true;
-                            if (isIOSStandalone) {
-                                alert("iPhoneのホーム画面アプリモードでは印刷がサポートされていません。\nSafariで開き直してから印刷してください。");
-                                return;
-                            }
-                            window.print();
-                        }}>🖨️ 印刷 / PDF</Button>
+                        <Button variant="secondary" size="sm" onClick={() => setShowPrintModal(true)}>🖨️ プレビュー</Button>
                         <Button variant="secondary" size="sm" onClick={handleDuplicateClick}>複製</Button>
 
                         {canEdit && (
@@ -497,7 +524,8 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                 <Button variant="danger" size="sm" onClick={handleDeleteClick} style={{ marginLeft: '0.5rem' }}>削除</Button>
                             </>
                         )}
-                        <Button variant="primary" size="sm">クッキングモード</Button>
+
+                        <Button variant="primary" size="sm" onClick={() => setIsCookingMode(true)}>クッキングモード</Button>
                     </div>
                 )}
                 {isDeleted && (
@@ -521,6 +549,11 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
             <div className="recipe-detail__title-card glass-panel">
                 <h1>{renderText(displayRecipe.title, recipe.title)}</h1>
                 <p className="recipe-detail__desc">{renderText(displayRecipe.description, recipe.description, true)}</p>
+                {user?.role === 'admin' && ownerLabel && (
+                    <div style={{ marginTop: '0.35rem', color: '#666', fontSize: '0.9rem' }}>
+                        👤 作成者: {ownerLabel}
+                    </div>
+                )}
                 <div className="recipe-detail__meta">
                     {displayRecipe.course && (
                         <div className="meta-item">
@@ -881,6 +914,9 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                                                 const groupIngredients = ingredients.filter(ing => ing.groupId === group.id);
                                                 if (groupIngredients.length === 0) return null;
 
+                                                // Prevent Steps from being rendered as ingredients
+                                                if (['作り方', 'Steps', 'Method', '手順'].includes(group.name)) return null;
+
                                                 return (
                                                     <div key={group.id} style={{ marginBottom: '1.5rem' }}>
                                                         <h3 style={{
@@ -1125,6 +1161,152 @@ export const RecipeDetail = ({ recipe, onBack, onEdit, onDelete, onHardDelete, i
                     </section>
                 </div>
             </div >
+
+            {/* 印刷プレビューモーダル */}
+            <Modal
+                isOpen={showPrintModal}
+                onClose={() => setShowPrintModal(false)}
+                title="🖨️ レシピプレビュー"
+                size="large"
+            >
+                <div className="print-preview-recipe">
+                    {/* ヘッダー */}
+                    <div className="preview-header">
+                        <h2>{displayRecipe.title}</h2>
+                        {displayRecipe.image && (
+                            <img
+                                src={displayRecipe.image}
+                                alt={displayRecipe.title}
+                                className="preview-image"
+                            />
+                        )}
+                    </div>
+
+                    {/* メタ情報 */}
+                    <div className="preview-meta">
+                        {displayRecipe.course && <div><strong>コース:</strong> {displayRecipe.course}</div>}
+                        {displayRecipe.category && <div><strong>カテゴリー:</strong> {displayRecipe.category}</div>}
+                        {displayRecipe.storeName && <div><strong>店舗名:</strong> {displayRecipe.storeName}</div>}
+                        {displayRecipe.servings && <div><strong>分量:</strong> {displayRecipe.servings}人分</div>}
+                    </div>
+
+                    {displayRecipe.description && (
+                        <div className="preview-description">
+                            <p>{displayRecipe.description}</p>
+                        </div>
+                    )}
+
+                    {/* 材料 */}
+                    <div className="preview-section">
+                        <h3>材料</h3>
+                        {displayRecipe.type === 'bread' ? (
+                            <div className="preview-ingredients-bread">
+                                {/* パンレシピの場合 */}
+                                <div className="bread-group">
+                                    <h4>粉グループ</h4>
+                                    <table className="preview-table">
+                                        <thead>
+                                            <tr>
+                                                <th>材料名</th>
+                                                <th style={{ textAlign: 'right' }}>分量</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {(displayRecipe.flours || []).map((item, i) => (
+                                                <tr key={i}>
+                                                    <td>{item.name}</td>
+                                                    <td style={{ textAlign: 'right' }}>{item.quantity}g</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="bread-group">
+                                    <h4>その他材料</h4>
+                                    <table className="preview-table">
+                                        <thead>
+                                            <tr>
+                                                <th>材料名</th>
+                                                <th style={{ textAlign: 'right' }}>分量</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {(displayRecipe.breadIngredients || []).map((item, i) => (
+                                                <tr key={i}>
+                                                    <td>{item.name}</td>
+                                                    <td style={{ textAlign: 'right' }}>{item.quantity}g</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="preview-ingredients-normal">
+                                {(() => {
+                                    const groups = displayRecipe.ingredientGroups && displayRecipe.ingredientGroups.length > 0
+                                        ? displayRecipe.ingredientGroups
+                                        : null;
+
+                                    if (groups) {
+                                        return groups.map((group) => {
+                                            const groupIngredients = ingredients.filter(ing => ing.groupId === group.id);
+                                            if (groupIngredients.length === 0) return null;
+                                            if (['作り方', 'Steps', 'Method', '手順'].includes(group.name)) return null;
+
+                                            return (
+                                                <div key={group.id} className="ingredient-group">
+                                                    <h4>{group.name}</h4>
+                                                    <ul>
+                                                        {groupIngredients.map((ing, i) => (
+                                                            <li key={i}>
+                                                                {ing.name} {ing.quantity && `${ing.quantity}${ing.unit || ''}`}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            );
+                                        });
+                                    } else {
+                                        return (
+                                            <ul>
+                                                {ingredients.map((ing, i) => (
+                                                    <li key={i}>
+                                                        {ing.name} {ing.quantity && `${ing.quantity}${ing.unit || ''}`}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        );
+                                    }
+                                })()}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 作り方 */}
+                    {steps.length > 0 && (
+                        <div className="preview-section">
+                            <h3>作り方</h3>
+                            <ol className="preview-steps">
+                                {steps.map((step, i) => {
+                                    const stepText = typeof step === 'object' ? step.text : step;
+                                    return <li key={i}>{stepText}</li>;
+                                })}
+                            </ol>
+                        </div>
+                    )}
+
+                    {/* アクションボタン */}
+                    <div className="modal-actions">
+                        <Button variant="primary" onClick={() => window.print()}>
+                            🖨️ 印刷する
+                        </Button>
+                        <Button variant="ghost" onClick={() => setShowPrintModal(false)}>
+                            閉じる
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
         </div >
     );
 };

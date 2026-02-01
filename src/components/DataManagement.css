@@ -26,6 +26,43 @@
     border-bottom: 1px solid #eee;
 }
 
+/* Tabs Styling */
+.tabs-container {
+    margin-bottom: 1rem;
+}
+
+.tabs {
+    display: flex;
+    gap: 8px;
+    border-bottom: 2px solid #eee;
+}
+
+.tab {
+    padding: 12px 20px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #ccc;
+    /* Updated for dark background */
+    transition: all 0.2s;
+    margin-bottom: -2px;
+}
+
+.tab:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.tab.active {
+    color: var(--color-primary, #D2691E);
+    border-bottom-color: var(--color-primary, #D2691E);
+    font-weight: 600;
+}
+
+
 .dashboard-content {
     display: grid;
     grid-template-columns: 1fr;
@@ -37,7 +74,8 @@
 
 @media (min-width: 750px) {
     .dashboard-content {
-        grid-template-columns: 320px 1fr 320px;
+        /* User requested: Others (Left), Data List (Right) */
+        grid-template-columns: 320px 1fr;
     }
 }
 
@@ -248,8 +286,22 @@
     color: #c92a2a;
 }
 
+
 .status-msg.info {
     background: #e7f5ff;
     color: #1864ab;
 }
 
+/* CSV Importer Styling */
+.csv-importer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+    min-height: 0;
+}

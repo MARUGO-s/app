@@ -1,91 +1,311 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase';
-import { userService } from '../services/userService';
 
 const AuthContext = createContext(null);
 
+const withTimeout = async (promise, ms, label) => {
+    let t = null;
+    try {
+        const timeoutPromise = new Promise((_, reject) => {
+            t = setTimeout(() => reject(new Error(`${label || 'operation'} timed out after ${ms}ms`)), ms);
+        });
+        return await Promise.race([promise, timeoutPromise]);
+    } finally {
+        if (t) clearTimeout(t);
+    }
+};
+
+const getEmailLocalPart = (email) => {
+    if (!email) return '';
+    const at = email.indexOf('@');
+    return at > 0 ? email.slice(0, at) : email;
+};
+
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
+    const [user, setUser] = useState(null); // { id, email, displayId, role, showMasterRecipes }
     const [loading, setLoading] = useState(true);
+    const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
-    useEffect(() => {
-        // Check for saved user in localStorage
-        const savedUser = localStorage.getItem('recipe_app_user');
-        if (savedUser) {
-            setUser(JSON.parse(savedUser));
+    const loadProfileAndSetUser = useCallback(async (sessionUser) => {
+        if (!sessionUser) {
+            setUser(null);
+            return;
         }
-        setLoading(false);
-    }, []);
 
-    const login = async (userId, password, rememberMe) => {
+        const uid = sessionUser.id;
+        const email = sessionUser.email || '';
+
+        // Load profile (app metadata)
+        let profile = null;
         try {
-            const { data, error } = await supabase
-                .from('app_users')
-                .select('id, password')
-                .eq('id', userId)
-                .single();
+            // Try selecting with email column (newer schema). If the column doesn't exist yet, retry without it.
+            let data = null;
+            let error = null;
+            const res1 = await withTimeout(
+                supabase
+                    .from('profiles')
+                    .select('id, display_id, role, show_master_recipes, email')
+                    .eq('id', uid)
+                    .single(),
+                8000,
+                'profiles.select(with_email)'
+            );
+            data = res1?.data ?? null;
+            error = res1?.error ?? null;
 
-            if (error || !data) {
-                // Determine if it's a "fetch" error or "not found"
-                // .single() returns error if 0 rows
-                throw new Error("ユーザーが見つかりません (ID違い)");
+            if (error && String(error.message || '').toLowerCase().includes('email')) {
+                const res2 = await withTimeout(
+                    supabase
+                        .from('profiles')
+                        .select('id, display_id, role, show_master_recipes')
+                        .eq('id', uid)
+                        .single(),
+                    8000,
+                    'profiles.select'
+                );
+                data = res2?.data ?? null;
+                error = res2?.error ?? null;
             }
 
-            if (data.password !== password) {
-                throw new Error("パスワードが間違っています");
-            }
+            if (error) {
+                // If profile is missing (first login after signUp confirm), try to create a minimal one
+                if (error.code === 'PGRST116') {
+                    const fallbackDisplayId = (sessionUser.user_metadata && sessionUser.user_metadata.display_id)
+                        ? String(sessionUser.user_metadata.display_id)
+                        : getEmailLocalPart(email) || uid.slice(0, 8);
 
-            if (data.password !== password) {
-                throw new Error("パスワードが間違っています");
-            }
+                    // Try insert with email, then fallback insert without email for older schema
+                    let created = null;
+                    let createError = null;
+                    const ins1 = await withTimeout(
+                        supabase
+                            .from('profiles')
+                            .insert([{
+                                id: uid,
+                                display_id: fallbackDisplayId,
+                                email: email || null,
+                                role: 'user',
+                                show_master_recipes: false
+                            }])
+                            .select('id, display_id, role, show_master_recipes, email')
+                            .single(),
+                        8000,
+                        'profiles.insert(with_email)'
+                    );
+                    created = ins1?.data ?? null;
+                    createError = ins1?.error ?? null;
 
-            // Revert to safe object structure to prevent crash
-            const userData = { id: userId };
-            setUser(userData);
+                    if (createError && String(createError.message || '').toLowerCase().includes('email')) {
+                        const ins2 = await withTimeout(
+                            supabase
+                                .from('profiles')
+                                .insert([{
+                                    id: uid,
+                                    display_id: fallbackDisplayId,
+                                    role: 'user',
+                                    show_master_recipes: false
+                                }])
+                                .select('id, display_id, role, show_master_recipes')
+                                .single(),
+                            8000,
+                            'profiles.insert'
+                        );
+                        created = ins2?.data ?? null;
+                        createError = ins2?.error ?? null;
+                    }
 
-            // Fire and forget last login update
-            userService.updateLastLogin(userId).catch(err => console.error(err));
-
-            if (rememberMe) {
-                localStorage.setItem('recipe_app_user', JSON.stringify(userData));
+                    if (createError) throw createError;
+                    profile = created;
+                } else {
+                    throw error;
+                }
             } else {
-                localStorage.removeItem('recipe_app_user');
+                profile = data;
+            }
+
+            // If schema supports email and it's missing, try to fill it from session
+            if (profile && Object.prototype.hasOwnProperty.call(profile, 'email') && email && !profile.email) {
+                try {
+                    await supabase
+                        .from('profiles')
+                        .update({ email })
+                        .eq('id', uid);
+                } catch (e2) {
+                    // ignore (not critical)
+                    console.warn('Failed to backfill profile email', e2);
+                }
             }
         } catch (e) {
-            // Rethrow with user friendly message if possible
-            if (e.message.includes('JSON')) throw e; // Syntax error etc
-            console.error("Login Error:", e);
-            throw new Error(e.message === "パスワードが間違っています" ? e.message : "ユーザーIDまたはパスワードが違います");
+            console.error('Failed to load/create profile:', e);
         }
-    };
 
-    const register = async (userId, password, secretQuestion, secretAnswer) => {
-        const { error } = await supabase
-            .from('app_users')
-            .insert([{
-                id: userId,
-                password,
-                secret_question: secretQuestion || null,
-                secret_answer: secretAnswer || null
-            }]);
+        const displayId = profile?.display_id || getEmailLocalPart(email) || uid.slice(0, 8);
+        const role = profile?.role || 'user';
+        const showMasterRecipes = profile?.show_master_recipes === true;
+
+        setUser({
+            id: uid, // IMPORTANT: use Auth UID as canonical id
+            email,
+            displayId,
+            role,
+            showMasterRecipes,
+        });
+    }, []);
+
+    useEffect(() => {
+        let unsub = null;
+
+        const init = async () => {
+            try {
+                const { data } = await withTimeout(
+                    supabase.auth.getSession(),
+                    8000,
+                    'auth.getSession'
+                );
+                await loadProfileAndSetUser(data?.session?.user || null);
+            } catch (e) {
+                console.error('Auth init failed:', e);
+            } finally {
+                setLoading(false);
+            }
+
+            const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
+                if (_event === 'PASSWORD_RECOVERY') {
+                    setIsPasswordRecovery(true);
+                }
+                try {
+                    await loadProfileAndSetUser(session?.user || null);
+                } catch (e) {
+                    console.error('Auth state change handler failed:', e);
+                }
+            });
+            unsub = sub?.subscription;
+        };
+
+        init();
+
+        return () => {
+            try {
+                unsub?.unsubscribe?.();
+            } catch {
+                // ignore
+            }
+        };
+    }, [loadProfileAndSetUser]);
+
+    const login = useCallback(async (email, password) => {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+            console.error('Login error:', error);
+            throw new Error('メールアドレスまたはパスワードが違います');
+        }
+    }, []);
+
+    const register = useCallback(async (email, password, displayId) => {
+        const { data, error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+                data: { display_id: displayId }
+            }
+        });
 
         if (error) {
-            console.error("Register Error:", error);
-            if (error.code === '23505') { // Postgres unique_violation
-                throw new Error("このIDは既に使用されています");
+            console.error('SignUp error:', error);
+            throw new Error(error.message || '登録に失敗しました');
+        }
+
+        // If session exists immediately, create profile now. If email confirmation is required, session may be null.
+        const sessionUser = data?.user;
+        if (sessionUser?.id) {
+            // Try insert with email column; fallback if schema isn't updated yet.
+            let profileError = null;
+            const ins1 = await supabase
+                .from('profiles')
+                .insert([{
+                    id: sessionUser.id,
+                    display_id: displayId,
+                    email: email || null,
+                    role: 'user',
+                    show_master_recipes: false
+                }]);
+            profileError = ins1?.error ?? null;
+
+            if (profileError && String(profileError.message || '').toLowerCase().includes('email')) {
+                const ins2 = await supabase
+                    .from('profiles')
+                    .insert([{
+                        id: sessionUser.id,
+                        display_id: displayId,
+                        role: 'user',
+                        show_master_recipes: false
+                    }]);
+                profileError = ins2?.error ?? null;
             }
-            throw new Error("登録エラー: " + (error.message || "不明なエラー"));
+
+            // If profile already exists (rare), ignore unique errors
+            if (profileError && profileError.code !== '23505') {
+                console.error('Profile create error:', profileError);
+            }
+        }
+
+        // If email confirmation is enabled, user must confirm via email before they can sign in.
+        return { needsEmailConfirmation: !data?.session };
+    }, []);
+
+    const logout = useCallback(async () => {
+        await supabase.auth.signOut();
+        setUser(null);
+        setIsPasswordRecovery(false);
+    }, []);
+
+    const sendPasswordResetEmail = useCallback(async (email) => {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.origin
+        });
+        if (error) {
+            console.error('Password reset email error:', error);
+            throw new Error('パスワード再設定メールの送信に失敗しました');
         }
         return true;
-    };
+    }, []);
 
-    const logout = () => {
-        setUser(null);
-        localStorage.removeItem('recipe_app_user');
-    };
+    const updatePassword = useCallback(async (newPassword) => {
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) {
+            console.error('Update password error:', error);
+            throw new Error('パスワード更新に失敗しました');
+        }
+        return true;
+    }, []);
+
+    const finishPasswordRecovery = useCallback(() => {
+        setIsPasswordRecovery(false);
+        // Keep session; user can continue using the app
+        // Also clean hash if Supabase included tokens in URL
+        try {
+            if (window.location.hash) {
+                history.replaceState(null, '', window.location.pathname + window.location.search);
+            }
+        } catch {
+            // ignore
+        }
+    }, []);
+
+    const value = useMemo(() => ({
+        user,
+        loading,
+        login,
+        register,
+        logout,
+        sendPasswordResetEmail,
+        isPasswordRecovery,
+        updatePassword,
+        finishPasswordRecovery
+    }), [user, loading, login, register, logout, sendPasswordResetEmail, isPasswordRecovery, updatePassword, finishPasswordRecovery]);
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, register, loading }}>
+        <AuthContext.Provider value={value}>
             {children}
         </AuthContext.Provider>
     );
