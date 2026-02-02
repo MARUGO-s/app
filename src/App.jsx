@@ -123,14 +123,22 @@ function AppContent() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) return;
-    // Avoid duplicate loads on initial mount / view changes.
-    if (currentView === 'trash') {
-      loadDeletedRecipes();
-    } else {
-      loadRecipes();
-    }
-    loadTrashCount();
-    loadRecentHistory();
+
+    // Load all data in parallel for faster initial load
+    (async () => {
+      try {
+        const mainRecipePromise = currentView === 'trash' ? loadDeletedRecipes() : loadRecipes();
+
+        // Execute all three data loads in parallel
+        await Promise.all([
+          mainRecipePromise,
+          loadTrashCount(),
+          loadRecentHistory()
+        ]);
+      } catch (error) {
+        console.error('Error during initial data load:', error);
+      }
+    })();
   }, [authLoading, user?.id]);
 
   // Admin helper: load all profiles so we can show "which user's recipe" in UI.
@@ -767,9 +775,6 @@ function AppContent() {
 
                         <div className="pc-recommend-note">
                           <div className="pc-recommend-note__title">以下の操作はPCかタブレット推奨</div>
-                          <div className="pc-recommend-note__items">
-                            在庫管理 / 仕込みカレンダー / データ管理 / ユーザー管理 / 発注リスト
-                          </div>
                         </div>
 
                         <Button variant="secondary" onClick={() => { setSearchParams({ view: 'inventory' }); setIsMenuOpen(false); }}>
