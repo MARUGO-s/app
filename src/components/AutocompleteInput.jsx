@@ -176,8 +176,10 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
                         position: 'fixed',
                         top: 'auto', // Reset top to avoid conflict with bottom
                         bottom: coords.bottom, // Display ABOVE: anchor to bottom
-                        left: coords.left,
-                        width: coords.width,
+                        left: Math.max(8, coords.left - 16), // Add padding on sides, min 8px margin from edge
+                        right: Math.max(8, window.innerWidth - (coords.left + coords.width + 16)), // Add padding on right
+                        minWidth: 'calc(100% - 16px)', // Ensure good width on mobile
+                        maxWidth: `${Math.min(600, window.innerWidth - 16)}px`, // Cap at 600px or screen width - 8px
                         zIndex: 9999, // Ensure top layer
                         marginBottom: '4px' // Space from input
                     }}
