@@ -80,10 +80,22 @@ const SortableIngredientItem = ({
             </div>
 
             <div className="ingredient-qty">
-                <Input value={item.quantity} onChange={(e) => onChange(groupId, index, 'quantity', e.target.value)} placeholder="0" style={{ width: '100%' }} />
+                <Input
+                    value={item.quantity}
+                    onChange={(e) => onChange(groupId, index, 'quantity', e.target.value)}
+                    placeholder="0"
+                    style={{ width: '100%' }}
+                    wrapperClassName="input-group--no-margin"
+                />
             </div>
             <div className="ingredient-unit">
-                <Input value={item.unit} onChange={(e) => onChange(groupId, index, 'unit', e.target.value)} placeholder="単位" style={{ width: '100%' }} />
+                <Input
+                    value={item.unit}
+                    onChange={(e) => onChange(groupId, index, 'unit', e.target.value)}
+                    placeholder="単位"
+                    style={{ width: '100%' }}
+                    wrapperClassName="input-group--no-margin"
+                />
             </div>
             <div className="ingredient-cost" style={{ position: 'relative' }}>
                 <Input
@@ -94,6 +106,7 @@ const SortableIngredientItem = ({
                     placeholder={item.purchaseCostRef ? "Ref" : ""}
                     style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '', paddingRight: '20px' }}
                     title={item.purchaseCostRef ? `参考: ¥${item.purchaseCostRef}${item.vendorRef ? ` (${item.vendorRef})` : ''}` : "No data"}
+                    wrapperClassName="input-group--no-margin"
                 />
                 <button
                     type="button"
@@ -113,7 +126,15 @@ const SortableIngredientItem = ({
                 )}
             </div>
             <div className="ingredient-cost">
-                <Input type="number" step="0.01" value={item.cost} onChange={(e) => onChange(groupId, index, 'cost', e.target.value)} placeholder="" style={{ width: '100%' }} />
+                <Input
+                    type="number"
+                    step="0.01"
+                    value={item.cost}
+                    onChange={(e) => onChange(groupId, index, 'cost', e.target.value)}
+                    placeholder=""
+                    style={{ width: '100%' }}
+                    wrapperClassName="input-group--no-margin"
+                />
             </div>
             <div className="ingredient-alcohol" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                 <input

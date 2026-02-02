@@ -15,6 +15,20 @@ export const LoginPage = () => {
     const [successMsg, setSuccessMsg] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    const [rememberMe, setRememberMe] = useState(false);
+
+    React.useEffect(() => {
+        const savedEmail = localStorage.getItem('savedEmail');
+        const savedPassword = localStorage.getItem('savedPassword');
+        if (savedEmail) {
+            setEmail(savedEmail);
+            if (savedPassword) {
+                setPassword(savedPassword);
+            }
+            setRememberMe(true);
+        }
+    }, []);
+
     const { login, register, sendPasswordResetEmail } = useAuth();
 
     const handleLoginSubmit = async (e) => {
@@ -24,6 +38,13 @@ export const LoginPage = () => {
         setIsSubmitting(true);
         try {
             await login(email.trim(), password);
+            if (rememberMe) {
+                localStorage.setItem('savedEmail', email.trim());
+                localStorage.setItem('savedPassword', password);
+            } else {
+                localStorage.removeItem('savedEmail');
+                localStorage.removeItem('savedPassword');
+            }
         } catch (err) {
             setError(err.message || 'ログインに失敗しました');
         } finally {
@@ -117,7 +138,7 @@ export const LoginPage = () => {
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             placeholder="name@example.com"
-                            autoComplete="email"
+                            autoComplete="username"
                             style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '1rem', color: '#333', backgroundColor: '#fff' }}
                             required
                         />
@@ -131,7 +152,7 @@ export const LoginPage = () => {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 placeholder="パスワード"
-                                autoComplete={isLoginMode ? "current-password" : "new-password"}
+                                autoComplete="current-password"
                                 style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '1rem', color: '#333', backgroundColor: '#fff' }}
                                 required
                             />
@@ -155,6 +176,18 @@ export const LoginPage = () => {
                             <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '6px', lineHeight: 1.4 }}>
                                 既存データ（在庫/棚卸し/レシピ）の引き継ぎに使います。あとから変更しないでください。
                             </div>
+                        </div>
+                    )}
+                    {isLoginMode && !isResetMode && (
+                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
+                            <input
+                                type="checkbox"
+                                id="rememberMe"
+                                checked={rememberMe}
+                                onChange={(e) => setRememberMe(e.target.checked)}
+                                style={{ marginRight: '8px', width: 'auto', cursor: 'pointer' }}
+                            />
+                            <label htmlFor="rememberMe" style={{ color: '#333', cursor: 'pointer', userSelect: 'none' }}>ログイン情報を保存する</label>
                         </div>
                     )}
 

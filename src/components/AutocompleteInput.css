@@ -5,6 +5,17 @@
 
 .autocomplete-input {
     width: 100%;
+    display: block;
+    /* Fix vertical misalignment caused by inline behavior */
+    /* Ensure height matches standard inputs */
+    padding: 0.5rem 0.75rem;
+    /* Match .input-field padding */
+    min-height: 38px;
+    /* Match standard input height */
+    box-sizing: border-box;
+    /* Critical for consistent sizing */
+    line-height: 1.4;
+    /* Match typical line-height */
 }
 
 .suggestions-list {
