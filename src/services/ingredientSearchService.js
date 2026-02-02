@@ -32,19 +32,23 @@ export const ingredientSearchService = {
      */
     async _searchFromDatabase(query) {
         try {
+            console.log('🔍 Searching DB for:', query);
             const { data, error } = await supabase.rpc('search_ingredients', {
                 search_query: query,
                 max_results: 15
             });
 
             if (error) {
-                console.warn('Database search failed, falling back to cache:', error.message);
+                console.warn('❌ Database search failed:', error);
+                console.warn('Error message:', error.message);
+                console.warn('Error code:', error.code);
                 return null;
             }
 
+            console.log('✅ DB search result:', data);
             return data || [];
         } catch (error) {
-            console.warn('Database search exception:', error.message);
+            console.warn('❌ Database search exception:', error);
             return null;
         }
     },
@@ -108,8 +112,11 @@ export const ingredientSearchService = {
             }
 
             // FALLBACK: If DB search failed, use old strategy
-            console.info('Database search unavailable, using fallback CSV search');
-            return await this._fallbackSearch(normalizedQuery);
+            console.info('⚠️ Database search unavailable (dbResults is null/empty), using fallback CSV search');
+            console.log('⚠️ dbResults:', dbResults);
+            const fallbackResults = await this._fallbackSearch(normalizedQuery);
+            console.log('✅ Fallback search returned:', fallbackResults.length, 'results');
+            return fallbackResults;
 
         } catch (error) {
             console.error('Error searching ingredients:', error);
@@ -126,11 +133,15 @@ export const ingredientSearchService = {
         try {
             // Build cache if empty
             if (!this._csvCache) {
+                console.log('📥 Building cache from CSV and manual data...');
                 // Fetch data in parallel
                 const [csvData, manualDataMap] = await Promise.all([
                     purchasePriceService.getPriceListArray(),
                     unitConversionService.getAllConversions()
                 ]);
+
+                console.log('📊 CSV Data rows:', csvData.length);
+                console.log('📊 Manual Data items:', manualDataMap.size);
 
                 // Format Manual Data (Priority 1)
                 const manualResults = Array.from(manualDataMap.values()).map(item => ({
@@ -158,6 +169,7 @@ export const ingredientSearchService = {
 
                 // Store combined list
                 this._csvCache = [...manualResults, ...uniqueCsvResults];
+                console.log('✅ Cache built. Total items:', this._csvCache.length);
             }
 
             // FILTER & SORT based on query
