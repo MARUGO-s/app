@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DndContext, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import { inventoryService } from '../services/inventoryService';
 import { purchasePriceService } from '../services/purchasePriceService';
+import { unitConversionService } from '../services/unitConversionService';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Input } from './Input';
@@ -17,6 +18,7 @@ export const Inventory = ({ onBack }) => {
     const [snapshots, setSnapshots] = useState([]);
     const [deletedSnapshots, setDeletedSnapshots] = useState([]);
     const [csvData, setCsvData] = useState([]); // Master data from CSV
+    const [ingredientMasterMap, setIngredientMasterMap] = useState(new Map()); // unit_conversions (材料マスター)
     const [ignoredNames, setIgnoredNames] = useState(new Set()); // Ignored item names
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -66,6 +68,9 @@ export const Inventory = ({ onBack }) => {
 
     useEffect(() => {
         if (!userId) return;
+        // When entering Inventory page, default to showing all vendors/items
+        setActiveTab('all');
+        setSearchQuery('');
         loadData();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [userId]);
@@ -73,18 +78,20 @@ export const Inventory = ({ onBack }) => {
     const loadData = async (isSilent = false) => {
         if (!isSilent) setLoading(true);
         try {
-            const [inventoryData, csvList, ignored, snapshotList, deletedList] = await Promise.all([
+            const [inventoryData, csvList, ignored, snapshotList, deletedList, conversions] = await Promise.all([
                 inventoryService.getAll(userId),
                 purchasePriceService.getPriceListArray(),
                 inventoryService.getIgnoredItems(userId),
                 inventoryService.getSnapshots(userId),
-                inventoryService.getDeletedSnapshots(userId)
+                inventoryService.getDeletedSnapshots(userId),
+                unitConversionService.getAllConversions()
             ]);
             setItems(inventoryData);
             setCsvData(csvList);
             setIgnoredNames(ignored);
             setSnapshots(snapshotList || []);
             setDeletedSnapshots(deletedList || []);
+            setIngredientMasterMap(conversions || new Map());
 
             // Initialize checkedItems with IDs of all existing inventory items
             // This ensures the count in "棚卸し一覧 ({checkedItems.size})" is correct after reload
@@ -238,15 +245,135 @@ export const Inventory = ({ onBack }) => {
     // Merge Inventory and CSV Data
     const mergedComponents = React.useMemo(() => {
         const normalize = (str) => str ? str.toString().trim() : '';
-        const inventoryMap = new Map(items.map(i => [normalize(i.name), i]));
-        const merged = [...items];
+        const masterByName = new Map();
+        try {
+            for (const [name, row] of (ingredientMasterMap || new Map()).entries()) {
+                masterByName.set(normalize(name), row);
+            }
+        } catch {
+            // ignore
+        }
+
+        const normalizeUnit = (u) => {
+            const s = String(u ?? '').trim();
+            if (!s) return '';
+            const lower = s.toLowerCase();
+            if (lower === 'ｇ') return 'g';
+            if (lower === 'ｍｌ') return 'ml';
+            if (lower === 'ｃｃ') return 'cc';
+            if (lower === 'ｋｇ') return 'kg';
+            if (lower === 'ｌ') return 'l';
+            return lower;
+        };
+
+        // Inventory expects "price" to be per-unit (matching item.unit).
+        // Ingredient master stores packet total price + packet size/unit.
+        const masterUnitPriceFor = (master, targetUnitRaw) => {
+            const lastPrice = parseFloat(master?.lastPrice);
+            const packetSize = parseFloat(master?.packetSize);
+            const packetUnit = normalizeUnit(master?.packetUnit);
+            const targetUnit = normalizeUnit(targetUnitRaw || packetUnit);
+            if (!Number.isFinite(lastPrice) || !Number.isFinite(packetSize) || packetSize <= 0) return null;
+            if (!packetUnit) return null;
+
+            // base price per 1 packetUnit
+            const perPacketUnit = lastPrice / packetSize;
+
+            // Same unit
+            if (targetUnit === packetUnit) return perPacketUnit;
+
+            // g <-> kg
+            if (packetUnit === 'g' && targetUnit === 'kg') return perPacketUnit * 1000;
+            if (packetUnit === 'kg' && targetUnit === 'g') return perPacketUnit / 1000;
+
+            // ml/cc <-> l (treat cc as ml)
+            const pu = packetUnit === 'cc' ? 'ml' : packetUnit;
+            const tu = targetUnit === 'cc' ? 'ml' : targetUnit;
+            if (pu === 'ml' && tu === 'l') return perPacketUnit * 1000;
+            if (pu === 'l' && tu === 'ml') return perPacketUnit / 1000;
+
+            // Not convertible
+            return null;
+        };
+
+        const isCountUnit = (uRaw) => {
+            const u = String(uRaw ?? '').trim();
+            if (!u) return false;
+            // Units that typically represent "number of packages/items"
+            return ['本', '個', '袋', '枚', 'パック', '缶', '箱', 'pc', 'PC', '包'].includes(u);
+        };
+
+        const applyMasterPriority = (base) => {
+            const normalizedName = normalize(base?.name);
+            const m = normalizedName ? masterByName.get(normalizedName) : null;
+            if (!m) return base;
+            const next = { ...base };
+
+            // 材料マスター（unit_conversions）の入力を優先
+            // - price: must be per-unit (matching next.unit) to avoid huge totals
+            // - unit/quantity: when inventory uses count-like units (本/袋/個...) but master is g/ml etc,
+            //   normalize to master unit and convert quantity using packetSize (e.g., 1本 -> 500ml).
+            const masterUnit = m.packetUnit || '';
+            const packetSize = parseFloat(m.packetSize);
+
+            if (next.isPhantom) {
+                if (masterUnit) next.unit = masterUnit;
+                const p = masterUnitPriceFor(m, next.unit || masterUnit);
+                if (p !== null) next.price = p;
+            } else {
+                // If existing inventory row is in count-unit and master provides measurable unit,
+                // convert quantity/threshold to master unit so calculations stay correct.
+                const shouldConvertToMasterUnit =
+                    !!masterUnit &&
+                    Number.isFinite(packetSize) &&
+                    packetSize > 0 &&
+                    (isCountUnit(next.unit) || !next.unit);
+
+                if (shouldConvertToMasterUnit) {
+                    // Convert quantity if it's numeric (keep empty string as-is)
+                    const qRaw = next.quantity;
+                    if (qRaw !== '' && qRaw !== null && qRaw !== undefined) {
+                        const q = parseFloat(qRaw);
+                        if (Number.isFinite(q)) next.quantity = q * packetSize;
+                    }
+
+                    // Convert threshold similarly so alert logic remains consistent
+                    const tRaw = next.threshold;
+                    if (tRaw !== '' && tRaw !== null && tRaw !== undefined) {
+                        const t = parseFloat(tRaw);
+                        if (Number.isFinite(t)) next.threshold = t * packetSize;
+                    }
+
+                    next.unit = masterUnit;
+                } else {
+                    // Keep unit unless blank
+                    if (!next.unit && masterUnit) next.unit = masterUnit;
+                }
+
+                const p = masterUnitPriceFor(m, next.unit || masterUnit);
+                if (p !== null) next.price = p;
+            }
+
+            // Keep extra master info for future UI if needed
+            next._master = {
+                packetSize: m.packetSize,
+                packetUnit: m.packetUnit,
+                lastPrice: m.lastPrice,
+                updatedAt: m.updatedAt
+            };
+            return next;
+        };
+
+        const effectiveItems = items.map(applyMasterPriority);
+        const inventoryMap = new Map(effectiveItems.map(i => [normalize(i.name), i]));
+        const merged = [...effectiveItems];
 
         csvData.forEach((csvItem, index) => {
             const normalizedName = normalize(csvItem.name);
             if (ignoredNames.has(csvItem.name) || ignoredNames.has(normalizedName)) return;
 
             if (!inventoryMap.has(normalizedName)) {
-                merged.push({
+                const base = {
                     id: `phantom-${index}`,
                     isPhantom: true,
                     name: csvItem.name.trim(),
@@ -256,7 +383,8 @@ export const Inventory = ({ onBack }) => {
                     price: csvItem.price,
                     vendor: csvItem.vendor,
                     threshold: 0
-                });
+                };
+                merged.push(applyMasterPriority(base));
             }
         });
         return merged.filter(i => {
@@ -265,17 +393,25 @@ export const Inventory = ({ onBack }) => {
             if (excludedNames.has(i.name) || excludedNames.has(name)) return false;
             return true;
         });
-    }, [items, csvData, ignoredNames, excludedNames]);
+    }, [items, csvData, ignoredNames, excludedNames, ingredientMasterMap]);
 
     const handleDragEnd = (event) => {
         const { active, over } = event;
         if (over && over.id === 'inventory-list-droppable') {
             const item = active.data.current.item;
             if (active.data.current.type === 'csv-item') {
+                const normalize = (str) => str ? str.toString().trim() : '';
+                const m = (ingredientMasterMap && ingredientMasterMap.get(normalize(item?.name))) || null;
+                    const preferredUnit = m?.packetUnit || item.unit;
+                    // For inventory, prefer per-unit price (normalized) when master exists
+                    const masterPricePerUnit = m ? masterUnitPriceFor(m, preferredUnit) : null;
+                    const preferredPrice = masterPricePerUnit !== null
+                        ? masterPricePerUnit
+                        : ((m?.lastPrice !== null && m?.lastPrice !== undefined && m?.lastPrice !== '') ? m.lastPrice : item.price);
                 setEditingItem({
                     name: item.name,
-                    price: item.price,
-                    unit: item.unit,
+                    price: preferredPrice,
+                    unit: preferredUnit,
                     category: '',
                     threshold: 0,
                     quantity: 0,
@@ -366,7 +502,17 @@ export const Inventory = ({ onBack }) => {
                     return newSet;
                 });
             } else {
-                setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: newQuantity } : i));
+                // Keep local state consistent with what we display (unit/price may be normalized by master)
+                setItems(prev => prev.map(i => {
+                    if (i.id !== id) return i;
+                    return {
+                        ...i,
+                        quantity: newQuantity,
+                        unit: item.unit ?? i.unit,
+                        price: item.price ?? i.price,
+                        threshold: item.threshold ?? i.threshold,
+                    };
+                }));
                 setCheckedItems(prev => {
                     const newSet = new Set(prev);
                     newSet.add(id);
@@ -376,7 +522,13 @@ export const Inventory = ({ onBack }) => {
             }
         } catch (e) {
             console.error(e);
-            setNotification({ title: 'エラー', message: '更新に失敗しました', type: 'error' });
+            const msg =
+                e?.message ||
+                e?.error_description ||
+                (typeof e === 'string' ? e : null) ||
+                (() => { try { return JSON.stringify(e); } catch { return null; } })() ||
+                '更新に失敗しました';
+            setNotification({ title: 'エラー', message: `更新に失敗しました\n${msg}`, type: 'error' });
             loadData();
         }
     };
@@ -385,8 +537,19 @@ export const Inventory = ({ onBack }) => {
         if (!snapshotTitle) return;
         if (!userId) return;
         try {
-            const totalValue = items.reduce((sum, item) => sum + ((parseFloat(item.price) || 0) * (parseFloat(item.quantity) || 0)), 0);
-            await inventoryService.createSnapshot(userId, snapshotTitle, items, totalValue);
+            // Use the same normalized view that the user sees (master overrides applied),
+            // and strip UI-only fields before saving to DB snapshots.
+            const snapshotItems = mergedComponents
+                .filter(i => !i.isPhantom)
+                .map(({ isPhantom, _master, ...rest }) => rest);
+
+            const totalValue = snapshotItems.reduce((sum, it) => {
+                const price = parseFloat(it.price) || 0;
+                const qty = it.quantity === '' ? 0 : (parseFloat(it.quantity) || 0);
+                return sum + (price * qty);
+            }, 0);
+
+            await inventoryService.createSnapshot(userId, snapshotTitle, snapshotItems, totalValue);
             if (resetAfterSnapshot) {
                 await inventoryService.resetStockQuantities(userId);
                 await loadData();
@@ -608,9 +771,11 @@ export const Inventory = ({ onBack }) => {
                                         className="inventory-controls__select"
                                         value={activeTab === 'inventory-check' ? '' : activeTab}
                                         onChange={(e) => {
+                                            // allow switching back to "all"
                                             if (e.target.value) setActiveTab(e.target.value);
                                         }}
                                     >
+                                <option value="all">すべて</option>
                                 <option value="" disabled>業者を選択してください</option>
                                 <optgroup label="業者リスト">
                                     {uniqueVendors.map(vendor => (

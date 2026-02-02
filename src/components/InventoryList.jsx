@@ -16,6 +16,15 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete }) => {
     const currentQty = localQuantity === '' ? 0 : parseFloat(localQuantity);
     const totalValue = price * currentQty;
 
+    const capacityLabel = React.useMemo(() => {
+        const sizeRaw = item?._master?.packetSize;
+        const unit = item?._master?.packetUnit;
+        const size = parseFloat(sizeRaw);
+        if (!Number.isFinite(size) || size <= 0) return '-';
+        const formatted = Number.isInteger(size) ? size.toLocaleString() : size.toLocaleString(undefined, { maximumFractionDigits: 3 });
+        return `${formatted}${unit ? String(unit) : ''}`;
+    }, [item?._master?.packetSize, item?._master?.packetUnit]);
+
     const handleBlur = () => {
         const val = parseFloat(localQuantity);
         if (!isNaN(val) && val !== item.quantity) {
@@ -53,6 +62,9 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete }) => {
                 {price > 0 ? `¥${price.toLocaleString()}` : '-'}
             </td>
             <td>{item.unit}</td>
+            <td style={{ textAlign: 'right', fontSize: '0.85rem', color: '#666' }}>
+                {capacityLabel}
+            </td>
             <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
                 <input
                     type="text"
@@ -159,6 +171,7 @@ export const InventoryList = ({ items, loading, onSearch, searchQuery, onEdit, o
                                 <th>品名</th>
                                 <th style={{ textAlign: 'right' }}>仕入れ値</th>
                                 <th>単位</th>
+                                <th style={{ textAlign: 'right' }}>内容量</th>
                                 <th style={{ textAlign: 'right' }}>在庫数</th>
                                 <th style={{ textAlign: 'right' }}>在庫金額</th>
                                 <th
@@ -182,14 +195,14 @@ export const InventoryList = ({ items, loading, onSearch, searchQuery, onEdit, o
                                 />
                             ))}
                             {sortedItems.length === 0 && (
-                                <tr><td colSpan="7" style={{ textAlign: 'center', color: '#888', padding: '2rem' }}>
+                                <tr><td colSpan="8" style={{ textAlign: 'center', color: '#888', padding: '2rem' }}>
                                     {isOver ? 'ここにドロップして新規登録' : 'データがありません'}
                                 </td></tr>
                             )}
                         </tbody>
                         <tfoot>
                             <tr style={{ fontWeight: 'bold', backgroundColor: '#f9f9f9' }}>
-                                <td colSpan="4" style={{ textAlign: 'right', paddingRight: '10px' }}>合計:</td>
+                                <td colSpan="5" style={{ textAlign: 'right', paddingRight: '10px' }}>合計:</td>
                                 <td style={{ textAlign: 'right' }}>
                                     ¥{Math.round(items.reduce((sum, item) => sum + ((parseFloat(item.price) || 0) * (parseFloat(item.quantity) || 0)), 0)).toLocaleString()}
                                 </td>

@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { plannerService } from '../services/plannerService';
 import { recipeService } from '../services/recipeService';
 import { inventoryService } from '../services/inventoryService';
+import { purchasePriceService } from '../services/purchasePriceService';
+import { unitConversionService } from '../services/unitConversionService';
+import { csvUnitOverrideService } from '../services/csvUnitOverrideService';
 import { Button } from './Button';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -58,7 +61,61 @@ export const OrderList = ({ onBack }) => {
             const allRecipes = await recipeService.fetchRecipes(user);
             const recipeDetails = recipesToCook.map(id => allRecipes.find(r => r.id === id)).filter(Boolean);
 
-            // 3. Aggregate Ingredients
+            const normalize = (s) => (s ?? '').toString().trim();
+            const normalizeUnit = (u) => {
+                const s = normalize(u);
+                if (!s) return '';
+                const lower = s.toLowerCase();
+                if (lower === 'ｇ') return 'g';
+                if (lower === 'ｍｌ') return 'ml';
+                if (lower === 'ｃｃ') return 'cc';
+                if (lower === 'ｋｇ') return 'kg';
+                if (lower === 'ｌ') return 'l';
+                return lower;
+            };
+
+            const isCountUnit = (uRaw) => {
+                const u = normalize(uRaw);
+                if (!u) return false;
+                return ['本', '個', '袋', '枚', 'パック', '缶', '箱', 'PC', 'pc', '包'].includes(u);
+            };
+
+            const toBaseUnit = (qtyRaw, unitRaw) => {
+                const qty = parseFloat(qtyRaw) || 0;
+                const u = normalizeUnit(unitRaw);
+                if (u === 'kg') return { qty: qty * 1000, unit: 'g' };
+                if (u === 'g') return { qty, unit: 'g' };
+                if (u === 'l') return { qty: qty * 1000, unit: 'ml' };
+                if (u === 'cc') return { qty, unit: 'ml' };
+                if (u === 'ml') return { qty, unit: 'ml' };
+                return { qty, unit: normalize(unitRaw) || '' };
+            };
+
+            const normalizeByMasterIfNeeded = (name, qtyRaw, unitRaw, conv) => {
+                const unit = normalize(unitRaw);
+                const qty = parseFloat(qtyRaw) || 0;
+                if (!conv) return toBaseUnit(qty, unit);
+                const packetSize = parseFloat(conv.packetSize);
+                const packetUnit = normalizeUnit(conv.packetUnit);
+                if (!Number.isFinite(packetSize) || packetSize <= 0 || !packetUnit) return toBaseUnit(qty, unit);
+
+                const masterIsMeasurable = ['g', 'kg', 'ml', 'cc', 'l'].includes(packetUnit);
+                if (masterIsMeasurable && isCountUnit(unit)) {
+                    const content = qty * packetSize;
+                    return toBaseUnit(content, packetUnit);
+                }
+                return toBaseUnit(qty, unit);
+            };
+
+            // Load master + csv master + inventory in parallel
+            const [conversions, csvPriceMap, inventoryRaw, csvUnitOverrides] = await Promise.all([
+                unitConversionService.getAllConversions(),
+                purchasePriceService.fetchPriceList(user.id),
+                inventoryService.getAll(user.id),
+                csvUnitOverrideService.getAll(user.id),
+            ]);
+
+            // 3. Aggregate Ingredients (normalized)
             const totals = {}; // name -> { quantity, unit }
 
             recipeDetails.forEach(r => {
@@ -68,9 +125,11 @@ export const OrderList = ({ onBack }) => {
 
                 allIngs.forEach(ing => {
                     if (!ing.name) return;
-                    const name = ing.name.trim();
-                    const qty = parseFloat(ing.quantity) || 0;
-                    const unit = ing.unit || '';
+                    const name = normalize(ing.name);
+                    const conv = conversions?.get(name) || null;
+                    const normalizedIng = normalizeByMasterIfNeeded(name, ing.quantity, ing.unit, conv);
+                    const qty = normalizedIng.qty || 0;
+                    const unit = normalizedIng.unit || '';
 
                     if (!totals[name]) {
                         totals[name] = { quantity: 0, unit: unit, count: 0 };
@@ -80,24 +139,75 @@ export const OrderList = ({ onBack }) => {
                 });
             });
 
-            // 4. Subtract Inventory
-            const inventory = await inventoryService.getAll(user.id);
-
+            // 4. Subtract Inventory + 20% rule + pack-based ordering
             const results = Object.keys(totals).map(name => {
                 const req = totals[name];
-                const stockItem = inventory.find(i => i.name === name); // Simple match
-                const stockQty = stockItem ? parseFloat(stockItem.quantity) : 0;
+                const conv = conversions?.get(name) || null;
+                const csvEntry = csvPriceMap?.get(name) || null; // { price, vendor, unit, dateStr }
 
-                const toOrder = Math.max(0, req.quantity - stockQty);
+                const stockItem = inventoryRaw.find(i => normalize(i.name) === name);
+                const stockNorm = normalizeByMasterIfNeeded(name, stockItem?.quantity ?? 0, stockItem?.unit ?? req.unit, conv);
+
+                const required = req.quantity || 0;
+                const stock = stockNorm.qty || 0;
+                const unit = req.unit || stockNorm.unit || '';
+                const remaining = stock - required;
+
+                const packetSize = parseFloat(conv?.packetSize);
+                const packetUnit = normalize(conv?.packetUnit);
+                const hasPack = Number.isFinite(packetSize) && packetSize > 0 && !!packetUnit;
+
+                const minRemaining = hasPack ? (packetSize * 0.2) : 0;
+                const needsOrderByRule = hasPack ? (remaining < minRemaining) : false;
+
+                // Ordering unit should be "元の単位（CSV）" first, optionally overridden by user.
+                // This keeps the UI aligned with how vendors actually sell the item (袋/本/箱...).
+                const csvOrderUnit = csvEntry?.unit ? String(csvEntry.unit).trim() : '';
+                const overrideUnit = csvUnitOverrides?.get(name) ? String(csvUnitOverrides.get(name)).trim() : '';
+                const orderUnitLabel =
+                    (overrideUnit ? overrideUnit : '') ||
+                    (csvOrderUnit ? csvOrderUnit : '') ||
+                    '袋';
+
+                const packPrice =
+                    (conv?.lastPrice !== null && conv?.lastPrice !== undefined && conv?.lastPrice !== '' ? parseFloat(conv.lastPrice) : null) ??
+                    (csvEntry?.price !== null && csvEntry?.price !== undefined ? parseFloat(csvEntry.price) : null);
+
+                let orderPacks = null;
+                let orderQty = 0;
+                let orderUnit = unit;
+
+                if (hasPack) {
+                    const additionalNeeded = Math.max(0, minRemaining - remaining);
+                    orderPacks = Math.ceil(additionalNeeded / packetSize);
+                    if (needsOrderByRule && orderPacks < 1) orderPacks = 1;
+                    orderQty = orderPacks;
+                    orderUnit = orderUnitLabel;
+                } else {
+                    orderQty = Math.max(0, required - stock);
+                    orderUnit = unit;
+                }
+
+                // If we have master capacity, the rule is strictly "remaining < 20% of one pack".
+                // If we don't have master capacity, fall back to old "shortage" logic.
+                const shouldShow = hasPack ? needsOrderByRule : orderQty > 0.01;
 
                 return {
                     name,
-                    required: req.quantity,
-                    stock: stockQty,
-                    toOrder: toOrder,
-                    unit: req.unit
+                    required,
+                    stock,
+                    remaining,
+                    unit,
+                    shouldShow,
+                    toOrder: orderQty,
+                    orderUnit,
+                    orderPacks,
+                    packSize: hasPack ? packetSize : null,
+                    packUnit: hasPack ? packetUnit : null,
+                    packPrice: Number.isFinite(packPrice) ? packPrice : null,
+                    vendor: csvEntry?.vendor || stockItem?.vendor || '',
                 };
-            }).filter(i => i.toOrder > 0.01); // Filter out zero orders
+            }).filter(i => i.shouldShow);
 
             setOrderItems(results);
             setGenerated(true);
@@ -119,7 +229,13 @@ export const OrderList = ({ onBack }) => {
     };
 
     const getCopyText = () => {
-        return orderItems.map(i => `・${i.name}: ${i.toOrder.toFixed(1)}${i.unit}`).join('\n');
+        return orderItems.map(i => {
+            if (Number.isFinite(i.orderPacks) && i.orderPacks !== null) {
+                const packInfo = (i.packSize && i.packUnit) ? `（1${i.orderUnit}=${i.packSize}${i.packUnit}）` : '';
+                return `・${i.name}: ${i.orderPacks}${i.orderUnit}${packInfo}`;
+            }
+            return `・${i.name}: ${Number(i.toOrder || 0).toFixed(1)}${i.unit}`;
+        }).join('\n');
     };
 
     const handleCopyToClipboard = async () => {
@@ -178,7 +294,7 @@ export const OrderList = ({ onBack }) => {
                             <tr>
                                 <th>材料名</th>
                                 <th style={{ textAlign: 'right' }}>必要量</th>
-                                <th style={{ textAlign: 'right' }}>在庫引当</th>
+	                                <th style={{ textAlign: 'right' }}>残在庫</th>
                                 <th style={{ textAlign: 'right' }}>発注量</th>
                             </tr>
                         </thead>
@@ -190,9 +306,25 @@ export const OrderList = ({ onBack }) => {
                                     <tr key={idx}>
                                         <td>{item.name}</td>
                                         <td style={{ textAlign: 'right' }}>{item.required.toFixed(1)} {item.unit}</td>
-                                        <td style={{ textAlign: 'right' }}>-{item.stock.toFixed(1)}</td>
+	                                        <td style={{ textAlign: 'right' }}>
+	                                            {Math.max(0, (item.remaining ?? 0)).toFixed(1)} {item.unit}
+	                                        </td>
                                         <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                                            {item.toOrder.toFixed(1)} <span style={{ fontSize: '0.8em' }}>{item.unit}</span>
+	                                            {Number.isFinite(item.orderPacks) && item.orderPacks !== null ? (
+	                                                <>
+	                                                    {item.orderPacks}{item.orderUnit}
+	                                                    {(item.packSize && item.packUnit) && (
+	                                                        <div style={{ fontSize: '0.75em', fontWeight: 'normal', color: '#666' }}>
+	                                                            1{item.orderUnit} = {Number(item.packSize).toLocaleString()}{item.packUnit}
+	                                                            {item.packPrice ? ` / ¥${Math.round(item.packPrice).toLocaleString()}` : ''}
+	                                                        </div>
+	                                                    )}
+	                                                </>
+	                                            ) : (
+	                                                <>
+	                                                    {item.toOrder.toFixed(1)} <span style={{ fontSize: '0.8em' }}>{item.unit}</span>
+	                                                </>
+	                                            )}
                                         </td>
                                     </tr>
                                 ))
@@ -250,7 +382,7 @@ export const OrderList = ({ onBack }) => {
                             <tr>
                                 <th>材料名</th>
                                 <th style={{ textAlign: 'right' }}>必要量</th>
-                                <th style={{ textAlign: 'right' }}>在庫引当</th>
+	                                <th style={{ textAlign: 'right' }}>残在庫</th>
                                 <th style={{ textAlign: 'right' }}>発注量</th>
                             </tr>
                         </thead>
@@ -259,9 +391,13 @@ export const OrderList = ({ onBack }) => {
                                 <tr key={idx}>
                                     <td>{item.name}</td>
                                     <td style={{ textAlign: 'right' }}>{item.required.toFixed(1)} {item.unit}</td>
-                                    <td style={{ textAlign: 'right' }}>-{item.stock.toFixed(1)}</td>
+	                                    <td style={{ textAlign: 'right' }}>
+	                                        {Math.max(0, (item.remaining ?? 0)).toFixed(1)} {item.unit}
+	                                    </td>
                                     <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                                        {item.toOrder.toFixed(1)} {item.unit}
+	                                        {Number.isFinite(item.orderPacks) && item.orderPacks !== null
+	                                            ? `${item.orderPacks}${item.orderUnit}`
+	                                            : `${item.toOrder.toFixed(1)} ${item.unit}`}
                                     </td>
                                 </tr>
                             ))}

@@ -574,7 +574,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                 <h1>{renderText(displayRecipe.title, recipe.title)}</h1>
                 <p className="recipe-detail__desc">{renderText(displayRecipe.description, recipe.description, true)}</p>
                 {user?.role === 'admin' && ownerLabel && (
-                    <div style={{ marginTop: '0.35rem', color: '#666', fontSize: '0.9rem' }}>
+                    <div className="recipe-detail__owner">
                         👤 作成者: {ownerLabel}
                     </div>
                 )}
@@ -758,7 +758,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                         <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-primary)' }}>
                                                                             {calcPercent(item.quantity)}%
                                                                         </td>
-                                                                        <td style={{ textAlign: 'right', color: '#666' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
+                                                                        <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
                                                                         <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
                                                                     </tr>
                                                                 );
@@ -808,7 +808,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                         <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-text-muted)' }}>
                                                                             {calcPercent(item.quantity)}%
                                                                         </td>
-                                                                        <td style={{ textAlign: 'right', color: '#666' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
+                                                                        <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
                                                                         <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
                                                                     </tr>
                                                                 );
@@ -850,7 +850,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                             })()}
 
                                                         </span>
-                                                        <span style={{ fontSize: '0.75rem', color: '#666', marginLeft: '8px' }}>(税込)</span>
+                                                        <span className="recipe-detail__subtle recipe-detail__tax-note" style={{ marginLeft: '8px' }}>(税込)</span>
                                                     </div>
 
                                                     {/* Profit Calculator for Bread */}
@@ -988,7 +988,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                                 {scaledQty}
                                                                             </td>
                                                                             <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
-                                                                            <td style={{ textAlign: 'right', color: '#666' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
+                                                                            <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
                                                                             <td style={{ textAlign: 'right' }}>
                                                                                 {scaledCost ? `¥${scaledCost}` : '-'}
                                                                                 {ing.isAlcohol && <span style={{ fontSize: '0.7em', color: '#d35400', marginLeft: '2px' }}>(酒)</span>}
@@ -1037,7 +1037,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                     {scaledQty}
                                                                 </td>
                                                                 <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
-                                                                <td style={{ textAlign: 'right', color: '#666' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
+                                                                <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
                                                                 <td style={{ textAlign: 'right' }}>
                                                                     {scaledCost ? `¥${scaledCost}` : '-'}
                                                                     {ing.isAlcohol && <span style={{ fontSize: '0.7em', color: '#d35400', marginLeft: '2px' }}>(酒)</span>}
@@ -1076,9 +1076,9 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                 return Math.round(calcTaxedCost(ingredients)).toLocaleString();
                                             })()}
                                         </span>
-                                        <span style={{ fontSize: '0.75rem', color: '#666' }}>(税込)</span>
+                                        <span className="recipe-detail__subtle recipe-detail__tax-note">(税込)</span>
                                     </div>
-                                    <p style={{ textAlign: 'right', fontSize: '0.75rem', color: '#666', marginTop: '0.5rem' }}>※原価は材料ごとに税率(8% or 10%)を適用</p>
+                                    <p className="recipe-detail__subtle recipe-detail__tax-footnote">※原価は材料ごとに税率(8% or 10%)を適用</p>
 
                                     {/* Profit Calculator for Normal Recipe */}
                                     {(() => {

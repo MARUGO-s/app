@@ -308,7 +308,7 @@
 
     /* テーブル自体は最小幅を確保して横スクロール対応 */
     .inventory-table {
-        min-width: 600px;
+        min-width: 700px;
         /* 最小幅を確保してレイアウト崩れを防ぐ */
         table-layout: auto;
     }
@@ -354,28 +354,34 @@
     }
 
     .inventory-table th:nth-child(4),
-    /* 在庫数 */
+    /* 内容量 */
     .inventory-table td:nth-child(4) {
         min-width: 90px;
     }
 
     .inventory-table th:nth-child(5),
-    /* 在庫金額 */
+    /* 在庫数 */
     .inventory-table td:nth-child(5) {
         min-width: 90px;
     }
 
     .inventory-table th:nth-child(6),
-    /* 業者名 */
+    /* 在庫金額 */
     .inventory-table td:nth-child(6) {
+        min-width: 90px;
+    }
+
+    .inventory-table th:nth-child(7),
+    /* 業者名 */
+    .inventory-table td:nth-child(7) {
         min-width: 100px;
         max-width: 150px;
     }
 
-    .inventory-table th:nth-child(7),
+    .inventory-table th:nth-child(8),
     /* アクション */
-    .inventory-table td:nth-child(7) {
-        min-width: 80px;
+    .inventory-table td:nth-child(8) {
+        min-width: 70px;
     }
 }
 
@@ -505,8 +511,8 @@
     .header-actions,
     .inventory-tabs,
     .dnd-context-overlay,
-    .inventory-table th:nth-child(7),
-    .inventory-table td:nth-child(7),
+    .inventory-table th:nth-child(8),
+    .inventory-table td:nth-child(8),
     button {
         display: none !important;
     }
@@ -571,25 +577,31 @@
 
     .inventory-table th:nth-child(3),
     .inventory-table td:nth-child(3) {
-        width: 5%;
+        width: 6%;
         text-align: center;
     }
 
     .inventory-table th:nth-child(4),
     .inventory-table td:nth-child(4) {
-        width: 5%;
+        width: 10%;
         text-align: right;
     }
 
     .inventory-table th:nth-child(5),
     .inventory-table td:nth-child(5) {
-        width: 10%;
+        width: 8%;
         text-align: right;
     }
 
     .inventory-table th:nth-child(6),
     .inventory-table td:nth-child(6) {
-        width: 35%;
+        width: 12%;
+        text-align: right;
+    }
+
+    .inventory-table th:nth-child(7),
+    .inventory-table td:nth-child(7) {
+        width: 22%;
         text-align: left;
         font-size: 9px !important;
     }

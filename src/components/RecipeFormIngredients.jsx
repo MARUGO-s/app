@@ -387,7 +387,8 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                     if (!isNaN(qty) && !isNaN(pCost)) {
                         let cost = 0;
                         const u = newItem.unit ? newItem.unit.trim().toLowerCase() : '';
-                        if (u === 'g' || u === 'ｇ') {
+                        // For weight/volume, purchaseCost is treated as per kg/L and qty is g/ml/cc.
+                        if (u === 'g' || u === 'ｇ' || u === 'ml' || u === 'ｍｌ' || u === 'cc' || u === 'ｃｃ') {
                             // Keep decimals, round to 2 places for storage if preferred, or keep raw
                             // User asked for 2 decimal places input. Calculation should arguably follow suit or standard yen rounding?
                             // Usually yen is integer, but for internal calc... let's keep precision then round?
@@ -424,15 +425,29 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                         // Check for saved conversion
                         const conv = conversionMap.get(value);
                         if (conv && conv.packetSize) {
+                            // Prefer master lastPrice when available (CSV price may be pack total too)
+                            const basePrice = (conv.lastPrice !== null && conv.lastPrice !== undefined && conv.lastPrice !== '')
+                                ? conv.lastPrice
+                                : price;
                             let normalized = 0;
-                            if (['g', 'ml', 'cc', 'ｇ'].includes(conv.packetUnit)) {
-                                normalized = (price / conv.packetSize) * 1000;
+                            const pu = (conv.packetUnit || '').trim().toLowerCase();
+                            if (['g', 'ｇ'].includes(pu)) {
+                                // price per kg, qty in g
+                                normalized = (basePrice / conv.packetSize) * 1000;
                                 newItem.unit = 'g';
-                            } else if (['kg', 'l', 'ｋｇ'].includes(conv.packetUnit.toLowerCase())) {
-                                normalized = price / conv.packetSize;
-                                newItem.unit = 'g'; // kg -> g
+                            } else if (['kg', 'ｋｇ'].includes(pu)) {
+                                normalized = basePrice / conv.packetSize; // per kg
+                                newItem.unit = 'g';
+                            } else if (['ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(pu)) {
+                                // price per L, qty in ml/cc
+                                normalized = (basePrice / conv.packetSize) * 1000;
+                                newItem.unit = 'ml';
+                            } else if (['l', 'ｌ'].includes(pu)) {
+                                normalized = basePrice / conv.packetSize; // per L
+                                newItem.unit = 'ml';
                             } else {
-                                normalized = price / conv.packetSize;
+                                // For '個', '本' etc. -> per unit
+                                normalized = basePrice / conv.packetSize;
                                 newItem.unit = conv.packetUnit;
                             }
                             newItem.purchaseCost = Math.round(normalized * 100) / 100;
@@ -447,12 +462,18 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                                 // If unit implies standard weights, normalize to kg price?
                                 // Usually if unit is 'g', price is for 'size' grams.
                                 // Logic for g/ml is: (price / size) * 1000 = Price per kg/L
-                                if (['g', 'ml', 'cc', 'ｇ'].includes(unit)) {
+                                if (['g', 'ｇ'].includes((unit || '').toLowerCase())) {
                                     calculatedPrice = (price / size) * 1000;
                                     calculatedUnit = 'g';
-                                } else if (['kg', 'l', 'ｋｇ'].includes(unit ? unit.toLowerCase() : '')) {
+                                } else if (['ml', 'ｍｌ', 'cc', 'ｃｃ'].includes((unit || '').toLowerCase())) {
+                                    calculatedPrice = (price / size) * 1000;
+                                    calculatedUnit = 'ml';
+                                } else if (['kg', 'ｋｇ'].includes(unit ? unit.toLowerCase() : '')) {
                                     calculatedPrice = price / size;
                                     calculatedUnit = 'g';
+                                } else if (['l', 'ｌ'].includes(unit ? unit.toLowerCase() : '')) {
+                                    calculatedPrice = price / size;
+                                    calculatedUnit = 'ml';
                                 } else {
                                     // For '個', '枚' etc. -> Calculate Unit Price
                                     calculatedPrice = price / size;
@@ -469,7 +490,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                         if (!isNaN(qty) && !isNaN(pCost)) {
                             const u = newItem.unit ? newItem.unit.trim().toLowerCase() : '';
                             let cost = 0;
-                            if (u === 'g' || u === 'ｇ') {
+                            if (u === 'g' || u === 'ｇ' || u === 'ml' || u === 'ｍｌ' || u === 'cc' || u === 'ｃｃ') {
                                 cost = (qty / 1000) * pCost;
                             } else {
                                 cost = qty * pCost;
@@ -510,14 +531,23 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                     if (item.source === 'manual') {
                         // Calculate normalized cost if size is available
                         if (item.size && item.size > 0) {
-                            if (['g', 'ml', 'cc', 'ｇ'].includes(item.unit)) {
-                                const normalized = (item.price / item.size) * 1000;
-                                newItem.purchaseCost = Math.round(normalized * 100) / 100;
-                                newItem.unit = 'g'; // Normalized to g
-                            } else if (['kg', 'l', 'ｋｇ'].includes(item.unit ? item.unit.toLowerCase() : '')) {
-                                const normalized = item.price / item.size;
+                            const u = (item.unit || '').trim().toLowerCase();
+                            if (['g', 'ｇ'].includes(u)) {
+                                const normalized = (item.price / item.size) * 1000; // per kg
                                 newItem.purchaseCost = Math.round(normalized * 100) / 100;
                                 newItem.unit = 'g';
+                            } else if (['kg', 'ｋｇ'].includes(u)) {
+                                const normalized = item.price / item.size; // per kg
+                                newItem.purchaseCost = Math.round(normalized * 100) / 100;
+                                newItem.unit = 'g';
+                            } else if (['ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(u)) {
+                                const normalized = (item.price / item.size) * 1000; // per L
+                                newItem.purchaseCost = Math.round(normalized * 100) / 100;
+                                newItem.unit = 'ml';
+                            } else if (['l', 'ｌ'].includes(u)) {
+                                const normalized = item.price / item.size; // per L
+                                newItem.purchaseCost = Math.round(normalized * 100) / 100;
+                                newItem.unit = 'ml';
                             } else {
                                 // For '個', '枚' etc. -> Calculate Unit Price
                                 const unitPrice = item.price / item.size;
@@ -533,15 +563,25 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                         // CSV Data or others
                         const conv = conversionMap.get(item.name);
                         if (conv && conv.packetSize) {
+                            const basePrice = (conv.lastPrice !== null && conv.lastPrice !== undefined && conv.lastPrice !== '')
+                                ? conv.lastPrice
+                                : item.price;
                             let normalized = 0;
-                            if (['g', 'ml', 'cc', 'ｇ'].includes(conv.packetUnit)) {
-                                normalized = (item.price / conv.packetSize) * 1000;
+                            const pu = (conv.packetUnit || '').trim().toLowerCase();
+                            if (['g', 'ｇ'].includes(pu)) {
+                                normalized = (basePrice / conv.packetSize) * 1000; // per kg
                                 newItem.unit = 'g';
-                            } else if (['kg', 'l', 'ｋｇ'].includes(conv.packetUnit.toLowerCase())) {
-                                normalized = item.price / conv.packetSize;
+                            } else if (['kg', 'ｋｇ'].includes(pu)) {
+                                normalized = basePrice / conv.packetSize; // per kg
                                 newItem.unit = 'g';
+                            } else if (['ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(pu)) {
+                                normalized = (basePrice / conv.packetSize) * 1000; // per L
+                                newItem.unit = 'ml';
+                            } else if (['l', 'ｌ'].includes(pu)) {
+                                normalized = basePrice / conv.packetSize; // per L
+                                newItem.unit = 'ml';
                             } else {
-                                normalized = item.price / conv.packetSize;
+                                normalized = basePrice / conv.packetSize;
                                 newItem.unit = conv.packetUnit;
                             }
                             newItem.purchaseCost = Math.round(normalized * 100) / 100;
@@ -559,7 +599,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                 if (!isNaN(qty) && !isNaN(pCost)) {
                     const u = newItem.unit ? newItem.unit.trim().toLowerCase() : '';
                     let cost = 0;
-                    if (u === 'g' || u === 'ｇ') {
+                    if (u === 'g' || u === 'ｇ' || u === 'ml' || u === 'ｍｌ' || u === 'cc' || u === 'ｃｃ') {
                         cost = (qty / 1000) * pCost;
                     } else {
                         cost = qty * pCost;

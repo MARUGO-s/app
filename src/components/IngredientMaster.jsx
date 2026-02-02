@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { unitConversionService } from '../services/unitConversionService';
+import { purchasePriceService } from '../services/purchasePriceService';
+import { csvUnitOverrideService } from '../services/csvUnitOverrideService';
 import { useToast } from '../contexts/ToastContext';
 import { Button } from './Button';
 import { Input } from './Input';
@@ -29,6 +31,9 @@ export const IngredientMaster = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [editingId, setEditingId] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [csvPriceMap, setCsvPriceMap] = useState(new Map()); // name -> { price, vendor, unit, dateStr }
+    const [csvUnitOverrideMap, setCsvUnitOverrideMap] = useState(new Map()); // name -> unit override
+    const [csvUnitEdits, setCsvUnitEdits] = useState({}); // name -> current input value
 
     useEffect(() => {
         loadIngredients();
@@ -37,12 +42,18 @@ export const IngredientMaster = () => {
     const loadIngredients = async () => {
         setLoading(true);
         try {
-            const conversionsMap = await unitConversionService.getAllConversions();
+            const [conversionsMap, prices, overrides] = await Promise.all([
+                unitConversionService.getAllConversions(),
+                purchasePriceService.fetchPriceList(),
+                csvUnitOverrideService.getAll(),
+            ]);
             const list = Array.from(conversionsMap.values()).map(item => ({
                 ...item,
                 isNew: false,
                 isEditing: false
             }));
+            setCsvPriceMap(prices || new Map());
+            setCsvUnitOverrideMap(overrides || new Map());
             setIngredients(list.sort((a, b) => a.ingredientName.localeCompare(b.ingredientName, 'ja')));
         } catch (error) {
             toast.error('データの読み込みに失敗しました');
@@ -151,6 +162,52 @@ export const IngredientMaster = () => {
         item.ingredientName.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    const getCsvUnit = (ingredientName) => {
+        const key = (ingredientName ?? '').toString().trim();
+        if (!key) return '-';
+        const entry = csvPriceMap?.get(key) || null;
+        const unit = entry?.unit;
+        return unit ? String(unit) : '-';
+    };
+
+    const getEditableCsvUnit = (ingredientName) => {
+        const name = (ingredientName ?? '').toString().trim();
+        if (!name) return '';
+        if (Object.prototype.hasOwnProperty.call(csvUnitEdits, name)) return csvUnitEdits[name];
+        const override = csvUnitOverrideMap?.get(name);
+        if (override) return String(override);
+        const base = getCsvUnit(name);
+        return base === '-' ? '' : base;
+    };
+
+    const saveCsvUnitOverride = async (ingredientName, unitValue) => {
+        const name = (ingredientName ?? '').toString().trim();
+        const unit = (unitValue ?? '').toString().trim();
+        if (!name) return;
+        if (!unit) {
+            // allow clearing local input without writing empty to DB
+            setCsvUnitEdits(prev => {
+                const next = { ...prev };
+                delete next[name];
+                return next;
+            });
+            return;
+        }
+        try {
+            await csvUnitOverrideService.upsert(name, unit);
+            // update local map so UI reflects immediately
+            setCsvUnitOverrideMap(prev => {
+                const next = new Map(prev);
+                next.set(name, unit);
+                return next;
+            });
+            toast.success('元の単位（CSV）を保存しました');
+        } catch (e) {
+            console.error(e);
+            toast.error(e?.message || '保存に失敗しました');
+        }
+    };
+
     return (
         <div className="ingredient-master-container">
             <div className="master-header">
@@ -179,6 +236,7 @@ export const IngredientMaster = () => {
                                 <th>仕入れ値（円）</th>
                                 <th>内容量</th>
                                 <th>単位</th>
+                                <th>元の単位（CSV）</th>
                                 <th>換算単価</th>
                                 <th>操作</th>
                             </tr>
@@ -186,7 +244,7 @@ export const IngredientMaster = () => {
                         <tbody>
                             {filteredIngredients.length === 0 ? (
                                 <tr>
-                                    <td colSpan="6" style={{ textAlign: 'center', color: '#999' }}>
+                                    <td colSpan="7" style={{ textAlign: 'center', color: '#999' }}>
                                         {searchQuery ? '該当する材料がありません' : '材料データがありません'}
                                     </td>
                                 </tr>
@@ -253,6 +311,18 @@ export const IngredientMaster = () => {
                                             ) : (
                                                 item.packetUnit
                                             )}
+                                        </td>
+                                        <td className="csv-unit-cell">
+                                            <Input
+                                                value={getEditableCsvUnit(item.ingredientName)}
+                                                onChange={(e) => {
+                                                    const name = (item.ingredientName ?? '').toString().trim();
+                                                    const val = e.target.value;
+                                                    setCsvUnitEdits(prev => ({ ...prev, [name]: val }));
+                                                }}
+                                                onBlur={(e) => saveCsvUnitOverride(item.ingredientName, e.target.value)}
+                                                placeholder={getCsvUnit(item.ingredientName) === '-' ? '未設定' : `CSV: ${getCsvUnit(item.ingredientName)}`}
+                                            />
                                         </td>
                                         <td className="normalized-cost">{calculateNormalizedCost(item)}</td>
                                         <td>

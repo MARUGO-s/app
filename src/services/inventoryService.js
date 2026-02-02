@@ -35,7 +35,8 @@ export const inventoryService = {
         // Supabase usually generates UUID or ID.
         // Let's strip the ID if it's not a real one from DB (though we can't easily know).
         // For new items, we usually don't send ID.
-        const { id, isPhantom, ...itemData } = item;
+        // Strip any UI-only fields before DB insert
+        const { id, isPhantom, _master, ...itemData } = item;
 
         const { data, error } = await supabase
             .from(TABLE_NAME)
@@ -62,7 +63,8 @@ export const inventoryService = {
         // We absolutely need ID to update
         if (!item.id) throw new Error("Item ID is required for update");
 
-        const { id, isPhantom, created_at, ...itemData } = item;
+        // Strip any UI-only fields before DB update
+        const { id, isPhantom, created_at, _master, ...itemData } = item;
 
         const { data, error } = await supabase
             .from(TABLE_NAME)
