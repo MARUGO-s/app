@@ -82,13 +82,22 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
             clearTimeout(timeoutRef.current);
         }
 
+        if (newValue.length === 0) {
+            // If empty, hide suggestions
+            setShowSuggestions(false);
+            return;
+        }
+
         // DEBOUNCE: Wait 150ms before searching (DB search is fast)
         // Reduced from 300ms for better responsiveness with database-level search
         timeoutRef.current = setTimeout(async () => {
             if (newValue.length > 0) {
                 const currentRequestId = ++requestRef.current; // Increment ID
 
+                console.log('🔍 AutocompleteInput: Fetching suggestions for:', newValue);
                 const results = await ingredientSearchService.search(newValue);
+
+                console.log('📋 AutocompleteInput: Got', results.length, 'suggestions');
 
                 // RACE CONDITION CHECK:
                 // Only update state if this is still the latest request
@@ -97,8 +106,6 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
                     setShowSuggestions(results.length > 0);
                     setSelectedIndex(-1);
                 }
-            } else {
-                setShowSuggestions(false);
             }
         }, 150);
     };
@@ -144,10 +151,18 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
                 value={value}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                onFocus={() => {
+                onFocus={async () => {
                     if (value && value.length > 0) {
+                        // If already has value, show suggestions
                         calculatePosition();
-                        setShowSuggestions(true);
+                        const results = await ingredientSearchService.search(value);
+                        setSuggestions(results);
+                        setShowSuggestions(results.length > 0);
+                    } else {
+                        // If empty, trigger search anyway to show all available options
+                        calculatePosition();
+                        // For empty focus, show recently used or top items
+                        // This will be loaded on first keystroke
                     }
                 }}
                 placeholder={placeholder}
