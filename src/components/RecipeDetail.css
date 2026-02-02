@@ -87,6 +87,30 @@
     font-size: 1rem;
 }
 
+.recipe-detail__owner {
+    margin-top: 0.35rem;
+    font-size: 0.9rem;
+    /* Was hardcoded #666; increase contrast on dark background */
+    color: hsl(var(--color-text-main));
+    opacity: 0.82;
+}
+
+.recipe-detail__subtle {
+    /* Works on both light and dark surfaces via inherited color */
+    color: currentColor;
+    opacity: 0.75;
+}
+
+.recipe-detail__tax-note {
+    font-size: 0.75rem;
+}
+
+.recipe-detail__tax-footnote {
+    text-align: right;
+    font-size: 0.75rem;
+    margin-top: 0.5rem;
+}
+
 .recipe-detail__meta {
     display: flex;
     gap: var(--space-xl);
@@ -460,6 +484,12 @@
         padding: var(--space-sm) 0;
         border-bottom: 1px solid hsl(var(--color-border));
         font-size: 0.95rem;
+    }
+
+    /* Improve contrast for "仕入れ" column values on dark background */
+    .ingredient-cost-muted {
+        color: hsl(var(--color-text-muted));
+        opacity: 0.92;
     }
 
     .ingredient-name {

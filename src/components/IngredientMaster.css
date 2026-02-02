@@ -84,6 +84,12 @@
     color: #D2691E;
 }
 
+.csv-unit-cell {
+    color: #6b7280;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
 .action-buttons {
     display: flex;
     gap: 8px;
