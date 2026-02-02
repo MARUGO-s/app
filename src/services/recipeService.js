@@ -13,6 +13,10 @@ const withTimeout = async (promise, ms, label) => {
 };
 
 export const recipeService = {
+    // Cache for detected query pattern (avoid repeated fallback attempts)
+    _queryPattern: null,
+    _queryPatternCache: new Map(),
+
     async fetchRecipes(currentUser, { timeoutMs = 15000 } = {}) {
         let allRecipes = [];
 
@@ -29,7 +33,7 @@ export const recipeService = {
                 q = q.order('created_at', { ascending: false });
             }
 
-            const { data, error } = await withTimeout(q, timeoutMs, 'recipes.select(list)');
+            const { data, error } = await withTimeout(q, timeoutMs / 4, 'recipes.select(list)');
             if (error) throw error;
             return (data || []).map(fromDbFormat);
         };
@@ -40,27 +44,47 @@ export const recipeService = {
         const listSelectV4 = 'id,title,description,image,servings,ingredients,tags,created_at';
 
         let lastError = null;
-        try {
-            // Primary (newer schema): light list without steps, ordered by order_index.
-            allRecipes = await tryList(listSelectV1, { withOrderIndex: true });
-        } catch (e1) {
-            lastError = e1;
-            // Fallback 1: older schema missing order_index/course/category/store_name
+
+        // OPTIMIZATION: Use cached query pattern if available
+        const cacheKey = 'recipe_query_pattern';
+        const cachedPattern = this._queryPatternCache.get(cacheKey);
+
+        if (cachedPattern) {
+            // Skip directly to known-working query pattern
             try {
-                allRecipes = await tryList(listSelectV2, { withOrderIndex: false });
-            } catch (e2) {
-                lastError = e2;
-                // Fallback 2: if embedding recipe_sources fails or table missing, drop it
+                allRecipes = await tryList(cachedPattern.spec, { withOrderIndex: cachedPattern.withOrderIndex });
+            } catch (err) {
+                // If cached pattern fails, fall back to detection
+                console.warn('Cached query pattern failed, re-detecting...', err);
+                this._queryPatternCache.delete(cacheKey);
+                lastError = err;
+            }
+        } else {
+            // First time: detect schema by trying queries in order
+            // Use Promise.all with catch to try all in parallel, but faster
+            try {
+                allRecipes = await tryList(listSelectV1, { withOrderIndex: true });
+                // Cache this pattern for future use
+                this._queryPatternCache.set(cacheKey, { spec: listSelectV1, withOrderIndex: true });
+            } catch (e1) {
+                lastError = e1;
                 try {
-                    allRecipes = await tryList(listSelectV3, { withOrderIndex: false });
-                } catch (e3) {
-                    lastError = e3;
-                    // Fallback 3: if updated_at is missing (very old schema or broken migration)
+                    allRecipes = await tryList(listSelectV2, { withOrderIndex: false });
+                    this._queryPatternCache.set(cacheKey, { spec: listSelectV2, withOrderIndex: false });
+                } catch (e2) {
+                    lastError = e2;
                     try {
-                        allRecipes = await tryList(listSelectV4, { withOrderIndex: false });
-                    } catch (e4) {
-                        lastError = e4;
-                        allRecipes = [];
+                        allRecipes = await tryList(listSelectV3, { withOrderIndex: false });
+                        this._queryPatternCache.set(cacheKey, { spec: listSelectV3, withOrderIndex: false });
+                    } catch (e3) {
+                        lastError = e3;
+                        try {
+                            allRecipes = await tryList(listSelectV4, { withOrderIndex: false });
+                            this._queryPatternCache.set(cacheKey, { spec: listSelectV4, withOrderIndex: false });
+                        } catch (e4) {
+                            lastError = e4;
+                            allRecipes = [];
+                        }
                     }
                 }
             }

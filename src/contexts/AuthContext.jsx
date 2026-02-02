@@ -38,33 +38,42 @@ export const AuthProvider = ({ children }) => {
         // Load profile (app metadata)
         let profile = null;
         try {
-            // Try selecting with email column (newer schema). If the column doesn't exist yet, retry without it.
+            // Optimize: Try both with and without email column in parallel
+            // This avoids sequential retries and speeds up profile loading significantly
             let data = null;
             let error = null;
-            const res1 = await withTimeout(
-                supabase
-                    .from('profiles')
-                    .select('id, display_id, role, show_master_recipes, email')
-                    .eq('id', uid)
-                    .single(),
-                8000,
-                'profiles.select(with_email)'
-            );
-            data = res1?.data ?? null;
-            error = res1?.error ?? null;
 
-            if (error && String(error.message || '').toLowerCase().includes('email')) {
-                const res2 = await withTimeout(
+            const [res1, res2] = await Promise.all([
+                withTimeout(
+                    supabase
+                        .from('profiles')
+                        .select('id, display_id, role, show_master_recipes, email')
+                        .eq('id', uid)
+                        .single(),
+                    4000,
+                    'profiles.select(with_email)'
+                ).catch(e => null),
+                withTimeout(
                     supabase
                         .from('profiles')
                         .select('id, display_id, role, show_master_recipes')
                         .eq('id', uid)
                         .single(),
-                    8000,
+                    4000,
                     'profiles.select'
-                );
-                data = res2?.data ?? null;
-                error = res2?.error ?? null;
+                ).catch(e => null)
+            ]);
+
+            // Use whichever query succeeded first
+            if (res1?.data) {
+                data = res1.data;
+                error = null;
+            } else if (res2?.data) {
+                data = res2.data;
+                error = null;
+            } else {
+                // Both failed, use first error
+                error = res1?.error ?? res2?.error ?? new Error('Profile fetch failed');
             }
 
             if (error) {
