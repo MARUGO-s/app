@@ -16,34 +16,68 @@ export const recipeService = {
     async fetchRecipes(currentUser, { timeoutMs = 15000 } = {}) {
         let allRecipes = [];
 
-        try {
-            // IMPORTANT:
-            // - Avoid fetching huge columns (steps) for list. Detail view fetches full data when needed.
-            // - Keep ingredients for search/filter and type meta extraction.
-            const { data, error } = await withTimeout(
-                supabase
-                    .from('recipes')
-                    .select('id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at,updated_at,order_index,recipe_sources(url)')
+        const tryList = async (selectSpec, { withOrderIndex }) => {
+            let q = supabase
+                .from('recipes')
+                .select(selectSpec);
+
+            if (withOrderIndex) {
+                q = q
                     .order('order_index', { ascending: true, nullsFirst: true })
-                    .order('created_at', { ascending: false }),
-                timeoutMs,
-                'recipes.select(list)'
-            );
+                    .order('created_at', { ascending: false });
+            } else {
+                q = q.order('created_at', { ascending: false });
+            }
 
-            if (error) throw error
-            allRecipes = data.map(fromDbFormat);
+            const { data, error } = await withTimeout(q, timeoutMs, 'recipes.select(list)');
+            if (error) throw error;
+            return (data || []).map(fromDbFormat);
+        };
 
-        } catch (error) {
-            console.warn("Supabase fetch failed, falling back to LocalStorage:", error);
-            // 2. Fallback to LocalStorage
+        const listSelectV1 = 'id,title,description,image,servings,course,category,store_name,ingredients_meta:ingredients->0,tags,created_at,updated_at,order_index,recipe_sources(url)';
+        const listSelectV2 = 'id,title,description,image,servings,ingredients,tags,created_at,updated_at,recipe_sources(url)';
+        const listSelectV3 = 'id,title,description,image,servings,ingredients,tags,created_at,updated_at';
+        const listSelectV4 = 'id,title,description,image,servings,ingredients,tags,created_at';
+
+        let lastError = null;
+        try {
+            // Primary (newer schema): light list without steps, ordered by order_index.
+            allRecipes = await tryList(listSelectV1, { withOrderIndex: true });
+        } catch (e1) {
+            lastError = e1;
+            // Fallback 1: older schema missing order_index/course/category/store_name
+            try {
+                allRecipes = await tryList(listSelectV2, { withOrderIndex: false });
+            } catch (e2) {
+                lastError = e2;
+                // Fallback 2: if embedding recipe_sources fails or table missing, drop it
+                try {
+                    allRecipes = await tryList(listSelectV3, { withOrderIndex: false });
+                } catch (e3) {
+                    lastError = e3;
+                    // Fallback 3: if updated_at is missing (very old schema or broken migration)
+                    try {
+                        allRecipes = await tryList(listSelectV4, { withOrderIndex: false });
+                    } catch (e4) {
+                        lastError = e4;
+                        allRecipes = [];
+                    }
+                }
+            }
+        }
+
+        if (allRecipes.length === 0 && lastError) {
+            // If Supabase failed and we have no local fallback data, propagate error so UI can show a message.
             try {
                 const localData = localStorage.getItem('local_recipes');
                 if (localData) {
                     allRecipes = JSON.parse(localData).map(r => typeof fromDbFormat === 'function' ? fromDbFormat(r) : r);
+                } else {
+                    throw lastError;
                 }
             } catch (e) {
-                console.error("LocalStorage read error:", e);
-                allRecipes = [];
+                // Keep lastError to help callers show a useful message.
+                throw lastError;
             }
         }
 
@@ -726,8 +760,14 @@ const fromDbFormat = (recipe) => {
     let cleanIngredients = rawIngs;
 
     // UNPACKING STRATEGY:
-    // Check for _meta item
-    if (Array.isArray(rawIngs) && rawIngs.length > 0 && rawIngs[0]._meta) {
+    // OPTIMIZATION: Check for lightweight metadata first (from List View)
+    if (recipe.ingredients_meta) {
+        type = recipe.ingredients_meta.type || 'normal';
+        // Ensure cleanIngredients is empty array to avoid UI issues
+        cleanIngredients = [];
+    }
+    // STANDARD: Check for _meta item in full ingredients list (from Detail View)
+    else if (Array.isArray(rawIngs) && rawIngs.length > 0 && rawIngs[0]._meta) {
         const meta = rawIngs[0];
         type = meta.type || 'normal';
 

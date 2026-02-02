@@ -5,6 +5,10 @@
     margin-bottom: var(--space-md);
 }
 
+.input-group--no-margin {
+    margin-bottom: 0;
+}
+
 .input-label {
     font-size: 0.8rem;
     font-weight: 600;
@@ -21,6 +25,11 @@
     font-size: 0.95rem;
     font-family: inherit;
     transition: border-color var(--transition-fast);
+    line-height: 1.4;
+    /* Stick to standard */
+    min-height: 38px;
+    /* Force a comfortable standard height for touch targets */
+    box-sizing: border-box;
 }
 
 .input-field:focus {

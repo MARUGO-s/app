@@ -785,26 +785,5 @@
 }
 
 /* 印刷時のスタイル（モーダル内からの印刷用） */
-@media print {
-
-    .modal-overlay,
-    .modal-header,
-    .modal-actions {
-        display: none !important;
-    }
-
-    .modal-content {
-        box-shadow: none;
-        max-height: none;
-        border-radius: 0;
-    }
-
-    .print-preview-recipe {
-        padding: 0;
-    }
-
-    .preview-steps li::before {
-        print-color-adjust: exact;
-        -webkit-print-color-adjust: exact;
-    }
-}
+/* 印刷時のスタイル（モーダル内からの印刷用） - Removed to prevent conflict with main print styles */
+/* Primary print styles are defined at the top of the file */

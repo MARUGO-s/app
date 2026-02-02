@@ -140,7 +140,8 @@ export const AuthProvider = ({ children }) => {
         }
 
         const displayId = profile?.display_id || getEmailLocalPart(email) || uid.slice(0, 8);
-        const role = profile?.role || 'user';
+        const rawRole = profile?.role || 'user';
+        const role = String(rawRole).trim().toLowerCase();
         const showMasterRecipes = profile?.show_master_recipes === true;
 
         setUser({
@@ -155,6 +156,26 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         let unsub = null;
 
+        // 1. Check URL hash manually for recovery flow to set state immediately
+        // Supabase sends type=recovery in the hash
+        if (typeof window !== 'undefined' && window.location.hash && window.location.hash.includes('type=recovery')) {
+            setIsPasswordRecovery(true);
+        }
+
+        // 2. Subscribe to auth changes FIRST to catch explicit events
+        const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            if (_event === 'PASSWORD_RECOVERY') {
+                setIsPasswordRecovery(true);
+            }
+            try {
+                await loadProfileAndSetUser(session?.user || null);
+            } catch (e) {
+                console.error('Auth state change handler failed:', e);
+            }
+        });
+        unsub = sub?.subscription;
+
+        // 3. Initial Session Load
         const init = async () => {
             try {
                 const { data } = await withTimeout(
@@ -162,24 +183,13 @@ export const AuthProvider = ({ children }) => {
                     8000,
                     'auth.getSession'
                 );
+                // Only set user if we didn't already get it from onAuthStateChange (though safe to call twice)
                 await loadProfileAndSetUser(data?.session?.user || null);
             } catch (e) {
                 console.error('Auth init failed:', e);
             } finally {
                 setLoading(false);
             }
-
-            const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
-                if (_event === 'PASSWORD_RECOVERY') {
-                    setIsPasswordRecovery(true);
-                }
-                try {
-                    await loadProfileAndSetUser(session?.user || null);
-                } catch (e) {
-                    console.error('Auth state change handler failed:', e);
-                }
-            });
-            unsub = sub?.subscription;
         };
 
         init();

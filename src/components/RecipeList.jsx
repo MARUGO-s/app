@@ -66,9 +66,11 @@ const SortableRecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, 
                             if (!recipe.tags) return null;
                             // Split by comma and clean
                             const allTags = recipe.tags.flatMap(t => (t || '').split(/[,、]/)).map(t => t.trim()).filter(Boolean);
+                            // Filter out internal tags (like owner:*)
+                            const visibleTags = allTags.filter(t => !t.startsWith('owner:'));
                             // Prioritize 'URL取り込み'
-                            const hasImport = allTags.includes('URL取り込み');
-                            const displayTags = hasImport ? ['URL取り込み'] : allTags;
+                            const hasImport = visibleTags.includes('URL取り込み');
+                            const displayTags = hasImport ? ['URL取り込み'] : visibleTags;
 
                             return displayTags.slice(0, 1).map((tag, index) => (
                                 <span key={`${tag}-${index}`} className="recipe-tag">{tag}</span>
@@ -207,11 +209,12 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                         alignItems: 'center',
                         gap: '8px',
                         cursor: (!isAllMode && hasMore) ? 'pointer' : 'default',
-                        userSelect: 'none'
+                        userSelect: 'none',
+                        color: '#ffffff' // White text as requested
                     }}
                 >
                     <span>{icon}</span> {title}
-                    <span style={{ fontSize: '0.8rem', color: '#888', fontWeight: 'normal' }}>({items.length})</span>
+                    <span style={{ fontSize: '0.8rem', color: '#ccc', fontWeight: 'normal' }}>({items.length})</span>
                     {!isAllMode && hasMore && (
                         <span className="section-toggle-btn">
                             {isExpanded ? '▲ 閉じる' : '▼ もっと見る'}

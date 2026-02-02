@@ -11,6 +11,7 @@
 /* Make Cards in RecipeForm 50% transparent as requested */
 .recipe-form .glass-card {
     background: rgba(255, 255, 255, 0.5);
+    /* Slightly greenish tint */
     backdrop-filter: blur(8px);
     /* Optional: adds nice glass effect */
 }
@@ -87,8 +88,8 @@
 
 h3 {
     margin-bottom: var(--space-md);
-    color: #ffffff;
-    /* White as requested */
+    color: #000000;
+    /* Black as requested */
 }
 
 .form-row-3 {
