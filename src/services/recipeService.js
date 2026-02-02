@@ -1,15 +1,34 @@
 import { supabase } from '../supabase'
 
+const withTimeout = async (promise, ms, label) => {
+    let t = null;
+    try {
+        const timeoutPromise = new Promise((_, reject) => {
+            t = setTimeout(() => reject(new Error(`${label || 'operation'} timed out after ${ms}ms`)), ms);
+        });
+        return await Promise.race([promise, timeoutPromise]);
+    } finally {
+        if (t) clearTimeout(t);
+    }
+};
+
 export const recipeService = {
-    async fetchRecipes(currentUser) {
+    async fetchRecipes(currentUser, { timeoutMs = 15000 } = {}) {
         let allRecipes = [];
 
         try {
-            const { data, error } = await supabase
-                .from('recipes')
-                .select('*, recipe_sources(url)')
-                .order('order_index', { ascending: true, nullsFirst: true })
-                .order('created_at', { ascending: false })
+            // IMPORTANT:
+            // - Avoid fetching huge columns (steps) for list. Detail view fetches full data when needed.
+            // - Keep ingredients for search/filter and type meta extraction.
+            const { data, error } = await withTimeout(
+                supabase
+                    .from('recipes')
+                    .select('id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at,updated_at,order_index,recipe_sources(url)')
+                    .order('order_index', { ascending: true, nullsFirst: true })
+                    .order('created_at', { ascending: false }),
+                timeoutMs,
+                'recipes.select(list)'
+            );
 
             if (error) throw error
             allRecipes = data.map(fromDbFormat);
@@ -34,35 +53,8 @@ export const recipeService = {
             return [];
         }
 
-        console.log("fetchRecipes: Filtering for user:", currentUser);
-
-        // Fetch user preference dynamically
-        // Fetch user preference (DB + LocalStorage Fallback)
-        let showMaster = false;
-
-        // 1. Try LocalStorage first (since we know DB might fail)
-        const localKey = `user_prefs_${currentUser.id}`;
-        try {
-            const localPrefs = JSON.parse(localStorage.getItem(localKey) || '{}');
-            if (localPrefs.show_master_recipes !== undefined) {
-                showMaster = localPrefs.show_master_recipes === true;
-                console.log("Using LocalStorage preference:", showMaster);
-            }
-        } catch (e) { console.warn("Local preference read error", e); }
-
-        // 2. Fetch from DB (Source of Truth)
-        try {
-            const { data: userPref } = await supabase
-                .from('profiles')
-                .select('show_master_recipes')
-                .eq('id', currentUser.id)
-                .single();
-            if (userPref && userPref.show_master_recipes !== null) {
-                showMaster = userPref.show_master_recipes === true;
-            }
-        } catch (e) {
-            console.warn("Failed to fetch user preference from DB", e);
-        }
+        // showMasterRecipes is already loaded into AuthContext/profile
+        const showMaster = currentUser.showMasterRecipes === true;
 
         const isAdmin = currentUser.role === 'admin';
         const userIds = [String(currentUser.id)];
@@ -76,9 +68,6 @@ export const recipeService = {
             // Check for owner tag
             const ownerTag = tags.find(t => t && t.startsWith('owner:'));
 
-            // Log for debugging
-            console.log(`Recipe ${recipe.title} tags:`, tags, "OwnerTag:", ownerTag);
-
             // If NO owner tag, it's implied Master Recipe (Legacy data)
             if (!ownerTag) {
                 const isPublic = tags.includes('public');
@@ -86,7 +75,6 @@ export const recipeService = {
 
                 // It is a Master Recipe (Untagged)
                 if (showMaster) {
-                    console.log("Visible (Master/Implicit)");
                     return true;
                 }
                 // Determine if hidden
@@ -142,11 +130,15 @@ export const recipeService = {
 
     async getRecipe(id) {
         try {
-            const { data, error } = await supabase
-                .from('recipes')
-                .select('*, recipe_sources(url)')
-                .eq('id', id)
-                .single();
+            const { data, error } = await withTimeout(
+                supabase
+                    .from('recipes')
+                    .select('*, recipe_sources(url)')
+                    .eq('id', id)
+                    .single(),
+                15000,
+                'recipes.select(detail)'
+            );
 
             if (error) throw error;
             return fromDbFormat(data);

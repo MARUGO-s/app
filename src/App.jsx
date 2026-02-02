@@ -123,7 +123,12 @@ function AppContent() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) return;
-    loadRecipes();
+    // Avoid duplicate loads on initial mount / view changes.
+    if (currentView === 'trash') {
+      loadDeletedRecipes();
+    } else {
+      loadRecipes();
+    }
     loadTrashCount();
     loadRecentHistory();
   }, [authLoading, user?.id]);
@@ -236,10 +241,11 @@ function AppContent() {
   const loadRecipes = async () => {
     try {
       setLoading(true);
-      const data = await recipeService.fetchRecipes(user);
+      const data = await recipeService.fetchRecipes(user, { timeoutMs: 15000 });
       setRecipes(data || []);
     } catch (error) {
       console.error("Failed to fetch recipes:", error);
+      toast.error(`レシピの読み込みに時間がかかっています。\nネットワークをご確認の上、再読み込みしてください。\n(${error?.message || 'unknown error'})`);
     } finally {
       setLoading(false);
     }
@@ -565,13 +571,13 @@ function AppContent() {
     setSearchParams({ view: 'edit', id: newRecipe.id });
   };
 
+  // View change loader (trash vs list) with auth gating.
   useEffect(() => {
-    if (currentView === 'trash') {
-      loadDeletedRecipes();
-    } else if (user) { // Only load if user exists
-      loadRecipes();
-    }
-  }, [currentView, user]);
+    if (authLoading) return;
+    if (!user) return;
+    if (currentView === 'trash') loadDeletedRecipes();
+    else if (currentView === 'list') loadRecipes();
+  }, [currentView, authLoading, user?.id]);
 
   if (authLoading && !authStuckFallback) {
     return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading...</div>;
