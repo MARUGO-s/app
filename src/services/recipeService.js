@@ -7,7 +7,7 @@ export const recipeService = {
         try {
             const { data, error } = await supabase
                 .from('recipes')
-                .select('id, title, description, image, servings, course, category, store_name, tags, ingredients, created_at, updated_at, order_index, recipe_sources(url)')
+                .select('*, recipe_sources(url)')
                 .order('order_index', { ascending: true, nullsFirst: true })
                 .order('created_at', { ascending: false })
 
