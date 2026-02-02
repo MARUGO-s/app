@@ -201,7 +201,7 @@ h3 {
     grid-template-columns: 20px 2fr 1fr 1fr 60px 60px 20px 24px;
     gap: 2px;
     margin-bottom: 8px;
-    font-size: 0.7rem;
+    font-size: 0.72rem;
     font-weight: bold;
     color: var(--color-text-muted);
     min-width: 0;
@@ -213,7 +213,7 @@ h3 {
     .recipe-list-header {
         grid-template-columns: 24px minmax(70px, 3fr) minmax(50px, 1fr) minmax(40px, 0.8fr) 65px 65px 26px 28px;
         gap: 2px;
-        font-size: 0.75rem;
+        font-size: 0.8rem;
     }
 }
 
@@ -238,14 +238,9 @@ h3 {
 
 /* Reduced font for ALL inputs on mobile */
 .form-ingredient-row input {
-    font-size: 0.75rem !important;
+    font-size: 0.8rem !important;
     letter-spacing: -0.5px;
-    /* Compacting numbers too slightly */
     padding: 2px 2px !important;
-}
-
-.form-ingredient-row .ingredient-name input {
-    /* Name might need name-specific tweaks if any, but above covers size */
 }
 
 @media (min-width: 600px) {
@@ -326,20 +321,7 @@ h3 {
     border-radius: 4px;
 }
 
-/* Mobile adjustments */
-@media (max-width: 749px) {
-    /* We use the scroll wrapper now, so we don't strictly *need* to stack, 
-       but for better UX we keep the scroll and min-width. */
-}
-
 /* Hide legacy styles */
-.ingredient-name,
-.ingredient-qty,
-.ingredient-unit {
-    flex: unset;
-    min-width: unset;
-}
-
 .remove-btn {
     display: none;
     /* using new class */
