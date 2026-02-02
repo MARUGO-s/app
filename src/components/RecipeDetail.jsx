@@ -61,8 +61,32 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         return (num * parseFloat(mult)).toFixed(2).replace(/\.00$/, '');
     };
 
+    // State for full recipe data (fetched if steps are missing)
+    const [fullRecipe, setFullRecipe] = React.useState(recipe);
+    const [loadingDetail, setLoadingDetail] = React.useState(false);
+
     // Determines which data to show
-    const displayRecipe = currentLang === 'ORIGINAL' ? recipe : (translationCache[currentLang] || recipe);
+    const displayRecipe = currentLang === 'ORIGINAL' ? fullRecipe : (translationCache[currentLang] || fullRecipe);
+
+    React.useEffect(() => {
+        // If recipe prop changes, reset fullRecipe to it initially
+        setFullRecipe(recipe);
+
+        // If steps are missing, fetch full details
+        if (!recipe.steps && !isDeleted) {
+            setLoadingDetail(true);
+            recipeService.getRecipe(recipe.id)
+                .then(data => {
+                    setFullRecipe(data);
+                })
+                .catch(err => {
+                    console.error("Failed to load details", err);
+                })
+                .finally(() => {
+                    setLoadingDetail(false);
+                });
+        }
+    }, [recipe, isDeleted]);
 
     const [isPublic, setIsPublic] = React.useState(recipe.tags?.includes('public') || false);
     const isOwner =
