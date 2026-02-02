@@ -176,21 +176,45 @@ h3 {
 /* Ensure inner input group fills container */
 .ingredient-name .input-group {
     width: 100%;
+    margin-bottom: 0;
+}
+
+/* Additional responsive columns styling */
+.ingredient-qty,
+.ingredient-unit,
+.ingredient-cost {
+    width: 100%;
+    min-width: 0;
+}
+
+.ingredient-qty .input-group,
+.ingredient-unit .input-group,
+.ingredient-cost .input-group {
+    width: 100%;
+    margin-bottom: 0;
 }
 
 .recipe-list-header {
     display: grid;
     /* Handle | Name | Qty | Unit | Purchase | Cost | Alcohol | Delete */
-    /* Compact mobile grid */
-    grid-template-columns: 24px minmax(70px, 3fr) minmax(50px, 1fr) minmax(40px, 0.8fr) 65px 65px 26px 28px;
+    /* Responsive grid for small screens: prioritize name, reduce others */
+    grid-template-columns: 20px 2fr 1fr 1fr 60px 60px 20px 24px;
     gap: 2px;
     margin-bottom: 8px;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: bold;
     color: var(--color-text-muted);
     min-width: 0;
     width: 100%;
     padding: 0 2px;
+}
+
+@media (min-width: 600px) {
+    .recipe-list-header {
+        grid-template-columns: 24px minmax(70px, 3fr) minmax(50px, 1fr) minmax(40px, 0.8fr) 65px 65px 26px 28px;
+        gap: 2px;
+        font-size: 0.75rem;
+    }
 }
 
 @media (min-width: 1200px) {
@@ -204,8 +228,8 @@ h3 {
 
 .form-ingredient-row {
     display: grid;
-    /* Compact mobile grid */
-    grid-template-columns: 24px minmax(70px, 3fr) minmax(50px, 1fr) minmax(40px, 0.8fr) 65px 65px 26px 28px;
+    /* Responsive grid for small screens: prioritize name, reduce others */
+    grid-template-columns: 20px 2fr 1fr 1fr 60px 60px 20px 24px;
     gap: 2px;
     align-items: center;
     min-width: 0;
@@ -214,14 +238,26 @@ h3 {
 
 /* Reduced font for ALL inputs on mobile */
 .form-ingredient-row input {
-    font-size: 0.85rem !important;
+    font-size: 0.75rem !important;
     letter-spacing: -0.5px;
     /* Compacting numbers too slightly */
-    padding: 4px 2px !important;
+    padding: 2px 2px !important;
 }
 
 .form-ingredient-row .ingredient-name input {
     /* Name might need name-specific tweaks if any, but above covers size */
+}
+
+@media (min-width: 600px) {
+    .form-ingredient-row {
+        grid-template-columns: 24px minmax(70px, 3fr) minmax(50px, 1fr) minmax(40px, 0.8fr) 65px 65px 26px 28px;
+        gap: 2px;
+    }
+
+    .form-ingredient-row input {
+        font-size: 0.85rem !important;
+        padding: 4px 2px !important;
+    }
 }
 
 @media (min-width: 1200px) {
@@ -229,6 +265,11 @@ h3 {
         grid-template-columns: 30px 1fr 80px 70px 90px 90px 30px 40px;
         gap: 8px;
         min-width: 700px;
+    }
+
+    .form-ingredient-row input {
+        font-size: 0.9rem !important;
+        padding: 4px 4px !important;
     }
 }
 
