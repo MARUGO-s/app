@@ -7,7 +7,7 @@ export const recipeService = {
         try {
             const { data, error } = await supabase
                 .from('recipes')
-                .select('*, recipe_sources(url)')
+                .select('id, title, description, image, servings, course, category, store_name, tags, ingredients, created_at, updated_at, order_index, recipe_sources(url)')
                 .order('order_index', { ascending: true, nullsFirst: true })
                 .order('created_at', { ascending: false })
 
@@ -138,6 +138,28 @@ export const recipeService = {
             .getPublicUrl(filePath);
 
         return data.publicUrl;
+    },
+
+    async getRecipe(id) {
+        try {
+            const { data, error } = await supabase
+                .from('recipes')
+                .select('*, recipe_sources(url)')
+                .eq('id', id)
+                .single();
+
+            if (error) throw error;
+            return fromDbFormat(data);
+        } catch (error) {
+            console.warn("Supabase getRecipe failed, falling back to LocalStorage:", error);
+            const localData = localStorage.getItem('local_recipes');
+            if (localData) {
+                const recipes = JSON.parse(localData);
+                const found = recipes.find(r => r.id == id);
+                if (found) return fromDbFormat(found);
+            }
+            throw error;
+        }
     },
 
     async createRecipe(recipe, currentUser) {

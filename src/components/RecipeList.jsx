@@ -43,7 +43,13 @@ const SortableRecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, 
             >
                 <div className="recipe-card__image-wrapper">
                     {recipe.image ? (
-                        <img src={recipe.image} alt={recipe.title} className="recipe-card__image" />
+                        <img
+                            src={recipe.image}
+                            alt={recipe.title}
+                            className="recipe-card__image"
+                            loading="lazy"
+                            decoding="async"
+                        />
                     ) : (
                         <div className="recipe-card__image placeholder" />
                     )}
