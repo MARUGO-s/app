@@ -60,7 +60,7 @@ export const recipeService = {
         const userIds = [String(currentUser.id)];
         if (currentUser.displayId) userIds.push(String(currentUser.displayId));
 
-        return allRecipes.filter(recipe => {
+        const filtered = allRecipes.filter(recipe => {
             // Admin sees ALL recipes
             if (isAdmin) return true;
 
@@ -68,17 +68,10 @@ export const recipeService = {
             // Check for owner tag
             const ownerTag = tags.find(t => t && t.startsWith('owner:'));
 
-            // If NO owner tag, it's implied Master Recipe (Legacy data)
+            // If NO owner tag, treat as legacy/shared and allow showing.
+            // (RLS is permissive in this project; hiding legacy items here can make the UI look empty.)
             if (!ownerTag) {
-                const isPublic = tags.includes('public');
-                if (isPublic) return true;
-
-                // It is a Master Recipe (Untagged)
-                if (showMaster) {
-                    return true;
-                }
-                // Determine if hidden
-                return false;
+                return true;
             }
 
             // If owner tag exists, it MUST match the current user OR have 'public' tag
@@ -102,6 +95,8 @@ export const recipeService = {
             //console.log(`Hidden. Owner: ${ownerTag}, User: ${currentUser.id}`);
             return false;
         });
+
+        return filtered;
     },
 
     // Helper to standardise filtering (can be used internally if needed)
