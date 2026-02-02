@@ -27,19 +27,19 @@ import { Card } from './Card';
 import { createPortal } from 'react-dom';
 import UnitConversionModal from './UnitConversionModal';
 import { unitConversionService } from '../services/unitConversionService';
+import { ingredientSearchService } from '../services/ingredientSearchService';
 
 import { AutocompleteInput } from './AutocompleteInput';
 
 // --- Sortable Item Component ---
-const SortableIngredientItem = ({
+const SortableIngredientItem = React.memo(({
     id,
     index,
     item,
     groupId,
     onChange,
     onRemove,
-    handleSuggestionSelect, // Now accepts (groupId, index, itemObject)
-
+    handleSuggestionSelect,
     onOpenConversion,
 }) => {
     const {
@@ -149,7 +149,17 @@ const SortableIngredientItem = ({
             </div>
         </div>
     );
-};
+}, (prevProps, nextProps) => {
+    // Custom comparison function for performance
+    // Only re-render if item props changed deeply or index/groupId changed
+    // Simple deep comparison for 'item' object is expensive, so check keys
+    return (
+        prevProps.id === nextProps.id &&
+        prevProps.index === nextProps.index &&
+        prevProps.groupId === nextProps.groupId &&
+        JSON.stringify(prevProps.item) === JSON.stringify(nextProps.item)
+    );
+});
 
 // --- Sortable Section Component ---
 const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, children }) => {
@@ -378,8 +388,9 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                     return { ...s, items: newItems };
                 });
 
-                // Reload conversions
+                // Reload conversions and invalidate search cache
                 unitConversionService.getAllConversions().then(map => setConversionMap(map));
+                ingredientSearchService.invalidateCache(); // Clear cache for fresh search
 
                 return { ...prev, ingredientSections: newSections };
             });
@@ -390,7 +401,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
         ? sections.find(s => s.id === conversionModal.groupId)?.items[conversionModal.index]
         : null;
 
-    const handleItemChange = (groupId, index, field, value) => {
+    const handleItemChange = React.useCallback((groupId, index, field, value) => {
         setFormData(prev => {
             const newSections = prev.ingredientSections.map(s => {
                 if (s.id !== groupId) return s;
@@ -529,9 +540,9 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
             });
             return { ...prev, ingredientSections: newSections };
         });
-    };
+    }, [conversionMap, priceList, setFormData]);
 
-    const handleSuggestionSelect = (groupId, index, item) => {
+    const handleSuggestionSelect = React.useCallback((groupId, index, item) => {
         // Apply selected item details
         setFormData(prev => {
             const newSections = prev.ingredientSections.map(s => {
@@ -581,7 +592,12 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                         }
 
                     } else {
-                        // CSV Data or others
+                        // For CSV Items, we need dynamic conversion access
+                        // Since conversionMap in useCallback dependency might be stale or cause excessive re-creation,
+                        // we can access the CURRENT conversionMap via a ref or just rely on the one in scope and list it as dependency.
+                        // Ideally, we should fetch fresh conversion if needed, but the map is stable enough.
+                        // Assuming conversionMap is in dependency (handled by React.useCallback deps)
+
                         const conv = conversionMap.get(item.name);
                         if (conv && conv.packetSize) {
                             const basePrice = (conv.lastPrice !== null && conv.lastPrice !== undefined && conv.lastPrice !== '')
@@ -633,9 +649,9 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
             });
             return { ...prev, ingredientSections: newSections };
         });
-    };
+    }, [conversionMap, setFormData]);
 
-    const handleRemoveItem = (groupId, index) => {
+    const handleRemoveItem = React.useCallback((groupId, index) => {
         setFormData(prev => ({
             ...prev,
             ingredientSections: prev.ingredientSections.map(s => {
@@ -645,7 +661,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                 return s;
             })
         }));
-    };
+    }, [setFormData]);
 
     const handleAddItem = (groupId) => {
         const newItem = { id: crypto.randomUUID(), name: '', quantity: '', unit: '', cost: '', purchaseCost: '', isAlcohol: false };

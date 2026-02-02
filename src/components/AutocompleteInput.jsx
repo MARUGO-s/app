@@ -56,7 +56,7 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
         if (wrapperRef.current) {
             const rect = wrapperRef.current.getBoundingClientRect();
             setCoords({
-                top: rect.bottom,
+                bottom: window.innerHeight - rect.top, // Distance from bottom of viewport to top of input
                 left: rect.left,
                 width: rect.width
             });
@@ -70,18 +70,37 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
         }
     }, [showSuggestions, suggestions]); // Recalc if suggestions change (though height changes, top/left shouldn't, but good practice)
 
+    const requestRef = useRef(0); // Track latest request ID
+    const timeoutRef = useRef(null); // Debounce timeout
+
     const handleInputChange = async (e) => {
         const newValue = e.target.value;
-        onChange(e); // Propagate change to parent
+        onChange(e); // Propagate change to parent immediately (Input responsiveness)
 
-        if (newValue.length > 0) {
-            const results = await ingredientSearchService.search(newValue);
-            setSuggestions(results);
-            setShowSuggestions(results.length > 0);
-            setSelectedIndex(-1);
-        } else {
-            setShowSuggestions(false);
+        // Clear previous timeout
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
         }
+
+        // DEBOUNCE: Wait 150ms before searching (DB search is fast)
+        // Reduced from 300ms for better responsiveness with database-level search
+        timeoutRef.current = setTimeout(async () => {
+            if (newValue.length > 0) {
+                const currentRequestId = ++requestRef.current; // Increment ID
+
+                const results = await ingredientSearchService.search(newValue);
+
+                // RACE CONDITION CHECK:
+                // Only update state if this is still the latest request
+                if (currentRequestId === requestRef.current) {
+                    setSuggestions(results);
+                    setShowSuggestions(results.length > 0);
+                    setSelectedIndex(-1);
+                }
+            } else {
+                setShowSuggestions(false);
+            }
+        }, 150);
     };
 
     const handleSelect = (item) => {
@@ -140,11 +159,12 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
                     ref={listRef}
                     style={{
                         position: 'fixed',
-                        top: coords.top,
+                        top: 'auto', // Reset top to avoid conflict with bottom
+                        bottom: coords.bottom, // Display ABOVE: anchor to bottom
                         left: coords.left,
                         width: coords.width,
                         zIndex: 9999, // Ensure top layer
-                        marginTop: '4px'
+                        marginBottom: '4px' // Space from input
                     }}
                 >
                     {suggestions.map((item, index) => (
