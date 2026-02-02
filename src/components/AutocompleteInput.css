@@ -22,8 +22,7 @@
     position: fixed; /* Use fixed for portal rendering */
     top: auto; /* Reset, will be set by inline style */
     bottom: auto; /* Reset, will be set by inline style */
-    left: 0;
-    right: 0;
+    /* left and right are set by inline style for responsive sizing */
     z-index: 9999; /* High z-index for portal overlay */
     background: white;
     border: 1px solid #ccc;
