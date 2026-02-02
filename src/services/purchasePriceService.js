@@ -70,8 +70,20 @@ export const purchasePriceService = {
                     }
 
                     const buffer = await data.arrayBuffer();
-                    const decoder = new TextDecoder('shift-jis');
-                    return decoder.decode(buffer);
+                    // Some Android/WebView environments don't support Shift-JIS in TextDecoder.
+                    // Fallback to UTF-8 to avoid "Loading..." deadlocks on mobile.
+                    try {
+                        const decoder = new TextDecoder('shift-jis');
+                        return decoder.decode(buffer);
+                    } catch (e) {
+                        try {
+                            const decoder = new TextDecoder('utf-8');
+                            return decoder.decode(buffer);
+                        } catch {
+                            console.warn('TextDecoder failed (shift-jis/utf-8). Skipping file:', file.name, e);
+                            return null;
+                        }
+                    }
                 });
 
             const csvTexts = await Promise.all(promises);
