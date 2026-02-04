@@ -688,6 +688,11 @@
     object-fit: cover;
 }
 
+/* プレビューでは画像を表示しない */
+.print-preview-recipe .preview-image {
+    display: none;
+}
+
 .preview-meta {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -710,10 +715,82 @@
     border-radius: 4px;
 }
 
+/* プレビューでメタ情報・説明を非表示 */
+.print-preview-recipe .preview-meta,
+.print-preview-recipe .preview-description {
+    display: none;
+}
+
 .preview-description p {
     margin: 0;
     color: #4b5563;
     line-height: 1.6;
+}
+
+.preview-controls {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 0.9rem;
+}
+
+.preview-control-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.preview-control-label {
+    font-weight: 600;
+    color: #374151;
+}
+
+.preview-control-mult {
+    font-weight: 700;
+    color: #4b5563;
+}
+
+.preview-control-input {
+    width: 90px;
+    padding: 6px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    text-align: right;
+}
+
+.preview-control-input[type="number"] {
+    -moz-appearance: textfield;
+}
+
+.preview-control-input::-webkit-outer-spin-button,
+.preview-control-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.preview-control-reset {
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    color: #374151;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.preview-control-reset:hover {
+    background: #f3f4f6;
+}
+
+.preview-control-note {
+    font-size: 0.85rem;
+    color: #6b7280;
 }
 
 .preview-section {
@@ -760,6 +837,15 @@
     text-align: left;
 }
 
+.preview-table--normal th:nth-child(2),
+.preview-table--normal td:nth-child(2) {
+    text-align: right;
+}
+
+.preview-table--normal th:nth-child(3),
+.preview-table--normal td:nth-child(3) {
+    text-align: left;
+}
 .preview-table tbody tr {
     cursor: pointer;
 }
