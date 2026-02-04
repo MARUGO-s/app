@@ -38,6 +38,21 @@ import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
 
+const LoadingScreen = ({ label, subLabel, variant = 'screen' }) => (
+  <div className={variant === 'screen' ? 'loading-screen' : 'loading-inline'}>
+    <div className="loading-spinner" aria-hidden="true" />
+    <div className="loading-text">
+      {label}
+      <span className="loading-dots" aria-hidden="true">
+        <span>.</span>
+        <span>.</span>
+        <span>.</span>
+      </span>
+    </div>
+    {subLabel && <div className="loading-subtext">{subLabel}</div>}
+  </div>
+);
+
 function AppContent() {
   const { user, logout, loading: authLoading, isPasswordRecovery } = useAuth();
   const toast = useToast();
@@ -588,7 +603,12 @@ function AppContent() {
   }, [currentView, authLoading, user?.id]);
 
   if (authLoading && !authStuckFallback) {
-    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading...</div>;
+    return (
+      <LoadingScreen
+        label="レシピデータを読み込み中"
+        subLabel="初回は少し時間がかかる場合があります"
+      />
+    );
   }
   if (!user) return <LoginPage />;
   if (isPasswordRecovery) return <PasswordResetPage />;
@@ -908,7 +928,7 @@ function AppContent() {
           </div>
 
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '2rem' }}>読み込み中...</div>
+            <LoadingScreen label="読み込み中" variant="inline" />
           ) : (
             recipes.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '2rem', color: '#888' }}>
