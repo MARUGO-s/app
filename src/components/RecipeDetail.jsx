@@ -1300,13 +1300,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                     {/* ヘッダー */}
                     <div className="preview-header">
                         <h2>{displayRecipe.title}</h2>
-                        {displayRecipe.image && (
-                            <img
-                                src={displayRecipe.image}
-                                alt={displayRecipe.title}
-                                className="preview-image"
-                            />
-                        )}
+                        {/* プレビューではレシピ画像を表示しない */}
                     </div>
 
                     {/* メタ情報 */}
