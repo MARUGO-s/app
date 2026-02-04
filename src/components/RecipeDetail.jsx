@@ -23,6 +23,8 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
     const [showHardDeleteConfirm, setShowHardDeleteConfirm] = React.useState(false);
     const [isCookingMode, setIsCookingMode] = React.useState(false);
     const [completedSteps, setCompletedSteps] = React.useState(new Set());
+    const [previewCompletedSteps, setPreviewCompletedSteps] = React.useState(new Set());
+    const [previewCompletedIngredients, setPreviewCompletedIngredients] = React.useState(new Set());
 
     const [translationCache, setTranslationCache] = React.useState({}); // {[langCode]: recipeObj }
     const [currentLang, setCurrentLang] = React.useState('ORIGINAL'); // 'ORIGINAL' is source text
@@ -182,6 +184,30 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         });
     };
 
+    const togglePreviewStep = (index) => {
+        setPreviewCompletedSteps(prev => {
+            const next = new Set(prev);
+            if (next.has(index)) {
+                next.delete(index);
+            } else {
+                next.add(index);
+            }
+            return next;
+        });
+    };
+
+    const togglePreviewIngredient = (id) => {
+        setPreviewCompletedIngredients(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    };
+
     React.useEffect(() => {
         window.scrollTo(0, 0);
         if (onView && recipe && !isDeleted) {
@@ -198,6 +224,8 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         setTranslationCache({});
         setCurrentLang('ORIGINAL');
         setCompletedSteps(new Set());
+        setPreviewCompletedSteps(new Set());
+        setPreviewCompletedIngredients(new Set());
         // Reset public state based on new recipe
         setIsPublic(recipe.tags?.includes('public') || false);
 
@@ -1311,12 +1339,27 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {(displayRecipe.flours || []).map((item, i) => (
-                                                <tr key={i}>
+                                            {(displayRecipe.flours || []).map((item, i) => {
+                                                const itemId = `flour-${i}`;
+                                                return (
+                                                <tr
+                                                    key={i}
+                                                    className={previewCompletedIngredients.has(itemId) ? 'is-completed' : ''}
+                                                    onClick={() => togglePreviewIngredient(itemId)}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                            e.preventDefault();
+                                                            togglePreviewIngredient(itemId);
+                                                        }
+                                                    }}
+                                                >
                                                     <td>{item.name}</td>
                                                     <td style={{ textAlign: 'right' }}>{item.quantity}g</td>
                                                 </tr>
-                                            ))}
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
@@ -1330,12 +1373,27 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {(displayRecipe.breadIngredients || []).map((item, i) => (
-                                                <tr key={i}>
+                                            {(displayRecipe.breadIngredients || []).map((item, i) => {
+                                                const itemId = `bread-${i}`;
+                                                return (
+                                                <tr
+                                                    key={i}
+                                                    className={previewCompletedIngredients.has(itemId) ? 'is-completed' : ''}
+                                                    onClick={() => togglePreviewIngredient(itemId)}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                            e.preventDefault();
+                                                            togglePreviewIngredient(itemId);
+                                                        }
+                                                    }}
+                                                >
                                                     <td>{item.name}</td>
                                                     <td style={{ textAlign: 'right' }}>{item.quantity}g</td>
                                                 </tr>
-                                            ))}
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
@@ -1357,11 +1415,26 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                 <div key={group.id} className="ingredient-group">
                                                     <h4>{group.name}</h4>
                                                     <ul>
-                                                        {groupIngredients.map((ing, i) => (
-                                                            <li key={i}>
+                                                        {groupIngredients.map((ing, i) => {
+                                                            const itemId = `${group.id}-${i}`;
+                                                            return (
+                                                            <li
+                                                                key={i}
+                                                                className={previewCompletedIngredients.has(itemId) ? 'is-completed' : ''}
+                                                                onClick={() => togglePreviewIngredient(itemId)}
+                                                                role="button"
+                                                                tabIndex={0}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                                        e.preventDefault();
+                                                                        togglePreviewIngredient(itemId);
+                                                                    }
+                                                                }}
+                                                            >
                                                                 {ing.name} {ing.quantity && `${ing.quantity}${ing.unit || ''}`}
                                                             </li>
-                                                        ))}
+                                                            );
+                                                        })}
                                                     </ul>
                                                 </div>
                                             );
@@ -1369,11 +1442,26 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                     } else {
                                         return (
                                             <ul>
-                                                {ingredients.map((ing, i) => (
-                                                    <li key={i}>
+                                                {ingredients.map((ing, i) => {
+                                                    const itemId = `ungrouped-${i}`;
+                                                    return (
+                                                    <li
+                                                        key={i}
+                                                        className={previewCompletedIngredients.has(itemId) ? 'is-completed' : ''}
+                                                        onClick={() => togglePreviewIngredient(itemId)}
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                e.preventDefault();
+                                                                togglePreviewIngredient(itemId);
+                                                            }
+                                                        }}
+                                                    >
                                                         {ing.name} {ing.quantity && `${ing.quantity}${ing.unit || ''}`}
                                                     </li>
-                                                ))}
+                                                    );
+                                                })}
                                             </ul>
                                         );
                                     }
@@ -1389,7 +1477,23 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                             <ol className="preview-steps">
                                 {steps.map((step, i) => {
                                     const stepText = typeof step === 'object' ? step.text : step;
-                                    return <li key={i}>{stepText}</li>;
+                                    return (
+                                        <li
+                                            key={i}
+                                            className={previewCompletedSteps.has(i) ? 'is-completed' : ''}
+                                            onClick={() => togglePreviewStep(i)}
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault();
+                                                    togglePreviewStep(i);
+                                                }
+                                            }}
+                                        >
+                                            {stepText}
+                                        </li>
+                                    );
                                 })}
                             </ol>
                         </div>
