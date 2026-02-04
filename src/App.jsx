@@ -38,9 +38,20 @@ import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
 
-const LoadingScreen = ({ label, subLabel, variant = 'screen' }) => (
+const LoadingScreen = ({
+  label,
+  subLabel,
+  variant = 'screen',
+  showLogo = true,
+}) => (
   <div className={variant === 'screen' ? 'loading-screen' : 'loading-inline'}>
-    <div className="loading-spinner" aria-hidden="true" />
+    {showLogo && (
+      <img
+        className="loading-logo"
+        src={`${import.meta.env.BASE_URL}header-logo.png`}
+        alt="Recipe management"
+      />
+    )}
     <div className="loading-text">
       {label}
       <span className="loading-dots" aria-hidden="true">
@@ -49,6 +60,7 @@ const LoadingScreen = ({ label, subLabel, variant = 'screen' }) => (
         <span>.</span>
       </span>
     </div>
+    <div className="loading-spinner" aria-hidden="true" />
     {subLabel && <div className="loading-subtext">{subLabel}</div>}
   </div>
 );
@@ -606,7 +618,7 @@ function AppContent() {
     return (
       <LoadingScreen
         label="レシピデータを読み込み中"
-        subLabel="初回は少し時間がかかる場合があります"
+        subLabel="通信状況によって時間がかかる場合があります"
       />
     );
   }
@@ -928,7 +940,11 @@ function AppContent() {
           </div>
 
           {loading ? (
-            <LoadingScreen label="読み込み中" variant="inline" />
+            <LoadingScreen
+              label="レシピ一覧を読み込み中"
+              variant="inline"
+              showLogo={false}
+            />
           ) : (
             recipes.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '2rem', color: '#888' }}>

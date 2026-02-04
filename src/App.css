@@ -142,6 +142,16 @@
   padding: 2rem;
 }
 
+.loading-logo {
+  width: 160px;
+  height: auto;
+  opacity: 0.95;
+}
+
+.loading-inline .loading-logo {
+  width: 120px;
+}
+
 .loading-spinner {
   width: 44px;
   height: 44px;
