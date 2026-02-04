@@ -1317,6 +1317,63 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                         </div>
                     )}
 
+                    <div className="preview-controls">
+                        {displayRecipe.type === 'bread' ? (
+                            <div className="preview-control-row">
+                                <label className="preview-control-label" htmlFor="preview-target-total">
+                                    仕上がり総重量(g)
+                                </label>
+                                <input
+                                    id="preview-target-total"
+                                    className="preview-control-input"
+                                    type="number"
+                                    value={targetTotal}
+                                    onChange={(e) => setTargetTotal(e.target.value)}
+                                    placeholder="1000"
+                                />
+                                {targetTotal && (
+                                    <button
+                                        type="button"
+                                        className="preview-control-reset"
+                                        onClick={() => setTargetTotal('')}
+                                    >
+                                        リセット
+                                    </button>
+                                )}
+                                {breadPrintContext?.grandTotal ? (
+                                    <span className="preview-control-note">
+                                        現在: {breadPrintContext.grandTotal.toLocaleString()}g
+                                    </span>
+                                ) : null}
+                            </div>
+                        ) : (
+                            <div className="preview-control-row">
+                                <label className="preview-control-label" htmlFor="preview-multiplier">
+                                    分量倍率
+                                </label>
+                                <span className="preview-control-mult">×</span>
+                                <input
+                                    id="preview-multiplier"
+                                    className="preview-control-input"
+                                    type="number"
+                                    step="0.1"
+                                    value={multiplier}
+                                    onChange={(e) => setMultiplier(e.target.value)}
+                                    placeholder="1"
+                                />
+                                {String(multiplier) !== '1' && (
+                                    <button
+                                        type="button"
+                                        className="preview-control-reset"
+                                        onClick={() => setMultiplier('1')}
+                                    >
+                                        リセット
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
                     {/* 材料 */}
                     <div className="preview-section">
                         <h3>材料</h3>
@@ -1335,6 +1392,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                         <tbody>
                                             {(displayRecipe.flours || []).map((item, i) => {
                                                 const itemId = `flour-${i}`;
+                                                const qty = breadPrintContext ? breadPrintContext.getScaledQtyValue(item.quantity) : item.quantity;
                                                 return (
                                                 <tr
                                                     key={i}
@@ -1350,7 +1408,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                     }}
                                                 >
                                                     <td>{item.name}</td>
-                                                    <td style={{ textAlign: 'right' }}>{item.quantity}g</td>
+                                                    <td style={{ textAlign: 'right' }}>{qty}g</td>
                                                 </tr>
                                                 );
                                             })}
@@ -1369,6 +1427,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                         <tbody>
                                             {(displayRecipe.breadIngredients || []).map((item, i) => {
                                                 const itemId = `bread-${i}`;
+                                                const qty = breadPrintContext ? breadPrintContext.getScaledQtyValue(item.quantity) : item.quantity;
                                                 return (
                                                 <tr
                                                     key={i}
@@ -1384,7 +1443,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                     }}
                                                 >
                                                     <td>{item.name}</td>
-                                                    <td style={{ textAlign: 'right' }}>{item.quantity}g</td>
+                                                    <td style={{ textAlign: 'right' }}>{qty}g</td>
                                                 </tr>
                                                 );
                                             })}
@@ -1408,11 +1467,63 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                             return (
                                                 <div key={group.id} className="ingredient-group">
                                                     <h4>{group.name}</h4>
-                                                    <ul>
-                                                        {groupIngredients.map((ing, i) => {
-                                                            const itemId = `${group.id}-${i}`;
-                                                            return (
-                                                            <li
+                                                    <table className="preview-table preview-table--normal">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>材料名</th>
+                                                                <th style={{ textAlign: 'right' }}>分量</th>
+                                                                <th>単位</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {groupIngredients.map((ing, i) => {
+                                                                const itemId = `${group.id}-${i}`;
+                                                                const name = typeof ing === 'string' ? ing : ing.name;
+                                                                const qty = typeof ing === 'object' ? getScaledQty(ing.quantity, multiplierValue) : '';
+                                                                const unit = typeof ing === 'object' ? ing.unit : '';
+                                                                return (
+                                                                    <tr
+                                                                        key={i}
+                                                                        className={previewCompletedIngredients.has(itemId) ? 'is-completed' : ''}
+                                                                        onClick={() => togglePreviewIngredient(itemId)}
+                                                                        role="button"
+                                                                        tabIndex={0}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                                e.preventDefault();
+                                                                                togglePreviewIngredient(itemId);
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        <td>{name}</td>
+                                                                        <td style={{ textAlign: 'right' }}>{qty}</td>
+                                                                        <td>{unit}</td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            );
+                                        });
+                                    } else {
+                                        return (
+                                            <table className="preview-table preview-table--normal">
+                                                <thead>
+                                                    <tr>
+                                                        <th>材料名</th>
+                                                        <th style={{ textAlign: 'right' }}>分量</th>
+                                                        <th>単位</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {ingredients.map((ing, i) => {
+                                                        const itemId = `ungrouped-${i}`;
+                                                        const name = typeof ing === 'string' ? ing : ing.name;
+                                                        const qty = typeof ing === 'object' ? getScaledQty(ing.quantity, multiplierValue) : '';
+                                                        const unit = typeof ing === 'object' ? ing.unit : '';
+                                                        return (
+                                                            <tr
                                                                 key={i}
                                                                 className={previewCompletedIngredients.has(itemId) ? 'is-completed' : ''}
                                                                 onClick={() => togglePreviewIngredient(itemId)}
@@ -1425,38 +1536,14 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                     }
                                                                 }}
                                                             >
-                                                                {ing.name} {ing.quantity && `${ing.quantity}${ing.unit || ''}`}
-                                                            </li>
-                                                            );
-                                                        })}
-                                                    </ul>
-                                                </div>
-                                            );
-                                        });
-                                    } else {
-                                        return (
-                                            <ul>
-                                                {ingredients.map((ing, i) => {
-                                                    const itemId = `ungrouped-${i}`;
-                                                    return (
-                                                    <li
-                                                        key={i}
-                                                        className={previewCompletedIngredients.has(itemId) ? 'is-completed' : ''}
-                                                        onClick={() => togglePreviewIngredient(itemId)}
-                                                        role="button"
-                                                        tabIndex={0}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter' || e.key === ' ') {
-                                                                e.preventDefault();
-                                                                togglePreviewIngredient(itemId);
-                                                            }
-                                                        }}
-                                                    >
-                                                        {ing.name} {ing.quantity && `${ing.quantity}${ing.unit || ''}`}
-                                                    </li>
-                                                    );
-                                                })}
-                                            </ul>
+                                                                <td>{name}</td>
+                                                                <td style={{ textAlign: 'right' }}>{qty}</td>
+                                                                <td>{unit}</td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
                                         );
                                     }
                                 })()}
