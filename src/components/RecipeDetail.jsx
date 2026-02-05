@@ -6,7 +6,6 @@ import { translationService } from '../services/translationService';
 import { recipeService } from '../services/recipeService';
 import { useAuth } from '../contexts/AuthContext';
 import { SUPPORTED_LANGUAGES } from '../constants';
-import { CookingMode } from './CookingMode';
 import './RecipeDetail.css';
 import QRCode from "react-qr-code";
 
@@ -21,7 +20,6 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
     const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
     const [showDuplicateConfirm, setShowDuplicateConfirm] = React.useState(false);
     const [showHardDeleteConfirm, setShowHardDeleteConfirm] = React.useState(false);
-    const [isCookingMode, setIsCookingMode] = React.useState(false);
     const [completedSteps, setCompletedSteps] = React.useState(new Set());
     const [previewCompletedSteps, setPreviewCompletedSteps] = React.useState(new Set());
     const [previewCompletedIngredients, setPreviewCompletedIngredients] = React.useState(new Set());
@@ -309,7 +307,6 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
     };
 
     const onTouchEnd = () => {
-        if (isCookingMode) return;
         if (!touchStartRef.current || !touchEndRef.current) return;
         const distance = touchStartRef.current - touchEndRef.current;
         const isLeftEdge = touchStartRef.current < 50;
@@ -418,27 +415,60 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
     const ingredients = displayRecipe.ingredients || [];
     // Normalization: Check if steps are hidden in ingredient groups (common in this app's data)
     let normalizedSteps = displayRecipe.steps || [];
+    const normalizeGroupName = (name) => String(name || '').trim().toLowerCase();
+    const isStepGroupName = (name) => {
+        const normalized = normalizeGroupName(name);
+        if (!normalized) return false;
+        return ['作り方', '手順', 'steps', 'method'].some(keyword => normalized === keyword || normalized.includes(keyword));
+    };
 
     // If no standard steps, look for an ingredient group named "作り方" or similar
     if (!normalizedSteps.length && displayRecipe.ingredientGroups) {
-        const stepGroup = displayRecipe.ingredientGroups.find(g => ['作り方', 'Steps', 'Method', '手順'].includes(g.name));
+        const stepGroup = displayRecipe.ingredientGroups.find(g => isStepGroupName(g.name));
         if (stepGroup) {
             // Found a group that should be steps
             const stepItems = ingredients.filter(ing => ing.groupId === stepGroup.id);
             // Convert to simple strings or objects as expected by renderer
             // Ingredient items usually have 'name' property
-            normalizedSteps = stepItems.map(item => typeof item === 'string' ? item : (item.name || item.text || ""));
+            normalizedSteps = stepItems.map(item => {
+                if (typeof item === 'string') return item;
+                // Preserve all properties (including groupId) and ensure text property exists
+                return {
+                    ...item,
+                    text: item.name || item.text || ""
+                };
+            });
+        } else {
+            // Fallback: legacy items may carry group name directly on the item
+            const stepItems = ingredients.filter(ing => isStepGroupName(ing.group) || isStepGroupName(ing.groupName));
+            if (stepItems.length) {
+                normalizedSteps = stepItems.map(item => {
+                    if (typeof item === 'string') return item;
+                    return {
+                        ...item,
+                        text: item.name || item.text || ""
+                    };
+                });
+            }
         }
     }
 
     const steps = normalizedSteps;
 
     const printIngredientSections = React.useMemo(() => {
-        const skipNames = ['作り方', 'Steps', 'Method', '手順'];
-        const groups = (displayRecipe.ingredientGroups || []).filter(group => !skipNames.includes(group.name));
+        const rawGroups = displayRecipe.ingredientGroups || [];
+        const skipNames = ['作り方', 'steps', 'method', '手順'];
+        const normalizeName = (name) => String(name || '').trim().toLowerCase();
+        const skipGroupIds = new Set(
+            rawGroups
+                .filter(group => skipNames.includes(normalizeName(group.name)))
+                .map(group => group.id)
+        );
+
+        const groups = rawGroups.filter(group => !skipGroupIds.has(group.id));
 
         if (!groups.length) {
-            return [{ id: 'default', name: null, items: ingredients }];
+            return [{ id: 'default', name: null, items: ingredients.filter(ing => !skipGroupIds.has(ing.groupId)) }];
         }
 
         const mapped = groups.map(group => {
@@ -446,12 +476,16 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
             return { id: group.id, name: group.name === '材料' ? null : group.name, items };
         }).filter(section => section.items.length > 0);
 
-        const ungrouped = ingredients.filter(ing => !ing.groupId || !groups.some(g => g.id === ing.groupId));
+        const ungrouped = ingredients.filter(ing => {
+            if (!ing.groupId) return true;
+            if (skipGroupIds.has(ing.groupId)) return false;
+            return !groups.some(g => g.id === ing.groupId);
+        });
         if (ungrouped.length) {
             mapped.push({ id: 'ungrouped', name: null, items: ungrouped });
         }
 
-        return mapped.length ? mapped : [{ id: 'default', name: null, items: ingredients }];
+        return mapped.length ? mapped : [{ id: 'default', name: null, items: ingredients.filter(ing => !skipGroupIds.has(ing.groupId)) }];
     }, [displayRecipe.ingredientGroups, ingredients]);
 
     const breadPrintContext = React.useMemo(() => {
@@ -506,524 +540,951 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
 
     return (
         <>
-        <div
-            className="recipe-detail fade-in"
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
-        >
-            {isCookingMode && (
-                <CookingMode
-                    recipe={displayRecipe}
-                    steps={normalizedSteps}
-                    onClose={() => setIsCookingMode(false)}
-                />
-            )}
+            <div
+                className="recipe-detail fade-in"
+                onTouchStart={onTouchStart}
+                onTouchMove={onTouchMove}
+                onTouchEnd={onTouchEnd}
+            >
             {/* ... (modals kept same) */}
-            {showDuplicateConfirm && (
-                <div className="modal-overlay fade-in" style={{
-                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                    <Card style={{ width: '90%', maxWidth: '400px', padding: '1.5rem', color: '#333' }}>
-                        <h3 style={{ marginTop: 0, color: 'var(--color-primary)' }}>レシピの複製</h3>
-                        <p style={{ margin: '1rem 0', color: '#333' }}>
-                            このレシピのコピーを作成しますか？
-                        </p>
-                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-                            <Button variant="ghost" onClick={cancelDuplicate}>キャンセル</Button>
-                            <Button variant="primary" onClick={confirmDuplicate}>複製する</Button>
-                        </div>
-                    </Card>
-                </div>
-            )}
+                {showDuplicateConfirm && (
+                    <div className="modal-overlay fade-in" style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                        <Card style={{ width: '90%', maxWidth: '400px', padding: '1.5rem', color: '#333' }}>
+                            <h3 style={{ marginTop: 0, color: 'var(--color-primary)' }}>レシピの複製</h3>
+                            <p style={{ margin: '1rem 0', color: '#333' }}>
+                                このレシピのコピーを作成しますか？
+                            </p>
+                            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+                                <Button variant="ghost" onClick={cancelDuplicate}>キャンセル</Button>
+                                <Button variant="primary" onClick={confirmDuplicate}>複製する</Button>
+                            </div>
+                        </Card>
+                    </div>
+                )}
 
-            {showHardDeleteConfirm && (
-                <div className="modal-overlay fade-in" style={{
-                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                    <Card style={{ width: '90%', maxWidth: '400px', padding: '1.5rem', border: '2px solid var(--color-danger)', color: '#333' }}>
-                        <h3 style={{ marginTop: 0, color: 'var(--color-danger)' }}>⚠️ 完全に削除しますか？</h3>
-                        <p style={{ margin: '1rem 0', color: '#333' }}>
-                            この操作は取り消せません。<br />
-                            永久に削除され、二度と復元できなくなります。
-                        </p>
-                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-                            <Button variant="ghost" onClick={cancelHardDelete}>キャンセル</Button>
-                            <Button variant="danger" onClick={confirmHardDelete}>完全に削除する</Button>
-                        </div>
-                    </Card>
-                </div>
-            )}
+                {showHardDeleteConfirm && (
+                    <div className="modal-overlay fade-in" style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                        <Card style={{ width: '90%', maxWidth: '400px', padding: '1.5rem', border: '2px solid var(--color-danger)', color: '#333' }}>
+                            <h3 style={{ marginTop: 0, color: 'var(--color-danger)' }}>⚠️ 完全に削除しますか？</h3>
+                            <p style={{ margin: '1rem 0', color: '#333' }}>
+                                この操作は取り消せません。<br />
+                                永久に削除され、二度と復元できなくなります。
+                            </p>
+                            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+                                <Button variant="ghost" onClick={cancelHardDelete}>キャンセル</Button>
+                                <Button variant="danger" onClick={confirmHardDelete}>完全に削除する</Button>
+                            </div>
+                        </Card>
+                    </div>
+                )}
 
-            {showDeleteConfirm && (
-                <div className="modal-overlay fade-in" style={{
-                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                    <Card style={{ width: '90%', maxWidth: '400px', padding: '1.5rem', color: '#333' }}>
-                        <h3 style={{ marginTop: 0, color: 'var(--color-danger)' }}>レシピの削除</h3>
-                        <p style={{ margin: '1rem 0', color: '#333' }}>
-                            本当にこのレシピを削除しますか？<br />
-                            <small style={{ color: '#666' }}>（削除済みアイテムとしてゴミ箱に移動します）</small>
-                        </p>
-                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-                            <Button variant="ghost" onClick={cancelDelete}>キャンセル</Button>
-                            <Button variant="danger" onClick={confirmDelete}>削除する</Button>
-                        </div>
-                    </Card>
-                </div>
-            )}
+                {showDeleteConfirm && (
+                    <div className="modal-overlay fade-in" style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                        <Card style={{ width: '90%', maxWidth: '400px', padding: '1.5rem', color: '#333' }}>
+                            <h3 style={{ marginTop: 0, color: 'var(--color-danger)' }}>レシピの削除</h3>
+                            <p style={{ margin: '1rem 0', color: '#333' }}>
+                                本当にこのレシピを削除しますか？<br />
+                                <small style={{ color: '#666' }}>（削除済みアイテムとしてゴミ箱に移動します）</small>
+                            </p>
+                            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+                                <Button variant="ghost" onClick={cancelDelete}>キャンセル</Button>
+                                <Button variant="danger" onClick={confirmDelete}>削除する</Button>
+                            </div>
+                        </Card>
+                    </div>
+                )}
 
-            <div className="recipe-detail__header">
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <Button variant="secondary" onClick={onBack} size="sm">{backLabel || "← 戻る"}</Button>
-                    {onList && (
-                        <Button variant="secondary" onClick={onList} size="sm">レシピ一覧</Button>
-                    )}
-                </div>
-                {!isDeleted && (
-                    <div className="recipe-detail__actions">
+                <div className="recipe-detail__header">
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <Button variant="secondary" onClick={onBack} size="sm">{backLabel || "← 戻る"}</Button>
+                        {onList && (
+                            <Button variant="secondary" onClick={onList} size="sm">レシピ一覧</Button>
+                        )}
+                    </div>
+                    {!isDeleted && (
+                        <div className="recipe-detail__actions">
 
-                        {/* Public Toggle (Owner Only) */}
-                        {canEdit && (user?.displayId === 'yoshito' || user?.role === 'admin') && (
-                            <div style={{ marginRight: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <label className="switch" style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                            {/* Public Toggle (Owner Only) */}
+                            {canEdit && (user?.displayId === 'yoshito' || user?.role === 'admin') && (
+                                <div style={{ marginRight: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <label className="switch" style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={isPublic}
+                                            onChange={handleTogglePublic}
+                                            style={{ accentColor: '#4CAF50', transform: 'scale(1.2)' }}
+                                        />
+                                        <span style={{ marginLeft: '4px', fontSize: '0.9rem', fontWeight: 'bold', color: isPublic ? '#4CAF50' : '#888' }}>
+                                            {isPublic ? '公開中' : '非公開'}
+                                        </span>
+                                    </label>
+                                </div>
+                            )}
+
+                            {!canEdit && (
+                                <span style={{
+                                    padding: '4px 8px',
+                                    backgroundColor: '#e0e0e0',
+                                    color: '#555',
+                                    borderRadius: '4px',
+                                    fontSize: '0.85rem',
+                                    marginRight: '0.5rem'
+                                }}>
+                                    🔒 マスターデータ (閲覧のみ)
+                                </span>
+                            )}
+
+                            <select
+                                className="language-select"
+                                value={currentLang}
+                                onChange={handleLanguageChange}
+                                disabled={isTranslating}
+                                style={{ padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', marginRight: '0.5rem', cursor: 'pointer' }}
+                            >
+                                <option value="ORIGINAL">📄 Original (原文)</option>
+                                {SUPPORTED_LANGUAGES.map(lang => (
+                                    <option key={lang.code} value={lang.code}>
+                                        {lang.label}
+                                    </option>
+                                ))}
+                            </select>
+                            {currentLang !== 'ORIGINAL' && (
+                                <label style={{ display: 'flex', alignItems: 'center', marginRight: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', userSelect: 'none' }}>
                                     <input
                                         type="checkbox"
-                                        checked={isPublic}
-                                        onChange={handleTogglePublic}
-                                        style={{ accentColor: '#4CAF50', transform: 'scale(1.2)' }}
+                                        checked={showOriginal}
+                                        onChange={(e) => setShowOriginal(e.target.checked)}
+                                        style={{ marginRight: '4px' }}
                                     />
-                                    <span style={{ marginLeft: '4px', fontSize: '0.9rem', fontWeight: 'bold', color: isPublic ? '#4CAF50' : '#888' }}>
-                                        {isPublic ? '公開中' : '非公開'}
-                                    </span>
+                                    原文表示
                                 </label>
-                            </div>
-                        )}
-
-                        {!canEdit && (
-                            <span style={{
-                                padding: '4px 8px',
-                                backgroundColor: '#e0e0e0',
-                                color: '#555',
-                                borderRadius: '4px',
-                                fontSize: '0.85rem',
-                                marginRight: '0.5rem'
-                            }}>
-                                🔒 マスターデータ (閲覧のみ)
-                            </span>
-                        )}
-
-                        <select
-                            className="language-select"
-                            value={currentLang}
-                            onChange={handleLanguageChange}
-                            disabled={isTranslating}
-                            style={{ padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', marginRight: '0.5rem', cursor: 'pointer' }}
-                        >
-                            <option value="ORIGINAL">📄 Original (原文)</option>
-                            {SUPPORTED_LANGUAGES.map(lang => (
-                                <option key={lang.code} value={lang.code}>
-                                    {lang.label}
-                                </option>
-                            ))}
-                        </select>
-                        {currentLang !== 'ORIGINAL' && (
-                            <label style={{ display: 'flex', alignItems: 'center', marginRight: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', userSelect: 'none' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={showOriginal}
-                                    onChange={(e) => setShowOriginal(e.target.checked)}
-                                    style={{ marginRight: '4px' }}
-                                />
-                                原文表示
-                            </label>
-                        )}
+                            )}
                         <Button variant="secondary" size="sm" onClick={() => setShowPrintModal(true)}>🖨️ プレビュー</Button>
+                        <Button variant="secondary" size="sm" onClick={() => window.print()}>🖨️ 印刷</Button>
                         <Button variant="secondary" size="sm" onClick={handleDuplicateClick}>複製</Button>
 
-                        {canEdit && (
-                            <>
-                                <Button variant="secondary" size="sm" onClick={onEdit}>編集</Button>
+                            {canEdit && (
+                                <>
+                                    <Button variant="secondary" size="sm" onClick={onEdit}>編集</Button>
                                 <Button variant="danger" size="sm" onClick={handleDeleteClick} style={{ marginLeft: '0.5rem' }}>削除</Button>
                             </>
                         )}
 
-                        <Button variant="primary" size="sm" onClick={() => setIsCookingMode(true)}>クッキングモード</Button>
-                    </div>
-                )}
-                {isDeleted && (
-                    <div className="recipe-detail__actions">
-                        <Button variant="ghost" size="sm" onClick={handleHardDeleteClick} style={{ color: 'var(--color-danger)', marginRight: 'auto' }}>完全に削除</Button>
-                        <Button variant="primary" size="sm" onClick={() => onDelete(recipe, true)}>復元する</Button>
-                    </div>
-                )}
-            </div>
-
-            <div className="recipe-detail__hero">
-                {displayRecipe.image ? (
-                    <img src={displayRecipe.image} alt={displayRecipe.title} className="recipe-detail__image" />
-                ) : (
-                    <div className="recipe-detail__image-placeholder" style={{ height: '100%', backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
-                        画像なし
-                    </div>
-                )}
-            </div>
-
-            <div className="recipe-detail__title-card glass-panel">
-                <h1>{renderText(displayRecipe.title, recipe.title)}</h1>
-                <p className="recipe-detail__desc">{renderText(displayRecipe.description, recipe.description, true)}</p>
-                {user?.role === 'admin' && ownerLabel && (
-                    <div className="recipe-detail__owner">
-                        👤 作成者: {ownerLabel}
-                    </div>
-                )}
-                <div className="recipe-detail__meta">
-                    {displayRecipe.course && (
-                        <div className="meta-item">
-                            <span className="meta-label">コース</span>
-                            <span className="meta-value">{renderText(displayRecipe.course, recipe.course)}</span>
                         </div>
                     )}
-                    {displayRecipe.category && (
-                        <div className="meta-item">
-                            <span className="meta-label">カテゴリー</span>
-                            <span className="meta-value">{renderText(displayRecipe.category, recipe.category)}</span>
+                    {isDeleted && (
+                        <div className="recipe-detail__actions">
+                            <Button variant="ghost" size="sm" onClick={handleHardDeleteClick} style={{ color: 'var(--color-danger)', marginRight: 'auto' }}>完全に削除</Button>
+                            <Button variant="primary" size="sm" onClick={() => onDelete(recipe, true)}>復元する</Button>
                         </div>
                     )}
-                    {displayRecipe.storeName && (
-                        <div className="meta-item">
-                            <span className="meta-label">店舗名</span>
-                            <span className="meta-value">{renderText(displayRecipe.storeName, recipe.storeName)}</span>
-                        </div>
-                    )}
-                    <div className="meta-item">
-                        <span className="meta-label">分量</span>
-                        <span className="meta-value">{displayRecipe.servings}人分</span>
-                    </div>
                 </div>
 
-                {displayRecipe.sourceUrl && (
-                    <div className="print-qr-container" style={{ marginTop: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        <div style={{ fontSize: '0.85rem' }}>
-                            <a href={displayRecipe.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'underline', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                🔗 <span className="screen-only">元レシピを見る</span>
-                                <span className="print-only">元のレシピを見る</span>
-                            </a>
+                <div className="recipe-detail__hero">
+                    {displayRecipe.image ? (
+                        <img src={displayRecipe.image} alt={displayRecipe.title} className="recipe-detail__image" />
+                    ) : (
+                        <div className="recipe-detail__image-placeholder" style={{ height: '100%', backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
+                            画像なし
                         </div>
-                        {/* QR Code */}
-                        <div style={{ background: 'white', padding: '4px', width: 'fit-content' }}>
-                            <QRCode value={displayRecipe.sourceUrl} size={64} style={{ height: "auto", maxWidth: "100%", width: "100%" }} />
+                    )}
+                </div>
+
+                <div className="recipe-detail__title-card glass-panel">
+                    <h1>{renderText(displayRecipe.title, recipe.title)}</h1>
+                    <p className="recipe-detail__desc">{renderText(displayRecipe.description, recipe.description, true)}</p>
+                    {user?.role === 'admin' && ownerLabel && (
+                        <div className="recipe-detail__owner">
+                            👤 作成者: {ownerLabel}
+                        </div>
+                    )}
+                    <div className="recipe-detail__meta">
+                        {displayRecipe.course && (
+                            <div className="meta-item">
+                                <span className="meta-label">コース</span>
+                                <span className="meta-value">{renderText(displayRecipe.course, recipe.course)}</span>
+                            </div>
+                        )}
+                        {displayRecipe.category && (
+                            <div className="meta-item">
+                                <span className="meta-label">カテゴリー</span>
+                                <span className="meta-value">{renderText(displayRecipe.category, recipe.category)}</span>
+                            </div>
+                        )}
+                        {displayRecipe.storeName && (
+                            <div className="meta-item">
+                                <span className="meta-label">店舗名</span>
+                                <span className="meta-value">{renderText(displayRecipe.storeName, recipe.storeName)}</span>
+                            </div>
+                        )}
+                        <div className="meta-item">
+                            <span className="meta-label">分量</span>
+                            <span className="meta-value">{displayRecipe.servings}人分</span>
                         </div>
                     </div>
-                )}
-            </div>
 
-            <div className="recipe-detail-dates" style={{ marginTop: '0.5rem', marginBottom: '1.5rem', borderTop: 'none', paddingRight: '0.5rem' }}>
-                <span>📅 登録: {formatDate(recipe.created_at)}</span>
-                {recipe.updated_at && <span>🔄 更新: {formatDate(recipe.updated_at)}</span>}
-            </div>
+                    {displayRecipe.sourceUrl && (
+                        <div className="print-qr-container" style={{ marginTop: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            <div style={{ fontSize: '0.85rem' }}>
+                                <a href={displayRecipe.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'underline', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    🔗 <span className="screen-only">元レシピを見る</span>
+                                    <span className="print-only">元のレシピを見る</span>
+                                </a>
+                            </div>
+                            {/* QR Code */}
+                            <div style={{ background: 'white', padding: '4px', width: 'fit-content' }}>
+                                <QRCode value={displayRecipe.sourceUrl} size={64} style={{ height: "auto", maxWidth: "100%", width: "100%" }} />
+                            </div>
+                        </div>
+                    )}
+                </div>
 
-            <div className="recipe-detail__content">
-                <div className="recipe-detail__main">
-                    <section className="detail-section">
-                        <h2>材料</h2>
-                        <Card className="ingredients-card">
-                            {displayRecipe.type === 'bread' ? (
-                                <div className="bread-detail-view">
-                                    {/* Helper for total calculation */}
-                                    {(() => {
-                                        const flours = displayRecipe.flours || [];
-                                        const others = displayRecipe.breadIngredients || [];
-                                        const totalFlour = flours.reduce((sum, f) => sum + (parseFloat(f.quantity) || 0), 0);
-                                        const grandTotal = totalFlour + others.reduce((sum, o) => sum + (parseFloat(o.quantity) || 0), 0);
-                                        const totalPercent = totalFlour ? (grandTotal / totalFlour * 100).toFixed(1) : '0.0';
+                <div className="recipe-detail-dates" style={{ marginTop: '0.5rem', marginBottom: '1.5rem', borderTop: 'none', paddingRight: '0.5rem' }}>
+                    <span>📅 登録: {formatDate(recipe.created_at)}</span>
+                    {recipe.updated_at && <span>🔄 更新: {formatDate(recipe.updated_at)}</span>}
+                </div>
 
-                                        const calcPercent = (q) => totalFlour ? ((parseFloat(q) || 0) / totalFlour * 100).toFixed(1) : '0.0';
+                <div className="recipe-detail__content">
+                    <div className="recipe-detail__main">
+                        <section className="detail-section">
+                            <h2>材料</h2>
+                            <Card className="ingredients-card">
+                                {displayRecipe.type === 'bread' ? (
+                                    <div className="bread-detail-view">
+                                        {/* Helper for total calculation */}
+                                        {(() => {
+                                            const flours = displayRecipe.flours || [];
+                                            const others = displayRecipe.breadIngredients || [];
+                                            const totalFlour = flours.reduce((sum, f) => sum + (parseFloat(f.quantity) || 0), 0);
+                                            const grandTotal = totalFlour + others.reduce((sum, o) => sum + (parseFloat(o.quantity) || 0), 0);
+                                            const totalPercent = totalFlour ? (grandTotal / totalFlour * 100).toFixed(1) : '0.0';
 
-                                        // Scaling logic
-                                        const target = parseFloat(targetTotal);
-                                        const scaleFactor = (target && grandTotal) ? (target / grandTotal) : 1;
+                                            const calcPercent = (q) => totalFlour ? ((parseFloat(q) || 0) / totalFlour * 100).toFixed(1) : '0.0';
 
-                                        const getScaledQty = (q) => {
-                                            if (!target) return q;
-                                            return ((parseFloat(q) || 0) * scaleFactor).toFixed(1);
-                                        };
+                                            // Scaling logic
+                                            const target = parseFloat(targetTotal);
+                                            const scaleFactor = (target && grandTotal) ? (target / grandTotal) : 1;
 
-                                        return (
-                                            <>
-                                                {/* Scaling Controls */}
-                                                <div className="screen-only" style={{
-                                                    background: '#f1f3f5',
-                                                    padding: '0.4rem 0.8rem',
-                                                    borderRadius: '6px',
-                                                    marginBottom: '1rem',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '0.5rem 1rem', // Smaller row gap
-                                                    flexWrap: 'wrap',
-                                                    border: '1px solid #dee2e6',
-                                                    lineHeight: 1.2
-                                                }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                        <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#000' }}>現在の総重量:</span>
-                                                        <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#000' }}>{grandTotal.toLocaleString()}g</span>
-                                                        <span style={{ fontSize: '0.75rem', color: '#444' }}>({totalPercent}%)</span>
-                                                    </div>
-                                                    <div style={{ height: '16px', width: '1px', background: '#adb5bd' }}></div>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                        <label htmlFor="target-total-input" style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#000' }}>仕上がり総重量:</label>
-                                                        <div style={{ position: 'relative' }}>
-                                                            <input
-                                                                id="target-total-input"
-                                                                type="number"
-                                                                value={targetTotal}
-                                                                onChange={(e) => setTargetTotal(e.target.value)}
-                                                                placeholder="1000"
-                                                                style={{
-                                                                    padding: '2px 20px 2px 6px',
-                                                                    width: '80px',
-                                                                    borderRadius: '4px',
-                                                                    border: '1.5px solid #333',
-                                                                    fontSize: '0.9rem',
-                                                                    fontWeight: 'bold',
-                                                                    textAlign: 'right',
-                                                                    color: '#000',
-                                                                    backgroundColor: '#fff'
-                                                                }}
-                                                            />
-                                                            <span style={{ position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.75rem', color: '#333' }}>g</span>
+                                            const getScaledQty = (q) => {
+                                                if (!target) return q;
+                                                return ((parseFloat(q) || 0) * scaleFactor).toFixed(1);
+                                            };
+
+                                            return (
+                                                <>
+                                                    {/* Scaling Controls */}
+                                                    <div className="screen-only" style={{
+                                                        background: '#f1f3f5',
+                                                        padding: '0.4rem 0.8rem',
+                                                        borderRadius: '6px',
+                                                        marginBottom: '1rem',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.5rem 1rem', // Smaller row gap
+                                                        flexWrap: 'wrap',
+                                                        border: '1px solid #dee2e6',
+                                                        lineHeight: 1.2
+                                                    }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#000' }}>現在の総重量:</span>
+                                                            <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#000' }}>{grandTotal.toLocaleString()}g</span>
+                                                            <span style={{ fontSize: '0.75rem', color: '#444' }}>({totalPercent}%)</span>
+                                                        </div>
+                                                        <div style={{ height: '16px', width: '1px', background: '#adb5bd' }}></div>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <label htmlFor="target-total-input" style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#000' }}>仕上がり総重量:</label>
+                                                            <div style={{ position: 'relative' }}>
+                                                                <input
+                                                                    id="target-total-input"
+                                                                    type="number"
+                                                                    value={targetTotal}
+                                                                    onChange={(e) => setTargetTotal(e.target.value)}
+                                                                    placeholder="1000"
+                                                                    style={{
+                                                                        padding: '2px 20px 2px 6px',
+                                                                        width: '80px',
+                                                                        borderRadius: '4px',
+                                                                        border: '1.5px solid #333',
+                                                                        fontSize: '0.9rem',
+                                                                        fontWeight: 'bold',
+                                                                        textAlign: 'right',
+                                                                        color: '#000',
+                                                                        backgroundColor: '#fff'
+                                                                    }}
+                                                                />
+                                                                <span style={{ position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.75rem', color: '#333' }}>g</span>
+                                                            </div>
+                                                            {targetTotal && (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={() => setTargetTotal('')}
+                                                                    style={{ padding: '0 4px', fontSize: '0.7rem', color: '#555', height: '22px', border: '1px solid #dee2e6' }}
+                                                                >
+                                                                    リセット
+                                                                </Button>
+                                                            )}
                                                         </div>
                                                         {targetTotal && (
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                onClick={() => setTargetTotal('')}
-                                                                style={{ padding: '0 4px', fontSize: '0.7rem', color: '#555', height: '22px', border: '1px solid #dee2e6' }}
-                                                            >
-                                                                リセット
-                                                            </Button>
+                                                            <div style={{ fontSize: '0.75rem', color: '#000', fontWeight: 'bold', marginLeft: 'auto' }}>
+                                                                ← 倍率: ×{scaleFactor.toFixed(3)} で計算中
+                                                            </div>
                                                         )}
                                                     </div>
-                                                    {targetTotal && (
-                                                        <div style={{ fontSize: '0.75rem', color: '#000', fontWeight: 'bold', marginLeft: 'auto' }}>
-                                                            ← 倍率: ×{scaleFactor.toFixed(3)} で計算中
+
+                                                    <div className="bread-section" style={{ marginBottom: '2rem' }}>
+                                                        <h3 style={{
+                                                            fontSize: '1.2rem',
+                                                            borderLeft: '4px solid var(--color-primary)',
+                                                            paddingLeft: '10px',
+                                                            marginBottom: '1rem',
+                                                            marginTop: 0,
+                                                            display: 'flex',
+                                                            justifyContent: 'space-between',
+                                                            alignItems: 'center',
+                                                            color: 'var(--color-text-main)'
+                                                        }}>
+                                                            <span>粉グループ</span>
+                                                            <span style={{ fontSize: '0.9rem', background: 'var(--color-primary)', color: 'white', padding: '4px 12px', borderRadius: '20px', fontWeight: 'bold' }}>Total: {targetTotal ? getScaledQty(totalFlour) : totalFlour}g (100%)</span>
+                                                        </h3>
+                                                        <table className="ingredients-table">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>材料名</th>
+                                                                    <th style={{ textAlign: 'right' }}>分量 (g)</th>
+                                                                    <th style={{ textAlign: 'center', width: '60px' }}>%</th>
+                                                                    <th style={{ textAlign: 'right', width: '80px' }}>仕入れ</th>
+                                                                    <th style={{ textAlign: 'right', width: '80px' }}>原価</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {flours.map((item, i) => {
+                                                                    const originalItem = recipe.flours?.[i] || {};
+                                                                    return (
+                                                                        <tr key={i}>
+                                                                            <td>
+                                                                                <div className="ingredient-name">
+                                                                                    <input type="checkbox" id={`flour-${i}`} />
+                                                                                    <label htmlFor={`flour-${i}`}>{renderText(item.name, originalItem?.name)}</label>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                                                                                {targetTotal ? (
+                                                                                    <span style={{ color: 'var(--color-primary)' }}>{getScaledQty(item.quantity)}</span>
+                                                                                ) : (
+                                                                                    item.quantity
+                                                                                )}
+                                                                            </td>
+                                                                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-primary)' }}>
+                                                                                {calcPercent(item.quantity)}%
+                                                                            </td>
+                                                                            <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
+                                                                            <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+
+                                                    <div className="bread-section" style={{ marginTop: '3rem' }}>
+                                                        <h3 style={{
+                                                            fontSize: '1.2rem',
+                                                            borderLeft: '4px solid #f39c12',
+                                                            paddingLeft: '10px',
+                                                            marginBottom: '1rem',
+                                                            color: 'var(--color-text-main)'
+                                                        }}>
+                                                            その他材料
+                                                        </h3>
+                                                        <table className="ingredients-table">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>材料名</th>
+                                                                    <th style={{ textAlign: 'right' }}>分量 (g)</th>
+                                                                    <th style={{ textAlign: 'center', width: '60px' }}>%</th>
+                                                                    <th style={{ textAlign: 'right', width: '80px' }}>仕入れ</th>
+                                                                    <th style={{ textAlign: 'right', width: '80px' }}>原価</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {others.map((item, i) => {
+                                                                    const originalItem = recipe.breadIngredients?.[i] || {};
+                                                                    return (
+                                                                        <tr key={i}>
+                                                                            <td>
+                                                                                <div className="ingredient-name">
+                                                                                    <input type="checkbox" id={`ingredient-${i}`} />
+                                                                                    <label htmlFor={`ingredient-${i}`}>{renderText(item.name, originalItem?.name)}</label>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                                                                                {targetTotal ? (
+                                                                                    <span style={{ color: 'var(--color-primary)' }}>{getScaledQty(item.quantity)}</span>
+                                                                                ) : (
+                                                                                    item.quantity
+                                                                                )}
+                                                                            </td>
+                                                                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-text-muted)' }}>
+                                                                                {calcPercent(item.quantity)}%
+                                                                            </td>
+                                                                            <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
+                                                                            <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+
+                                                        <div className="cost-summary">
+                                                            <span className="cost-summary__label">合計原価:</span>
+                                                            <span className="cost-summary__value">
+                                                                ¥{(() => {
+                                                                    // Calculate Total Tax Included
+                                                                    // Iterate all items, apply tax rate per item, then sum
+                                                                    // Note: 'item.cost' is Tax Excluded unit cost * qty? No, in bread form logic:
+                                                                    // item.cost = (qty/1000 * purchaseCost). This is Tax Excluded Total for that item.
+
+                                                                    const calcTaxedCost = (items) => {
+                                                                        return items.reduce((sum, item) => {
+                                                                            const rawCost = parseFloat(item.cost) || 0;
+                                                                            const taxRate = item.isAlcohol ? 1.10 : 1.08;
+                                                                            // Scale applies to the raw cost (which depends on Quantity)
+                                                                            const scaledCost = rawCost * scaleFactor;
+                                                                            return sum + (scaledCost * taxRate);
+                                                                        }, 0);
+                                                                    }
+
+                                                                    const totalTaxIncluded = calcTaxedCost(flours) + calcTaxedCost(others);
+                                                                    return Math.round(totalTaxIncluded).toLocaleString();
+                                                                })()}
+
+                                                            </span>
+                                                            <span className="cost-summary__note">(税込)</span>
                                                         </div>
-                                                    )}
-                                                </div>
 
-                                                <div className="bread-section" style={{ marginBottom: '2rem' }}>
-                                                    <h3 style={{
-                                                        fontSize: '1.2rem',
-                                                        borderLeft: '4px solid var(--color-primary)',
-                                                        paddingLeft: '10px',
-                                                        marginBottom: '1rem',
-                                                        marginTop: 0,
-                                                        display: 'flex',
-                                                        justifyContent: 'space-between',
-                                                        alignItems: 'center',
-                                                        color: 'var(--color-text-main)'
-                                                    }}>
-                                                        <span>粉グループ</span>
-                                                        <span style={{ fontSize: '0.9rem', background: 'var(--color-primary)', color: 'white', padding: '4px 12px', borderRadius: '20px', fontWeight: 'bold' }}>Total: {targetTotal ? getScaledQty(totalFlour) : totalFlour}g (100%)</span>
-                                                    </h3>
+                                                        {/* Profit Calculator for Bread */}
+                                                        {(() => {
+                                                            const calcTaxedCost = (items) => {
+                                                                return items.reduce((sum, item) => {
+                                                                    const rawCost = parseFloat(item.cost) || 0;
+                                                                    const taxRate = item.isAlcohol ? 1.10 : 1.08;
+                                                                    const scaledCost = rawCost * scaleFactor;
+                                                                    return sum + (scaledCost * taxRate);
+                                                                }, 0);
+                                                            }
+                                                            const total = calcTaxedCost(flours) + calcTaxedCost(others);
+                                                            return renderProfitCalculator(total);
+                                                        })()}
+                                                    </div>
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                ) : (
+                                    <>
+                                        {/* Normal Recipe Scaling UI */}
+                                        <div className="screen-only no-print" style={{
+                                            background: '#f8f9fa',
+                                            color: '#333',
+                                            padding: '0.8rem',
+                                            borderRadius: '6px',
+                                            marginBottom: '1rem',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '1rem',
+                                            border: '1px solid #e9ecef'
+                                        }}>
+                                            <label htmlFor="multiplier-input" style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#333' }}>分量倍率:</label>
+                                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                                                <span style={{ fontSize: '1.2rem', fontWeight: 'bold', marginRight: '4px', color: '#333' }}>×</span>
+                                                <input
+                                                    id="multiplier-input"
+                                                    type="number"
+                                                    min="0.1"
+                                                    step="0.1"
+                                                    value={multiplier}
+                                                    onChange={(e) => setMultiplier(e.target.value)}
+                                                    style={{
+                                                        width: '60px',
+                                                        padding: '4px',
+                                                        fontSize: '1rem',
+                                                        fontWeight: 'bold',
+                                                        textAlign: 'center',
+                                                        borderRadius: '4px',
+                                                        border: '1px solid #ced4da',
+                                                        background: '#fff',
+                                                        color: '#333'
+                                                    }}
+                                                />
+                                            </div>
+                                            {parseFloat(multiplier) !== 1 && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => setMultiplier('1')}
+                                                    style={{
+                                                        fontSize: '0.8rem',
+                                                        padding: '2px 8px',
+                                                        height: 'auto',
+                                                        color: '#555',
+                                                        borderColor: '#ccc',
+                                                        background: '#fff'
+                                                    }}
+                                                >
+                                                    リセット
+                                                </Button>
+                                            )}
+                                        </div>
+
+                                        {(() => {
+                                            // Grouping Logic
+                                            const groups = displayRecipe.ingredientGroups && displayRecipe.ingredientGroups.length > 0
+                                                ? displayRecipe.ingredientGroups
+                                                : null;
+
+                                            if (groups) {
+                                                return groups.map((group) => {
+                                                    const groupIngredients = ingredients.filter(ing => ing.groupId === group.id);
+                                                    if (groupIngredients.length === 0) return null;
+
+                                                    if (['作り方', 'Steps', 'Method', '手順'].includes(group.name)) return null;
+
+                                                    return (
+                                                        <div key={group.id} style={{ marginBottom: '1.5rem' }}>
+                                                            <h3 style={{
+                                                                fontSize: '1rem',
+                                                                borderBottom: '2px solid var(--color-border)',
+                                                                paddingBottom: '0.5rem',
+                                                                marginBottom: '0.5rem',
+                                                                marginTop: '0.5rem',
+                                                                color: 'var(--color-text-main)',
+                                                                display: ['材料', 'Ingredients', 'ingredients'].includes(group.name) ? 'none' : 'block'
+                                                            }}>
+                                                                {group.name}
+                                                            </h3>
+                                                            <table className="ingredients-table">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th style={{ width: '40%' }}>材料名</th>
+                                                                        <th style={{ width: '20%', textAlign: 'right', paddingRight: '0.5rem' }}>分量</th>
+                                                                        <th style={{ width: '15%', paddingLeft: '0.5rem' }}>単位</th>
+                                                                        <th style={{ width: '15%', textAlign: 'right' }}>仕入れ</th>
+                                                                        <th style={{ width: '15%', textAlign: 'right' }}>原価</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {groupIngredients.map((ing, i) => {
+                                                                        const originalIndex = ingredients.indexOf(ing);
+                                                                        const originalIng = recipe.ingredients?.[originalIndex];
+                                                                        const displayRef = typeof ing === 'string' ? ing : ing.name;
+                                                                        const originalRef = originalIng ? (typeof originalIng === 'string' ? originalIng : originalIng.name) : '';
+
+                                                                        const scaledQty = getScaledQty(ing.quantity, multiplier);
+                                                                        const scaledCost = getScaledCost(ing.cost, multiplier);
+                                                                        const isScaled = String(multiplier) !== '1';
+
+                                                                        return (
+                                                                            <tr key={i} className="ingredient-row">
+                                                                                <td>
+                                                                                    <div className="ingredient-name">
+                                                                                        <input type="checkbox" id={`ing-${group.id}-${i}`} />
+                                                                                        <label htmlFor={`ing-${group.id}-${i}`}>{renderText(displayRef, originalRef)}</label>
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td style={{ textAlign: 'right', paddingRight: '0.5rem', fontWeight: isScaled ? 'bold' : 'normal', color: isScaled ? 'var(--color-primary)' : 'inherit' }}>
+                                                                                    {scaledQty}
+                                                                                </td>
+                                                                                <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
+                                                                                <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
+                                                                                <td style={{ textAlign: 'right' }}>
+                                                                                    {scaledCost ? `¥${scaledCost}` : '-'}
+                                                                                    {ing.isAlcohol && <span style={{ fontSize: '0.7em', color: '#d35400', marginLeft: '2px' }}>(酒)</span>}
+                                                                                </td>
+                                                                            </tr>
+                                                                        );
+                                                                    })}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    );
+                                                });
+                                            }
+
+                                            // Fallback: Legacy Flat View
+                                            return (
+                                                <>
                                                     <table className="ingredients-table">
                                                         <thead>
                                                             <tr>
-                                                                <th>材料名</th>
-                                                                <th style={{ textAlign: 'right' }}>分量 (g)</th>
-                                                                <th style={{ textAlign: 'center', width: '60px' }}>%</th>
-                                                                <th style={{ textAlign: 'right', width: '80px' }}>仕入れ</th>
-                                                                <th style={{ textAlign: 'right', width: '80px' }}>原価</th>
+                                                                <th style={{ width: '40%' }}>材料名</th>
+                                                                <th style={{ width: '20%', textAlign: 'right', paddingRight: '0.5rem' }}>分量</th>
+                                                                <th style={{ width: '15%', paddingLeft: '0.5rem' }}>単位</th>
+                                                                <th style={{ width: '15%', textAlign: 'right' }}>仕入れ</th>
+                                                                <th style={{ width: '15%', textAlign: 'right' }}>原価</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {flours.map((item, i) => {
-                                                                const originalItem = recipe.flours?.[i] || {};
+                                                            {ingredients.map((ing, i) => {
+                                                                const originalIng = recipe.ingredients?.[i];
+                                                                const displayRef = typeof ing === 'string' ? ing : ing.name;
+                                                                const originalRef = originalIng ? (typeof originalIng === 'string' ? originalIng : originalIng.name) : '';
+
+                                                                const scaledQty = getScaledQty(ing.quantity, multiplier);
+                                                                const scaledCost = getScaledCost(ing.cost, multiplier);
+                                                                const isScaled = String(multiplier) !== '1';
+
                                                                 return (
-                                                                    <tr key={i}>
+                                                                    <tr key={i} className="ingredient-row">
                                                                         <td>
                                                                             <div className="ingredient-name">
-                                                                                <input type="checkbox" id={`flour-${i}`} />
-                                                                                <label htmlFor={`flour-${i}`}>{renderText(item.name, originalItem?.name)}</label>
+                                                                                <input type="checkbox" id={`ing-${i}`} />
+                                                                                <label htmlFor={`ing-${i}`}>{renderText(displayRef, originalRef)}</label>
                                                                             </div>
                                                                         </td>
-                                                                        <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                                                                            {targetTotal ? (
-                                                                                <span style={{ color: 'var(--color-primary)' }}>{getScaledQty(item.quantity)}</span>
-                                                                            ) : (
-                                                                                item.quantity
-                                                                            )}
+                                                                        <td style={{ textAlign: 'right', paddingRight: '0.5rem', fontWeight: isScaled ? 'bold' : 'normal', color: isScaled ? 'var(--color-primary)' : 'inherit' }}>
+                                                                            {scaledQty}
                                                                         </td>
-                                                                        <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-primary)' }}>
-                                                                            {calcPercent(item.quantity)}%
+                                                                        <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
+                                                                        <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
+                                                                        <td style={{ textAlign: 'right' }}>
+                                                                            {scaledCost ? `¥${scaledCost}` : '-'}
+                                                                            {ing.isAlcohol && <span style={{ fontSize: '0.7em', color: '#d35400', marginLeft: '2px' }}>(酒)</span>}
                                                                         </td>
-                                                                        <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
-                                                                        <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
                                                                     </tr>
                                                                 );
                                                             })}
                                                         </tbody>
                                                     </table>
-                                                </div>
-
-                                                <div className="bread-section" style={{ marginTop: '3rem' }}>
-                                                    <h3 style={{
-                                                        fontSize: '1.2rem',
-                                                        borderLeft: '4px solid #f39c12',
-                                                        paddingLeft: '10px',
-                                                        marginBottom: '1rem',
-                                                        color: 'var(--color-text-main)'
-                                                    }}>
-                                                        その他材料
-                                                    </h3>
-                                                    <table className="ingredients-table">
-                                                        <thead>
-                                                            <tr>
-                                                                <th>材料名</th>
-                                                                <th style={{ textAlign: 'right' }}>分量 (g)</th>
-                                                                <th style={{ textAlign: 'center', width: '60px' }}>%</th>
-                                                                <th style={{ textAlign: 'right', width: '80px' }}>仕入れ</th>
-                                                                <th style={{ textAlign: 'right', width: '80px' }}>原価</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {others.map((item, i) => {
-                                                                const originalItem = recipe.breadIngredients?.[i] || {};
-                                                                return (
-                                                                    <tr key={i}>
-                                                                        <td>
-                                                                            <div className="ingredient-name">
-                                                                                <input type="checkbox" id={`ingredient-${i}`} />
-                                                                                <label htmlFor={`ingredient-${i}`}>{renderText(item.name, originalItem?.name)}</label>
-                                                                            </div>
-                                                                        </td>
-                                                                        <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                                                                            {targetTotal ? (
-                                                                                <span style={{ color: 'var(--color-primary)' }}>{getScaledQty(item.quantity)}</span>
-                                                                            ) : (
-                                                                                item.quantity
-                                                                            )}
-                                                                        </td>
-                                                                        <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-text-muted)' }}>
-                                                                            {calcPercent(item.quantity)}%
-                                                                        </td>
-                                                                        <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
-                                                                        <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
-                                                                    </tr>
-                                                                );
-                                                            })}
-                                                        </tbody>
-                                                    </table>
-
                                                     <div className="cost-summary">
                                                         <span className="cost-summary__label">合計原価:</span>
                                                         <span className="cost-summary__value">
                                                             ¥{(() => {
-                                                                // Calculate Total Tax Included
-                                                                // Iterate all items, apply tax rate per item, then sum
-                                                                // Note: 'item.cost' is Tax Excluded unit cost * qty? No, in bread form logic:
-                                                                // item.cost = (qty/1000 * purchaseCost). This is Tax Excluded Total for that item.
-
-                                                                const calcTaxedCost = (items) => {
+                                                                const calcTaxedCostInternal = (items) => {
                                                                     return items.reduce((sum, item) => {
                                                                         const rawCost = parseFloat(item.cost) || 0;
                                                                         const taxRate = item.isAlcohol ? 1.10 : 1.08;
-                                                                        // Scale applies to the raw cost (which depends on Quantity)
-                                                                        const scaledCost = rawCost * scaleFactor;
-                                                                        return sum + (scaledCost * taxRate);
+                                                                        const scaledCost = getScaledCost(rawCost, multiplier);
+                                                                        const scCostVal = parseFloat(scaledCost) || 0;
+                                                                        return sum + (scCostVal * taxRate);
                                                                     }, 0);
                                                                 }
-
-                                                                const totalTaxIncluded = calcTaxedCost(flours) + calcTaxedCost(others);
-                                                                return Math.round(totalTaxIncluded).toLocaleString();
+                                                                return Math.round(calcTaxedCostInternal(ingredients)).toLocaleString();
                                                             })()}
-
                                                         </span>
-                                                        <span className="cost-summary__note">(税込)</span>
                                                     </div>
+                                                </>
+                                            );
+                                        })()}
 
-                                                    {/* Profit Calculator for Bread */}
-                                                    {(() => {
-                                                        const calcTaxedCost = (items) => {
+                                        <div className="screen-only no-print">
+                                            <div className="cost-summary">
+                                                <span className="cost-summary__label">合計原価:</span>
+                                                <span className="cost-summary__value">
+                                                    ¥{(() => {
+                                                        const calcTaxedCostInternal = (items) => {
                                                             return items.reduce((sum, item) => {
                                                                 const rawCost = parseFloat(item.cost) || 0;
                                                                 const taxRate = item.isAlcohol ? 1.10 : 1.08;
-                                                                const scaledCost = rawCost * scaleFactor;
-                                                                return sum + (scaledCost * taxRate);
+                                                                const scaledCost = getScaledCost(rawCost, multiplier);
+                                                                const scCostVal = parseFloat(scaledCost) || 0;
+                                                                return sum + (scCostVal * taxRate);
                                                             }, 0);
                                                         }
-                                                        const total = calcTaxedCost(flours) + calcTaxedCost(others);
-                                                        return renderProfitCalculator(total);
+                                                        return Math.round(calcTaxedCostInternal(ingredients)).toLocaleString();
                                                     })()}
-                                                </div>
-                                            </>
-                                        );
-                                    })()}
+                                                </span>
+                                                <span className="cost-summary__note">(税込)</span>
+                                            </div>
+                                        </div>
+                                        <p className="recipe-detail__subtle recipe-detail__tax-footnote">※原価は材料ごとに税率(8% or 10%)を適用</p>
+
+                                        {(() => {
+                                            const calcTaxedCostInternal = (items) => {
+                                                return items.reduce((sum, item) => {
+                                                    const rawCost = parseFloat(item.cost) || 0;
+                                                    const taxRate = item.isAlcohol ? 1.10 : 1.08;
+                                                    const scaledCost = parseFloat(getScaledCost(rawCost, multiplier)) || 0;
+                                                    return sum + (scaledCost * taxRate);
+                                                }, 0);
+                                            }
+                                            const total = calcTaxedCostInternal(ingredients);
+                                            return renderProfitCalculator(total);
+                                        })()}
+                                    </>
+                                )}
+                            </Card>
+                        </section>
+                        <section className="detail-section">
+                            <h2>作り方</h2>
+                            {(() => {
+                                const stepGroups = displayRecipe.stepGroups && displayRecipe.stepGroups.length > 0 ? displayRecipe.stepGroups : null;
+                                const hasGroupedSteps = stepGroups && steps.some(s => {
+                                    if (!s || typeof s !== 'object' || !s.groupId) return false;
+                                    return stepGroups.some(g => g.id === s.groupId);
+                                });
+
+                                if (stepGroups && hasGroupedSteps) {
+                                    return (
+                                        <div className="steps-container">
+                                            {stepGroups.map(group => {
+                                                const groupSteps = steps.filter(s => {
+                                                    const sGroupId = typeof s === 'object' ? s.groupId : null;
+                                                    return sGroupId === group.id;
+                                                });
+
+                                                if (groupSteps.length === 0) return null;
+
+                                                return (
+                                                    <div key={group.id} className="step-group" style={{ marginBottom: '2rem' }}>
+                                                        {/* Skip redundant group headers */}
+                                                        {group.name !== '作り方' && group.name !== 'Steps' && (
+                                                            <h3 style={{
+                                                                fontSize: '1.1rem',
+                                                                marginBottom: '1rem',
+                                                                color: 'var(--color-text-main)',
+                                                                borderLeft: '4px solid var(--color-primary)',
+                                                                paddingLeft: '10px'
+                                                            }}>
+                                                                {group.name}
+                                                            </h3>
+                                                        )}
+                                                        <div className="steps-list">
+                                                            {groupSteps.map((step, i) => {
+                                                                // Find original index relative to full list for correct translation mapping logic if needed
+                                                                const originalIndex = steps.indexOf(step);
+                                                                const stepText = typeof step === 'object' ? step.text : step;
+                                                                const originalStep = recipe.steps?.[originalIndex];
+                                                                const originalText = typeof originalStep === 'object' ? originalStep.text : originalStep;
+
+                                                                // Strip HTML tags for safety and clean print
+                                                                const cleanText = (txt) => {
+                                                                    if (!txt) return '';
+                                                                    return txt.replace(/<[^>]*>?/gm, '');
+                                                                };
+
+                                                                return (
+                                                                    <Card
+                                                                        key={i}
+                                                                        className={`step-card ${completedSteps.has(originalIndex) ? 'is-completed' : ''}`}
+                                                                        onClick={() => toggleStep(originalIndex)}
+                                                                    >
+                                                                        <div className="step-number">{originalIndex + 1}</div>
+                                                                        <p className="step-text">{renderText(cleanText(stepText), cleanText(originalText), true)}</p>
+                                                                    </Card>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                }
+
+                                // Legacy Flat List
+                                return (
+                                    <div className="steps-list">
+                                        {steps.map((step, i) => {
+                                            const stepText = typeof step === 'object' ? step.text : step;
+                                            const originalStep = recipe.steps?.[i];
+                                            const originalText = typeof originalStep === 'object' ? originalStep.text : originalStep;
+
+                                            return (
+                                                <Card
+                                                    key={i}
+                                                    className={`step-card ${completedSteps.has(i) ? 'is-completed' : ''}`}
+                                                    onClick={() => toggleStep(i)}
+                                                >
+                                                    <div className="step-number">{i + 1}</div>
+                                                    <p className="step-text">{renderText(stepText, originalText, true)}</p>
+                                                </Card>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })()}
+                        </section>
+                    </div>
+                </div >
+
+                {/* 印刷プレビューモーダル */}
+                <Modal
+                    isOpen={showPrintModal}
+                    onClose={() => setShowPrintModal(false)}
+                    title="🖨️ レシピプレビュー"
+                    size="large"
+                >
+                    <div className="print-preview-recipe">
+                        {/* ヘッダー */}
+                        <div className="preview-header">
+                            <h2>{displayRecipe.title}</h2>
+                            {/* プレビューではレシピ画像を表示しない */}
+                        </div>
+
+                        {/* メタ情報 */}
+                        <div className="preview-meta">
+                            {displayRecipe.course && <div><strong>コース:</strong> {displayRecipe.course}</div>}
+                            {displayRecipe.category && <div><strong>カテゴリー:</strong> {displayRecipe.category}</div>}
+                            {displayRecipe.storeName && <div><strong>店舗名:</strong> {displayRecipe.storeName}</div>}
+                            {displayRecipe.servings && <div><strong>分量:</strong> {displayRecipe.servings}人分</div>}
+                        </div>
+
+                        {displayRecipe.description && (
+                            <div className="preview-description">
+                                <p>{displayRecipe.description}</p>
+                            </div>
+                        )}
+
+                        <div className="preview-controls">
+                            {displayRecipe.type === 'bread' ? (
+                                <div className="preview-control-row">
+                                    <label className="preview-control-label" htmlFor="preview-target-total">
+                                        仕上がり総重量(g)
+                                    </label>
+                                    <input
+                                        id="preview-target-total"
+                                        className="preview-control-input"
+                                        type="number"
+                                        value={targetTotal}
+                                        onChange={(e) => setTargetTotal(e.target.value)}
+                                        placeholder="1000"
+                                    />
+                                    {targetTotal && (
+                                        <button
+                                            type="button"
+                                            className="preview-control-reset"
+                                            onClick={() => setTargetTotal('')}
+                                        >
+                                            リセット
+                                        </button>
+                                    )}
+                                    {breadPrintContext?.grandTotal ? (
+                                        <span className="preview-control-note">
+                                            現在: {breadPrintContext.grandTotal.toLocaleString()}g
+                                        </span>
+                                    ) : null}
                                 </div>
                             ) : (
-                                <>
-                                    {/* Normal Recipe Scaling UI */}
-                                    <div className="screen-only no-print" style={{
-                                        background: '#f8f9fa',
-                                        color: '#333',
-                                        padding: '0.8rem',
-                                        borderRadius: '6px',
-                                        marginBottom: '1rem',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '1rem',
-                                        border: '1px solid #e9ecef'
-                                    }}>
-                                        <label htmlFor="multiplier-input" style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#333' }}>分量倍率:</label>
-                                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '1.2rem', fontWeight: 'bold', marginRight: '4px', color: '#333' }}>×</span>
-                                            <input
-                                                id="multiplier-input"
-                                                type="number"
-                                                min="0.1"
-                                                step="0.1"
-                                                value={multiplier}
-                                                onChange={(e) => setMultiplier(e.target.value)}
-                                                style={{
-                                                    width: '60px',
-                                                    padding: '4px',
-                                                    fontSize: '1rem',
-                                                    fontWeight: 'bold',
-                                                    textAlign: 'center',
-                                                    borderRadius: '4px',
-                                                    border: '1px solid #ced4da',
-                                                    background: '#fff',
-                                                    color: '#333'
-                                                }}
-                                            />
-                                        </div>
-                                        {parseFloat(multiplier) !== 1 && (
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => setMultiplier('1')}
-                                                style={{
-                                                    fontSize: '0.8rem',
-                                                    padding: '2px 8px',
-                                                    height: 'auto',
-                                                    color: '#555',
-                                                    borderColor: '#ccc',
-                                                    background: '#fff'
-                                                }}
-                                            >
-                                                リセット
-                                            </Button>
-                                        )}
-                                    </div>
+                                <div className="preview-control-row">
+                                    <label className="preview-control-label" htmlFor="preview-multiplier">
+                                        分量倍率
+                                    </label>
+                                    <span className="preview-control-mult">×</span>
+                                    <input
+                                        id="preview-multiplier"
+                                        className="preview-control-input"
+                                        type="number"
+                                        step="0.1"
+                                        value={multiplier}
+                                        onChange={(e) => setMultiplier(e.target.value)}
+                                        placeholder="1"
+                                    />
+                                    {String(multiplier) !== '1' && (
+                                        <button
+                                            type="button"
+                                            className="preview-control-reset"
+                                            onClick={() => setMultiplier('1')}
+                                        >
+                                            リセット
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
 
+                        {/* 材料 */}
+                        <div className="preview-section">
+                            <h3>材料</h3>
+                            {displayRecipe.type === 'bread' ? (
+                                <div className="preview-ingredients-bread">
+                                    {/* パンレシピの場合 */}
+                                    <div className="bread-group">
+                                        <h4>粉グループ</h4>
+                                        <table className="preview-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>材料名</th>
+                                                    <th style={{ textAlign: 'right' }}>分量</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {(displayRecipe.flours || []).map((item, i) => {
+                                                    const itemId = `flour-${i}`;
+                                                    const qty = breadPrintContext ? breadPrintContext.getScaledQtyValue(item.quantity) : item.quantity;
+                                                    return (
+                                                        <tr
+                                                            key={i}
+                                                            className={previewCompletedIngredients.has(itemId) ? 'is-completed' : ''}
+                                                            onClick={() => togglePreviewIngredient(itemId)}
+                                                            role="button"
+                                                            tabIndex={0}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                                    e.preventDefault();
+                                                                    togglePreviewIngredient(itemId);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <td>{item.name}</td>
+                                                            <td style={{ textAlign: 'right' }}>{qty}g</td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div className="bread-group">
+                                        <h4>その他材料</h4>
+                                        <table className="preview-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>材料名</th>
+                                                    <th style={{ textAlign: 'right' }}>分量</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {(displayRecipe.breadIngredients || []).map((item, i) => {
+                                                    const itemId = `bread-${i}`;
+                                                    const qty = breadPrintContext ? breadPrintContext.getScaledQtyValue(item.quantity) : item.quantity;
+                                                    return (
+                                                        <tr
+                                                            key={i}
+                                                            className={previewCompletedIngredients.has(itemId) ? 'is-completed' : ''}
+                                                            onClick={() => togglePreviewIngredient(itemId)}
+                                                            role="button"
+                                                            tabIndex={0}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                                    e.preventDefault();
+                                                                    togglePreviewIngredient(itemId);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <td>{item.name}</td>
+                                                            <td style={{ textAlign: 'right' }}>{qty}g</td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="preview-ingredients-normal">
                                     {(() => {
-                                        // Grouping Logic
                                         const groups = displayRecipe.ingredientGroups && displayRecipe.ingredientGroups.length > 0
                                             ? displayRecipe.ingredientGroups
                                             : null;
@@ -1032,60 +1493,42 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                             return groups.map((group) => {
                                                 const groupIngredients = ingredients.filter(ing => ing.groupId === group.id);
                                                 if (groupIngredients.length === 0) return null;
-
                                                 if (['作り方', 'Steps', 'Method', '手順'].includes(group.name)) return null;
 
                                                 return (
-                                                    <div key={group.id} style={{ marginBottom: '1.5rem' }}>
-                                                        <h3 style={{
-                                                            fontSize: '1rem',
-                                                            borderBottom: '2px solid var(--color-border)',
-                                                            paddingBottom: '0.5rem',
-                                                            marginBottom: '0.5rem',
-                                                            marginTop: '0.5rem',
-                                                            color: 'var(--color-text-main)',
-                                                            display: ['材料', 'Ingredients', 'ingredients'].includes(group.name) ? 'none' : 'block'
-                                                        }}>
-                                                            {group.name}
-                                                        </h3>
-                                                        <table className="ingredients-table">
+                                                    <div key={group.id} className="ingredient-group">
+                                                        <h4>{group.name}</h4>
+                                                        <table className="preview-table preview-table--normal">
                                                             <thead>
                                                                 <tr>
-                                                                    <th style={{ width: '40%' }}>材料名</th>
-                                                                    <th style={{ width: '20%', textAlign: 'right', paddingRight: '0.5rem' }}>分量</th>
-                                                                    <th style={{ width: '15%', paddingLeft: '0.5rem' }}>単位</th>
-                                                                    <th style={{ width: '15%', textAlign: 'right' }}>仕入れ</th>
-                                                                    <th style={{ width: '15%', textAlign: 'right' }}>原価</th>
+                                                                    <th>材料名</th>
+                                                                    <th style={{ textAlign: 'right' }}>分量</th>
+                                                                    <th>単位</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
                                                                 {groupIngredients.map((ing, i) => {
-                                                                    const originalIndex = ingredients.indexOf(ing);
-                                                                    const originalIng = recipe.ingredients?.[originalIndex];
-                                                                    const displayRef = typeof ing === 'string' ? ing : ing.name;
-                                                                    const originalRef = originalIng ? (typeof originalIng === 'string' ? originalIng : originalIng.name) : '';
-
-                                                                    const scaledQty = getScaledQty(ing.quantity, multiplier);
-                                                                    const scaledCost = getScaledCost(ing.cost, multiplier);
-                                                                    const isScaled = String(multiplier) !== '1';
-
+                                                                    const itemId = `${group.id}-${i}`;
+                                                                    const name = typeof ing === 'string' ? ing : ing.name;
+                                                                    const qty = typeof ing === 'object' ? getScaledQty(ing.quantity, multiplierValue) : '';
+                                                                    const unit = typeof ing === 'object' ? ing.unit : '';
                                                                     return (
-                                                                        <tr key={i} className="ingredient-row">
-                                                                            <td>
-                                                                                <div className="ingredient-name">
-                                                                                    <input type="checkbox" id={`ing-${group.id}-${i}`} />
-                                                                                    <label htmlFor={`ing-${group.id}-${i}`}>{renderText(displayRef, originalRef)}</label>
-                                                                                </div>
-                                                                            </td>
-                                                                            <td style={{ textAlign: 'right', paddingRight: '0.5rem', fontWeight: isScaled ? 'bold' : 'normal', color: isScaled ? 'var(--color-primary)' : 'inherit' }}>
-                                                                                {scaledQty}
-                                                                            </td>
-                                                                            <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
-                                                                            <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
-                                                                            <td style={{ textAlign: 'right' }}>
-                                                                                {scaledCost ? `¥${scaledCost}` : '-'}
-                                                                                {ing.isAlcohol && <span style={{ fontSize: '0.7em', color: '#d35400', marginLeft: '2px' }}>(酒)</span>}
-                                                                            </td>
+                                                                        <tr
+                                                                            key={i}
+                                                                            className={previewCompletedIngredients.has(itemId) ? 'is-completed' : ''}
+                                                                            onClick={() => togglePreviewIngredient(itemId)}
+                                                                            role="button"
+                                                                            tabIndex={0}
+                                                                            onKeyDown={(e) => {
+                                                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                                                    e.preventDefault();
+                                                                                    togglePreviewIngredient(itemId);
+                                                                                }
+                                                                            }}
+                                                                        >
+                                                                            <td>{name}</td>
+                                                                            <td style={{ textAlign: 'right' }}>{qty}</td>
+                                                                            <td>{unit}</td>
                                                                         </tr>
                                                                     );
                                                                 })}
@@ -1094,677 +1537,265 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                     </div>
                                                 );
                                             });
-                                        }
-
-                                        // Fallback: Legacy Flat View
-                                        return (
-                                            <>
-                                                <table className="ingredients-table">
+                                        } else {
+                                            return (
+                                                <table className="preview-table preview-table--normal">
                                                     <thead>
                                                         <tr>
-                                                            <th style={{ width: '40%' }}>材料名</th>
-                                                            <th style={{ width: '20%', textAlign: 'right', paddingRight: '0.5rem' }}>分量</th>
-                                                            <th style={{ width: '15%', paddingLeft: '0.5rem' }}>単位</th>
-                                                            <th style={{ width: '15%', textAlign: 'right' }}>仕入れ</th>
-                                                            <th style={{ width: '15%', textAlign: 'right' }}>原価</th>
+                                                            <th>材料名</th>
+                                                            <th style={{ textAlign: 'right' }}>分量</th>
+                                                            <th>単位</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
                                                         {ingredients.map((ing, i) => {
-                                                            const originalIng = recipe.ingredients?.[i];
-                                                            const displayRef = typeof ing === 'string' ? ing : ing.name;
-                                                            const originalRef = originalIng ? (typeof originalIng === 'string' ? originalIng : originalIng.name) : '';
-
-                                                            const scaledQty = getScaledQty(ing.quantity, multiplier);
-                                                            const scaledCost = getScaledCost(ing.cost, multiplier);
-                                                            const isScaled = String(multiplier) !== '1';
-
+                                                            const itemId = `ungrouped-${i}`;
+                                                            const name = typeof ing === 'string' ? ing : ing.name;
+                                                            const qty = typeof ing === 'object' ? getScaledQty(ing.quantity, multiplierValue) : '';
+                                                            const unit = typeof ing === 'object' ? ing.unit : '';
                                                             return (
-                                                                <tr key={i} className="ingredient-row">
-                                                                    <td>
-                                                                        <div className="ingredient-name">
-                                                                            <input type="checkbox" id={`ing-${i}`} />
-                                                                            <label htmlFor={`ing-${i}`}>{renderText(displayRef, originalRef)}</label>
-                                                                        </div>
-                                                                    </td>
-                                                                    <td style={{ textAlign: 'right', paddingRight: '0.5rem', fontWeight: isScaled ? 'bold' : 'normal', color: isScaled ? 'var(--color-primary)' : 'inherit' }}>
-                                                                        {scaledQty}
-                                                                    </td>
-                                                                    <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
-                                                                    <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
-                                                                    <td style={{ textAlign: 'right' }}>
-                                                                        {scaledCost ? `¥${scaledCost}` : '-'}
-                                                                        {ing.isAlcohol && <span style={{ fontSize: '0.7em', color: '#d35400', marginLeft: '2px' }}>(酒)</span>}
-                                                                    </td>
+                                                                <tr
+                                                                    key={i}
+                                                                    className={previewCompletedIngredients.has(itemId) ? 'is-completed' : ''}
+                                                                    onClick={() => togglePreviewIngredient(itemId)}
+                                                                    role="button"
+                                                                    tabIndex={0}
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                                            e.preventDefault();
+                                                                            togglePreviewIngredient(itemId);
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <td>{name}</td>
+                                                                    <td style={{ textAlign: 'right' }}>{qty}</td>
+                                                                    <td>{unit}</td>
                                                                 </tr>
                                                             );
                                                         })}
                                                     </tbody>
                                                 </table>
-                                                <div className="cost-summary">
-                                                    <span className="cost-summary__label">合計原価:</span>
-                                                    <span className="cost-summary__value">
-                                                        ¥{(() => {
-                                                            const calcTaxedCostInternal = (items) => {
-                                                                return items.reduce((sum, item) => {
-                                                                    const rawCost = parseFloat(item.cost) || 0;
-                                                                    const taxRate = item.isAlcohol ? 1.10 : 1.08;
-                                                                    const scaledCost = getScaledCost(rawCost, multiplier);
-                                                                    const scCostVal = parseFloat(scaledCost) || 0;
-                                                                    return sum + (scCostVal * taxRate);
-                                                                }, 0);
-                                                            }
-                                                            return Math.round(calcTaxedCostInternal(ingredients)).toLocaleString();
-                                                        })()}
-                                                    </span>
-                                                </div>
-                                            </>
-                                        );
-                                    })()}
-
-                                    <div className="screen-only no-print">
-                                        <div className="cost-summary">
-                                            <span className="cost-summary__label">合計原価:</span>
-                                            <span className="cost-summary__value">
-                                                ¥{(() => {
-                                                    const calcTaxedCostInternal = (items) => {
-                                                        return items.reduce((sum, item) => {
-                                                            const rawCost = parseFloat(item.cost) || 0;
-                                                            const taxRate = item.isAlcohol ? 1.10 : 1.08;
-                                                            const scaledCost = getScaledCost(rawCost, multiplier);
-                                                            const scCostVal = parseFloat(scaledCost) || 0;
-                                                            return sum + (scCostVal * taxRate);
-                                                        }, 0);
-                                                    }
-                                                    return Math.round(calcTaxedCostInternal(ingredients)).toLocaleString();
-                                                })()}
-                                            </span>
-                                            <span className="cost-summary__note">(税込)</span>
-                                        </div>
-                                    </div>
-                                    <p className="recipe-detail__subtle recipe-detail__tax-footnote">※原価は材料ごとに税率(8% or 10%)を適用</p>
-
-                                    {(() => {
-                                        const calcTaxedCostInternal = (items) => {
-                                            return items.reduce((sum, item) => {
-                                                const rawCost = parseFloat(item.cost) || 0;
-                                                const taxRate = item.isAlcohol ? 1.10 : 1.08;
-                                                const scaledCost = parseFloat(getScaledCost(rawCost, multiplier)) || 0;
-                                                return sum + (scaledCost * taxRate);
-                                            }, 0);
+                                            );
                                         }
-                                        const total = calcTaxedCostInternal(ingredients);
-                                        return renderProfitCalculator(total);
                                     })()}
-                                </>
+                                </div>
                             )}
-                        </Card>
+                        </div>
+
+                        {/* 作り方 */}
+                        {steps.length > 0 && (
+                            <div className="preview-section">
+                                <h3>作り方</h3>
+                                <ol className="preview-steps">
+                                    {steps.map((step, i) => {
+                                        const stepText = typeof step === 'object' ? step.text : step;
+                                        return (
+                                            <li
+                                                key={i}
+                                                className={previewCompletedSteps.has(i) ? 'is-completed' : ''}
+                                                onClick={() => togglePreviewStep(i)}
+                                                role="button"
+                                                tabIndex={0}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        togglePreviewStep(i);
+                                                    }
+                                                }}
+                                            >
+                                                {stepText}
+                                            </li>
+                                        );
+                                    })}
+                                </ol>
+                            </div>
+                        )}
+
+                        {/* アクションボタン */}
+                        <div className="modal-actions">
+                            <Button variant="primary" onClick={() => window.print()}>
+                                🖨️ 印刷する
+                            </Button>
+                            <Button variant="ghost" onClick={() => setShowPrintModal(false)}>
+                                閉じる
+                            </Button>
+                        </div>
+                    </div>
+                </Modal>
+            </div >
+
+            <div className="print-layout">
+                <div className="recipe-detail__hero">
+                    {displayRecipe.image ? (
+                        <img src={displayRecipe.image} alt={displayRecipe.title} className="recipe-detail__image" />
+                    ) : (
+                        <div className="recipe-detail__image-placeholder" style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: '0.8rem' }}>
+                            No Image
+                        </div>
+                    )}
+                </div>
+                <div className="recipe-detail__title-card">
+                    <h1>{displayRecipe.title}</h1>
+                    {printDescription && (
+                        <p className="recipe-detail__desc">{printDescription}</p>
+                    )}
+                </div>
+                <div className="recipe-detail__meta">
+                    {displayRecipe.category && (
+                        <div className="meta-item">
+                            <span className="meta-label">カテゴリ</span>
+                            <span className="meta-value">{displayRecipe.category}</span>
+                        </div>
+                    )}
+                    {displayRecipe.storeName && (
+                        <div className="meta-item">
+                            <span className="meta-label">店舗名</span>
+                            <span className="meta-value meta-value--store">{displayRecipe.storeName}</span>
+                        </div>
+                    )}
+                    {displayRecipe.course && (
+                        <div className="meta-item">
+                            <span className="meta-label">コース</span>
+                            <span className="meta-value">{displayRecipe.course}</span>
+                        </div>
+                    )}
+                    {displayRecipe.servings && (
+                        <div className="meta-item">
+                            <span className="meta-label">分量</span>
+                            <span className="meta-value">{displayRecipe.servings}人分</span>
+                        </div>
+                    )}
+                </div>
+                <div className="recipe-detail__main">
+                    <section className="detail-section">
+                        <h2>材料</h2>
+                        {displayRecipe.type === 'bread' && breadPrintContext ? (
+                            <div>
+                                <div className="bread-section" style={{ marginBottom: '1.5rem' }}>
+                                    <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>粉グループ</h3>
+                                    <table className="ingredients-table">
+                                        <thead>
+                                            <tr>
+                                                <th>材料名</th>
+                                                <th style={{ textAlign: 'right' }}>分量 (g)</th>
+                                                <th style={{ textAlign: 'center', width: '60px' }}>%</th>
+                                                <th style={{ textAlign: 'right', width: '80px' }}>仕入れ</th>
+                                                <th style={{ textAlign: 'right', width: '80px' }}>原価</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {breadPrintContext.flours.map((item, idx) => (
+                                                <tr key={`print-flour-${idx}`}>
+                                                    <td>{item.name}</td>
+                                                    <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                                                        {breadPrintContext.getScaledQtyValue(item.quantity)}
+                                                    </td>
+                                                    <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#555' }}>
+                                                        {breadPrintContext.calcPercent(item.quantity)}%
+                                                    </td>
+                                                    <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
+                                                    <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="bread-section">
+                                    <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>その他材料</h3>
+                                    <table className="ingredients-table">
+                                        <thead>
+                                            <tr>
+                                                <th>材料名</th>
+                                                <th style={{ textAlign: 'right' }}>分量 (g)</th>
+                                                <th style={{ textAlign: 'center', width: '60px' }}>%</th>
+                                                <th style={{ textAlign: 'right', width: '80px' }}>仕入れ</th>
+                                                <th style={{ textAlign: 'right', width: '80px' }}>原価</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {breadPrintContext.others.map((item, idx) => (
+                                                <tr key={`print-others-${idx}`}>
+                                                    <td>{item.name}</td>
+                                                    <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                                                        {breadPrintContext.getScaledQtyValue(item.quantity)}
+                                                    </td>
+                                                    <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#555' }}>
+                                                        {breadPrintContext.calcPercent(item.quantity)}%
+                                                    </td>
+                                                    <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
+                                                    <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ) : (
+                            printIngredientSections.map(section => (
+                                <div key={section.id} style={{ marginBottom: '1.2rem' }}>
+                                    {section.name && (
+                                        <div className="print-group-heading">{section.name}</div>
+                                    )}
+                                    <table className="ingredients-table">
+                                        <thead>
+                                            <tr>
+                                                <th style={{ width: '40%' }}>材料名</th>
+                                                <th style={{ width: '20%', textAlign: 'right', paddingRight: '0.5rem' }}>分量</th>
+                                                <th style={{ width: '15%', paddingLeft: '0.5rem' }}>単位</th>
+                                                <th style={{ width: '15%', textAlign: 'right' }}>仕入れ</th>
+                                                <th style={{ width: '15%', textAlign: 'right' }}>原価</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {section.items.map((ing, idx) => {
+                                                const qty = typeof ing === 'object' ? ing.quantity : '';
+                                                const unit = typeof ing === 'object' ? ing.unit : '';
+                                                const purchase = typeof ing === 'object' ? ing.purchaseCost : null;
+                                                const costVal = typeof ing === 'object' ? ing.cost : null;
+                                                const name = typeof ing === 'string' ? ing : ing.name;
+                                                const scaledQty = typeof ing === 'object' ? getScaledQty(ing.quantity, multiplierValue) : qty;
+                                                return (
+                                                    <tr key={`print-ing-${section.id}-${idx}`}>
+                                                        <td>{name}</td>
+                                                        <td style={{ textAlign: 'right', paddingRight: '0.5rem' }}>{scaledQty}</td>
+                                                        <td style={{ paddingLeft: '0.5rem' }}>{unit}</td>
+                                                        <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{purchase ? `¥${purchase}` : '-'}</td>
+                                                        <td style={{ textAlign: 'right' }}>{costVal ? `¥${costVal}` : '-'}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ))
+                        )}
+                        <div className="cost-summary">
+                            <span className="cost-summary__label">合計原価:</span>
+                            <span className="cost-summary__value">¥{printCostTotalDisplay}</span>
+                            <span className="cost-summary__note">(税込)</span>
+                        </div>
+                        <p className="recipe-detail__subtle recipe-detail__tax-footnote">※原価は材料ごとに税率(8% or 10%)を適用</p>
                     </section>
                     <section className="detail-section">
                         <h2>作り方</h2>
-                        {(() => {
-                            const stepGroups = displayRecipe.stepGroups && displayRecipe.stepGroups.length > 0 ? displayRecipe.stepGroups : null;
-
-                            if (stepGroups) {
-                                return (
-                                    <div className="steps-container">
-                                        {stepGroups.map(group => {
-                                            const groupSteps = steps.filter(s => {
-                                                const sGroupId = typeof s === 'object' ? s.groupId : null;
-                                                return sGroupId === group.id;
-                                            });
-
-                                            if (groupSteps.length === 0) return null;
-
-                                            return (
-                                                <div key={group.id} className="step-group" style={{ marginBottom: '2rem' }}>
-                                                    {/* Skip redundant group headers */}
-                                                    {group.name !== '作り方' && group.name !== 'Steps' && (
-                                                        <h3 style={{
-                                                            fontSize: '1.1rem',
-                                                            marginBottom: '1rem',
-                                                            color: 'var(--color-text-main)',
-                                                            borderLeft: '4px solid var(--color-primary)',
-                                                            paddingLeft: '10px'
-                                                        }}>
-                                                            {group.name}
-                                                        </h3>
-                                                    )}
-                                                    <div className="steps-list">
-                                                        {groupSteps.map((step, i) => {
-                                                            // Find original index relative to full list for correct translation mapping logic if needed
-                                                            const originalIndex = steps.indexOf(step);
-                                                            const stepText = typeof step === 'object' ? step.text : step;
-                                                            const originalStep = recipe.steps?.[originalIndex];
-                                                            const originalText = typeof originalStep === 'object' ? originalStep.text : originalStep;
-
-                                                            // Strip HTML tags for safety and clean print
-                                                            const cleanText = (txt) => {
-                                                                if (!txt) return '';
-                                                                return txt.replace(/<[^>]*>?/gm, '');
-                                                            };
-
-                                                            return (
-                                                                <Card
-                                                                    key={i}
-                                                                    className={`step-card ${completedSteps.has(originalIndex) ? 'is-completed' : ''}`}
-                                                                    onClick={() => toggleStep(originalIndex)}
-                                                                >
-                                                                    <div className="step-number">{originalIndex + 1}</div>
-                                                                    <p className="step-text">{renderText(cleanText(stepText), cleanText(originalText), true)}</p>
-                                                                </Card>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                );
-                            }
-
-                            // Legacy Flat List
-                            return (
-                                <div className="steps-list">
-                                    {steps.map((step, i) => {
-                                        const stepText = typeof step === 'object' ? step.text : step;
-                                        const originalStep = recipe.steps?.[i];
-                                        const originalText = typeof originalStep === 'object' ? originalStep.text : originalStep;
-
-                                        return (
-                                            <Card
-                                                key={i}
-                                                className={`step-card ${completedSteps.has(i) ? 'is-completed' : ''}`}
-                                                onClick={() => toggleStep(i)}
-                                            >
-                                                <div className="step-number">{i + 1}</div>
-                                                <p className="step-text">{renderText(stepText, originalText, true)}</p>
-                                            </Card>
-                                        );
-                                    })}
-                                </div>
-                            );
-                        })()}
-                    </section>
-                </div>
-            </div >
-
-            {/* 印刷プレビューモーダル */}
-            <Modal
-                isOpen={showPrintModal}
-                onClose={() => setShowPrintModal(false)}
-                title="🖨️ レシピプレビュー"
-                size="large"
-            >
-                <div className="print-preview-recipe">
-                    {/* ヘッダー */}
-                    <div className="preview-header">
-                        <h2>{displayRecipe.title}</h2>
-                        {/* プレビューではレシピ画像を表示しない */}
-                    </div>
-
-                    {/* メタ情報 */}
-                    <div className="preview-meta">
-                        {displayRecipe.course && <div><strong>コース:</strong> {displayRecipe.course}</div>}
-                        {displayRecipe.category && <div><strong>カテゴリー:</strong> {displayRecipe.category}</div>}
-                        {displayRecipe.storeName && <div><strong>店舗名:</strong> {displayRecipe.storeName}</div>}
-                        {displayRecipe.servings && <div><strong>分量:</strong> {displayRecipe.servings}人分</div>}
-                    </div>
-
-                    {displayRecipe.description && (
-                        <div className="preview-description">
-                            <p>{displayRecipe.description}</p>
-                        </div>
-                    )}
-
-                    <div className="preview-controls">
-                        {displayRecipe.type === 'bread' ? (
-                            <div className="preview-control-row">
-                                <label className="preview-control-label" htmlFor="preview-target-total">
-                                    仕上がり総重量(g)
-                                </label>
-                                <input
-                                    id="preview-target-total"
-                                    className="preview-control-input"
-                                    type="number"
-                                    value={targetTotal}
-                                    onChange={(e) => setTargetTotal(e.target.value)}
-                                    placeholder="1000"
-                                />
-                                {targetTotal && (
-                                    <button
-                                        type="button"
-                                        className="preview-control-reset"
-                                        onClick={() => setTargetTotal('')}
-                                    >
-                                        リセット
-                                    </button>
-                                )}
-                                {breadPrintContext?.grandTotal ? (
-                                    <span className="preview-control-note">
-                                        現在: {breadPrintContext.grandTotal.toLocaleString()}g
-                                    </span>
-                                ) : null}
-                            </div>
-                        ) : (
-                            <div className="preview-control-row">
-                                <label className="preview-control-label" htmlFor="preview-multiplier">
-                                    分量倍率
-                                </label>
-                                <span className="preview-control-mult">×</span>
-                                <input
-                                    id="preview-multiplier"
-                                    className="preview-control-input"
-                                    type="number"
-                                    step="0.1"
-                                    value={multiplier}
-                                    onChange={(e) => setMultiplier(e.target.value)}
-                                    placeholder="1"
-                                />
-                                {String(multiplier) !== '1' && (
-                                    <button
-                                        type="button"
-                                        className="preview-control-reset"
-                                        onClick={() => setMultiplier('1')}
-                                    >
-                                        リセット
-                                    </button>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* 材料 */}
-                    <div className="preview-section">
-                        <h3>材料</h3>
-                        {displayRecipe.type === 'bread' ? (
-                            <div className="preview-ingredients-bread">
-                                {/* パンレシピの場合 */}
-                                <div className="bread-group">
-                                    <h4>粉グループ</h4>
-                                    <table className="preview-table">
-                                        <thead>
-                                            <tr>
-                                                <th>材料名</th>
-                                                <th style={{ textAlign: 'right' }}>分量</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {(displayRecipe.flours || []).map((item, i) => {
-                                                const itemId = `flour-${i}`;
-                                                const qty = breadPrintContext ? breadPrintContext.getScaledQtyValue(item.quantity) : item.quantity;
-                                                return (
-                                                <tr
-                                                    key={i}
-                                                    className={previewCompletedIngredients.has(itemId) ? 'is-completed' : ''}
-                                                    onClick={() => togglePreviewIngredient(itemId)}
-                                                    role="button"
-                                                    tabIndex={0}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter' || e.key === ' ') {
-                                                            e.preventDefault();
-                                                            togglePreviewIngredient(itemId);
-                                                        }
-                                                    }}
-                                                >
-                                                    <td>{item.name}</td>
-                                                    <td style={{ textAlign: 'right' }}>{qty}g</td>
-                                                </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div className="bread-group">
-                                    <h4>その他材料</h4>
-                                    <table className="preview-table">
-                                        <thead>
-                                            <tr>
-                                                <th>材料名</th>
-                                                <th style={{ textAlign: 'right' }}>分量</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {(displayRecipe.breadIngredients || []).map((item, i) => {
-                                                const itemId = `bread-${i}`;
-                                                const qty = breadPrintContext ? breadPrintContext.getScaledQtyValue(item.quantity) : item.quantity;
-                                                return (
-                                                <tr
-                                                    key={i}
-                                                    className={previewCompletedIngredients.has(itemId) ? 'is-completed' : ''}
-                                                    onClick={() => togglePreviewIngredient(itemId)}
-                                                    role="button"
-                                                    tabIndex={0}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter' || e.key === ' ') {
-                                                            e.preventDefault();
-                                                            togglePreviewIngredient(itemId);
-                                                        }
-                                                    }}
-                                                >
-                                                    <td>{item.name}</td>
-                                                    <td style={{ textAlign: 'right' }}>{qty}g</td>
-                                                </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="preview-ingredients-normal">
-                                {(() => {
-                                    const groups = displayRecipe.ingredientGroups && displayRecipe.ingredientGroups.length > 0
-                                        ? displayRecipe.ingredientGroups
-                                        : null;
-
-                                    if (groups) {
-                                        return groups.map((group) => {
-                                            const groupIngredients = ingredients.filter(ing => ing.groupId === group.id);
-                                            if (groupIngredients.length === 0) return null;
-                                            if (['作り方', 'Steps', 'Method', '手順'].includes(group.name)) return null;
-
-                                            return (
-                                                <div key={group.id} className="ingredient-group">
-                                                    <h4>{group.name}</h4>
-                                                    <table className="preview-table preview-table--normal">
-                                                        <thead>
-                                                            <tr>
-                                                                <th>材料名</th>
-                                                                <th style={{ textAlign: 'right' }}>分量</th>
-                                                                <th>単位</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {groupIngredients.map((ing, i) => {
-                                                                const itemId = `${group.id}-${i}`;
-                                                                const name = typeof ing === 'string' ? ing : ing.name;
-                                                                const qty = typeof ing === 'object' ? getScaledQty(ing.quantity, multiplierValue) : '';
-                                                                const unit = typeof ing === 'object' ? ing.unit : '';
-                                                                return (
-                                                                    <tr
-                                                                        key={i}
-                                                                        className={previewCompletedIngredients.has(itemId) ? 'is-completed' : ''}
-                                                                        onClick={() => togglePreviewIngredient(itemId)}
-                                                                        role="button"
-                                                                        tabIndex={0}
-                                                                        onKeyDown={(e) => {
-                                                                            if (e.key === 'Enter' || e.key === ' ') {
-                                                                                e.preventDefault();
-                                                                                togglePreviewIngredient(itemId);
-                                                                            }
-                                                                        }}
-                                                                    >
-                                                                        <td>{name}</td>
-                                                                        <td style={{ textAlign: 'right' }}>{qty}</td>
-                                                                        <td>{unit}</td>
-                                                                    </tr>
-                                                                );
-                                                            })}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            );
-                                        });
-                                    } else {
-                                        return (
-                                            <table className="preview-table preview-table--normal">
-                                                <thead>
-                                                    <tr>
-                                                        <th>材料名</th>
-                                                        <th style={{ textAlign: 'right' }}>分量</th>
-                                                        <th>単位</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {ingredients.map((ing, i) => {
-                                                        const itemId = `ungrouped-${i}`;
-                                                        const name = typeof ing === 'string' ? ing : ing.name;
-                                                        const qty = typeof ing === 'object' ? getScaledQty(ing.quantity, multiplierValue) : '';
-                                                        const unit = typeof ing === 'object' ? ing.unit : '';
-                                                        return (
-                                                            <tr
-                                                                key={i}
-                                                                className={previewCompletedIngredients.has(itemId) ? 'is-completed' : ''}
-                                                                onClick={() => togglePreviewIngredient(itemId)}
-                                                                role="button"
-                                                                tabIndex={0}
-                                                                onKeyDown={(e) => {
-                                                                    if (e.key === 'Enter' || e.key === ' ') {
-                                                                        e.preventDefault();
-                                                                        togglePreviewIngredient(itemId);
-                                                                    }
-                                                                }}
-                                                            >
-                                                                <td>{name}</td>
-                                                                <td style={{ textAlign: 'right' }}>{qty}</td>
-                                                                <td>{unit}</td>
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
-                                        );
-                                    }
-                                })()}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* 作り方 */}
-                    {steps.length > 0 && (
-                        <div className="preview-section">
-                            <h3>作り方</h3>
-                            <ol className="preview-steps">
-                                {steps.map((step, i) => {
+                        {steps.length > 0 ? (
+                            <div className="steps-list">
+                                {steps.map((step, index) => {
                                     const stepText = typeof step === 'object' ? step.text : step;
                                     return (
-                                        <li
-                                            key={i}
-                                            className={previewCompletedSteps.has(i) ? 'is-completed' : ''}
-                                            onClick={() => togglePreviewStep(i)}
-                                            role="button"
-                                            tabIndex={0}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                    e.preventDefault();
-                                                    togglePreviewStep(i);
-                                                }
-                                            }}
-                                        >
-                                            {stepText}
-                                        </li>
+                                        <div className="step-card" key={`print-step-${index}`}>
+                                            <div className="step-number">{index + 1}</div>
+                                            <p className="step-text">{stepText}</p>
+                                        </div>
                                     );
                                 })}
-                            </ol>
-                        </div>
-                    )}
-
-                    {/* アクションボタン */}
-                    <div className="modal-actions">
-                        <Button variant="primary" onClick={() => window.print()}>
-                            🖨️ 印刷する
-                        </Button>
-                        <Button variant="ghost" onClick={() => setShowPrintModal(false)}>
-                            閉じる
-                        </Button>
-                    </div>
+                            </div>
+                        ) : (
+                            <p style={{ fontSize: '0.9rem', color: '#555' }}>手順情報がありません。</p>
+                        )}
+                    </section>
                 </div>
-            </Modal>
-        </div >
-
-        <div className="print-layout">
-            <div className="recipe-detail__hero">
-                {displayRecipe.image ? (
-                    <img src={displayRecipe.image} alt={displayRecipe.title} className="recipe-detail__image" />
-                ) : (
-                    <div className="recipe-detail__image-placeholder" style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: '0.8rem' }}>
-                        No Image
-                    </div>
-                )}
             </div>
-            <div className="recipe-detail__title-card">
-                <h1>{displayRecipe.title}</h1>
-                {printDescription && (
-                    <p className="recipe-detail__desc">{printDescription}</p>
-                )}
-            </div>
-            <div className="recipe-detail__meta">
-                {displayRecipe.category && (
-                    <div className="meta-item">
-                        <span className="meta-label">カテゴリ</span>
-                        <span className="meta-value">{displayRecipe.category}</span>
-                    </div>
-                )}
-                {displayRecipe.storeName && (
-                    <div className="meta-item">
-                        <span className="meta-label">店舗名</span>
-                        <span className="meta-value meta-value--store">{displayRecipe.storeName}</span>
-                    </div>
-                )}
-                {displayRecipe.course && (
-                    <div className="meta-item">
-                        <span className="meta-label">コース</span>
-                        <span className="meta-value">{displayRecipe.course}</span>
-                    </div>
-                )}
-                {displayRecipe.servings && (
-                    <div className="meta-item">
-                        <span className="meta-label">分量</span>
-                        <span className="meta-value">{displayRecipe.servings}人分</span>
-                    </div>
-                )}
-            </div>
-            <div className="recipe-detail__main">
-                <section className="detail-section">
-                    <h2>材料</h2>
-                    {displayRecipe.type === 'bread' && breadPrintContext ? (
-                        <div>
-                            <div className="bread-section" style={{ marginBottom: '1.5rem' }}>
-                                <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>粉グループ</h3>
-                                <table className="ingredients-table">
-                                    <thead>
-                                        <tr>
-                                            <th>材料名</th>
-                                            <th style={{ textAlign: 'right' }}>分量 (g)</th>
-                                            <th style={{ textAlign: 'center', width: '60px' }}>%</th>
-                                            <th style={{ textAlign: 'right', width: '80px' }}>仕入れ</th>
-                                            <th style={{ textAlign: 'right', width: '80px' }}>原価</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {breadPrintContext.flours.map((item, idx) => (
-                                            <tr key={`print-flour-${idx}`}>
-                                                <td>{item.name}</td>
-                                                <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                                                    {breadPrintContext.getScaledQtyValue(item.quantity)}
-                                                </td>
-                                                <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#555' }}>
-                                                    {breadPrintContext.calcPercent(item.quantity)}%
-                                                </td>
-                                                <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
-                                                <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div className="bread-section">
-                                <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>その他材料</h3>
-                                <table className="ingredients-table">
-                                    <thead>
-                                        <tr>
-                                            <th>材料名</th>
-                                            <th style={{ textAlign: 'right' }}>分量 (g)</th>
-                                            <th style={{ textAlign: 'center', width: '60px' }}>%</th>
-                                            <th style={{ textAlign: 'right', width: '80px' }}>仕入れ</th>
-                                            <th style={{ textAlign: 'right', width: '80px' }}>原価</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {breadPrintContext.others.map((item, idx) => (
-                                            <tr key={`print-others-${idx}`}>
-                                                <td>{item.name}</td>
-                                                <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                                                    {breadPrintContext.getScaledQtyValue(item.quantity)}
-                                                </td>
-                                                <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#555' }}>
-                                                    {breadPrintContext.calcPercent(item.quantity)}%
-                                                </td>
-                                                <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
-                                                <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    ) : (
-                        printIngredientSections.map(section => (
-                            <div key={section.id} style={{ marginBottom: '1.2rem' }}>
-                                {section.name && (
-                                    <div className="print-group-heading">{section.name}</div>
-                                )}
-                                <table className="ingredients-table">
-                                    <thead>
-                                        <tr>
-                                            <th style={{ width: '40%' }}>材料名</th>
-                                            <th style={{ width: '20%', textAlign: 'right', paddingRight: '0.5rem' }}>分量</th>
-                                            <th style={{ width: '15%', paddingLeft: '0.5rem' }}>単位</th>
-                                            <th style={{ width: '15%', textAlign: 'right' }}>仕入れ</th>
-                                            <th style={{ width: '15%', textAlign: 'right' }}>原価</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {section.items.map((ing, idx) => {
-                                            const qty = typeof ing === 'object' ? ing.quantity : '';
-                                            const unit = typeof ing === 'object' ? ing.unit : '';
-                                            const purchase = typeof ing === 'object' ? ing.purchaseCost : null;
-                                            const costVal = typeof ing === 'object' ? ing.cost : null;
-                                            const name = typeof ing === 'string' ? ing : ing.name;
-                                            const scaledQty = typeof ing === 'object' ? getScaledQty(ing.quantity, multiplierValue) : qty;
-                                            return (
-                                                <tr key={`print-ing-${section.id}-${idx}`}>
-                                                    <td>{name}</td>
-                                                    <td style={{ textAlign: 'right', paddingRight: '0.5rem' }}>{scaledQty}</td>
-                                                    <td style={{ paddingLeft: '0.5rem' }}>{unit}</td>
-                                                    <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{purchase ? `¥${purchase}` : '-'}</td>
-                                                    <td style={{ textAlign: 'right' }}>{costVal ? `¥${costVal}` : '-'}</td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ))
-                    )}
-                    <div className="cost-summary">
-                        <span className="cost-summary__label">合計原価:</span>
-                        <span className="cost-summary__value">¥{printCostTotalDisplay}</span>
-                        <span className="cost-summary__note">(税込)</span>
-                    </div>
-                    <p className="recipe-detail__subtle recipe-detail__tax-footnote">※原価は材料ごとに税率(8% or 10%)を適用</p>
-                </section>
-                <section className="detail-section">
-                    <h2>作り方</h2>
-                    {steps.length > 0 ? (
-                        <div className="steps-list">
-                            {steps.map((step, index) => {
-                                const stepText = typeof step === 'object' ? step.text : step;
-                                return (
-                                    <div className="step-card" key={`print-step-${index}`}>
-                                        <div className="step-number">{index + 1}</div>
-                                        <p className="step-text">{stepText}</p>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ) : (
-                        <p style={{ fontSize: '0.9rem', color: '#555' }}>手順情報がありません。</p>
-                    )}
-                </section>
-            </div>
-        </div>
         </>
     );
 };

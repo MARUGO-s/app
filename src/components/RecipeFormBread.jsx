@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from './Button';
 import { Input } from './Input';
 import { Card } from './Card';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { unitConversionService } from '../services/unitConversionService';
+import { AutocompleteInput } from './AutocompleteInput';
+import { ingredientSearchService } from '../services/ingredientSearchService';
 import './RecipeForm.css'; // Reuse basic styles
 import './RecipeFormBread.css'; // Add specialized styles
 
@@ -11,7 +13,8 @@ import {
     DndContext,
     closestCenter,
     KeyboardSensor,
-    PointerSensor,
+    MouseSensor,
+    TouchSensor,
     useSensor,
     useSensors,
 } from '@dnd-kit/core';
@@ -32,11 +35,6 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
 
     // Price list cache
     const [priceList, setPriceList] = useState(new Map());
-    const allIngredientNames = useMemo(() => Array.from(priceList.keys()), [priceList]);
-
-    // Suggestions State
-    const [activeSuggestion, setActiveSuggestion] = useState(null); // { type: 'flour'|'ingredient', index: number }
-    const [filteredSuggestions, setFilteredSuggestions] = useState([]);
 
     // Helper Modal State
     const [conversionModal, setConversionModal] = useState({
@@ -80,20 +78,11 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
         // Auto-lookup cost if name changes
         if (field === 'name') {
             // Suggestion logic
-            if (value.trim()) {
-                const matchVal = value.toLowerCase();
-                const matches = allIngredientNames.filter(n => n.toLowerCase().includes(matchVal));
-                setFilteredSuggestions(matches.slice(0, 10));
-                setActiveSuggestion({ type: 'flour', index });
-            } else {
-                setFilteredSuggestions([]);
-                setActiveSuggestion(null);
-            }
-
             const refData = priceList.get(value);
             if (refData) {
                 const price = typeof refData === 'object' ? refData.price : refData;
                 const vendor = typeof refData === 'object' ? refData.vendor : null;
+                const unit = typeof refData === 'object' ? refData.unit : null;
 
                 newFlours[index].purchaseCostRef = price;
                 newFlours[index].vendorRef = vendor;
@@ -108,19 +97,20 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                     // If unit is 'g'/'ml', app expects cost per 1000 units.
                     // If packetUnit match 'g'/'ml', then (Price / Size) * 1000.
                     let normalized = 0;
-                    if (['g', 'ml', 'cc', 'ｇ'].includes(conv.packetUnit)) {
-                        normalized = (price / conv.packetSize) * 1000;
+                    const basePrice = (conv.lastPrice !== null && conv.lastPrice !== undefined && conv.lastPrice !== '')
+                        ? conv.lastPrice
+                        : price;
+                    const pu = (conv.packetUnit || '').trim().toLowerCase();
+                    if (['g', 'ｇ'].includes(pu)) {
+                        normalized = (basePrice / conv.packetSize) * 1000;
+                    } else if (['kg', 'ｋｇ'].includes(pu)) {
+                        normalized = basePrice / conv.packetSize;
+                    } else if (['ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(pu)) {
+                        normalized = (basePrice / conv.packetSize) * 1000;
+                    } else if (['l', 'ｌ'].includes(pu)) {
+                        normalized = basePrice / conv.packetSize;
                     } else {
-                        // per unit (e.g. per kg, per bottle)
-                        // If app unit is 'g' but stored is 'kg'.
-                        // Wait, RecipeFormBread assumes 'cost' is either per 1kg (if g) or per 1 unit.
-                        // If stored unit is 'kg', 25kg bag.
-                        // Price is for 25kg. Normalized should be per 1kg?
-                        // Yes because 1kg = 1000g.
-                        // If stored is 'kg', then Price / Size = cost per kg.
-                        // Which matches cost per 1000g.
-                        // So (Price / Size) is correct for 'kg' -> 'g'.
-                        normalized = price / conv.packetSize;
+                        normalized = basePrice / conv.packetSize;
                     }
 
                     newFlours[index].purchaseCost = Math.round(normalized * 100) / 100;
@@ -128,6 +118,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                 } else if (!newFlours[index].purchaseCost) {
                     // No conversion, just raw price (maybe it's already per kg?)
                     newFlours[index].purchaseCost = price;
+                    if (!newFlours[index].unit && unit) newFlours[index].unit = unit;
                 }
             } else {
                 newFlours[index].purchaseCostRef = null;
@@ -138,7 +129,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
         // Auto-Calc Cost logic (Cost = Qty * PurchaseCost)
         // Assumption: If unit is 'g' or 'ｇ', Purchase Cost is per 1kg (1000g).
         // Otherwise, simply Qty * PurchaseCost.
-        if (['quantity', 'purchaseCost', 'name', 'isAlcohol'].includes(field) || field === 'name') {
+        if (['quantity', 'purchaseCost', 'name', 'isAlcohol', 'unit'].includes(field) || field === 'name') {
             // Re-evaluate cost for this row
             // Note: 'value' is the NEW value for 'field'. But we already set it in newFlours[index].
             const item = newFlours[index];
@@ -148,7 +139,8 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
             if (!isNaN(qty) && !isNaN(pCost)) {
                 let calculated = 0;
                 // Bread flours usually 'g'.
-                if (item.unit === 'g' || item.unit === 'ｇ' || !item.unit) {
+                const unit = (item.unit || '').trim().toLowerCase();
+                if (unit === 'g' || unit === 'ｇ' || unit === 'ml' || unit === 'ｍｌ' || unit === 'cc' || unit === 'ｃｃ' || !unit) {
                     calculated = (qty / 1000) * pCost;
                 } else {
                     calculated = qty * pCost;
@@ -171,20 +163,11 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
 
         if (field === 'name') {
             // Suggestion logic
-            if (value.trim()) {
-                const matchVal = value.toLowerCase();
-                const matches = allIngredientNames.filter(n => n.toLowerCase().includes(matchVal));
-                setFilteredSuggestions(matches.slice(0, 10));
-                setActiveSuggestion({ type: 'ingredient', index });
-            } else {
-                setFilteredSuggestions([]);
-                setActiveSuggestion(null);
-            }
-
             const refData = priceList.get(value);
             if (refData) {
                 const price = typeof refData === 'object' ? refData.price : refData;
                 const vendor = typeof refData === 'object' ? refData.vendor : null;
+                const unit = typeof refData === 'object' ? refData.unit : null;
 
                 newIngs[index].purchaseCostRef = price;
                 newIngs[index].vendorRef = vendor;
@@ -198,21 +181,32 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                     // If PacketUnit is 'kg'/'L', Price is for X kg. Normalized (per 1kg) = Price/Size.
                     // If PacketUnit is 'pcs'/'bag', Price is for X pcs. Normalized (per 1pc) = Price/Size.
 
-                    if (['g', 'ml', 'cc', 'ｇ'].includes(conv.packetUnit)) {
-                        normalized = (price / conv.packetSize) * 1000;
+                    const basePrice = (conv.lastPrice !== null && conv.lastPrice !== undefined && conv.lastPrice !== '')
+                        ? conv.lastPrice
+                        : price;
+                    const pu = (conv.packetUnit || '').trim().toLowerCase();
+                    if (['g', 'ｇ'].includes(pu)) {
+                        normalized = (basePrice / conv.packetSize) * 1000;
                         newIngs[index].unit = 'g';
-                    } else if (['kg', 'l', 'ｋｇ'].includes(conv.packetUnit.toLowerCase())) {
-                        normalized = price / conv.packetSize;
+                    } else if (['kg', 'ｋｇ'].includes(pu)) {
+                        normalized = basePrice / conv.packetSize;
                         newIngs[index].unit = 'g'; // Assume kg -> g usage
+                    } else if (['ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(pu)) {
+                        normalized = (basePrice / conv.packetSize) * 1000;
+                        newIngs[index].unit = 'ml';
+                    } else if (['l', 'ｌ'].includes(pu)) {
+                        normalized = basePrice / conv.packetSize;
+                        newIngs[index].unit = 'ml';
                     } else {
                         // other units (pcs, packs)
-                        normalized = price / conv.packetSize;
+                        normalized = basePrice / conv.packetSize;
                         newIngs[index].unit = conv.packetUnit; // Use the unit (e.g. '個')
                     }
 
                     newIngs[index].purchaseCost = Math.round(normalized * 100) / 100;
                 } else if (!newIngs[index].purchaseCost) {
                     newIngs[index].purchaseCost = price;
+                    if (!newIngs[index].unit && unit) newIngs[index].unit = unit;
                 }
             } else {
                 newIngs[index].purchaseCostRef = null;
@@ -221,7 +215,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
         }
 
         // Auto-Calc Cost logic
-        if (['quantity', 'purchaseCost', 'name', 'isAlcohol'].includes(field) || field === 'name') {
+        if (['quantity', 'purchaseCost', 'name', 'isAlcohol', 'unit'].includes(field) || field === 'name') {
             const item = newIngs[index];
             const qty = parseFloat(item.quantity);
             const pCost = parseFloat(item.purchaseCost);
@@ -230,7 +224,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                 let calculated = 0;
                 // Check unit
                 const u = item.unit ? item.unit.trim().toLowerCase() : 'g'; // default to g for bread ings if empty?
-                if (u === 'g' || u === 'ｇ') {
+                if (u === 'g' || u === 'ｇ' || u === 'ml' || u === 'ｍｌ' || u === 'cc' || u === 'ｃｃ') {
                     calculated = (qty / 1000) * pCost;
                 } else {
                     calculated = qty * pCost;
@@ -274,19 +268,10 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
         }));
     };
 
-    const handleSuggestionSelect = (type, index, name) => {
-        if (type === 'flour') {
-            handleFlourChange(index, 'name', name);
-        } else {
-            handleIngredientChange(index, 'name', name);
-        }
-        setActiveSuggestion(null);
-        setFilteredSuggestions([]);
-    };
-
     // DnD Sensors
     const sensors = useSensors(
-        useSensor(PointerSensor),
+        useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
+        useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
         useSensor(KeyboardSensor, {
             coordinateGetter: sortableKeyboardCoordinates,
         })
@@ -370,6 +355,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                 newFlours[index] = item;
                 // Reload conversions to update cache
                 unitConversionService.getAllConversions().then(map => setConversionMap(map));
+                ingredientSearchService.invalidateCache();
                 return { ...prev, flours: newFlours };
             } else if (type === 'ingredient') {
                 const newIngs = [...prev.breadIngredients];
@@ -396,9 +382,105 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                 newIngs[index] = item;
                 // Reload conversions
                 unitConversionService.getAllConversions().then(map => setConversionMap(map));
+                ingredientSearchService.invalidateCache();
                 return { ...prev, breadIngredients: newIngs };
             }
             return prev;
+        });
+    };
+
+    const handleAutocompleteSelect = (type, index, selectedItem) => {
+        if (!selectedItem) return;
+
+        setFormData(prev => {
+            const field = type === 'flour' ? 'flours' : 'breadIngredients';
+            const items = [...(prev[field] || [])];
+            const newItem = { ...items[index] };
+
+            newItem.name = selectedItem.name;
+
+            if (selectedItem.price !== undefined && selectedItem.price !== null && selectedItem.price !== '') {
+                newItem.purchaseCostRef = selectedItem.price;
+                newItem.vendorRef = selectedItem.source === 'csv' ? 'CSV' : 'Master';
+
+                let normalized = selectedItem.price;
+                let normalizedUnit = selectedItem.unit;
+
+                if (selectedItem.source === 'manual') {
+                    if (selectedItem.size && selectedItem.size > 0) {
+                        const u = (selectedItem.unit || '').trim().toLowerCase();
+                        if (['g', 'ｇ'].includes(u)) {
+                            normalized = (selectedItem.price / selectedItem.size) * 1000;
+                            normalizedUnit = 'g';
+                        } else if (['kg', 'ｋｇ'].includes(u)) {
+                            normalized = selectedItem.price / selectedItem.size;
+                            normalizedUnit = 'g';
+                        } else if (['ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(u)) {
+                            normalized = (selectedItem.price / selectedItem.size) * 1000;
+                            normalizedUnit = 'ml';
+                        } else if (['l', 'ｌ'].includes(u)) {
+                            normalized = selectedItem.price / selectedItem.size;
+                            normalizedUnit = 'ml';
+                        } else {
+                            normalized = selectedItem.price / selectedItem.size;
+                            normalizedUnit = selectedItem.unit;
+                        }
+                    } else {
+                        normalized = selectedItem.price;
+                        normalizedUnit = selectedItem.unit;
+                    }
+                } else {
+                    const conv = conversionMap.get(selectedItem.name);
+                    if (conv && conv.packetSize) {
+                        const basePrice = (conv.lastPrice !== null && conv.lastPrice !== undefined && conv.lastPrice !== '')
+                            ? conv.lastPrice
+                            : selectedItem.price;
+                        const pu = (conv.packetUnit || '').trim().toLowerCase();
+                        if (['g', 'ｇ'].includes(pu)) {
+                            normalized = (basePrice / conv.packetSize) * 1000;
+                            normalizedUnit = 'g';
+                        } else if (['kg', 'ｋｇ'].includes(pu)) {
+                            normalized = basePrice / conv.packetSize;
+                            normalizedUnit = 'g';
+                        } else if (['ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(pu)) {
+                            normalized = (basePrice / conv.packetSize) * 1000;
+                            normalizedUnit = 'ml';
+                        } else if (['l', 'ｌ'].includes(pu)) {
+                            normalized = basePrice / conv.packetSize;
+                            normalizedUnit = 'ml';
+                        } else {
+                            normalized = basePrice / conv.packetSize;
+                            normalizedUnit = conv.packetUnit;
+                        }
+                    } else {
+                        normalized = selectedItem.price;
+                        normalizedUnit = selectedItem.unit;
+                    }
+                }
+
+                newItem.purchaseCost = Math.round(normalized * 100) / 100;
+                if (type === 'flour') {
+                    newItem.unit = 'g';
+                } else if (normalizedUnit) {
+                    newItem.unit = normalizedUnit;
+                }
+            }
+
+            const qty = parseFloat(newItem.quantity);
+            const pCost = parseFloat(newItem.purchaseCost);
+            if (!isNaN(qty) && !isNaN(pCost)) {
+                const u = (newItem.unit || '').trim().toLowerCase();
+                let cost = 0;
+                if (u === 'g' || u === 'ｇ' || u === 'ml' || u === 'ｍｌ' || u === 'cc' || u === 'ｃｃ') {
+                    cost = (qty / 1000) * pCost;
+                } else {
+                    cost = qty * pCost;
+                }
+                newItem.cost = Math.round(cost * 100) / 100;
+            }
+
+            items[index] = newItem;
+            return { ...prev, [field]: items };
         });
     };
 
@@ -416,8 +498,8 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                     <span className="bread-badge">Base (100%)</span>
                 </div>
 
-                <div className="bread-scroll-wrapper">
-                    <div className="bread-grid-header">
+                <div className="recipe-scroll-wrapper">
+                    <div className="recipe-list-header">
                         <span></span> {/* Handle */}
                         <span>粉の種類</span>
                         <span>重量 (g)</span>
@@ -447,13 +529,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                                         item={item}
                                         onChange={handleFlourChange}
                                         onRemove={removeFlour}
-                                        onSuggestionSelect={handleSuggestionSelect}
-                                        activeSuggestion={activeSuggestion}
-                                        filteredSuggestions={filteredSuggestions}
-                                        setActiveSuggestion={setActiveSuggestion}
-                                        setFilteredSuggestions={setFilteredSuggestions}
-                                        handleSuggestionSelect={handleSuggestionSelect}
-                                        allIngredientNames={allIngredientNames}
+                                        onSelect={handleAutocompleteSelect}
                                         calculatePercentage={calculatePercentage}
                                         floursLength={(formData.flours || []).length}
                                         onOpenConversion={() => setConversionModal({ isOpen: true, type: 'flour', index: i })}
@@ -472,15 +548,12 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                     <span className="bread-subtitle">Water, Salt, Yeast, etc.</span>
                 </div>
 
-                <div className="bread-scroll-wrapper">
-
-
-                    <div className="bread-grid-header">
+                <div className="recipe-scroll-wrapper">
+                    <div className="recipe-list-header">
                         <span></span> {/* Handle */}
                         <span>材料名</span>
                         <span>重量 (g)</span>
                         <span className="text-center">%</span>
-
                         <span style={{ textAlign: 'center' }}>仕入れ</span>
                         <span style={{ textAlign: 'center' }}>原価</span>
                         <span style={{ textAlign: 'center' }}>酒</span>
@@ -506,13 +579,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                                         item={item}
                                         onChange={handleIngredientChange}
                                         onRemove={removeIngredient}
-                                        onSuggestionSelect={handleSuggestionSelect}
-                                        activeSuggestion={activeSuggestion}
-                                        filteredSuggestions={filteredSuggestions}
-                                        setActiveSuggestion={setActiveSuggestion}
-                                        setFilteredSuggestions={setFilteredSuggestions}
-                                        handleSuggestionSelect={handleSuggestionSelect}
-                                        allIngredientNames={allIngredientNames}
+                                        onSelect={handleAutocompleteSelect}
                                         calculatePercentage={calculatePercentage}
                                         onOpenConversion={() => setConversionModal({ isOpen: true, type: 'ingredient', index: i })}
                                     />
@@ -544,7 +611,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
 };
 
 // Wrapper for Sortable Hook (Flour Items)
-const FlourItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, activeSuggestion, filteredSuggestions, setActiveSuggestion, setFilteredSuggestions, handleSuggestionSelect, allIngredientNames, calculatePercentage, floursLength, onOpenConversion }) => {
+const FlourItem = ({ id, index, item, onChange, onRemove, onSelect, calculatePercentage, floursLength, onOpenConversion }) => {
     const {
         attributes,
         listeners,
@@ -559,16 +626,15 @@ const FlourItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, ac
         transition,
         opacity: isDragging ? 0.5 : 1,
         position: 'relative',
-        zIndex: isDragging ? 999 : 'auto',
-        backgroundColor: 'white'
+        zIndex: isDragging ? 999 : 'auto'
     };
 
     return (
-        <div ref={setNodeRef} style={style} className="bread-row">
+        <div ref={setNodeRef} style={style} className="form-ingredient-row form-ingredient-row--bread">
             <div
                 {...attributes}
                 {...listeners}
-                className="bread-drag-handle"
+                className="ingredient-drag-handle"
                 style={{
                     cursor: 'grab',
                     padding: '0 0.5rem',
@@ -582,94 +648,38 @@ const FlourItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, ac
             >
                 ⋮⋮
             </div>
-            <div style={{ position: 'relative', zIndex: activeSuggestion?.type === 'flour' && activeSuggestion?.index === index ? 10000 : 'auto' }}>
-                <Input
+            <div className="ingredient-name">
+                <AutocompleteInput
                     value={item.name}
-                    onChange={(e) => {
-                        onChange(index, 'name', e.target.value);
-                        // Trigger suggestions
-                        if (e.target.value.trim()) {
-                            const matchVal = e.target.value.toLowerCase();
-                            const matches = allIngredientNames.filter(n => n.toLowerCase().includes(matchVal));
-                            setFilteredSuggestions(matches.slice(0, 10));
-                            setActiveSuggestion({ type: 'flour', index: index });
-                        } else {
-                            setFilteredSuggestions([]);
-                            setActiveSuggestion(null);
-                        }
-                    }}
-                    onFocus={() => {
-                        if (item.name.trim()) {
-                            const matchVal = item.name.toLowerCase();
-                            const matches = allIngredientNames.filter(n => n.toLowerCase().includes(matchVal));
-                            setFilteredSuggestions(matches.slice(0, 10));
-                            setActiveSuggestion({ type: 'flour', index: index });
-                        }
-                    }}
-                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
+                    onChange={(e) => onChange(index, 'name', e.target.value)}
+                    onSelect={(selectedItem) => onSelect('flour', index, selectedItem)}
                     placeholder="例: 強力粉"
-                    className="bread-input name"
-                    autoComplete="off"
                 />
-                {activeSuggestion && activeSuggestion.type === 'flour' && activeSuggestion.index === index && filteredSuggestions.length > 0 && (
-                    <ul style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        backgroundColor: 'white',
-                        border: '1px solid #ccc',
-                        borderRadius: '0 0 4px 4px',
-                        maxHeight: '150px',
-                        overflowY: 'auto',
-                        zIndex: 10001,
-                        padding: 0,
-                        margin: 0,
-                        listStyle: 'none',
-                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                    }}>
-                        {filteredSuggestions.map((suggestion, idx) => (
-                            <li
-                                key={idx}
-                                onMouseDown={() => handleSuggestionSelect('flour', index, suggestion)}
-                                style={{
-                                    padding: '8px 12px',
-                                    cursor: 'pointer',
-                                    borderBottom: idx < filteredSuggestions.length - 1 ? '1px solid #f0f0f0' : 'none',
-                                    fontSize: '14px',
-                                    color: '#333'
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                            >
-                                {suggestion}
-                            </li>
-                        ))}
-                    </ul>
-                )}
             </div>
-            <Input
-                type="number"
-                step="any"
-                value={item.quantity}
-                onChange={(e) => onChange(index, 'quantity', e.target.value)}
-                placeholder="0"
-                className="bread-input qty"
-            />
-            <div className="bread-percent">
+            <div className="ingredient-qty">
+                <Input
+                    type="number"
+                    step="any"
+                    value={item.quantity}
+                    onChange={(e) => onChange(index, 'quantity', e.target.value)}
+                    placeholder="0"
+                    wrapperClassName="input-group--no-margin"
+                />
+            </div>
+            <div className="ingredient-unit bread-percent">
                 {calculatePercentage(item.quantity)}%
             </div>
-            <div style={{ position: 'relative' }}>
+            <div className="ingredient-cost" style={{ position: 'relative' }}>
                 <Input
                     type="number"
                     step="any"
                     value={item.purchaseCost || ''}
                     onChange={(e) => onChange(index, 'purchaseCost', e.target.value)}
                     placeholder={item.purchaseCostRef ? `Ref: ¥${item.purchaseCostRef}` : "仕入れ"}
-                    className="bread-input cost"
                     style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '', paddingRight: '20px' }}
                     min="0"
                     title={item.purchaseCostRef ? `参考価格: ¥${item.purchaseCostRef}` : "No data"}
+                    wrapperClassName="input-group--no-margin"
                 />
                 <button
                     type="button"
@@ -689,17 +699,19 @@ const FlourItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, ac
                 )}
             </div>
 
-            <Input
-                type="number"
-                step="any"
-                value={item.cost || ''}
-                onChange={(e) => onChange(index, 'cost', e.target.value)}
-                placeholder="原価"
-                className="bread-input cost"
-                style={{ width: '100%' }}
-                min="0"
-            />
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <div className="ingredient-cost">
+                <Input
+                    type="number"
+                    step="any"
+                    value={item.cost || ''}
+                    onChange={(e) => onChange(index, 'cost', e.target.value)}
+                    placeholder="原価"
+                    style={{ width: '100%' }}
+                    min="0"
+                    wrapperClassName="input-group--no-margin"
+                />
+            </div>
+            <div className="ingredient-alcohol" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                 <input
                     type="checkbox"
                     checked={item.isAlcohol || false}
@@ -707,17 +719,17 @@ const FlourItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, ac
                     title="酒類 (10%税)"
                 />
             </div>
-            {
-                floursLength > 1 && (
-                    <button type="button" className="bread-remove" onClick={() => onRemove(index)}>×</button>
-                )
-            }
+            <div className="remove-button-cell">
+                {floursLength > 1 && (
+                    <button type="button" className="icon-btn-delete" onClick={() => onRemove(index)}>✕</button>
+                )}
+            </div>
         </div >
     );
 };
 
 // Wrapper for Sortable Hook (Bread Ingredients)
-const BreadIngredientItem = ({ id, index, item, onChange, onRemove, onSuggestionSelect, activeSuggestion, filteredSuggestions, setActiveSuggestion, setFilteredSuggestions, handleSuggestionSelect, allIngredientNames, calculatePercentage, onOpenConversion }) => {
+const BreadIngredientItem = ({ id, index, item, onChange, onRemove, onSelect, calculatePercentage, onOpenConversion }) => {
     const {
         attributes,
         listeners,
@@ -732,16 +744,15 @@ const BreadIngredientItem = ({ id, index, item, onChange, onRemove, onSuggestion
         transition,
         opacity: isDragging ? 0.5 : 1,
         position: 'relative',
-        zIndex: isDragging ? 999 : 'auto',
-        backgroundColor: 'white'
+        zIndex: isDragging ? 999 : 'auto'
     };
 
     return (
-        <div ref={setNodeRef} style={style} className="bread-row">
+        <div ref={setNodeRef} style={style} className="form-ingredient-row form-ingredient-row--bread">
             <div
                 {...attributes}
                 {...listeners}
-                className="bread-drag-handle"
+                className="ingredient-drag-handle"
                 style={{
                     cursor: 'grab',
                     padding: '0 0.5rem',
@@ -755,94 +766,38 @@ const BreadIngredientItem = ({ id, index, item, onChange, onRemove, onSuggestion
             >
                 ⋮⋮
             </div>
-            <div style={{ position: 'relative', zIndex: activeSuggestion?.type === 'ingredient' && activeSuggestion?.index === index ? 10000 : 'auto' }}>
-                <Input
+            <div className="ingredient-name">
+                <AutocompleteInput
                     value={item.name}
-                    onChange={(e) => {
-                        onChange(index, 'name', e.target.value);
-                        // Trigger suggestions
-                        if (e.target.value.trim()) {
-                            const matchVal = e.target.value.toLowerCase();
-                            const matches = allIngredientNames.filter(n => n.toLowerCase().includes(matchVal));
-                            setFilteredSuggestions(matches.slice(0, 10));
-                            setActiveSuggestion({ type: 'ingredient', index: index });
-                        } else {
-                            setFilteredSuggestions([]);
-                            setActiveSuggestion(null);
-                        }
-                    }}
-                    onFocus={() => {
-                        if (item.name.trim()) {
-                            const matchVal = item.name.toLowerCase();
-                            const matches = allIngredientNames.filter(n => n.toLowerCase().includes(matchVal));
-                            setFilteredSuggestions(matches.slice(0, 10));
-                            setActiveSuggestion({ type: 'ingredient', index: index });
-                        }
-                    }}
-                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
+                    onChange={(e) => onChange(index, 'name', e.target.value)}
+                    onSelect={(selectedItem) => onSelect('ingredient', index, selectedItem)}
                     placeholder="例: 塩"
-                    className="bread-input name"
-                    autoComplete="off"
                 />
-                {activeSuggestion && activeSuggestion.type === 'ingredient' && activeSuggestion.index === index && filteredSuggestions.length > 0 && (
-                    <ul style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        backgroundColor: 'white',
-                        border: '1px solid #ccc',
-                        borderRadius: '0 0 4px 4px',
-                        maxHeight: '150px',
-                        overflowY: 'auto',
-                        zIndex: 10001,
-                        padding: 0,
-                        margin: 0,
-                        listStyle: 'none',
-                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                    }}>
-                        {filteredSuggestions.map((suggestion, idx) => (
-                            <li
-                                key={idx}
-                                onMouseDown={() => handleSuggestionSelect('ingredient', index, suggestion)}
-                                style={{
-                                    padding: '8px 12px',
-                                    cursor: 'pointer',
-                                    borderBottom: idx < filteredSuggestions.length - 1 ? '1px solid #f0f0f0' : 'none',
-                                    fontSize: '14px',
-                                    color: '#333'
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
-                            >
-                                {suggestion}
-                            </li>
-                        ))}
-                    </ul>
-                )}
             </div>
-            <Input
-                type="number"
-                step="any"
-                value={item.quantity}
-                onChange={(e) => onChange(index, 'quantity', e.target.value)}
-                placeholder="0"
-                className="bread-input qty"
-            />
-            <div className="bread-percent">
+            <div className="ingredient-qty">
+                <Input
+                    type="number"
+                    step="any"
+                    value={item.quantity}
+                    onChange={(e) => onChange(index, 'quantity', e.target.value)}
+                    placeholder="0"
+                    wrapperClassName="input-group--no-margin"
+                />
+            </div>
+            <div className="ingredient-unit bread-percent">
                 {calculatePercentage(item.quantity)}%
             </div>
-            <div style={{ position: 'relative' }}>
+            <div className="ingredient-cost" style={{ position: 'relative' }}>
                 <Input
                     type="number"
                     step="any"
                     value={item.purchaseCost || ''}
                     onChange={(e) => onChange(index, 'purchaseCost', e.target.value)}
                     placeholder={item.purchaseCostRef ? `Ref: ¥${item.purchaseCostRef}` : "仕入れ"}
-                    className="bread-input cost"
                     style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '', paddingRight: '20px' }}
                     min="0"
                     title={item.purchaseCostRef ? `参考価格: ¥${item.purchaseCostRef}` : "No data"}
+                    wrapperClassName="input-group--no-margin"
                 />
                 <button
                     type="button"
@@ -862,17 +817,19 @@ const BreadIngredientItem = ({ id, index, item, onChange, onRemove, onSuggestion
                 )}
             </div>
 
-            <Input
-                type="number"
-                step="any"
-                value={item.cost || ''}
-                onChange={(e) => onChange(index, 'cost', e.target.value)}
-                placeholder="原価"
-                className="bread-input cost"
-                style={{ width: '100%' }}
-                min="0"
-            />
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <div className="ingredient-cost">
+                <Input
+                    type="number"
+                    step="any"
+                    value={item.cost || ''}
+                    onChange={(e) => onChange(index, 'cost', e.target.value)}
+                    placeholder="原価"
+                    style={{ width: '100%' }}
+                    min="0"
+                    wrapperClassName="input-group--no-margin"
+                />
+            </div>
+            <div className="ingredient-alcohol" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                 <input
                     type="checkbox"
                     checked={item.isAlcohol || false}
@@ -880,7 +837,9 @@ const BreadIngredientItem = ({ id, index, item, onChange, onRemove, onSuggestion
                     title="酒類 (10%税)"
                 />
             </div>
-            <button type="button" className="bread-remove" onClick={() => onRemove(index)}>×</button>
+            <div className="remove-button-cell">
+                <button type="button" className="icon-btn-delete" onClick={() => onRemove(index)}>✕</button>
+            </div>
         </div >
     );
 };

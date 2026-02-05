@@ -225,6 +225,41 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
             // Ensure consistency for other components
             finalRecipe.description = finalRecipe.description || '';
 
+            // FIX: Extract steps erroneously categorized as ingredients
+            // First ensure ingredients is populated (some scrapers return recipeIngredient)
+            if (!finalRecipe.ingredients && finalRecipe.recipeIngredient) {
+                finalRecipe.ingredients = finalRecipe.recipeIngredient;
+            }
+
+            if (Array.isArray(finalRecipe.ingredients)) {
+                const stepGroupKeywords = ['作り方', '手順', 'method', 'instructions', 'steps', 'preparation'];
+                const realIngredients = [];
+                const extractedSteps = [];
+
+                finalRecipe.ingredients.forEach(ing => {
+                    const groupName = (ing.group || '').trim().toLowerCase();
+                    // Check if group name indicates it is actually a step
+                    if (groupName && stepGroupKeywords.some(k => groupName === k || groupName.includes(k))) {
+                        // Extract text: prefer name or text
+                        const stepText = ing.name || ing.text || '';
+                        if (stepText) {
+                            extractedSteps.push(stepText);
+                        }
+                    } else {
+                        realIngredients.push(ing);
+                    }
+                });
+
+                if (extractedSteps.length > 0) {
+                    console.log("Extracted steps from ingredients:", extractedSteps);
+                    finalRecipe.ingredients = realIngredients;
+                    // Ensure steps array exists
+                    finalRecipe.steps = Array.isArray(finalRecipe.steps) ? finalRecipe.steps : [];
+                    // Combine
+                    finalRecipe.steps = [...finalRecipe.steps, ...extractedSteps];
+                }
+            }
+
             // Check for foreign language (lack of Japanese) in Name or Steps
             // We check name and first few steps
             const sampleText = (finalRecipe.name || '') + (finalRecipe.steps ? finalRecipe.steps.slice(0, 3).join('') : '');
