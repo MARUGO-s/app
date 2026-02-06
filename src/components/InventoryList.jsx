@@ -214,18 +214,28 @@ export const InventoryList = ({ items, loading, onSearch, searchQuery, onEdit, o
                             )}
                         </tbody>
                         <tfoot>
-                            <tr style={{ fontWeight: 'bold', backgroundColor: '#f9f9f9' }}>
-                                <td colSpan="6" style={{ textAlign: 'right', paddingRight: '10px' }}>合計(税込):</td>
-                                <td style={{ textAlign: 'right' }}>
-                                    ¥{Math.round(items.reduce((sum, item) => {
-                                        const price = parseFloat(item.price) || 0;
-                                        const qty = item.quantity === '' ? 0 : (parseFloat(item.quantity) || 0);
-                                        const tax = item?.tax10 === true || item?.tax10 === 1 || item?.tax10 === '1' || item?.tax10 === 'true' ? 1.1 : 1.08;
-                                        return sum + (price * qty * tax);
-                                    }, 0)).toLocaleString()}
-                                </td>
-                                <td colSpan="2"></td>
-                            </tr>
+                            {(() => {
+                                const totals = items.reduce((acc, item) => {
+                                    const price = parseFloat(item.price) || 0;
+                                    const qty = item.quantity === '' ? 0 : (parseFloat(item.quantity) || 0);
+                                    const tax = item?.tax10 === true || item?.tax10 === 1 || item?.tax10 === '1' || item?.tax10 === 'true' ? 1.1 : 1.08;
+                                    const base = price * qty;
+                                    acc.net += base;
+                                    acc.taxed += base * tax;
+                                    return acc;
+                                }, { net: 0, taxed: 0 });
+                                return (
+                                    <tr style={{ fontWeight: 'bold', backgroundColor: '#f9f9f9' }}>
+                                        <td colSpan="6" style={{ textAlign: 'right', paddingRight: '10px' }}>
+                                            合計（税抜 / 税込）:
+                                        </td>
+                                        <td style={{ textAlign: 'right' }}>
+                                            ¥{Math.round(totals.net).toLocaleString()} / ¥{Math.round(totals.taxed).toLocaleString()}
+                                        </td>
+                                        <td colSpan="2"></td>
+                                    </tr>
+                                );
+                            })()}
                         </tfoot>
                     </table>
                 )}

@@ -535,6 +535,19 @@
     cursor: pointer;
 }
 
+.snapshot-tax-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 4px;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    color: #555;
+    background: #fdecec;
+    border: 1px solid #f5c2c2;
+    border-radius: 4px;
+    vertical-align: middle;
+}
+
 .inventory-table tr:hover {
     background-color: #f5f5f5;
 }
