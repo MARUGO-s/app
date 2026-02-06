@@ -6,13 +6,36 @@ import { Input } from './Input';
 const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onToggleTax }) => {
     const [localQuantity, setLocalQuantity] = React.useState(item.quantity === '' ? '' : (parseFloat(item.quantity) || 0));
 
+    const normalizeItemCategory = (value) => {
+        const normalized = String(value || '').trim();
+        if (!normalized) return '';
+        if (normalized === 'food_alcohol') return 'food';
+        if (['food', 'alcohol', 'soft_drink', 'supplies'].includes(normalized)) return normalized;
+        return '';
+    };
+
+    const categoryLabelMap = {
+        food: '食材',
+        alcohol: 'アルコール',
+        soft_drink: 'ソフトドリンク',
+        supplies: '備品'
+    };
+
     // Sync from parent prop if it changes externally (e.g. reload) - keeping basic sync
     React.useEffect(() => {
         setLocalQuantity(item.quantity === '' ? '' : (parseFloat(item.quantity) || 0));
     }, [item.quantity]);
 
     const price = parseFloat(item.price) || 0;
-    const isTax10 = item?.tax10 === true || item?.tax10 === 1 || item?.tax10 === '1' || item?.tax10 === 'true';
+    const normalizedCategory = normalizeItemCategory(item?._master?.itemCategory);
+    const isCategoryTaxLocked = !!normalizedCategory;
+    const categoryBasedTax10 = normalizedCategory === 'alcohol' || normalizedCategory === 'supplies';
+    const isTax10 = isCategoryTaxLocked
+        ? categoryBasedTax10
+        : (item?.tax10 === true || item?.tax10 === 1 || item?.tax10 === '1' || item?.tax10 === 'true');
+    const taxTitle = isCategoryTaxLocked
+        ? `区分「${categoryLabelMap[normalizedCategory] || normalizedCategory}」により${isTax10 ? '10%' : '8%'}固定`
+        : '10%対象';
     const taxMultiplier = isTax10 ? 1.1 : 1.08;
     // Calculate total value based on LOCAL input immediately
     const currentQty = localQuantity === '' ? 0 : parseFloat(localQuantity);
@@ -60,8 +83,9 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
                 <input
                     type="checkbox"
                     checked={isTax10}
+                    disabled={isCategoryTaxLocked}
                     onChange={(e) => onToggleTax && onToggleTax(item, e.target.checked)}
-                    title="10%対象"
+                    title={taxTitle}
                     className="inventory-tax-checkbox"
                 />
             </td>

@@ -83,6 +83,7 @@ export const ingredientSearchService = {
                     price: item.last_price,
                     size: item.packet_size,
                     unit: item.packet_unit,
+                    itemCategory: item.item_category || null,
                     source: 'manual',
                     displaySource: '📦 マスター'
                 }));
@@ -149,6 +150,7 @@ export const ingredientSearchService = {
                     price: item.lastPrice,
                     size: item.packetSize,
                     unit: item.packetUnit,
+                    itemCategory: item.itemCategory || null,
                     source: 'manual',
                     displaySource: '📦 マスター'
                 }));

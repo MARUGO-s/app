@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { unitConversionService } from '../services/unitConversionService';
 import { Button } from './Button';
@@ -7,13 +7,45 @@ import { Input } from './Input';
 import { Modal } from './Modal';
 import { useToast } from '../contexts/ToastContext';
 
+const ALL_VENDORS_KEY = '__all_vendors__';
+const UNKNOWN_VENDOR_KEY = '__unknown_vendor__';
+const ALL_CATEGORIES_KEY = '__all_categories__';
+const DEFAULT_ITEM_CATEGORY = 'food';
+const ITEM_CATEGORY_OPTIONS = [
+    { value: 'food', label: '食材' },
+    { value: 'alcohol', label: 'アルコール' },
+    { value: 'soft_drink', label: 'ソフトドリンク' },
+    { value: 'supplies', label: '備品' },
+];
+const ITEM_CATEGORY_LABELS = ITEM_CATEGORY_OPTIONS.reduce((acc, option) => {
+    acc[option.value] = option.label;
+    return acc;
+}, {});
+
+const normalizeVendorKey = (vendor) => {
+    const value = typeof vendor === 'string' ? vendor.trim() : '';
+    return value || UNKNOWN_VENDOR_KEY;
+};
+
+const normalizeItemCategory = (value) => {
+    const normalized = String(value || '').trim();
+    if (!normalized) return DEFAULT_ITEM_CATEGORY;
+    if (normalized === 'food_alcohol') return DEFAULT_ITEM_CATEGORY;
+    return ITEM_CATEGORY_LABELS[normalized] ? normalized : DEFAULT_ITEM_CATEGORY;
+};
+
 const CsvToMasterImporter = () => {
     const [mergedData, setMergedData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(null); // id of item being saved (or 'bulk' for bulk save)
     const [filter, setFilter] = useState('all'); // all, unregistered, registered
+    const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' }); // key: name,csvPrice,inputCategory,inputSize,inputUnit,inputPrice
     const [searchTerm, setSearchTerm] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState(ALL_CATEGORIES_KEY);
+    const [selectedVendor, setSelectedVendor] = useState(ALL_VENDORS_KEY);
+    const [isVendorMenuOpen, setIsVendorMenuOpen] = useState(false);
     const [error, setError] = useState(null); // Critical error state
+    const vendorMenuRef = useRef(null);
 
     // Toast
     const toast = useToast();
@@ -66,12 +98,14 @@ const CsvToMasterImporter = () => {
 
                 // masterDataMap keys are ingredient_name
                 const masterItem = masterDataMap.get(item.name);
+                const baseCategory = normalizeItemCategory(masterItem?.itemCategory);
 
                 uniqueCsvItems.push({
                     name: item.name,
                     csvPrice: item.price,
                     csvUnit: item.unit,
                     csvVendor: item.vendor,
+                    masterCategory: baseCategory,
 
                     // Master data (if exists)
                     masterSize: masterItem ? masterItem.packetSize : '',
@@ -84,6 +118,7 @@ const CsvToMasterImporter = () => {
                     inputSize: masterItem ? masterItem.packetSize : '',
                     inputUnit: masterItem ? masterItem.packetUnit : (item.unit || 'g'),
                     inputPrice: masterItem ? masterItem.lastPrice : (item.price || 0),
+                    inputCategory: baseCategory,
 
                     // Modification tracking
                     isModified: false
@@ -115,13 +150,18 @@ const CsvToMasterImporter = () => {
                 toast.error("単位を入力してください。");
                 return;
             }
+            if (!item.inputCategory) {
+                toast.error("区分を選択してください。");
+                return;
+            }
 
             // Save to master
             await unitConversionService.saveConversion(
                 item.name,
                 size,
                 item.inputUnit,
-                price
+                price,
+                item.inputCategory
             );
 
             // Refresh local state to show "Registered" and reset modification flag
@@ -133,7 +173,9 @@ const CsvToMasterImporter = () => {
                         isModified: false, // Reset modification flag on save
                         masterSize: size,
                         masterUnit: item.inputUnit,
-                        masterPrice: price
+                        masterPrice: price,
+                        masterCategory: item.inputCategory,
+                        inputCategory: item.inputCategory
                     };
                 }
                 return d;
@@ -163,12 +205,14 @@ const CsvToMasterImporter = () => {
                 // Basic validation
                 if (isNaN(size) || size <= 0) throw new Error("Invalid size");
                 if (!item.inputUnit) throw new Error("Invalid unit");
+                if (!item.inputCategory) throw new Error("Invalid category");
 
                 await unitConversionService.saveConversion(
                     item.name,
                     size,
                     item.inputUnit,
-                    price
+                    price,
+                    item.inputCategory
                 );
                 return item;
             }));
@@ -195,7 +239,9 @@ const CsvToMasterImporter = () => {
                         isModified: false, // Reset modification flag
                         masterSize: parseFloat(updated.inputSize),
                         masterUnit: updated.inputUnit,
-                        masterPrice: parseFloat(updated.inputPrice)
+                        masterPrice: parseFloat(updated.inputPrice),
+                        masterCategory: updated.inputCategory,
+                        inputCategory: updated.inputCategory
                     };
                 }
                 return d;
@@ -240,7 +286,105 @@ const CsvToMasterImporter = () => {
         }));
     };
 
-    const filteredData = mergedData.filter(item => {
+    const handleSort = (key) => {
+        setSortConfig((prev) => {
+            if (prev.key === key) {
+                return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+            }
+            return { key, direction: 'asc' };
+        });
+    };
+
+    const sortMark = (key) => {
+        if (sortConfig.key !== key) return '';
+        return sortConfig.direction === 'asc' ? ' ▲' : ' ▼';
+    };
+
+    const vendorTabs = useMemo(() => {
+        const tabMap = new Map();
+
+        mergedData.forEach((item) => {
+            const key = normalizeVendorKey(item.csvVendor);
+            const label = key === UNKNOWN_VENDOR_KEY ? '業者未設定' : key;
+            const prev = tabMap.get(key);
+            if (prev) {
+                prev.count += 1;
+            } else {
+                tabMap.set(key, { key, label, count: 1 });
+            }
+        });
+
+        const tabs = Array.from(tabMap.values()).sort((a, b) => a.label.localeCompare(b.label, 'ja'));
+        return [{ key: ALL_VENDORS_KEY, label: '全業者', count: mergedData.length }, ...tabs];
+    }, [mergedData]);
+
+    useEffect(() => {
+        const isSelectedVendorAvailable = vendorTabs.some(tab => tab.key === selectedVendor);
+        if (!isSelectedVendorAvailable) {
+            setSelectedVendor(ALL_VENDORS_KEY);
+        }
+    }, [vendorTabs, selectedVendor]);
+
+    useEffect(() => {
+        if (!isVendorMenuOpen) return undefined;
+
+        const handlePointerDown = (event) => {
+            if (vendorMenuRef.current && !vendorMenuRef.current.contains(event.target)) {
+                setIsVendorMenuOpen(false);
+            }
+        };
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                setIsVendorMenuOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handlePointerDown);
+        document.addEventListener('touchstart', handlePointerDown);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', handlePointerDown);
+            document.removeEventListener('touchstart', handlePointerDown);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isVendorMenuOpen]);
+
+    const vendorScopedData = useMemo(() => {
+        if (selectedVendor === ALL_VENDORS_KEY) return mergedData;
+        return mergedData.filter(item => normalizeVendorKey(item.csvVendor) === selectedVendor);
+    }, [mergedData, selectedVendor]);
+
+    const categoryCounts = useMemo(() => {
+        const counts = {
+            [ALL_CATEGORIES_KEY]: vendorScopedData.length
+        };
+        ITEM_CATEGORY_OPTIONS.forEach(option => {
+            counts[option.value] = 0;
+        });
+        vendorScopedData.forEach(item => {
+            const key = normalizeItemCategory(item.inputCategory);
+            counts[key] = (counts[key] || 0) + 1;
+        });
+        return counts;
+    }, [vendorScopedData]);
+
+    const categoryScopedData = useMemo(() => {
+        if (categoryFilter === ALL_CATEGORIES_KEY) return vendorScopedData;
+        return vendorScopedData.filter(item => normalizeItemCategory(item.inputCategory) === categoryFilter);
+    }, [vendorScopedData, categoryFilter]);
+
+    const statusCounts = useMemo(() => ({
+        all: categoryScopedData.length,
+        unregistered: categoryScopedData.filter(d => !d.isRegistered).length,
+        registered: categoryScopedData.filter(d => d.isRegistered).length
+    }), [categoryScopedData]);
+
+    const selectedVendorTab = useMemo(
+        () => vendorTabs.find(tab => tab.key === selectedVendor) || vendorTabs[0],
+        [vendorTabs, selectedVendor]
+    );
+
+    const filteredData = useMemo(() => categoryScopedData.filter(item => {
         // Filter by status
         if (filter === 'unregistered' && item.isRegistered) return false;
         if (filter === 'registered' && !item.isRegistered) return false;
@@ -249,7 +393,54 @@ const CsvToMasterImporter = () => {
         if (searchTerm && !item.name.includes(searchTerm)) return false;
 
         return true;
-    });
+    }), [categoryScopedData, filter, searchTerm]);
+
+    const sortedData = useMemo(() => {
+        if (!sortConfig.key) return filteredData;
+
+        const getString = (value) => String(value ?? '');
+        const getNumber = (value) => {
+            const parsed = parseFloat(value);
+            return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+        };
+
+        const data = [...filteredData];
+        data.sort((a, b) => {
+            let cmp = 0;
+            switch (sortConfig.key) {
+                case 'name':
+                    cmp = getString(a.name).localeCompare(getString(b.name), 'ja');
+                    break;
+                case 'csvPrice':
+                    cmp = getNumber(a.csvPrice) - getNumber(b.csvPrice);
+                    break;
+                case 'inputCategory': {
+                    const aLabel = ITEM_CATEGORY_LABELS[normalizeItemCategory(a.inputCategory)] || '';
+                    const bLabel = ITEM_CATEGORY_LABELS[normalizeItemCategory(b.inputCategory)] || '';
+                    cmp = aLabel.localeCompare(bLabel, 'ja');
+                    break;
+                }
+                case 'inputSize':
+                    cmp = getNumber(a.inputSize) - getNumber(b.inputSize);
+                    break;
+                case 'inputUnit':
+                    cmp = getString(a.inputUnit).localeCompare(getString(b.inputUnit), 'ja');
+                    break;
+                case 'inputPrice':
+                    cmp = getNumber(a.inputPrice) - getNumber(b.inputPrice);
+                    break;
+                default:
+                    cmp = 0;
+                    break;
+            }
+
+            if (cmp === 0) {
+                cmp = getString(a.name).localeCompare(getString(b.name), 'ja');
+            }
+            return sortConfig.direction === 'asc' ? cmp : -cmp;
+        });
+        return data;
+    }, [filteredData, sortConfig]);
 
     const modifiedCount = mergedData.filter(d => d.isModified).length;
 
@@ -285,7 +476,7 @@ const CsvToMasterImporter = () => {
                         size="sm"
                         style={{ marginRight: '0.5rem' }}
                     >
-                        全て ({mergedData.length})
+                        全て ({statusCounts.all})
                     </Button>
                     <Button
                         variant={filter === 'unregistered' ? 'primary' : 'secondary'}
@@ -293,15 +484,65 @@ const CsvToMasterImporter = () => {
                         size="sm"
                         style={{ marginRight: '0.5rem' }}
                     >
-                        未登録 ({mergedData.filter(d => !d.isRegistered).length})
+                        未登録 ({statusCounts.unregistered})
                     </Button>
                     <Button
                         variant={filter === 'registered' ? 'primary' : 'secondary'}
                         onClick={() => setFilter('registered')}
                         size="sm"
                     >
-                        登録済 ({mergedData.filter(d => d.isRegistered).length})
+                        登録済 ({statusCounts.registered})
                     </Button>
+                </div>
+
+                <div className="vendor-dropdown" ref={vendorMenuRef}>
+                    <button
+                        type="button"
+                        className="vendor-dropdown-trigger"
+                        onClick={() => setIsVendorMenuOpen(prev => !prev)}
+                        aria-haspopup="listbox"
+                        aria-expanded={isVendorMenuOpen}
+                    >
+                        <span>業者: {selectedVendorTab?.label} ({selectedVendorTab?.count ?? 0})</span>
+                        <span className={`vendor-dropdown-chevron ${isVendorMenuOpen ? 'open' : ''}`}>▼</span>
+                    </button>
+
+                    {isVendorMenuOpen && (
+                        <div className="vendor-dropdown-menu" role="listbox" aria-label="業者で絞り込み">
+                            {vendorTabs.map(tab => (
+                                <button
+                                    key={tab.key}
+                                    type="button"
+                                    className={`vendor-tab ${selectedVendor === tab.key ? 'active' : ''}`}
+                                    onClick={() => {
+                                        setSelectedVendor(tab.key);
+                                        setIsVendorMenuOpen(false);
+                                    }}
+                                    role="option"
+                                    aria-selected={selectedVendor === tab.key}
+                                >
+                                    {tab.label} ({tab.count})
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <div className="category-filter-row">
+                    <label htmlFor="csv-item-category-filter" className="category-filter-label">区分:</label>
+                    <select
+                        id="csv-item-category-filter"
+                        className="input-field category-filter-select"
+                        value={categoryFilter}
+                        onChange={(e) => setCategoryFilter(e.target.value)}
+                    >
+                        <option value={ALL_CATEGORIES_KEY}>全て ({categoryCounts[ALL_CATEGORIES_KEY] || 0})</option>
+                        {ITEM_CATEGORY_OPTIONS.map(option => (
+                            <option key={option.value} value={option.value}>
+                                {option.label} ({categoryCounts[option.value] || 0})
+                            </option>
+                        ))}
+                    </select>
                 </div>
 
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
@@ -324,22 +565,23 @@ const CsvToMasterImporter = () => {
                 <table className="enterprise-table">
                     <thead>
                         <tr>
-                            <th style={{ width: '25%' }}>材料名 (CSV)</th>
-                            <th style={{ width: '15%' }}>参考価格 (CSV)</th>
-                            <th style={{ width: '20%' }}>容量 (登録値) <span style={{ color: 'red' }}>*</span></th>
-                            <th style={{ width: '15%' }}>単位 (登録値) <span style={{ color: 'red' }}>*</span></th>
-                            <th style={{ width: '15%' }}>価格 (登録値)</th>
-                            <th style={{ width: '10%' }}>操作</th>
+                            <th style={{ width: '22%' }} onClick={() => handleSort('name')}>材料名 (CSV){sortMark('name')}</th>
+                            <th style={{ width: '14%' }} onClick={() => handleSort('csvPrice')}>参考価格 (CSV){sortMark('csvPrice')}</th>
+                            <th style={{ width: '14%' }} onClick={() => handleSort('inputCategory')}>区分 <span style={{ color: 'red' }}>*</span>{sortMark('inputCategory')}</th>
+                            <th style={{ width: '18%' }} onClick={() => handleSort('inputSize')}>容量 (登録値) <span style={{ color: 'red' }}>*</span>{sortMark('inputSize')}</th>
+                            <th style={{ width: '13%' }} onClick={() => handleSort('inputUnit')}>単位 (登録値) <span style={{ color: 'red' }}>*</span>{sortMark('inputUnit')}</th>
+                            <th style={{ width: '12%' }} onClick={() => handleSort('inputPrice')}>価格 (登録値){sortMark('inputPrice')}</th>
+                            <th style={{ width: '7%' }}>操作</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredData.length === 0 ? (
+                        {sortedData.length === 0 ? (
                             <tr>
-                                <td colSpan="6" className="no-data">データが見つかりません</td>
+                                <td colSpan="7" className="no-data">データが見つかりません</td>
                             </tr>
                         ) : (
-                            filteredData.map((item, index) => (
-                                <tr key={item.name + index} style={{
+                            sortedData.map((item) => (
+                                <tr key={item.name} style={{
                                     backgroundColor: item.isModified ? '#fff8e1' : (item.isRegistered ? '#f9fff9' : 'inherit'),
                                     transition: 'background-color 0.3s'
                                 }}>
@@ -352,20 +594,25 @@ const CsvToMasterImporter = () => {
                                         {item.csvUnit && <span style={{ fontSize: '0.8rem', color: '#888' }}> / {item.csvUnit}</span>}
                                     </td>
                                     <td>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                            <Input
-                                                type="number"
-                                                value={item.inputSize}
-                                                onChange={(e) => handleInputChange(item.name, 'inputSize', e.target.value)}
-                                                placeholder={['個', '本', '枚', 'PC', '箱', '缶', '包'].includes(item.inputUnit) ? '数量 (例: 1)' : '例: 1000'}
-                                                style={{ width: '100%' }}
-                                            />
-                                            {['個', '本', '枚', 'PC', '箱', '缶', '包'].includes(item.inputUnit) && (
-                                                <span style={{ fontSize: '0.7rem', color: '#e67e22', whiteSpace: 'nowrap' }}>
-                                                    ※1{item.inputUnit}単位の価格なら「1」
-                                                </span>
-                                            )}
-                                        </div>
+                                        <select
+                                            className="input-field"
+                                            value={normalizeItemCategory(item.inputCategory)}
+                                            onChange={(e) => handleInputChange(item.name, 'inputCategory', e.target.value)}
+                                            style={{ width: '100%', padding: '8px', cursor: 'pointer' }}
+                                        >
+                                            {ITEM_CATEGORY_OPTIONS.map(option => (
+                                                <option key={option.value} value={option.value}>{option.label}</option>
+                                            ))}
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <Input
+                                            type="number"
+                                            value={item.inputSize}
+                                            onChange={(e) => handleInputChange(item.name, 'inputSize', e.target.value)}
+                                            placeholder={['個', '本', '枚', 'PC', '箱', '缶', '包'].includes(item.inputUnit) ? '数量 (例: 1)' : '例: 1000'}
+                                            style={{ width: '100%' }}
+                                        />
                                     </td>
                                     <td>
                                         <select
@@ -448,4 +695,3 @@ const CsvToMasterImporter = () => {
 };
 
 export default CsvToMasterImporter;
-
