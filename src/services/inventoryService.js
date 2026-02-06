@@ -38,24 +38,41 @@ export const inventoryService = {
         // Strip any UI-only fields before DB insert
         const { id, isPhantom, _master, ...itemData } = item;
 
-        const { data, error } = await supabase
+        const payload = {
+            ...itemData,
+            user_id: userId,
+            tax10: !!item.tax10,
+            // Ensure numeric fields are numbers
+            quantity: parseFloat(item.quantity) || 0,
+            threshold: parseFloat(item.threshold) || 0,
+            price: parseFloat(item.price) || 0
+        };
+
+        const res1 = await supabase
             .from(TABLE_NAME)
-            .insert([{
-                ...itemData,
-                user_id: userId,
-                // Ensure numeric fields are numbers
-                quantity: parseFloat(item.quantity) || 0,
-                threshold: parseFloat(item.threshold) || 0,
-                price: parseFloat(item.price) || 0
-            }])
-            .select() // Return the inserted data including ID
+            .insert([payload])
+            .select()
             .single();
 
-        if (error) {
-            console.error('Error adding item:', error);
-            throw error;
+        if (res1.error && isMissingColumnError(res1.error, 'tax10')) {
+            const { tax10, ...fallbackPayload } = payload;
+            const res2 = await supabase
+                .from(TABLE_NAME)
+                .insert([fallbackPayload])
+                .select()
+                .single();
+            if (res2.error) {
+                console.error('Error adding item:', res2.error);
+                throw res2.error;
+            }
+            return res2.data;
         }
-        return data;
+
+        if (res1.error) {
+            console.error('Error adding item:', res1.error);
+            throw res1.error;
+        }
+        return res1.data;
     },
 
     update: async (userId, item) => {
@@ -66,25 +83,44 @@ export const inventoryService = {
         // Strip any UI-only fields before DB update
         const { id, isPhantom, created_at, _master, ...itemData } = item;
 
-        const { data, error } = await supabase
+        const payload = {
+            ...itemData,
+            tax10: !!item.tax10,
+            quantity: parseFloat(item.quantity) || 0,
+            threshold: parseFloat(item.threshold) || 0,
+            price: parseFloat(item.price) || 0,
+            updated_at: new Date().toISOString()
+        };
+
+        const res1 = await supabase
             .from(TABLE_NAME)
-            .update({
-                ...itemData,
-                quantity: parseFloat(item.quantity) || 0,
-                threshold: parseFloat(item.threshold) || 0,
-                price: parseFloat(item.price) || 0,
-                updated_at: new Date().toISOString()
-            })
+            .update(payload)
             .eq('id', item.id)
             .eq('user_id', userId)
             .select()
             .single();
 
-        if (error) {
-            console.error('Error updating item:', error);
-            throw error;
+        if (res1.error && isMissingColumnError(res1.error, 'tax10')) {
+            const { tax10, ...fallbackPayload } = payload;
+            const res2 = await supabase
+                .from(TABLE_NAME)
+                .update(fallbackPayload)
+                .eq('id', item.id)
+                .eq('user_id', userId)
+                .select()
+                .single();
+            if (res2.error) {
+                console.error('Error updating item:', res2.error);
+                throw res2.error;
+            }
+            return res2.data;
         }
-        return data;
+
+        if (res1.error) {
+            console.error('Error updating item:', res1.error);
+            throw res1.error;
+        }
+        return res1.data;
     },
 
     delete: async (userId, id) => {

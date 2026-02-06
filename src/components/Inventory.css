@@ -227,6 +227,96 @@
     font-weight: bold;
 }
 
+.inventory-controls__summary-range {
+    font-size: 0.9rem;
+    color: #555;
+}
+
+.inventory-summary {
+    background: #fff;
+    color: #333;
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.inventory-summary__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.inventory-summary__title {
+    font-size: 1.1rem;
+    font-weight: bold;
+}
+
+.inventory-summary__meta {
+    font-size: 0.9rem;
+    color: #555;
+    margin-top: 4px;
+}
+
+.inventory-summary__note {
+    font-size: 0.85rem;
+    color: #888;
+    margin-top: 6px;
+}
+
+.inventory-summary__table-wrap {
+    overflow-x: auto;
+}
+
+.inventory-summary__actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 8px;
+}
+
+.inventory-summary__table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.inventory-summary__table th,
+.inventory-summary__table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #eee;
+}
+
+.inventory-summary__drag {
+    width: 40px;
+    text-align: center;
+    color: #999;
+}
+
+.inventory-summary__drag-handle {
+    display: inline-block;
+    cursor: grab;
+    user-select: none;
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.inventory-summary__drag-handle:active {
+    cursor: grabbing;
+}
+
+.inventory-summary__table th {
+    background: #f5f5f5;
+    text-align: left;
+    font-weight: 600;
+}
+
+.inventory-summary__empty {
+    text-align: center;
+    color: #888;
+    padding: 16px 0;
+}
+
 @media (max-width: 700px) {
     .inventory-header-actions {
         justify-content: stretch;
@@ -322,7 +412,7 @@
     }
 
     /* 品名カラムだけは折り返しを許可 */
-    .inventory-table td:first-child {
+    .inventory-table td:nth-child(2) {
         word-break: break-word;
         white-space: normal;
         max-width: 180px;
@@ -341,46 +431,52 @@
     }
 
     /* 各カラムに最小幅を設定 */
-    .inventory-table th:nth-child(2),
-    /* 仕入れ値 */
-    .inventory-table td:nth-child(2) {
-        min-width: 80px;
-    }
-
-    .inventory-table th:nth-child(3),
-    /* 単位 */
-    .inventory-table td:nth-child(3) {
+    .inventory-table th:nth-child(1),
+    /* 10% */
+    .inventory-table td:nth-child(1) {
         min-width: 50px;
     }
 
+    .inventory-table th:nth-child(3),
+    /* 仕入れ値 */
+    .inventory-table td:nth-child(3) {
+        min-width: 80px;
+    }
+
     .inventory-table th:nth-child(4),
-    /* 内容量 */
+    /* 単位 */
     .inventory-table td:nth-child(4) {
-        min-width: 90px;
+        min-width: 50px;
     }
 
     .inventory-table th:nth-child(5),
-    /* 在庫数 */
+    /* 内容量 */
     .inventory-table td:nth-child(5) {
         min-width: 90px;
     }
 
     .inventory-table th:nth-child(6),
-    /* 在庫金額 */
+    /* 在庫数 */
     .inventory-table td:nth-child(6) {
         min-width: 90px;
     }
 
     .inventory-table th:nth-child(7),
-    /* 業者名 */
+    /* 在庫金額 */
     .inventory-table td:nth-child(7) {
+        min-width: 90px;
+    }
+
+    .inventory-table th:nth-child(8),
+    /* 業者名 */
+    .inventory-table td:nth-child(8) {
         min-width: 100px;
         max-width: 150px;
     }
 
-    .inventory-table th:nth-child(8),
+    .inventory-table th:nth-child(9),
     /* アクション */
-    .inventory-table td:nth-child(8) {
+    .inventory-table td:nth-child(9) {
         min-width: 70px;
     }
 }
@@ -431,6 +527,12 @@
     -moz-appearance: textfield;
     /* Firefox */
     appearance: textfield;
+}
+
+.inventory-tax-checkbox {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
 }
 
 .inventory-table tr:hover {
@@ -511,8 +613,8 @@
     .header-actions,
     .inventory-tabs,
     .dnd-context-overlay,
-    .inventory-table th:nth-child(8),
-    .inventory-table td:nth-child(8),
+    .inventory-table th:nth-child(9),
+    .inventory-table td:nth-child(9),
     button {
         display: none !important;
     }
@@ -565,43 +667,50 @@
     /* Column Widths */
     .inventory-table th:nth-child(1),
     .inventory-table td:nth-child(1) {
-        width: 35%;
-        text-align: left;
+        width: 5%;
+        text-align: center;
     }
 
     .inventory-table th:nth-child(2),
     .inventory-table td:nth-child(2) {
-        width: 10%;
-        text-align: right;
+        width: 30%;
+        text-align: left;
     }
 
     .inventory-table th:nth-child(3),
     .inventory-table td:nth-child(3) {
-        width: 6%;
-        text-align: center;
-    }
-
-    .inventory-table th:nth-child(4),
-    .inventory-table td:nth-child(4) {
         width: 10%;
         text-align: right;
     }
 
+    .inventory-table th:nth-child(4),
+    .inventory-table td:nth-child(4) {
+        width: 6%;
+        text-align: center;
+    }
+
     .inventory-table th:nth-child(5),
     .inventory-table td:nth-child(5) {
-        width: 8%;
+        width: 10%;
         text-align: right;
     }
 
     .inventory-table th:nth-child(6),
     .inventory-table td:nth-child(6) {
-        width: 12%;
+        width: 8%;
         text-align: right;
     }
 
     .inventory-table th:nth-child(7),
     .inventory-table td:nth-child(7) {
-        width: 22%;
+        width: 12%;
+        text-align: right;
+        font-size: 9px !important;
+    }
+
+    .inventory-table th:nth-child(8),
+    .inventory-table td:nth-child(8) {
+        width: 19%;
         text-align: left;
         font-size: 9px !important;
     }

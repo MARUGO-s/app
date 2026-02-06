@@ -286,35 +286,59 @@ function AppContent() {
     }
   };
 
+  const normalizeValue = (value) => (value || '').toString().replace(/\s+/g, ' ').trim();
+  const normalizeKey = (value) => normalizeValue(value).toLowerCase();
+  const NO_STORE_VALUE = '__NO_STORE__';
+  const OTHER_STORE_VALUE = '__OTHER_STORE__';
+
   // Get unique courses and categories
-  const allCourses = [...new Set(recipes.map(r => r.course).filter(Boolean))];
-  const allCategories = [...new Set(recipes.map(r => r.category).filter(Boolean))];
+  const allCourses = [...new Set(recipes.map(r => normalizeValue(r.course)).filter(Boolean))];
+  const allCategories = [...new Set(recipes.map(r => normalizeValue(r.category)).filter(Boolean))];
 
   // Calculate counts
   const storeCounts = recipes.reduce((acc, r) => {
-    if (r.storeName) acc[r.storeName] = (acc[r.storeName] || 0) + 1;
+    const key = normalizeKey(r.storeName);
+    if (key) acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {});
+  const knownStoreKeys = new Set(STORE_LIST.map(store => normalizeKey(store)).filter(Boolean));
+  const noStoreCount = recipes.reduce((acc, r) => {
+    const key = normalizeKey(r.storeName);
+    if (!key) return acc + 1;
+    return acc;
+  }, 0);
+  const otherStoreCount = recipes.reduce((acc, r) => {
+    const key = normalizeKey(r.storeName);
+    if (!key) return acc;
+    if (!knownStoreKeys.has(key)) return acc + 1;
+    return acc;
+  }, 0);
 
   const courseCounts = recipes.reduce((acc, r) => {
-    if (r.course) acc[r.course] = (acc[r.course] || 0) + 1;
+    const key = normalizeKey(r.course);
+    if (key) acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {});
 
   const categoryCounts = recipes.reduce((acc, r) => {
-    if (r.category) acc[r.category] = (acc[r.category] || 0) + 1;
+    const key = normalizeKey(r.category);
+    if (key) acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {});
 
   // Filter recipes based on Tag/Category/Store AND Search Query
   const filteredRecipes = recipes.filter(recipe => {
     // 1. Tag/Category/Store Filter
+    const normalizedSelectedTag = normalizeKey(selectedTag);
     const matchesTag =
       selectedTag === 'すべて' ||
       (selectedTag === 'recent' && recentIds.includes(recipe.id)) ||
       (recipe.tags && recipe.tags.includes(selectedTag)) ||
-      (recipe.category && recipe.category === selectedTag) ||
-      (recipe.storeName && recipe.storeName === selectedTag);
+      (selectedTag === NO_STORE_VALUE && !normalizeKey(recipe.storeName)) ||
+      (selectedTag === OTHER_STORE_VALUE && normalizeKey(recipe.storeName) && !knownStoreKeys.has(normalizeKey(recipe.storeName))) ||
+      (recipe.category && normalizeKey(recipe.category) === normalizedSelectedTag) ||
+      (recipe.course && normalizeKey(recipe.course) === normalizedSelectedTag) ||
+      (recipe.storeName && normalizeKey(recipe.storeName) === normalizedSelectedTag);
 
     // 2. Search Query Filter
     const query = searchQuery.toLowerCase().trim();
@@ -890,13 +914,21 @@ function AppContent() {
           <div className="tag-filter-container">
             <select
               className="store-filter-select"
-              value={STORE_LIST.includes(selectedTag) ? selectedTag : ""}
+              value={
+                selectedTag === NO_STORE_VALUE
+                  ? NO_STORE_VALUE
+                  : selectedTag === OTHER_STORE_VALUE
+                    ? OTHER_STORE_VALUE
+                    : (STORE_LIST.includes(selectedTag) ? selectedTag : "")
+              }
               onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
             >
               <option value="">店舗</option>
               {STORE_LIST.map(store => (
-                <option key={store} value={store}>{store} ({storeCounts[store] || 0})</option>
+                <option key={store} value={store}>{store} ({storeCounts[normalizeKey(store)] || 0})</option>
               ))}
+              <option value={NO_STORE_VALUE}>未登録 ({noStoreCount})</option>
+              <option value={OTHER_STORE_VALUE}>その他 ({otherStoreCount})</option>
             </select>
 
             <select
@@ -906,7 +938,7 @@ function AppContent() {
             >
               <option value="">コース</option>
               {allCourses.sort().map(course => (
-                <option key={course} value={course}>{course} ({courseCounts[course] || 0})</option>
+                <option key={course} value={course}>{course} ({courseCounts[normalizeKey(course)] || 0})</option>
               ))}
             </select>
 
@@ -917,7 +949,7 @@ function AppContent() {
             >
               <option value="">カテゴリー</option>
               {allCategories.sort().map(cat => (
-                <option key={cat} value={cat}>{cat} ({categoryCounts[cat] || 0})</option>
+                <option key={cat} value={cat}>{cat} ({categoryCounts[normalizeKey(cat)] || 0})</option>
               ))}
             </select>
 

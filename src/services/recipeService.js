@@ -39,9 +39,9 @@ export const recipeService = {
         };
 
         const listSelectV1 = 'id,title,description,image,servings,course,category,store_name,ingredients_meta:ingredients->0,tags,created_at,updated_at,order_index,recipe_sources(url)';
-        const listSelectV2 = 'id,title,description,image,servings,ingredients,tags,created_at,updated_at,recipe_sources(url)';
-        const listSelectV3 = 'id,title,description,image,servings,ingredients,tags,created_at,updated_at';
-        const listSelectV4 = 'id,title,description,image,servings,ingredients,tags,created_at';
+        const listSelectV2 = 'id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at,updated_at,recipe_sources(url)';
+        const listSelectV3 = 'id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at,updated_at';
+        const listSelectV4 = 'id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at';
 
         let lastError = null;
 
