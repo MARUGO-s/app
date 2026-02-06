@@ -3,7 +3,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { Button } from './Button';
 import { Input } from './Input';
 
-const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete }) => {
+const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onToggleTax }) => {
     const [localQuantity, setLocalQuantity] = React.useState(item.quantity === '' ? '' : (parseFloat(item.quantity) || 0));
 
     // Sync from parent prop if it changes externally (e.g. reload) - keeping basic sync
@@ -12,9 +12,11 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete }) => {
     }, [item.quantity]);
 
     const price = parseFloat(item.price) || 0;
+    const isTax10 = item?.tax10 === true || item?.tax10 === 1 || item?.tax10 === '1' || item?.tax10 === 'true';
+    const taxMultiplier = isTax10 ? 1.1 : 1.08;
     // Calculate total value based on LOCAL input immediately
     const currentQty = localQuantity === '' ? 0 : parseFloat(localQuantity);
-    const totalValue = price * currentQty;
+    const totalValue = price * currentQty * taxMultiplier;
 
     const capacityLabel = React.useMemo(() => {
         const sizeRaw = item?._master?.packetSize;
@@ -54,6 +56,15 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete }) => {
 
     return (
         <tr className={isLowStock(item) ? 'low-stock' : ''}>
+            <td style={{ textAlign: 'center' }}>
+                <input
+                    type="checkbox"
+                    checked={isTax10}
+                    onChange={(e) => onToggleTax && onToggleTax(item, e.target.checked)}
+                    title="10%対象"
+                    className="inventory-tax-checkbox"
+                />
+            </td>
             <td>
                 {item.name}
                 {isLowStock(item) && <span style={{ marginLeft: '4px', fontSize: '0.7rem', color: 'red' }}>⚠️</span>}
@@ -108,7 +119,7 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete }) => {
     );
 };
 
-export const InventoryList = ({ items, loading, onSearch, searchQuery, onEdit, onDelete, onUpdateQuantity }) => {
+export const InventoryList = ({ items, loading, onSearch, searchQuery, onEdit, onDelete, onUpdateQuantity, onToggleTax }) => {
     const { setNodeRef, isOver } = useDroppable({
         id: 'inventory-list-droppable',
     });
@@ -168,12 +179,13 @@ export const InventoryList = ({ items, loading, onSearch, searchQuery, onEdit, o
                     <table className="inventory-table">
                         <thead>
                             <tr>
+                                <th style={{ textAlign: 'center', width: '50px' }}>10%</th>
                                 <th>品名</th>
                                 <th style={{ textAlign: 'right' }}>仕入れ値</th>
                                 <th>単位</th>
                                 <th style={{ textAlign: 'right' }}>内容量</th>
                                 <th style={{ textAlign: 'right' }}>在庫数</th>
-                                <th style={{ textAlign: 'right' }}>在庫金額</th>
+                                <th style={{ textAlign: 'right' }}>在庫金額(税込)</th>
                                 <th
                                     onClick={() => handleSort('vendor')}
                                     title="クリックで業者名ソート"
@@ -192,19 +204,25 @@ export const InventoryList = ({ items, loading, onSearch, searchQuery, onEdit, o
                                     isLowStock={isLowStock}
                                     onUpdateQuantity={onUpdateQuantity}
                                     onDelete={onDelete}
+                                    onToggleTax={onToggleTax}
                                 />
                             ))}
                             {sortedItems.length === 0 && (
-                                <tr><td colSpan="8" style={{ textAlign: 'center', color: '#888', padding: '2rem' }}>
+                                <tr><td colSpan="9" style={{ textAlign: 'center', color: '#888', padding: '2rem' }}>
                                     {isOver ? 'ここにドロップして新規登録' : 'データがありません'}
                                 </td></tr>
                             )}
                         </tbody>
                         <tfoot>
                             <tr style={{ fontWeight: 'bold', backgroundColor: '#f9f9f9' }}>
-                                <td colSpan="5" style={{ textAlign: 'right', paddingRight: '10px' }}>合計:</td>
+                                <td colSpan="6" style={{ textAlign: 'right', paddingRight: '10px' }}>合計(税込):</td>
                                 <td style={{ textAlign: 'right' }}>
-                                    ¥{Math.round(items.reduce((sum, item) => sum + ((parseFloat(item.price) || 0) * (parseFloat(item.quantity) || 0)), 0)).toLocaleString()}
+                                    ¥{Math.round(items.reduce((sum, item) => {
+                                        const price = parseFloat(item.price) || 0;
+                                        const qty = item.quantity === '' ? 0 : (parseFloat(item.quantity) || 0);
+                                        const tax = item?.tax10 === true || item?.tax10 === 1 || item?.tax10 === '1' || item?.tax10 === 'true' ? 1.1 : 1.08;
+                                        return sum + (price * qty * tax);
+                                    }, 0)).toLocaleString()}
                                 </td>
                                 <td colSpan="2"></td>
                             </tr>

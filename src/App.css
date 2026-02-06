@@ -383,12 +383,12 @@
   padding-bottom: 8px;
   border-bottom: 1px solid transparent;
   align-items: center;
-  position: sticky;
-  top: 0;
+  position: static;
+  top: auto;
   z-index: 10;
   background-color: #353535;
   padding-top: var(--space-md);
-  overflow-x: hidden;
+  overflow: visible;
   justify-content: space-between;
 }
 
@@ -399,9 +399,6 @@
   padding: 0 2px;
   font-size: 0.75rem;
   height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   text-align: center;
   border: 1px solid hsl(var(--color-border));
   border-radius: var(--radius-full);
@@ -409,6 +406,18 @@
   color: #555;
   cursor: pointer;
   transition: all 0.2s;
+}
+
+.tag-filter-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.store-filter-select {
+  display: block;
+  -webkit-appearance: menulist;
+  appearance: menulist;
 }
 
 .tag-divider {
@@ -432,6 +441,8 @@
   }
 
   .tag-filter-container {
+    position: sticky;
+    top: 0;
     flex-wrap: wrap;
     gap: var(--space-sm);
     justify-content: flex-start;
