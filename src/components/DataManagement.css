@@ -305,3 +305,119 @@
     overflow: hidden;
     min-height: 0;
 }
+
+.importer-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin-bottom: 0.75rem;
+}
+
+.filter-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.category-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.category-filter-label {
+    font-size: 0.85rem;
+    color: #444444;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.category-filter-select {
+    max-width: 300px;
+}
+
+.vendor-dropdown {
+    position: relative;
+    width: min(420px, 100%);
+}
+
+.vendor-dropdown-trigger {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid #dddddd;
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    color: #444444;
+    cursor: pointer;
+}
+
+.vendor-dropdown-trigger:hover {
+    background: #f8f8f8;
+    border-color: #cccccc;
+}
+
+.vendor-dropdown-chevron {
+    font-size: 0.72rem;
+    color: #777777;
+    transition: transform 0.2s ease;
+}
+
+.vendor-dropdown-chevron.open {
+    transform: rotate(180deg);
+}
+
+.vendor-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 15;
+    border: 1px solid #dddddd;
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 0.45rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    max-height: 280px;
+    overflow-y: auto;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+    scrollbar-width: thin;
+}
+
+.vendor-tab {
+    border: 1px solid #dddddd;
+    background: #ffffff;
+    color: #444444;
+    border-radius: 6px;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    min-height: 38px;
+    white-space: normal;
+    overflow: visible;
+    word-break: break-word;
+    text-align: left;
+    width: 100%;
+    transition: all 0.2s ease;
+}
+
+.vendor-tab:hover {
+    background: #f6f6f6;
+    border-color: #cccccc;
+}
+
+.vendor-tab.active {
+    background: #ffeddc;
+    border-color: var(--color-primary, #D2691E);
+    color: #8a3f0f;
+    font-weight: 600;
+}

@@ -28,6 +28,109 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import UnitConversionModal from './UnitConversionModal';
 
+const ALLOWED_ITEM_CATEGORIES = new Set(['food', 'alcohol', 'soft_drink', 'supplies']);
+const TAX10_ITEM_CATEGORIES = new Set(['alcohol', 'supplies']);
+const ITEM_CATEGORY_LABELS = {
+    food: '食材',
+    alcohol: 'アルコール',
+    soft_drink: 'ソフトドリンク',
+    supplies: '備品',
+};
+
+const normalizeItemCategory = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return '';
+    if (normalized === 'food_alcohol') return 'food';
+    if (ALLOWED_ITEM_CATEGORIES.has(normalized)) return normalized;
+    return '';
+};
+
+const isTax10Category = (category) => TAX10_ITEM_CATEGORIES.has(category);
+
+const applyCategoryTax = (item, categoryValue) => {
+    const category = normalizeItemCategory(categoryValue);
+    if (!category) {
+        return { ...item, itemCategory: null };
+    }
+
+    return {
+        ...item,
+        itemCategory: category,
+        isAlcohol: isTax10Category(category),
+    };
+};
+
+const toFiniteNumber = (value) => {
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : NaN;
+};
+
+const normalizePurchaseCostByConversion = (basePrice, packetSize, packetUnit) => {
+    const safeBase = toFiniteNumber(basePrice);
+    const safePacketSize = toFiniteNumber(packetSize);
+    if (!Number.isFinite(safeBase) || !Number.isFinite(safePacketSize) || safePacketSize <= 0) return NaN;
+
+    const pu = String(packetUnit || '').trim().toLowerCase();
+    if (['g', 'ｇ', 'ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(pu)) {
+        return (safeBase / safePacketSize) * 1000;
+    }
+    if (['kg', 'ｋｇ', 'l', 'ｌ'].includes(pu)) {
+        return safeBase / safePacketSize;
+    }
+    return safeBase / safePacketSize;
+};
+
+const calculateCostByUnit = (quantity, purchaseCost, unit, forceWeightBased = false) => {
+    const qty = toFiniteNumber(quantity);
+    const pCost = toFiniteNumber(purchaseCost);
+    if (!Number.isFinite(qty) || !Number.isFinite(pCost)) return NaN;
+
+    if (forceWeightBased) {
+        return (qty / 1000) * pCost;
+    }
+    const normalizedUnit = String(unit || '').trim().toLowerCase();
+    if (['g', 'ｇ', 'ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(normalizedUnit) || !normalizedUnit) {
+        return (qty / 1000) * pCost;
+    }
+    return qty * pCost;
+};
+
+const isLikelyLegacyPackPrice = (item, normalizedCost) => {
+    const stored = toFiniteNumber(item?.purchaseCost);
+    const ref = toFiniteNumber(item?.purchaseCostRef ?? item?.purchase_cost);
+    if (!Number.isFinite(normalizedCost)) return false;
+    if (!Number.isFinite(stored)) return true;
+
+    if (Number.isFinite(ref) && Math.abs(stored - ref) < 0.0001 && Math.abs(stored - normalizedCost) > 0.01) {
+        return true;
+    }
+    return false;
+};
+
+const normalizeIngredientName = (value) =>
+    String(value || '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
+
+const findConversionByName = (conversionMap, ingredientName) => {
+    if (!conversionMap || conversionMap.size === 0) return null;
+    if (!ingredientName) return null;
+
+    const direct = conversionMap.get(ingredientName);
+    if (direct) return direct;
+
+    const target = normalizeIngredientName(ingredientName);
+    if (!target) return null;
+
+    for (const [key, value] of conversionMap.entries()) {
+        if (normalizeIngredientName(key) === target) {
+            return value;
+        }
+    }
+    return null;
+};
+
 export const RecipeFormBread = ({ formData, setFormData }) => {
     // Local state for calculation convenience, synced with parent formData
     // We expect formData to have 'flours' and 'breadIngredients' arrays
@@ -71,6 +174,98 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
         return ((w / totalFlour) * 100).toFixed(1);
     };
 
+    useEffect(() => {
+        if (conversionMap.size === 0) return;
+
+        const adjustItems = (items = []) => {
+            let changed = false;
+            const adjusted = items.map((item) => {
+                if (!item || typeof item !== 'object') return item;
+
+                const conv = findConversionByName(conversionMap, item.name);
+                let nextItem = item;
+
+                const resolvedCategory = normalizeItemCategory(
+                    item.itemCategory ?? item.item_category ?? conv?.itemCategory
+                );
+                if (resolvedCategory) {
+                    const nextIsAlcohol = isTax10Category(resolvedCategory);
+                    const currentCategory = normalizeItemCategory(item.itemCategory ?? item.item_category);
+                    if (currentCategory !== resolvedCategory || Boolean(item.isAlcohol) !== nextIsAlcohol) {
+                        nextItem = {
+                            ...nextItem,
+                            itemCategory: resolvedCategory,
+                            isAlcohol: nextIsAlcohol,
+                        };
+                    }
+                }
+
+                const qty = toFiniteNumber(item.quantity);
+                const pCost = toFiniteNumber(nextItem.purchaseCost);
+                const expectedCost = (Number.isFinite(qty) && Number.isFinite(pCost))
+                    ? Math.round(((qty / 1000) * pCost) * 100) / 100
+                    : NaN;
+                const currentCost = toFiniteNumber(nextItem.cost);
+                if (Number.isFinite(expectedCost) && (!Number.isFinite(currentCost) || Math.abs(currentCost - expectedCost) > 0.01)) {
+                    nextItem = {
+                        ...nextItem,
+                        cost: expectedCost,
+                    };
+                }
+
+                if (conv && conv.packetSize) {
+                    const basePriceCandidates = [
+                        conv.lastPrice,
+                        item.purchaseCostRef,
+                        item.purchase_cost,
+                        item.purchaseCost,
+                    ];
+                    const basePrice = basePriceCandidates.find((value) => Number.isFinite(toFiniteNumber(value)));
+                    const normalizedCost = normalizePurchaseCostByConversion(basePrice, conv.packetSize, conv.packetUnit);
+
+                    if (Number.isFinite(normalizedCost) && isLikelyLegacyPackPrice(item, normalizedCost)) {
+                        const roundedPurchaseCost = Math.round(normalizedCost * 100) / 100;
+                        const recalculatedCost = calculateCostByUnit(item.quantity, roundedPurchaseCost, item.unit, true);
+                        const roundedCost = Number.isFinite(recalculatedCost)
+                            ? Math.round(recalculatedCost * 100) / 100
+                            : nextItem.cost;
+
+                        const currentPurchase = toFiniteNumber(nextItem.purchaseCost);
+                        const currentCost = toFiniteNumber(nextItem.cost);
+                        const purchaseChanged = !Number.isFinite(currentPurchase) || Math.abs(currentPurchase - roundedPurchaseCost) > 0.01;
+                        const costChanged =
+                            Number.isFinite(toFiniteNumber(roundedCost)) &&
+                            (!Number.isFinite(currentCost) || Math.abs(currentCost - roundedCost) > 0.01);
+
+                        if (purchaseChanged || costChanged) {
+                            nextItem = {
+                                ...nextItem,
+                                purchaseCost: roundedPurchaseCost,
+                                cost: roundedCost,
+                            };
+                        }
+                    }
+                }
+
+                if (nextItem !== item) {
+                    changed = true;
+                }
+                return nextItem;
+            });
+            return { adjusted, changed };
+        };
+
+        const flourResult = adjustItems(formData.flours || []);
+        const ingredientResult = adjustItems(formData.breadIngredients || []);
+        if (!flourResult.changed && !ingredientResult.changed) return;
+
+        setFormData((prev) => ({
+            ...prev,
+            flours: flourResult.adjusted,
+            breadIngredients: ingredientResult.adjusted,
+        }));
+    }, [conversionMap, formData.breadIngredients, formData.flours, setFormData]);
+
     const handleFlourChange = (index, field, value) => {
         const newFlours = [...(formData.flours || [])];
         newFlours[index] = { ...newFlours[index], [field]: value };
@@ -88,7 +283,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                 newFlours[index].vendorRef = vendor;
 
                 // Check for saved conversion
-                const conv = conversionMap.get(value);
+                const conv = findConversionByName(conversionMap, value);
                 if (conv && conv.packetSize) {
                     // Normalize cost: Price / PacketSize (if unit is compatible)
                     // If conv has lastPrice, maybe use that? Or prefer current CSV price?
@@ -120,9 +315,17 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                     newFlours[index].purchaseCost = price;
                     if (!newFlours[index].unit && unit) newFlours[index].unit = unit;
                 }
+
+                const matchedCategory = normalizeItemCategory(conv?.itemCategory);
+                if (matchedCategory) {
+                    newFlours[index] = applyCategoryTax(newFlours[index], matchedCategory);
+                } else {
+                    newFlours[index].itemCategory = null;
+                }
             } else {
                 newFlours[index].purchaseCostRef = null;
                 newFlours[index].vendorRef = null;
+                newFlours[index].itemCategory = null;
             }
         }
 
@@ -173,7 +376,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                 newIngs[index].vendorRef = vendor;
 
                 // Check for saved conversion
-                const conv = conversionMap.get(value);
+                const conv = findConversionByName(conversionMap, value);
                 if (conv && conv.packetSize) {
                     let normalized = 0;
                     // Logic:
@@ -208,9 +411,17 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                     newIngs[index].purchaseCost = price;
                     if (!newIngs[index].unit && unit) newIngs[index].unit = unit;
                 }
+
+                const matchedCategory = normalizeItemCategory(conv?.itemCategory);
+                if (matchedCategory) {
+                    newIngs[index] = applyCategoryTax(newIngs[index], matchedCategory);
+                } else {
+                    newIngs[index].itemCategory = null;
+                }
             } else {
                 newIngs[index].purchaseCostRef = null;
                 newIngs[index].vendorRef = null;
+                newIngs[index].itemCategory = null;
             }
         }
 
@@ -243,14 +454,14 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
     const addFlour = () => {
         setFormData(prev => ({
             ...prev,
-            flours: [...(prev.flours || []), { id: crypto.randomUUID(), name: '', quantity: '', unit: 'g', cost: '', isAlcohol: false }]
+            flours: [...(prev.flours || []), { id: crypto.randomUUID(), name: '', quantity: '', unit: 'g', cost: '', isAlcohol: false, itemCategory: null }]
         }));
     };
 
     const addIngredient = () => {
         setFormData(prev => ({
             ...prev,
-            breadIngredients: [...(prev.breadIngredients || []), { id: crypto.randomUUID(), name: '', quantity: '', unit: 'g', cost: '', isAlcohol: false }]
+            breadIngredients: [...(prev.breadIngredients || []), { id: crypto.randomUUID(), name: '', quantity: '', unit: 'g', cost: '', isAlcohol: false, itemCategory: null }]
         }));
     };
 
@@ -302,7 +513,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
     // Provide initial structure if empty and ensure all items have IDs
     useEffect(() => {
         if (!formData.flours) {
-            setFormData(prev => ({ ...prev, flours: [{ id: crypto.randomUUID(), name: '', quantity: '', unit: 'g', cost: '' }] }));
+            setFormData(prev => ({ ...prev, flours: [{ id: crypto.randomUUID(), name: '', quantity: '', unit: 'g', cost: '', isAlcohol: false, itemCategory: null }] }));
         } else {
             // Ensure all flours have IDs
             const floursWithIds = formData.flours.map(flour =>
@@ -314,7 +525,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
         }
 
         if (!formData.breadIngredients) {
-            setFormData(prev => ({ ...prev, breadIngredients: [{ id: crypto.randomUUID(), name: '', quantity: '', unit: 'g', cost: '' }] }));
+            setFormData(prev => ({ ...prev, breadIngredients: [{ id: crypto.randomUUID(), name: '', quantity: '', unit: 'g', cost: '', isAlcohol: false, itemCategory: null }] }));
         } else {
             // Ensure all breadIngredients have IDs
             const ingredientsWithIds = formData.breadIngredients.map(ing =>
@@ -398,6 +609,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
             const newItem = { ...items[index] };
 
             newItem.name = selectedItem.name;
+            newItem.itemCategory = null;
 
             if (selectedItem.price !== undefined && selectedItem.price !== null && selectedItem.price !== '') {
                 newItem.purchaseCostRef = selectedItem.price;
@@ -430,7 +642,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                         normalizedUnit = selectedItem.unit;
                     }
                 } else {
-                    const conv = conversionMap.get(selectedItem.name);
+                    const conv = findConversionByName(conversionMap, selectedItem.name);
                     if (conv && conv.packetSize) {
                         const basePrice = (conv.lastPrice !== null && conv.lastPrice !== undefined && conv.lastPrice !== '')
                             ? conv.lastPrice
@@ -464,6 +676,14 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                 } else if (normalizedUnit) {
                     newItem.unit = normalizedUnit;
                 }
+            }
+
+            const mappedCategory = normalizeItemCategory(
+                selectedItem.itemCategory ?? selectedItem.item_category ?? findConversionByName(conversionMap, selectedItem.name)?.itemCategory
+            );
+            if (mappedCategory) {
+                const updatedItem = applyCategoryTax(newItem, mappedCategory);
+                Object.assign(newItem, updatedItem);
             }
 
             const qty = parseFloat(newItem.quantity);
@@ -506,7 +726,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                         <span className="text-center">%</span>
                         <span style={{ textAlign: 'center' }}>仕入れ</span>
                         <span style={{ textAlign: 'center' }}>原価</span>
-                        <span style={{ textAlign: 'center' }}>酒</span>
+                        <span style={{ textAlign: 'center' }}>税10%</span>
                         <span></span>
                     </div>
 
@@ -556,7 +776,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                         <span className="text-center">%</span>
                         <span style={{ textAlign: 'center' }}>仕入れ</span>
                         <span style={{ textAlign: 'center' }}>原価</span>
-                        <span style={{ textAlign: 'center' }}>酒</span>
+                        <span style={{ textAlign: 'center' }}>税10%</span>
                         <span></span>
                     </div>
 
@@ -612,6 +832,11 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
 
 // Wrapper for Sortable Hook (Flour Items)
 const FlourItem = ({ id, index, item, onChange, onRemove, onSelect, calculatePercentage, floursLength, onOpenConversion }) => {
+    const itemCategory = normalizeItemCategory(item.itemCategory ?? item.item_category);
+    const hasCategoryTaxRule = Boolean(itemCategory);
+    const categoryLabel = ITEM_CATEGORY_LABELS[itemCategory] || 'カテゴリ';
+    const taxLabel = hasCategoryTaxRule ? `${categoryLabel}（${isTax10Category(itemCategory) ? '10%' : '8%'}）` : '';
+
     const {
         attributes,
         listeners,
@@ -716,7 +941,9 @@ const FlourItem = ({ id, index, item, onChange, onRemove, onSelect, calculatePer
                     type="checkbox"
                     checked={item.isAlcohol || false}
                     onChange={(e) => onChange(index, 'isAlcohol', e.target.checked)}
-                    title="酒類 (10%税)"
+                    disabled={hasCategoryTaxRule}
+                    style={{ cursor: hasCategoryTaxRule ? 'not-allowed' : 'pointer' }}
+                    title={hasCategoryTaxRule ? `${taxLabel}で自動判定` : '税率10%のときにチェック'}
                 />
             </div>
             <div className="remove-button-cell">
@@ -730,6 +957,11 @@ const FlourItem = ({ id, index, item, onChange, onRemove, onSelect, calculatePer
 
 // Wrapper for Sortable Hook (Bread Ingredients)
 const BreadIngredientItem = ({ id, index, item, onChange, onRemove, onSelect, calculatePercentage, onOpenConversion }) => {
+    const itemCategory = normalizeItemCategory(item.itemCategory ?? item.item_category);
+    const hasCategoryTaxRule = Boolean(itemCategory);
+    const categoryLabel = ITEM_CATEGORY_LABELS[itemCategory] || 'カテゴリ';
+    const taxLabel = hasCategoryTaxRule ? `${categoryLabel}（${isTax10Category(itemCategory) ? '10%' : '8%'}）` : '';
+
     const {
         attributes,
         listeners,
@@ -834,7 +1066,9 @@ const BreadIngredientItem = ({ id, index, item, onChange, onRemove, onSelect, ca
                     type="checkbox"
                     checked={item.isAlcohol || false}
                     onChange={(e) => onChange(index, 'isAlcohol', e.target.checked)}
-                    title="酒類 (10%税)"
+                    disabled={hasCategoryTaxRule}
+                    style={{ cursor: hasCategoryTaxRule ? 'not-allowed' : 'pointer' }}
+                    title={hasCategoryTaxRule ? `${taxLabel}で自動判定` : '税率10%のときにチェック'}
                 />
             </div>
             <div className="remove-button-cell">

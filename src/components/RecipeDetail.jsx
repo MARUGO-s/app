@@ -4,6 +4,7 @@ import { Card } from './Card';
 import { Modal } from './Modal';
 import { translationService } from '../services/translationService';
 import { recipeService } from '../services/recipeService';
+import { unitConversionService } from '../services/unitConversionService';
 import { useAuth } from '../contexts/AuthContext';
 import { SUPPORTED_LANGUAGES } from '../constants';
 import './RecipeDetail.css';
@@ -13,6 +14,100 @@ const formatDate = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
     return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+};
+
+const ALLOWED_ITEM_CATEGORIES = new Set(['food', 'alcohol', 'soft_drink', 'supplies']);
+const TAX10_ITEM_CATEGORIES = new Set(['alcohol', 'supplies']);
+
+const normalizeItemCategory = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return '';
+    if (normalized === 'food_alcohol') return 'food';
+    if (ALLOWED_ITEM_CATEGORIES.has(normalized)) return normalized;
+    return '';
+};
+
+const isTax10Item = (item) => {
+    const category = normalizeItemCategory(item?.itemCategory ?? item?.item_category);
+    if (category) return TAX10_ITEM_CATEGORIES.has(category);
+    return Boolean(item?.isAlcohol);
+};
+
+const getItemTaxRate = (item) => (isTax10Item(item) ? 1.10 : 1.08);
+
+const normalizeIngredientName = (value) =>
+    String(value || '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
+
+const findConversionByName = (conversionMap, ingredientName) => {
+    if (!conversionMap || conversionMap.size === 0) return null;
+    if (!ingredientName) return null;
+
+    const direct = conversionMap.get(ingredientName);
+    if (direct) return direct;
+
+    const target = normalizeIngredientName(ingredientName);
+    if (!target) return null;
+
+    for (const [key, value] of conversionMap.entries()) {
+        if (normalizeIngredientName(key) === target) {
+            return value;
+        }
+    }
+    return null;
+};
+
+const toFiniteNumber = (value) => {
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : NaN;
+};
+
+const normalizePurchaseCostByConversion = (basePrice, packetSize, packetUnit) => {
+    const safeBase = toFiniteNumber(basePrice);
+    const safePacketSize = toFiniteNumber(packetSize);
+    if (!Number.isFinite(safeBase) || !Number.isFinite(safePacketSize) || safePacketSize <= 0) return NaN;
+
+    const pu = String(packetUnit || '').trim().toLowerCase();
+    if (['g', 'ｇ', 'ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(pu)) {
+        return (safeBase / safePacketSize) * 1000;
+    }
+    if (['kg', 'ｋｇ', 'l', 'ｌ'].includes(pu)) {
+        return safeBase / safePacketSize;
+    }
+    return safeBase / safePacketSize;
+};
+
+const calculateCostByUnit = (quantity, purchaseCost, unit, { defaultWeightWhenUnitEmpty = false, forceWeightBased = false } = {}) => {
+    const qty = toFiniteNumber(quantity);
+    const pCost = toFiniteNumber(purchaseCost);
+    if (!Number.isFinite(qty) || !Number.isFinite(pCost)) return NaN;
+
+    const normalizedUnit = String(unit || '').trim().toLowerCase();
+    if (forceWeightBased) {
+        return (qty / 1000) * pCost;
+    }
+    if (!normalizedUnit && defaultWeightWhenUnitEmpty) {
+        return (qty / 1000) * pCost;
+    }
+    if (['g', 'ｇ', 'ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(normalizedUnit)) {
+        return (qty / 1000) * pCost;
+    }
+    return qty * pCost;
+};
+
+const isLikelyLegacyPackPrice = (item, normalizedCost) => {
+    const stored = toFiniteNumber(item?.purchaseCost);
+    const ref = toFiniteNumber(item?.purchaseCostRef ?? item?.purchase_cost);
+    if (!Number.isFinite(normalizedCost)) return false;
+    if (!Number.isFinite(stored)) return true;
+
+    // Legacy case: purchaseCost was saved as pack price (= purchaseCostRef), not normalized unit cost.
+    if (Number.isFinite(ref) && Math.abs(stored - ref) < 0.0001 && Math.abs(stored - normalizedCost) > 0.01) {
+        return true;
+    }
+    return false;
 };
 
 export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onHardDelete, isDeleted, onView, onDuplicate, backLabel, onList }) => {
@@ -29,6 +124,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
     const [isTranslating, setIsTranslating] = React.useState(false);
     const [showOriginal, setShowOriginal] = React.useState(true); // Default to showing original
     const [showPrintModal, setShowPrintModal] = React.useState(false);
+    const [conversionMap, setConversionMap] = React.useState(new Map());
 
     // Scaling State
     const [targetTotal, setTargetTotal] = React.useState(''); // For Bread
@@ -72,6 +168,94 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
 
     // Determines which data to show
     const displayRecipe = currentLang === 'ORIGINAL' ? fullRecipe : (translationCache[currentLang] || fullRecipe);
+
+    React.useEffect(() => {
+        let mounted = true;
+        unitConversionService.getAllConversions()
+            .then((map) => {
+                if (mounted) setConversionMap(map);
+            })
+            .catch(() => {
+                if (mounted) setConversionMap(new Map());
+            });
+        return () => {
+            mounted = false;
+        };
+    }, []);
+
+    const costAdjustedRecipe = React.useMemo(() => {
+        const adjustItem = (item, options = {}) => {
+            if (!item || typeof item !== 'object') return item;
+
+            const conv = findConversionByName(conversionMap, item.name);
+            const normalizedCategory = normalizeItemCategory(item.itemCategory ?? item.item_category ?? conv?.itemCategory);
+
+            let nextItem = item;
+            if (normalizedCategory) {
+                nextItem = {
+                    ...nextItem,
+                    itemCategory: normalizedCategory,
+                    isAlcohol: TAX10_ITEM_CATEGORIES.has(normalizedCategory),
+                };
+            }
+
+            if (!conv || !conv.packetSize) {
+                const unitRaw = String(item.unit || '').trim();
+                const shouldWeightBased =
+                    options.forceWeightBased || (options.defaultWeightWhenUnitEmpty && !unitRaw);
+                if (shouldWeightBased) {
+                    const qty = toFiniteNumber(item.quantity);
+                    const pCost = toFiniteNumber(nextItem.purchaseCost);
+                    const expectedCost = (Number.isFinite(qty) && Number.isFinite(pCost))
+                        ? Math.round(((qty / 1000) * pCost) * 100) / 100
+                        : NaN;
+                    const currentCost = toFiniteNumber(nextItem.cost);
+                    if (Number.isFinite(expectedCost) && (!Number.isFinite(currentCost) || Math.abs(currentCost - expectedCost) > 0.01)) {
+                        return {
+                            ...nextItem,
+                            cost: expectedCost,
+                        };
+                    }
+                }
+                return nextItem;
+            }
+
+            const basePriceCandidates = [
+                conv.lastPrice,
+                item.purchaseCostRef,
+                item.purchase_cost,
+                item.purchaseCost,
+            ];
+            const basePrice = basePriceCandidates.find((v) => Number.isFinite(toFiniteNumber(v)));
+            const normalizedCost = normalizePurchaseCostByConversion(basePrice, conv.packetSize, conv.packetUnit);
+            if (!Number.isFinite(normalizedCost)) return nextItem;
+
+            if (!isLikelyLegacyPackPrice(item, normalizedCost)) {
+                return nextItem;
+            }
+
+            const recalculatedCost = calculateCostByUnit(item.quantity, normalizedCost, item.unit, options);
+
+            return {
+                ...nextItem,
+                purchaseCost: Math.round(normalizedCost * 100) / 100,
+                cost: Number.isFinite(recalculatedCost)
+                    ? Math.round(recalculatedCost * 100) / 100
+                    : nextItem.cost,
+            };
+        };
+
+        return {
+            ...displayRecipe,
+            ingredients: (displayRecipe.ingredients || []).map((item) => adjustItem(item)),
+            flours: (displayRecipe.flours || []).map((item) =>
+                adjustItem(item, { forceWeightBased: true })
+            ),
+            breadIngredients: (displayRecipe.breadIngredients || []).map((item) =>
+                adjustItem(item, { forceWeightBased: true })
+            ),
+        };
+    }, [conversionMap, displayRecipe]);
 
     React.useEffect(() => {
         // If recipe prop changes, reset fullRecipe to it initially
@@ -330,6 +514,11 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
 
         let costRate = null;
         let totalSales = null;
+        let unitCost = null;
+
+        if (!isNaN(costNum) && !isNaN(servingsNum) && servingsNum > 0) {
+            unitCost = costNum / servingsNum;
+        }
 
         if (!isNaN(costNum) && !isNaN(priceNum) && !isNaN(servingsNum) && priceNum > 0 && servingsNum > 0) {
             totalSales = priceNum * servingsNum;
@@ -386,24 +575,31 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                         />
                     </div>
 
-                    {costRate !== null && (
+                    {unitCost !== null && (
                         <div style={{
                             marginLeft: 'auto',
                             padding: '8px 12px',
-                            background: costRate > 40 ? '#ffebee' : '#e8f5e9',
+                            background: costRate !== null ? (costRate > 40 ? '#ffebee' : '#e8f5e9') : '#eef3ff',
                             borderRadius: '6px',
-                            border: `1px solid ${costRate > 40 ? '#ffcdd2' : '#c8e6c9'}`,
+                            border: `1px solid ${costRate !== null ? (costRate > 40 ? '#ffcdd2' : '#c8e6c9') : '#d6e3ff'}`,
                             textAlign: 'right'
                         }}>
-                            <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '4px' }}>
-                                予想売上: ¥{totalSales.toLocaleString()}
+                            <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: costRate !== null ? '6px' : '0' }}>
+                                1個あたり原価(税込): <strong>¥{unitCost.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong>
                             </div>
-                            <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '4px', fontWeight: 'bold' }}>
-                                粗利益: ¥{(totalSales - costNum).toLocaleString()}
-                            </div>
-                            <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: costRate > 40 ? '#d32f2f' : '#2e7d32' }}>
-                                原価率: {costRate.toFixed(1)}%
-                            </div>
+                            {costRate !== null && (
+                                <>
+                                    <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '4px' }}>
+                                        予想売上: ¥{totalSales.toLocaleString()}
+                                    </div>
+                                    <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '4px', fontWeight: 'bold' }}>
+                                        粗利益: ¥{(totalSales - costNum).toLocaleString()}
+                                    </div>
+                                    <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: costRate > 40 ? '#d32f2f' : '#2e7d32' }}>
+                                        原価率: {costRate.toFixed(1)}%
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>
@@ -412,7 +608,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
     };
 
     // Safety check for array rendering
-    const ingredients = displayRecipe.ingredients || [];
+    const ingredients = costAdjustedRecipe.ingredients || [];
     // Normalization: Check if steps are hidden in ingredient groups (common in this app's data)
     let normalizedSteps = displayRecipe.steps || [];
     const normalizeGroupName = (name) => String(name || '').trim().toLowerCase();
@@ -490,8 +686,8 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
 
     const breadPrintContext = React.useMemo(() => {
         if (displayRecipe.type !== 'bread') return null;
-        const flours = displayRecipe.flours || [];
-        const others = displayRecipe.breadIngredients || [];
+        const flours = costAdjustedRecipe.flours || [];
+        const others = costAdjustedRecipe.breadIngredients || [];
         const totalFlour = flours.reduce((sum, f) => sum + (parseFloat(f.quantity) || 0), 0);
         const grandTotal = totalFlour + others.reduce((sum, o) => sum + (parseFloat(o.quantity) || 0), 0);
         const target = parseFloat(targetTotal);
@@ -501,11 +697,22 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
             if (!target) return qty;
             return ((parseFloat(qty) || 0) * scaleFactor).toFixed(1);
         };
+        const getScaledCostValue = (cost) => {
+            const raw = parseFloat(cost) || 0;
+            if (!target) return raw;
+            const scaled = raw * scaleFactor;
+            return Math.round(scaled * 100) / 100;
+        };
+        const formatCostValue = (cost) => {
+            const val = getScaledCostValue(cost);
+            if (!Number.isFinite(val)) return '';
+            return val.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        };
         const calcTaxedCost = (items) => {
             return items.reduce((sum, item) => {
                 const rawCost = parseFloat(item.cost) || 0;
                 const scaledCost = rawCost * (target ? scaleFactor : 1);
-                const taxRate = item.isAlcohol ? 1.10 : 1.08;
+                const taxRate = getItemTaxRate(item);
                 return sum + (scaledCost * taxRate);
             }, 0);
         };
@@ -517,17 +724,19 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
             grandTotal,
             calcPercent,
             getScaledQtyValue,
+            getScaledCostValue,
+            formatCostValue,
             scaleFactor,
             totalTaxIncluded: calcTaxedCost(flours) + calcTaxedCost(others)
         };
-    }, [displayRecipe, targetTotal]);
+    }, [costAdjustedRecipe.breadIngredients, costAdjustedRecipe.flours, displayRecipe.type, targetTotal]);
 
     const normalPrintTotal = React.useMemo(() => {
         if (displayRecipe.type === 'bread') return 0;
         return ingredients.reduce((sum, ing) => {
             const rawCost = parseFloat(ing.cost) || 0;
             const scaledCost = rawCost * multiplierValue;
-            const taxRate = ing.isAlcohol ? 1.10 : 1.08;
+            const taxRate = getItemTaxRate(ing);
             return sum + (scaledCost * taxRate);
         }, 0);
     }, [displayRecipe.type, ingredients, multiplierValue]);
@@ -765,8 +974,8 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                     <div className="bread-detail-view">
                                         {/* Helper for total calculation */}
                                         {(() => {
-                                            const flours = displayRecipe.flours || [];
-                                            const others = displayRecipe.breadIngredients || [];
+                                            const flours = costAdjustedRecipe.flours || [];
+                                            const others = costAdjustedRecipe.breadIngredients || [];
                                             const totalFlour = flours.reduce((sum, f) => sum + (parseFloat(f.quantity) || 0), 0);
                                             const grandTotal = totalFlour + others.reduce((sum, o) => sum + (parseFloat(o.quantity) || 0), 0);
                                             const totalPercent = totalFlour ? (grandTotal / totalFlour * 100).toFixed(1) : '0.0';
@@ -780,6 +989,16 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                             const getScaledQty = (q) => {
                                                 if (!target) return q;
                                                 return ((parseFloat(q) || 0) * scaleFactor).toFixed(1);
+                                            };
+                                            const getScaledCost = (c) => {
+                                                const raw = parseFloat(c) || 0;
+                                                if (!target) return raw;
+                                                const scaled = raw * scaleFactor;
+                                                return Math.round(scaled * 100) / 100;
+                                            };
+                                            const formatCost = (value) => {
+                                                if (!Number.isFinite(value)) return '-';
+                                                return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
                                             };
 
                                             return (
@@ -891,7 +1110,9 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                                 {calcPercent(item.quantity)}%
                                                                             </td>
                                                                             <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
-                                                                            <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
+                                                                            <td style={{ textAlign: 'right' }}>
+                                                                                {item.cost ? `¥${formatCost(getScaledCost(item.cost))}` : '-'}
+                                                                            </td>
                                                                         </tr>
                                                                     );
                                                                 })}
@@ -941,7 +1162,9 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                                 {calcPercent(item.quantity)}%
                                                                             </td>
                                                                             <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
-                                                                            <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
+                                                                            <td style={{ textAlign: 'right' }}>
+                                                                                {item.cost ? `¥${formatCost(getScaledCost(item.cost))}` : '-'}
+                                                                            </td>
                                                                         </tr>
                                                                     );
                                                                 })}
@@ -960,7 +1183,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                     const calcTaxedCost = (items) => {
                                                                         return items.reduce((sum, item) => {
                                                                             const rawCost = parseFloat(item.cost) || 0;
-                                                                            const taxRate = item.isAlcohol ? 1.10 : 1.08;
+                                                                            const taxRate = getItemTaxRate(item);
                                                                             // Scale applies to the raw cost (which depends on Quantity)
                                                                             const scaledCost = rawCost * scaleFactor;
                                                                             return sum + (scaledCost * taxRate);
@@ -980,7 +1203,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                             const calcTaxedCost = (items) => {
                                                                 return items.reduce((sum, item) => {
                                                                     const rawCost = parseFloat(item.cost) || 0;
-                                                                    const taxRate = item.isAlcohol ? 1.10 : 1.08;
+                                                                    const taxRate = getItemTaxRate(item);
                                                                     const scaledCost = rawCost * scaleFactor;
                                                                     return sum + (scaledCost * taxRate);
                                                                 }, 0);
@@ -1111,7 +1334,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                                 <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
                                                                                 <td style={{ textAlign: 'right' }}>
                                                                                     {scaledCost ? `¥${scaledCost}` : '-'}
-                                                                                    {ing.isAlcohol && <span style={{ fontSize: '0.7em', color: '#d35400', marginLeft: '2px' }}>(酒)</span>}
+                                                                                    {isTax10Item(ing) && <span style={{ fontSize: '0.7em', color: '#d35400', marginLeft: '2px' }}>(税10%)</span>}
                                                                                 </td>
                                                                             </tr>
                                                                         );
@@ -1161,7 +1384,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                         <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
                                                                         <td style={{ textAlign: 'right' }}>
                                                                             {scaledCost ? `¥${scaledCost}` : '-'}
-                                                                            {ing.isAlcohol && <span style={{ fontSize: '0.7em', color: '#d35400', marginLeft: '2px' }}>(酒)</span>}
+                                                                            {isTax10Item(ing) && <span style={{ fontSize: '0.7em', color: '#d35400', marginLeft: '2px' }}>(税10%)</span>}
                                                                         </td>
                                                                     </tr>
                                                                 );
@@ -1175,7 +1398,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                 const calcTaxedCostInternal = (items) => {
                                                                     return items.reduce((sum, item) => {
                                                                         const rawCost = parseFloat(item.cost) || 0;
-                                                                        const taxRate = item.isAlcohol ? 1.10 : 1.08;
+                                                                        const taxRate = getItemTaxRate(item);
                                                                         const scaledCost = getScaledCost(rawCost, multiplier);
                                                                         const scCostVal = parseFloat(scaledCost) || 0;
                                                                         return sum + (scCostVal * taxRate);
@@ -1197,7 +1420,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                         const calcTaxedCostInternal = (items) => {
                                                             return items.reduce((sum, item) => {
                                                                 const rawCost = parseFloat(item.cost) || 0;
-                                                                const taxRate = item.isAlcohol ? 1.10 : 1.08;
+                                                                const taxRate = getItemTaxRate(item);
                                                                 const scaledCost = getScaledCost(rawCost, multiplier);
                                                                 const scCostVal = parseFloat(scaledCost) || 0;
                                                                 return sum + (scCostVal * taxRate);
@@ -1215,7 +1438,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                             const calcTaxedCostInternal = (items) => {
                                                 return items.reduce((sum, item) => {
                                                     const rawCost = parseFloat(item.cost) || 0;
-                                                    const taxRate = item.isAlcohol ? 1.10 : 1.08;
+                                                    const taxRate = getItemTaxRate(item);
                                                     const scaledCost = parseFloat(getScaledCost(rawCost, multiplier)) || 0;
                                                     return sum + (scaledCost * taxRate);
                                                 }, 0);
@@ -1421,7 +1644,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {(displayRecipe.flours || []).map((item, i) => {
+                                                {(costAdjustedRecipe.flours || []).map((item, i) => {
                                                     const itemId = `flour-${i}`;
                                                     const qty = breadPrintContext ? breadPrintContext.getScaledQtyValue(item.quantity) : item.quantity;
                                                     return (
@@ -1456,7 +1679,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {(displayRecipe.breadIngredients || []).map((item, i) => {
+                                                {(costAdjustedRecipe.breadIngredients || []).map((item, i) => {
                                                     const itemId = `bread-${i}`;
                                                     const qty = breadPrintContext ? breadPrintContext.getScaledQtyValue(item.quantity) : item.quantity;
                                                     return (
@@ -1694,7 +1917,9 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                         {breadPrintContext.calcPercent(item.quantity)}%
                                                     </td>
                                                     <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
-                                                    <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
+                                                    <td style={{ textAlign: 'right' }}>
+                                                        {item.cost ? `¥${breadPrintContext.formatCostValue(item.cost)}` : '-'}
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -1723,7 +1948,9 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                         {breadPrintContext.calcPercent(item.quantity)}%
                                                     </td>
                                                     <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
-                                                    <td style={{ textAlign: 'right' }}>{item.cost ? `¥${item.cost}` : '-'}</td>
+                                                    <td style={{ textAlign: 'right' }}>
+                                                        {item.cost ? `¥${breadPrintContext.formatCostValue(item.cost)}` : '-'}
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>

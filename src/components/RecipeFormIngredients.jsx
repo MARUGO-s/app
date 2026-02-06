@@ -31,6 +31,106 @@ import { ingredientSearchService } from '../services/ingredientSearchService';
 
 import { AutocompleteInput } from './AutocompleteInput';
 
+const ALLOWED_ITEM_CATEGORIES = new Set(['food', 'alcohol', 'soft_drink', 'supplies']);
+const TAX10_ITEM_CATEGORIES = new Set(['alcohol', 'supplies']);
+const ITEM_CATEGORY_LABELS = {
+    food: '食材',
+    alcohol: 'アルコール',
+    soft_drink: 'ソフトドリンク',
+    supplies: '備品',
+};
+
+const normalizeItemCategory = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return '';
+    if (normalized === 'food_alcohol') return 'food';
+    if (ALLOWED_ITEM_CATEGORIES.has(normalized)) return normalized;
+    return '';
+};
+
+const isTax10Category = (category) => TAX10_ITEM_CATEGORIES.has(category);
+
+const applyCategoryTax = (item, categoryValue) => {
+    const category = normalizeItemCategory(categoryValue);
+    if (!category) {
+        return { ...item, itemCategory: null };
+    }
+
+    return {
+        ...item,
+        itemCategory: category,
+        isAlcohol: isTax10Category(category),
+    };
+};
+
+const normalizeIngredientName = (value) =>
+    String(value || '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
+
+const findConversionByName = (conversionMap, ingredientName) => {
+    if (!conversionMap || conversionMap.size === 0) return null;
+    if (!ingredientName) return null;
+
+    const direct = conversionMap.get(ingredientName);
+    if (direct) return direct;
+
+    const target = normalizeIngredientName(ingredientName);
+    if (!target) return null;
+
+    for (const [key, value] of conversionMap.entries()) {
+        if (normalizeIngredientName(key) === target) {
+            return value;
+        }
+    }
+    return null;
+};
+
+const toFiniteNumber = (value) => {
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : NaN;
+};
+
+const normalizePurchaseCostByConversion = (basePrice, packetSize, packetUnit) => {
+    const safeBase = toFiniteNumber(basePrice);
+    const safePacketSize = toFiniteNumber(packetSize);
+    if (!Number.isFinite(safeBase) || !Number.isFinite(safePacketSize) || safePacketSize <= 0) return NaN;
+
+    const pu = String(packetUnit || '').trim().toLowerCase();
+    if (['g', 'ｇ', 'ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(pu)) {
+        return (safeBase / safePacketSize) * 1000;
+    }
+    if (['kg', 'ｋｇ', 'l', 'ｌ'].includes(pu)) {
+        return safeBase / safePacketSize;
+    }
+    return safeBase / safePacketSize;
+};
+
+const calculateCostByUnit = (quantity, purchaseCost, unit) => {
+    const qty = toFiniteNumber(quantity);
+    const pCost = toFiniteNumber(purchaseCost);
+    if (!Number.isFinite(qty) || !Number.isFinite(pCost)) return NaN;
+
+    const normalizedUnit = String(unit || '').trim().toLowerCase();
+    if (['g', 'ｇ', 'ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(normalizedUnit)) {
+        return (qty / 1000) * pCost;
+    }
+    return qty * pCost;
+};
+
+const isLikelyLegacyPackPrice = (item, normalizedCost) => {
+    const stored = toFiniteNumber(item?.purchaseCost);
+    const ref = toFiniteNumber(item?.purchaseCostRef ?? item?.purchase_cost);
+    if (!Number.isFinite(normalizedCost)) return false;
+    if (!Number.isFinite(stored)) return true;
+
+    if (Number.isFinite(ref) && Math.abs(stored - ref) < 0.0001 && Math.abs(stored - normalizedCost) > 0.01) {
+        return true;
+    }
+    return false;
+};
+
 // --- Sortable Item Component ---
 const SortableIngredientItem = React.memo(({
     id,
@@ -42,6 +142,11 @@ const SortableIngredientItem = React.memo(({
     handleSuggestionSelect,
     onOpenConversion,
 }) => {
+    const itemCategory = normalizeItemCategory(item.itemCategory ?? item.item_category);
+    const hasCategoryTaxRule = Boolean(itemCategory);
+    const categoryLabel = ITEM_CATEGORY_LABELS[itemCategory] || 'カテゴリ';
+    const taxLabel = hasCategoryTaxRule ? `${categoryLabel}（${isTax10Category(itemCategory) ? '10%' : '8%'}）` : '';
+
     const {
         attributes,
         listeners,
@@ -141,7 +246,9 @@ const SortableIngredientItem = React.memo(({
                     type="checkbox"
                     checked={item.isAlcohol || false}
                     onChange={(e) => onChange(groupId, index, 'isAlcohol', e.target.checked)}
-                    title="酒類 (10%税)"
+                    disabled={hasCategoryTaxRule}
+                    style={{ cursor: hasCategoryTaxRule ? 'not-allowed' : 'pointer' }}
+                    title={hasCategoryTaxRule ? `${taxLabel}で自動判定` : '税率10%のときにチェック'}
                 />
             </div>
             <div className="remove-button-cell">
@@ -192,7 +299,7 @@ const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, 
                 <span>単位</span>
                 <span style={{ textAlign: 'center' }}>仕入れ</span>
                 <span style={{ textAlign: 'center' }}>原価</span>
-                <span style={{ textAlign: 'center' }}>酒</span>
+                <span style={{ textAlign: 'center' }}>税10%</span>
                 <span></span>
             </div>
 
@@ -264,6 +371,81 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
     }, [formData.ingredients, formData.ingredientGroups, formData.ingredientSections, setFormData]);
 
     const sections = formData.ingredientSections || [];
+
+    useEffect(() => {
+        if (!formData.ingredientSections || formData.ingredientSections.length === 0 || conversionMap.size === 0) {
+            return;
+        }
+
+        let hasChanges = false;
+        const nextSections = formData.ingredientSections.map((section) => {
+            const nextItems = section.items.map((item) => {
+                if (!item || typeof item !== 'object') return item;
+
+                const conv = findConversionByName(conversionMap, item.name);
+                let nextItem = item;
+
+                const resolvedCategory = normalizeItemCategory(
+                    item.itemCategory ?? item.item_category ?? conv?.itemCategory
+                );
+                if (resolvedCategory) {
+                    const nextIsAlcohol = isTax10Category(resolvedCategory);
+                    const currentCategory = normalizeItemCategory(item.itemCategory ?? item.item_category);
+                    if (currentCategory !== resolvedCategory || Boolean(item.isAlcohol) !== nextIsAlcohol) {
+                        nextItem = {
+                            ...nextItem,
+                            itemCategory: resolvedCategory,
+                            isAlcohol: nextIsAlcohol,
+                        };
+                    }
+                }
+
+                if (conv && conv.packetSize) {
+                    const basePriceCandidates = [
+                        conv.lastPrice,
+                        item.purchaseCostRef,
+                        item.purchase_cost,
+                        item.purchaseCost,
+                    ];
+                    const basePrice = basePriceCandidates.find((value) => Number.isFinite(toFiniteNumber(value)));
+                    const normalizedCost = normalizePurchaseCostByConversion(basePrice, conv.packetSize, conv.packetUnit);
+
+                    if (Number.isFinite(normalizedCost) && isLikelyLegacyPackPrice(item, normalizedCost)) {
+                        const roundedPurchaseCost = Math.round(normalizedCost * 100) / 100;
+                        const recalculatedCost = calculateCostByUnit(item.quantity, roundedPurchaseCost, item.unit);
+                        const roundedCost = Number.isFinite(recalculatedCost)
+                            ? Math.round(recalculatedCost * 100) / 100
+                            : nextItem.cost;
+
+                        const currentPurchase = toFiniteNumber(nextItem.purchaseCost);
+                        const currentCost = toFiniteNumber(nextItem.cost);
+                        const purchaseChanged = !Number.isFinite(currentPurchase) || Math.abs(currentPurchase - roundedPurchaseCost) > 0.01;
+                        const costChanged =
+                            Number.isFinite(toFiniteNumber(roundedCost)) &&
+                            (!Number.isFinite(currentCost) || Math.abs(currentCost - roundedCost) > 0.01);
+
+                        if (purchaseChanged || costChanged) {
+                            nextItem = {
+                                ...nextItem,
+                                purchaseCost: roundedPurchaseCost,
+                                cost: roundedCost,
+                            };
+                        }
+                    }
+                }
+
+                if (nextItem !== item) {
+                    hasChanges = true;
+                }
+                return nextItem;
+            });
+
+            return nextItems !== section.items ? { ...section, items: nextItems } : section;
+        });
+
+        if (!hasChanges) return;
+        setFormData((prev) => ({ ...prev, ingredientSections: nextSections }));
+    }, [conversionMap, formData.ingredientSections, setFormData]);
 
     const sensors = useSensors(
         useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
@@ -455,7 +637,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                         newItem.vendorRef = vendor;
 
                         // Check for saved conversion
-                        const conv = conversionMap.get(value);
+                        const conv = findConversionByName(conversionMap, value);
                         if (conv && conv.packetSize) {
                             // Prefer master lastPrice when available (CSV price may be pack total too)
                             const basePrice = (conv.lastPrice !== null && conv.lastPrice !== undefined && conv.lastPrice !== '')
@@ -516,6 +698,14 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                             if (!newItem.unit && calculatedUnit) newItem.unit = calculatedUnit;
                         }
 
+                        const matchedCategory = normalizeItemCategory(conv?.itemCategory);
+                        if (matchedCategory) {
+                            const updatedItem = applyCategoryTax(newItem, matchedCategory);
+                            Object.assign(newItem, updatedItem);
+                        } else {
+                            newItem.itemCategory = null;
+                        }
+
                         // Re-calc cost after autofill
                         const qty = parseFloat(newItem.quantity);
                         const pCost = parseFloat(newItem.purchaseCost);
@@ -532,6 +722,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                     } else {
                         newItem.purchaseCostRef = null;
                         newItem.vendorRef = null;
+                        newItem.itemCategory = null;
                     }
                     newItems[index] = newItem;
                 }
@@ -553,6 +744,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
 
                 // Set Name
                 newItem.name = item.name;
+                newItem.itemCategory = null;
 
                 // Set Price & Unit
                 // Logic adapted from handleItemChange but using the selected item directly
@@ -598,7 +790,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                         // Ideally, we should fetch fresh conversion if needed, but the map is stable enough.
                         // Assuming conversionMap is in dependency (handled by React.useCallback deps)
 
-                        const conv = conversionMap.get(item.name);
+                        const conv = findConversionByName(conversionMap, item.name);
                         if (conv && conv.packetSize) {
                             const basePrice = (conv.lastPrice !== null && conv.lastPrice !== undefined && conv.lastPrice !== '')
                                 ? conv.lastPrice
@@ -628,6 +820,14 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                             newItem.unit = item.unit;
                         }
                     }
+                }
+
+                const mappedCategory = normalizeItemCategory(
+                    item.itemCategory ?? item.item_category ?? findConversionByName(conversionMap, item.name)?.itemCategory
+                );
+                if (mappedCategory) {
+                    const updatedItem = applyCategoryTax(newItem, mappedCategory);
+                    Object.assign(newItem, updatedItem);
                 }
 
                 // Recalculate Cost
@@ -664,7 +864,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
     }, [setFormData]);
 
     const handleAddItem = (groupId) => {
-        const newItem = { id: crypto.randomUUID(), name: '', quantity: '', unit: '', cost: '', purchaseCost: '', isAlcohol: false };
+        const newItem = { id: crypto.randomUUID(), name: '', quantity: '', unit: '', cost: '', purchaseCost: '', isAlcohol: false, itemCategory: null };
         setFormData(prev => ({
             ...prev,
             ingredientSections: prev.ingredientSections.map(s => {
