@@ -306,10 +306,19 @@ export const Inventory = ({ onBack }) => {
             if (isHiddenVendor(vendorRaw)) return;
             const price = parseFloat(it?.price) || 0;
             const qty = it?.quantity === '' ? 0 : (parseFloat(it?.quantity) || 0);
-            const value = price * qty * getTaxMultiplier(it);
-            map.set(vendor, (map.get(vendor) || 0) + value);
+            const net = price * qty;
+            const taxed = net * getTaxMultiplier(it);
+            const prev = map.get(vendor) || { vendor, net: 0, taxed: 0 };
+            prev.net += net;
+            prev.taxed += taxed;
+            map.set(vendor, prev);
         });
-        return Array.from(map.entries()).map(([vendor, total]) => ({ vendor, total }));
+        return Array.from(map.values()).map((row) => ({
+            vendor: row.vendor,
+            net: row.net,
+            taxed: row.taxed,
+            total: row.taxed
+        }));
     }, [summarySnapshot, isHiddenVendor, getTaxMultiplier]);
 
     const summaryVendorTotalsMap = React.useMemo(() => {
@@ -324,7 +333,7 @@ export const Inventory = ({ onBack }) => {
         return summaryVendorTotalsBase
             .slice()
             .sort((a, b) => {
-                if (b.total !== a.total) return b.total - a.total;
+                if (b.taxed !== a.taxed) return b.taxed - a.taxed;
                 return a.vendor.localeCompare(b.vendor, 'ja');
             })
             .map((row) => row.vendor);
@@ -343,7 +352,11 @@ export const Inventory = ({ onBack }) => {
         return summaryOrder.map((vendor) => summaryVendorTotalsMap.get(vendor)).filter(Boolean);
     }, [summaryOrder, summaryVendorTotalsMap]);
 
-    const summaryTotal = summaryVendorTotals.reduce((sum, row) => sum + (row.total || 0), 0);
+    const summaryTotals = summaryVendorTotals.reduce((sum, row) => {
+        sum.net += row.net || 0;
+        sum.taxed += row.taxed || 0;
+        return sum;
+    }, { net: 0, taxed: 0 });
 
     const handleMoveSnapshotToTrash = (snapshot) => {
         if (!snapshot?.id) return;
@@ -1294,9 +1307,9 @@ export const Inventory = ({ onBack }) => {
                                             <tfoot>
                                                 <tr>
                                                     <td></td>
-                                                    <td style={{ textAlign: 'right', fontWeight: 'bold' }}>合計(税込)</td>
+                                                    <td style={{ textAlign: 'right', fontWeight: 'bold' }}>合計（税抜 / 税込）</td>
                                                     <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                                                        ¥{Math.round(summaryTotal || 0).toLocaleString()}
+                                                        ¥{Math.round(summaryTotals.net).toLocaleString()} / ¥{Math.round(summaryTotals.taxed).toLocaleString()}
                                                     </td>
                                                 </tr>
                                             </tfoot>
@@ -1710,18 +1723,23 @@ export const Inventory = ({ onBack }) => {
                             const bv = (b?.vendor || '').toString();
                             return av.localeCompare(bv, 'ja') * dir;
                         });
-                        const totalValue = Math.round(sortedRows.reduce((sum, it) => {
+                        const totals = sortedRows.reduce((sum, it) => {
                             const price = parseFloat(it?.price) || 0;
                             const qty = it?.quantity === '' ? 0 : (parseFloat(it?.quantity) || 0);
-                            return sum + (price * qty * getTaxMultiplier(it));
-                        }, 0));
+                            const base = price * qty;
+                            sum.net += base;
+                            sum.taxed += base * getTaxMultiplier(it);
+                            return sum;
+                        }, { net: 0, taxed: 0 });
 
                         return (
                             <div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '12px', color: '#555', fontSize: '0.9rem' }}>
                                     <div>日付: <strong>{formatDateTime(s.snapshot_date)}</strong></div>
                                     <div>件数: <strong>{sortedRows.length.toLocaleString()}</strong></div>
-                                    <div style={{ marginLeft: 'auto' }}>在庫金額(税込): <strong>¥{totalValue.toLocaleString()}</strong></div>
+                                    <div style={{ marginLeft: 'auto' }}>
+                                        在庫金額（税抜 / 税込）: <strong>¥{Math.round(totals.net).toLocaleString()} / ¥{Math.round(totals.taxed).toLocaleString()}</strong>
+                                    </div>
                                 </div>
 
                                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
@@ -1775,7 +1793,12 @@ export const Inventory = ({ onBack }) => {
                                                     const rowTotal = Math.round(price * qty * getTaxMultiplier(it));
                                                     return (
                                                         <tr key={it?.id || `${it?.name || 'item'}-${idx}`} style={{ borderBottom: '1px solid #eee' }}>
-                                                            <td style={{ padding: '10px' }}>{it?.name || '-'}</td>
+                                                            <td style={{ padding: '10px' }}>
+                                                                {it?.name || '-'}
+                                                                {isTax10(it?.tax10) && (
+                                                                    <span className="snapshot-tax-badge" title="10%対象">10%</span>
+                                                                )}
+                                                            </td>
                                                             <td style={{ padding: '10px', textAlign: 'right' }}>{price ? `¥${Math.round(price).toLocaleString()}` : '-'}</td>
                                                             <td style={{ padding: '10px' }}>{it?.unit || '-'}</td>
                                                             <td style={{ padding: '10px', textAlign: 'right' }}>{qty ? qty.toLocaleString() : '0'}</td>
