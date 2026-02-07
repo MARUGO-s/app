@@ -88,6 +88,12 @@ export const ingredientSearchService = {
                     displaySource: '📦 マスター'
                 }));
 
+                // If DB returns no hit, fallback to wide search (includes manual conversions + CSV partial match)
+                // so users still get suggestions for "contains" matches.
+                if (formattedDbResults.length === 0) {
+                    return await this._fallbackSearch(normalizedQuery);
+                }
+
                 // Load CSV data (if not cached yet)
                 if (!this._csvCache) {
                     const csvData = await purchasePriceService.getPriceListArray();

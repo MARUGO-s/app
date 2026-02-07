@@ -11,6 +11,22 @@ const formatDate = (dateString) => {
     return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
 };
 
+const normalizeTags = (rawTags) => {
+    if (Array.isArray(rawTags)) {
+        return rawTags
+            .flatMap(tag => String(tag || '').split(/[,、]/))
+            .map(tag => tag.trim())
+            .filter(Boolean);
+    }
+    if (typeof rawTags === 'string') {
+        return rawTags
+            .split(/[,、]/)
+            .map(tag => tag.trim())
+            .filter(Boolean);
+    }
+    return [];
+};
+
 const SortableRecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggleSelection, disableDrag, showOwner, ownerLabelFn }) => {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: recipe.id,
@@ -63,9 +79,8 @@ const SortableRecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, 
 
                     <div className="recipe-card__tags">
                         {(() => {
-                            if (!recipe.tags) return null;
-                            // Split by comma and clean
-                            const allTags = recipe.tags.flatMap(t => (t || '').split(/[,、]/)).map(t => t.trim()).filter(Boolean);
+                            const allTags = normalizeTags(recipe.tags);
+                            if (allTags.length === 0) return null;
                             // Filter out internal tags (like owner:*)
                             const visibleTags = allTags.filter(t => !t.startsWith('owner:'));
                             // Prioritize 'URL取り込み'
@@ -100,24 +115,28 @@ const SortableRecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, 
 };
 
 const isBread = (recipe) => {
-    return recipe.type === 'bread' || (recipe.tags && recipe.tags.some(t => /パン|Bread/i.test(t)));
+    const tags = normalizeTags(recipe.tags);
+    return recipe.type === 'bread' || tags.some(t => /パン|Bread/i.test(t));
 };
 
 const isDessert = (recipe) => {
     const isDessertTag = (t) => /デザート|Dessert/i.test(t);
-    return /デザート|Dessert/i.test(recipe.category || '') || (recipe.tags && recipe.tags.some(isDessertTag));
+    const tags = normalizeTags(recipe.tags);
+    return /デザート|Dessert/i.test(recipe.category || '') || tags.some(isDessertTag);
 };
 
 const isSauce = (recipe) => {
-    return /ソース|Sauce/i.test(recipe.category || '') || (recipe.tags && recipe.tags.some(t => /ソース|Sauce/i.test(t)));
+    const tags = normalizeTags(recipe.tags);
+    return /ソース|Sauce/i.test(recipe.category || '') || tags.some(t => /ソース|Sauce/i.test(t));
 };
 
 const isDecoration = (recipe) => {
     // "飾り" or "Deco" or "Garnish"? 
-    return /飾り|デコ|Decor/i.test(recipe.category || '') || (recipe.tags && recipe.tags.some(t => /飾り|デコ|Decor/i.test(t)));
+    const tags = normalizeTags(recipe.tags);
+    return /飾り|デコ|Decor/i.test(recipe.category || '') || tags.some(t => /飾り|デコ|Decor/i.test(t));
 };
 
-export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds, onToggleSelection, disableDrag, displayMode = 'normal', showOwner = false, ownerLabelFn }) => {
+export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds, onToggleSelection, disableDrag, displayMode = 'normal', showOwner = false, ownerLabelFn, currentUser = null }) => {
     const [expandedSections, setExpandedSections] = useState({});
 
     const toggleSection = (sectionKey) => {
@@ -127,13 +146,35 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
         }));
     };
 
-    // 1. Filter into categories (Priority: Bread -> Sauce -> Decoration -> Dessert -> Cooking)
+    const isPublicRecipe = (recipe) => {
+        const tags = normalizeTags(recipe?.tags).map(t => t.toLowerCase());
+        return tags.includes('public');
+    };
+
+    const isOwnedByCurrentUser = (recipe) => {
+        if (!currentUser) return false;
+        const ownerTags = normalizeTags(recipe?.tags).filter(tag => tag.startsWith('owner:'));
+        if (ownerTags.length === 0) return false;
+        const myOwnerTags = new Set([
+            currentUser?.id ? `owner:${currentUser.id}` : null,
+            currentUser?.displayId ? `owner:${currentUser.displayId}` : null
+        ].filter(Boolean));
+        return ownerTags.some(tag => myOwnerTags.has(tag));
+    };
+
+    // 1. Filter into categories (Priority: Public -> Bread -> Sauce -> Decoration -> Dessert -> Cooking)
     // Adjust priority based on user likelyhood. Dessert might contain sauces?
     // User requested separation, so Sauce/Decoration should pull out from Dessert/Cooking.
 
+    // Public category (all published recipes)
+    const publicRecipes = recipes.filter(r => isPublicRecipe(r));
+    const myPublicRecipes = publicRecipes.filter(r => isOwnedByCurrentUser(r));
+    const otherUsersPublicRecipes = publicRecipes.filter(r => !isOwnedByCurrentUser(r));
+    const nonPublicShared = recipes.filter(r => !isPublicRecipe(r));
+
     // Bread
-    const breadRecipes = recipes.filter(r => isBread(r));
-    const nonBread = recipes.filter(r => !isBread(r));
+    const breadRecipes = nonPublicShared.filter(r => isBread(r));
+    const nonBread = nonPublicShared.filter(r => !isBread(r));
 
     // Sauce
     const sauceRecipes = nonBread.filter(r => isSauce(r));
@@ -146,7 +187,7 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
     // Dressing (New)
     const isDressing = (r) => {
         const cat = r.category || '';
-        const tags = r.tags || [];
+        const tags = normalizeTags(r.tags);
         return /ドレッシング|Dressing|ヴィネグレット|Vinaigrette|マヨネーズ|Mayonnaise/i.test(cat) ||
             tags.some(t => /ドレッシング|Dressing|ヴィネグレット|Vinaigrette|マヨネーズ|Mayonnaise/i.test(t));
     };
@@ -178,8 +219,8 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
     }, []);
 
     // Helper to render a section
-    const renderSection = (title, items, icon, sectionKey) => {
-        if (items.length === 0) return null;
+    const renderSection = (title, items, icon, sectionKey, { showWhenEmpty = false, emptyMessage = '' } = {}) => {
+        if (items.length === 0 && !showWhenEmpty) return null;
 
         // If displayMode is 'all', show everything. 
         // If 'normal', use expansion logic.
@@ -241,12 +282,19 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                         })}
                     </SortableContext>
                 </div>
+                {items.length === 0 && (
+                    <div style={{ color: '#9ca3af', fontSize: '0.9rem', marginTop: '0.5rem' }}>
+                        {emptyMessage || `${title}はありません`}
+                    </div>
+                )}
             </div>
         );
     };
 
     return (
         <div className="recipe-list-container">
+            {renderSection("自分が公開中", myPublicRecipes, "🟢", "public-mine", { showWhenEmpty: true, emptyMessage: '自分が公開中のレシピはありません' })}
+            {renderSection("他ユーザー公開", otherUsersPublicRecipes, "🌐", "public-others", { showWhenEmpty: true, emptyMessage: '他ユーザーの公開レシピはありません' })}
             {renderSection("料理", cookingRecipes, "🍽️", "cooking")}
             {renderSection("パン", breadRecipes, "🍞", "bread")}
             {renderSection("デザート", dessertRecipes, "🍰", "dessert")}

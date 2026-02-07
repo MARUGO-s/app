@@ -63,6 +63,37 @@ const normalizeRecipeTags = (rawTags) => {
     return [];
 };
 
+const shouldUseLocalRecipeFallback = (error) => {
+    if (!error) return false;
+
+    const code = String(error.code || '').toUpperCase();
+    const message = String(error.message || '').toLowerCase();
+    const details = String(error.details || '').toLowerCase();
+
+    // Permission/RLS/schema errors should be surfaced to user, not masked by local fallback.
+    if (
+        code === '42501' ||
+        code.startsWith('PGRST') ||
+        message.includes('row-level security') ||
+        message.includes('permission denied') ||
+        message.includes('violates row-level security') ||
+        message.includes('invalid input syntax') ||
+        message.includes('column') ||
+        details.includes('row-level security')
+    ) {
+        return false;
+    }
+
+    // Only fallback for transient/offline/timeout style failures.
+    return (
+        message.includes('failed to fetch') ||
+        message.includes('network') ||
+        message.includes('timeout') ||
+        message.includes('timed out') ||
+        message.includes('load failed')
+    );
+};
+
 export const recipeService = {
     // Cache for detected query pattern (avoid repeated fallback attempts)
     _queryPattern: null,
@@ -368,7 +399,11 @@ export const recipeService = {
             return fromDbFormat({ ...data, recipe_sources: sourceUrl ? [{ url: sourceUrl }] : [] })
 
         } catch (error) {
-            console.warn("Supabase create failed, using LocalStorage fallback:", error);
+            if (!shouldUseLocalRecipeFallback(error)) {
+                throw error;
+            }
+
+            console.warn("Supabase create failed (network/transient), using LocalStorage fallback:", error);
 
             const newId = Date.now();
             const newRecipe = {
@@ -443,7 +478,11 @@ export const recipeService = {
             return fromDbFormat({ ...data, recipe_sources: sourceUrl ? [{ url: sourceUrl }] : [] })
 
         } catch (error) {
-            console.warn("Supabase update failed, using LocalStorage fallback:", error);
+            if (!shouldUseLocalRecipeFallback(error)) {
+                throw error;
+            }
+
+            console.warn("Supabase update failed (network/transient), using LocalStorage fallback:", error);
 
             const localData = localStorage.getItem('local_recipes');
             if (localData) {
