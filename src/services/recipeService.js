@@ -132,7 +132,7 @@ export const recipeService = {
             const value = data?.show_master_recipes === true;
             this._showMasterPrefCache.set(userId, { value, updatedAt: now });
             return value;
-        } catch (err) {
+        } catch {
             // Fallback to in-memory auth state if profile fetch fails.
             this._showMasterPrefCache.set(userId, { value: fallback, updatedAt: now });
             return fallback;
@@ -156,7 +156,7 @@ export const recipeService = {
             const nextSet = new Set(tags.length > 0 ? tags : ['owner:yoshito', 'owner:admin']);
             this._masterOwnerTagsCache = { value: nextSet, updatedAt: now };
             return nextSet;
-        } catch (err) {
+        } catch {
             const fallback = this._masterOwnerTagsCache?.value || new Set(['owner:yoshito', 'owner:admin']);
             this._masterOwnerTagsCache = { value: fallback, updatedAt: now };
             return fallback;
@@ -247,7 +247,7 @@ export const recipeService = {
                 } else {
                     throw lastError;
                 }
-            } catch (e) {
+            } catch {
                 // Keep lastError to help callers show a useful message.
                 throw lastError;
             }
@@ -507,7 +507,7 @@ export const recipeService = {
 
     async duplicateRecipe(recipe, currentUser) {
         // 1. Prepare copy data
-        const { id, created_at, updated_at, image, ...recipeData } = recipe;
+        const { id: _id, created_at: _createdAt, updated_at: _updatedAt, image, ...recipeData } = recipe;
 
         // Append " (Copy)" to title to distinguish
         recipeData.title = `${recipeData.title} (コピー)`;
@@ -961,8 +961,18 @@ const fromDbFormat = (recipe) => {
         const dataItems = rawIngs.slice(1);
 
         if (type === 'bread') {
-            flours = dataItems.filter(i => i._group === 'flour').map(({ _group: _GROUP, ...i }) => i);
-            breadIngredients = dataItems.filter(i => i._group === 'other').map(({ _group: _GROUP, ...i }) => i);
+            flours = dataItems
+                .filter(i => i._group === 'flour')
+                .map((item) => {
+                    const { _group, ...rest } = item;
+                    return rest;
+                });
+            breadIngredients = dataItems
+                .filter(i => i._group === 'other')
+                .map((item) => {
+                    const { _group, ...rest } = item;
+                    return rest;
+                });
             // For standard views, we might want a combined list
             cleanIngredients = [...flours, ...breadIngredients];
         } else {

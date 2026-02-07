@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom'; // Import portal
 import { ingredientSearchService } from '../services/ingredientSearchService';
 import './AutocompleteInput.css';
@@ -21,6 +21,35 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
         maxHeight: 250,
         placeAbove: true
     });
+
+    const calculatePosition = useCallback(() => {
+        if (wrapperRef.current) {
+            const rect = wrapperRef.current.getBoundingClientRect();
+            const viewportPadding = 8;
+            const gap = 4;
+            const spaceAbove = rect.top - viewportPadding;
+            const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+            const preferAbove = spaceAbove >= 180 || spaceAbove >= spaceBelow;
+            const placeAbove = preferAbove && spaceAbove >= 110;
+            const maxHeight = Math.max(110, Math.min(280, placeAbove ? spaceAbove - gap : spaceBelow - gap));
+
+            const baseLeft = rect.left;
+            const maxWidth = Math.max(220, window.innerWidth - viewportPadding * 2);
+            const width = Math.min(Math.max(rect.width, 220), maxWidth);
+            const left = Math.min(
+                Math.max(viewportPadding, baseLeft),
+                window.innerWidth - viewportPadding - width
+            );
+
+            setCoords({
+                top: placeAbove ? rect.top - gap : rect.bottom + gap,
+                left,
+                width,
+                maxHeight,
+                placeAbove
+            });
+        }
+    }, []);
 
     useEffect(() => {
         // Close suggestions when clicking outside
@@ -56,43 +85,14 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
             window.removeEventListener('scroll', handleScroll, { capture: true });
             window.removeEventListener('resize', handleResize);
         };
-    }, [showSuggestions]);
-
-    function calculatePosition() {
-        if (wrapperRef.current) {
-            const rect = wrapperRef.current.getBoundingClientRect();
-            const viewportPadding = 8;
-            const gap = 4;
-            const spaceAbove = rect.top - viewportPadding;
-            const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
-            const preferAbove = spaceAbove >= 180 || spaceAbove >= spaceBelow;
-            const placeAbove = preferAbove && spaceAbove >= 110;
-            const maxHeight = Math.max(110, Math.min(280, placeAbove ? spaceAbove - gap : spaceBelow - gap));
-
-            const baseLeft = rect.left;
-            const maxWidth = Math.max(220, window.innerWidth - viewportPadding * 2);
-            const width = Math.min(Math.max(rect.width, 220), maxWidth);
-            const left = Math.min(
-                Math.max(viewportPadding, baseLeft),
-                window.innerWidth - viewportPadding - width
-            );
-
-            setCoords({
-                top: placeAbove ? rect.top - gap : rect.bottom + gap,
-                left,
-                width,
-                maxHeight,
-                placeAbove
-            });
-        }
-    }
+    }, [showSuggestions, calculatePosition]);
 
     // Update position when showing
     useEffect(() => {
         if (showSuggestions) {
             calculatePosition();
         }
-    }, [showSuggestions, suggestions]); // Recalc if suggestions change (though height changes, top/left shouldn't, but good practice)
+    }, [showSuggestions, suggestions, calculatePosition]); // Recalc if suggestions change (though height changes, top/left shouldn't, but good practice)
 
     const requestRef = useRef(0); // Track latest request ID
     const timeoutRef = useRef(null); // Debounce timeout

@@ -5,9 +5,8 @@ const getEnv = (key) => {
     if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
         return import.meta.env[key];
     }
-    if (typeof process !== 'undefined' && process && process.env && process.env[key]) {
-        return process.env[key];
-    }
+    const procEnv = globalThis?.process?.env;
+    if (procEnv && procEnv[key]) return procEnv[key];
     return null;
 };
 

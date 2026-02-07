@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import {
     DndContext,
-    closestCenter,
     KeyboardSensor,
     MouseSensor,
     TouchSensor,
@@ -40,7 +39,7 @@ const SortableStepItem = ({
         transform,
         transition,
         isDragging
-    } = useSortable({ id: item.id, data: { groupId, index } });
+    } = useSortable({ id, data: { groupId, index } });
 
     const style = {
         transform: CSS.Translate.toString(transform),

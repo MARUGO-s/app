@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
     DndContext,
-    closestCenter,
     KeyboardSensor,
     MouseSensor,
     TouchSensor,
@@ -23,8 +22,6 @@ import { CSS } from '@dnd-kit/utilities';
 import { Button } from './Button';
 import { Input } from './Input';
 import { Card } from './Card';
-
-import { createPortal } from 'react-dom';
 import UnitConversionModal from './UnitConversionModal';
 import { unitConversionService } from '../services/unitConversionService';
 import { ingredientSearchService } from '../services/ingredientSearchService';
@@ -155,7 +152,7 @@ const SortableIngredientItem = React.memo(({
         transform,
         transition,
         isDragging
-    } = useSortable({ id: item.id, data: { groupId, index } });
+    } = useSortable({ id, data: { groupId, index } });
 
     const style = {
         transform: CSS.Translate.toString(transform),
@@ -318,8 +315,6 @@ const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, 
 
 
 export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
-    const allIngredientNames = Array.from(priceList.keys());
-
     // Unit Conversion Cache
     const [conversionMap, setConversionMap] = useState(new Map());
 
@@ -453,8 +448,6 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
         useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     );
-
-    const findSection = (id) => sections.find(s => s.items.some(i => i.id === id));
 
     const handleDragOver = ({ active, over }) => {
         if (!over) return;

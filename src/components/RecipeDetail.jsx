@@ -5,7 +5,7 @@ import { Modal } from './Modal';
 import { translationService } from '../services/translationService';
 import { recipeService } from '../services/recipeService';
 import { unitConversionService } from '../services/unitConversionService';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import { SUPPORTED_LANGUAGES } from '../constants';
 import './RecipeDetail.css';
 import QRCode from "react-qr-code";
@@ -164,7 +164,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
 
     // State for full recipe data (fetched if steps are missing)
     const [fullRecipe, setFullRecipe] = React.useState(recipe);
-    const [loadingDetail, setLoadingDetail] = React.useState(false);
+    const [_loadingDetail, setLoadingDetail] = React.useState(false);
 
     // Determines which data to show
     const displayRecipe = currentLang === 'ORIGINAL' ? fullRecipe : (translationCache[currentLang] || fullRecipe);
@@ -500,8 +500,6 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
             onBack();
         }
     };
-
-    if (!recipe) return null;
 
     // --- Helper for Profit Calculation UI ---
     // Note: totalCost passed here usually represents Tax Excluded (sum of ingredients).

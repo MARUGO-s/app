@@ -11,7 +11,7 @@ import { Input } from './Input';
 import { InventoryList } from './InventoryList';
 import './Inventory.css';
 import { Modal } from './Modal';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 
 export const Inventory = ({ onBack }) => {
     const { user } = useAuth();
@@ -205,6 +205,48 @@ export const Inventory = ({ onBack }) => {
     };
 
     const isTax10 = (value) => value === true || value === 1 || value === '1' || value === 'true';
+
+    const normalizeUnit = (u) => {
+        const s = String(u ?? '').trim();
+        if (!s) return '';
+        const lower = s.toLowerCase();
+        if (lower === 'ｇ') return 'g';
+        if (lower === 'ｍｌ') return 'ml';
+        if (lower === 'ｃｃ') return 'cc';
+        if (lower === 'ｋｇ') return 'kg';
+        if (lower === 'ｌ') return 'l';
+        return lower;
+    };
+
+    // Inventory expects "price" to be per-unit (matching item.unit).
+    // Ingredient master stores packet total price + packet size/unit.
+    const masterUnitPriceFor = (master, targetUnitRaw) => {
+        const lastPrice = parseFloat(master?.lastPrice);
+        const packetSize = parseFloat(master?.packetSize);
+        const packetUnit = normalizeUnit(master?.packetUnit);
+        const targetUnit = normalizeUnit(targetUnitRaw || packetUnit);
+        if (!Number.isFinite(lastPrice) || !Number.isFinite(packetSize) || packetSize <= 0) return null;
+        if (!packetUnit) return null;
+
+        // base price per 1 packetUnit
+        const perPacketUnit = lastPrice / packetSize;
+
+        // Same unit
+        if (targetUnit === packetUnit) return perPacketUnit;
+
+        // g <-> kg
+        if (packetUnit === 'g' && targetUnit === 'kg') return perPacketUnit * 1000;
+        if (packetUnit === 'kg' && targetUnit === 'g') return perPacketUnit / 1000;
+
+        // ml/cc <-> l (treat cc as ml)
+        const pu = packetUnit === 'cc' ? 'ml' : packetUnit;
+        const tu = targetUnit === 'cc' ? 'ml' : targetUnit;
+        if (pu === 'ml' && tu === 'l') return perPacketUnit * 1000;
+        if (pu === 'l' && tu === 'ml') return perPacketUnit / 1000;
+
+        // Not convertible
+        return null;
+    };
 
     const normalizeItemCategory = (value) => {
         const normalized = String(value || '').trim();
@@ -1157,7 +1199,12 @@ export const Inventory = ({ onBack }) => {
             // and strip UI-only fields before saving to DB snapshots.
             const snapshotItems = mergedComponents
                 .filter(i => !i.isPhantom)
-                .map(({ isPhantom, _master, ...rest }) => rest);
+                .map((it) => {
+                    const rest = { ...it };
+                    delete rest.isPhantom;
+                    delete rest._master;
+                    return rest;
+                });
 
             const totalValue = snapshotItems.reduce((sum, it) => {
                 const price = parseFloat(it.price) || 0;

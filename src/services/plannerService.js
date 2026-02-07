@@ -11,7 +11,7 @@ const getPlans = (userId) => {
         let data = localStorage.getItem(getStorageKey(userId));
 
         return data ? JSON.parse(data) : {};
-    } catch (e) {
+    } catch {
         return {};
     }
 };
