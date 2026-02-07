@@ -5,35 +5,46 @@ create or replace function get_user_recipe_counts()
 returns table (user_id text, count bigint)
 language plpgsql
 security definer
+set search_path = public
 as $$
 begin
+  if not exists (
+    select 1
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = 'profiles'
+  ) then
+    return;
+  end if;
+
   return query
+  with users as (
+    select
+      coalesce(nullif(btrim(display_id), ''), id::text) as user_id,
+      id::text as auth_uid,
+      lower(coalesce(display_id, '')) as display_id_lc
+    from profiles
+  )
   select
-    u.id::text,
+    u.user_id,
     (
       select count(*)
       from recipes r
       where
-        -- 1. Explicit Ownership
-        r.tags @> array['owner:' || u.id]
-        
-        OR
-        
-        -- 2. Implicit Ownership (Legacy Master Data) -> Belongs to yoshito (and admin alias)
-        (
-          (u.id = 'yoshito' or u.id = 'admin')
-          AND
-          (
-             r.tags is null 
-             OR 
-             NOT EXISTS (
-               SELECT 1 
-               FROM unnest(r.tags) t 
-               WHERE t LIKE 'owner:%'
-             )
+        r.tags @> array['owner:' || u.user_id]
+        or r.tags @> array['owner:' || u.auth_uid]
+        or (
+          u.display_id_lc in ('yoshito', 'admin')
+          and (
+            r.tags is null
+            or not exists (
+              select 1
+              from unnest(r.tags) t
+              where t like 'owner:%'
+            )
           )
         )
-    ) as count
-  from app_users u;
+    )::bigint as count
+  from users u;
 end;
 $$;

@@ -1,7 +1,7 @@
 -- Create table for storing source URLs
 create table if not exists recipe_sources (
     id uuid default gen_random_uuid() primary key,
-    recipe_id bigint references recipes(id) on delete cascade not null,
+    recipe_id uuid references recipes(id) on delete cascade not null,
     url text not null,
     created_at timestamp with time zone default timezone('utc'::text, now()) not null,
     constraint unique_recipe_source unique (recipe_id, url)
