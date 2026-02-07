@@ -34,6 +34,10 @@ drop policy if exists "Enable read access for all users" on public.unit_conversi
 drop policy if exists "Enable insert for all users" on public.unit_conversions;
 drop policy if exists "Enable update for all users" on public.unit_conversions;
 drop policy if exists "Enable delete for all users" on public.unit_conversions;
+drop policy if exists "unit_conversions_select_own" on public.unit_conversions;
+drop policy if exists "unit_conversions_insert_own" on public.unit_conversions;
+drop policy if exists "unit_conversions_update_own" on public.unit_conversions;
+drop policy if exists "unit_conversions_delete_own" on public.unit_conversions;
 
 create policy "unit_conversions_select_own" on public.unit_conversions
   for select
@@ -51,4 +55,3 @@ create policy "unit_conversions_update_own" on public.unit_conversions
 create policy "unit_conversions_delete_own" on public.unit_conversions
   for delete
   using (user_id = auth.uid()::text);
-
