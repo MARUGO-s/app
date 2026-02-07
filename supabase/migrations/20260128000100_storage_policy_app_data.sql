@@ -4,6 +4,7 @@ values ('app-data', 'app-data', true)
 on conflict (id) do nothing;
 
 -- Allow public read access to app-data for cost calculation
+drop policy if exists "Allow public read access to app-data" on storage.objects;
 create policy "Allow public read access to app-data"
   on storage.objects for select
   using ( bucket_id = 'app-data' );

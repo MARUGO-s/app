@@ -12,12 +12,17 @@ create table if not exists material_costs (
 alter table material_costs enable row level security;
 
 -- Create policies (open access for now to match recipes)
+drop policy if exists "Allow anonymous read access" on material_costs;
+drop policy if exists "Allow anonymous insert" on material_costs;
+drop policy if exists "Allow anonymous update" on material_costs;
+drop policy if exists "Allow anonymous delete" on material_costs;
 create policy "Allow anonymous read access" on material_costs for select using (true);
 create policy "Allow anonymous insert" on material_costs for insert with check (true);
 create policy "Allow anonymous update" on material_costs for update using (true);
 create policy "Allow anonymous delete" on material_costs for delete using (true);
 
 -- Create updated_at trigger
+drop trigger if exists update_material_costs_updated_at on material_costs;
 create trigger update_material_costs_updated_at
   before update on material_costs
   for each row

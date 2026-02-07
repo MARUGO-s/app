@@ -35,6 +35,10 @@ ALTER TABLE inventory_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ignored_items ENABLE ROW LEVEL SECURITY;
 
 -- Allow anonymous users to manage inventory
+DROP POLICY IF EXISTS "Allow anonymous access to inventory_items" ON inventory_items;
+DROP POLICY IF EXISTS "Allow anonymous access to inventory_snapshots" ON inventory_snapshots;
+DROP POLICY IF EXISTS "Allow anonymous access to ignored_items" ON ignored_items;
+
 CREATE POLICY "Allow anonymous access to inventory_items" ON inventory_items
     FOR ALL USING (true) WITH CHECK (true);
 

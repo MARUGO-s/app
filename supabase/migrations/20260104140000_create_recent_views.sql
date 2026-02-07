@@ -8,4 +8,5 @@ create table if not exists recent_views (
 -- Enable RLS
 alter table recent_views enable row level security;
 
+drop policy if exists "Enable access to all users" on recent_views;
 create policy "Enable access to all users" on recent_views for all using (true) with check (true);
