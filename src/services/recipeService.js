@@ -12,10 +12,125 @@ const withTimeout = async (promise, ms, label) => {
     }
 };
 
+const parseTextArrayMaybe = (value) => {
+    if (Array.isArray(value)) return value.map(v => String(v)).filter(Boolean);
+    if (typeof value !== 'string') return [];
+    const raw = value.trim();
+    if (!raw) return [];
+    if (raw.startsWith('{') && raw.endsWith('}')) {
+        const body = raw.slice(1, -1);
+        if (!body) return [];
+        return body
+            .split(',')
+            .map(v => v.trim().replace(/^"(.*)"$/, '$1'))
+            .filter(Boolean);
+    }
+    return [];
+};
+
+const normalizeRpcTagArray = (payload) => {
+    if (payload == null) return [];
+
+    if (Array.isArray(payload)) {
+        if (payload.every(v => typeof v === 'string')) return payload.filter(Boolean);
+        if (payload.length === 1 && payload[0] && typeof payload[0] === 'object') {
+            const firstObj = payload[0];
+            const firstVal = Object.values(firstObj)[0];
+            return parseTextArrayMaybe(firstVal);
+        }
+        return [];
+    }
+
+    if (typeof payload === 'object') {
+        const firstVal = Object.values(payload)[0];
+        return parseTextArrayMaybe(firstVal);
+    }
+
+    return parseTextArrayMaybe(payload);
+};
+
+const normalizeRecipeTags = (rawTags) => {
+    if (Array.isArray(rawTags)) return rawTags.map(v => String(v)).filter(Boolean);
+    if (typeof rawTags === 'string') {
+        const trimmed = rawTags.trim();
+        if (!trimmed) return [];
+        // Handle Postgres text[] string format first.
+        const pgArray = parseTextArrayMaybe(trimmed);
+        if (pgArray.length > 0) return pgArray;
+        // Fallback for legacy comma-separated string tags.
+        return trimmed.split(',').map(v => v.trim()).filter(Boolean);
+    }
+    return [];
+};
+
 export const recipeService = {
     // Cache for detected query pattern (avoid repeated fallback attempts)
     _queryPattern: null,
     _queryPatternCache: new Map(),
+    _showMasterPrefCache: new Map(), // userId -> { value: boolean, updatedAt: number }
+    _masterOwnerTagsCache: { value: new Set(['owner:yoshito', 'owner:admin']), updatedAt: 0 },
+
+    async _resolveShowMasterPreference(currentUser, timeoutMs = 15000) {
+        const fallback = currentUser?.showMasterRecipes === true;
+        const userId = currentUser?.id;
+        if (!userId) return fallback;
+
+        const cached = this._showMasterPrefCache.get(userId);
+        const now = Date.now();
+        // If auth-context value changed locally, prioritize it immediately.
+        if (cached && cached.value !== fallback) {
+            this._showMasterPrefCache.set(userId, { value: fallback, updatedAt: now });
+            return fallback;
+        }
+        // 30 sec cache to reduce extra profile queries
+        if (cached && now - cached.updatedAt < 30000) {
+            return cached.value;
+        }
+
+        try {
+            const { data, error } = await withTimeout(
+                supabase
+                    .from('profiles')
+                    .select('show_master_recipes')
+                    .eq('id', userId)
+                    .single(),
+                Math.min(3000, timeoutMs / 3),
+                'profiles.select(show_master_recipes)'
+            );
+            if (error) throw error;
+            const value = data?.show_master_recipes === true;
+            this._showMasterPrefCache.set(userId, { value, updatedAt: now });
+            return value;
+        } catch (err) {
+            // Fallback to in-memory auth state if profile fetch fails.
+            this._showMasterPrefCache.set(userId, { value: fallback, updatedAt: now });
+            return fallback;
+        }
+    },
+
+    async _resolveMasterOwnerTags(timeoutMs = 15000) {
+        const now = Date.now();
+        if (this._masterOwnerTagsCache?.value && now - this._masterOwnerTagsCache.updatedAt < 30000) {
+            return this._masterOwnerTagsCache.value;
+        }
+
+        try {
+            const { data, error } = await withTimeout(
+                supabase.rpc('get_master_recipe_owner_tags'),
+                Math.min(3000, timeoutMs / 3),
+                'rpc.get_master_recipe_owner_tags'
+            );
+            if (error) throw error;
+            const tags = normalizeRpcTagArray(data);
+            const nextSet = new Set(tags.length > 0 ? tags : ['owner:yoshito', 'owner:admin']);
+            this._masterOwnerTagsCache = { value: nextSet, updatedAt: now };
+            return nextSet;
+        } catch (err) {
+            const fallback = this._masterOwnerTagsCache?.value || new Set(['owner:yoshito', 'owner:admin']);
+            this._masterOwnerTagsCache = { value: fallback, updatedAt: now };
+            return fallback;
+        }
+    },
 
     async fetchRecipes(currentUser, { timeoutMs = 15000 } = {}) {
         let allRecipes = [];
@@ -38,7 +153,9 @@ export const recipeService = {
             return (data || []).map(fromDbFormat);
         };
 
-        const listSelectV1 = 'id,title,description,image,servings,course,category,store_name,ingredients_meta:ingredients->0,tags,created_at,updated_at,order_index,recipe_sources(url)';
+        // Deprecated ingredients->0; it causes 400 if ingredients is not jsonb or null in a way Supabase dislikes.
+        // We will just fetch 'ingredients' (jsonb) and parse it client-side if needed, but for list view we don't really need deep inspection yet.
+        const listSelectV1 = 'id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at,updated_at,order_index,recipe_sources(url)';
         const listSelectV2 = 'id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at,updated_at,recipe_sources(url)';
         const listSelectV3 = 'id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at,updated_at';
         const listSelectV4 = 'id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at';
@@ -111,42 +228,40 @@ export const recipeService = {
             return [];
         }
 
-        // showMasterRecipes is already loaded into AuthContext/profile
-        const showMaster = currentUser.showMasterRecipes === true;
+        // Resolve from latest profile value (with short cache) to avoid stale auth-context state.
+        const showMaster = await this._resolveShowMasterPreference(currentUser, timeoutMs);
+        const masterOwnerTags = await this._resolveMasterOwnerTags(timeoutMs);
 
         const isAdmin = currentUser.role === 'admin';
         const userIds = [String(currentUser.id)];
         if (currentUser.displayId) userIds.push(String(currentUser.displayId));
 
         const filtered = allRecipes.filter(recipe => {
-            // Admin sees ALL recipes
+            // Admin can see everything.
             if (isAdmin) return true;
 
-            const tags = recipe.tags || [];
-            // Check for owner tag
-            const ownerTag = tags.find(t => t && t.startsWith('owner:'));
+            const tags = normalizeRecipeTags(recipe.tags);
+            const ownerTags = tags.filter(t => t && t.startsWith('owner:'));
 
             // If NO owner tag, treat as legacy/shared and allow showing.
             // (RLS is permissive in this project; hiding legacy items here can make the UI look empty.)
-            if (!ownerTag) {
+            if (ownerTags.length === 0) {
                 return true;
             }
 
-            // If owner tag exists, it MUST match the current user OR have 'public' tag
-            const isOwner = !!ownerTag && userIds.some(id => ownerTag === `owner:${id}`);
+            // Check if recipe is owned by a Master/Admin
+            const isMaster = ownerTags.some(tag => masterOwnerTags.has(tag));
+
+            // If "Master Sharing" is enabled for this user, they can see Master recipes.
+            if (showMaster && isMaster) {
+                return true;
+            }
+
+            // Otherwise, it MUST match the current user OR have 'public' tag
+            const isOwner = ownerTags.some(ownerTag => userIds.some(id => ownerTag === `owner:${id}`));
             const isPublic = tags.includes('public');
 
-            // MASTER RECIPE LOGIC
-            // Legacy master: owner:yoshito
-            const isMasterRecipe = ownerTag === 'owner:yoshito';
-            // showMaster is already determined above
-
             if (isOwner || isPublic) {
-                return true;
-            }
-
-            // Allow master recipes if enabled for this user
-            if (isMasterRecipe && showMaster) {
                 return true;
             }
 
