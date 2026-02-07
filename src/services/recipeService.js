@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
 
 const withTimeout = async (promise, ms, label) => {
     let t = null;
@@ -760,7 +761,7 @@ export const recipeService = {
             const updateList = (list) => {
                 return list.map(ing => {
                     if (!ing.name) return ing;
-                    const priceData = priceMap.get(ing.name);
+                    const priceData = priceMap.get(normalizeIngredientKey(ing.name));
 
                     if (priceData) {
                         // Found a matching price!

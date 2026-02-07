@@ -3,6 +3,7 @@ import { DndContext, useSensor, useSensors, PointerSensor } from '@dnd-kit/core'
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useSearchParams } from 'react-router-dom';
+import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
 import { inventoryService } from '../services/inventoryService';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { unitConversionService } from '../services/unitConversionService';
@@ -868,10 +869,35 @@ export const Inventory = ({ onBack }) => {
     // Merge Inventory and CSV Data
     const mergedComponents = React.useMemo(() => {
         const normalize = (str) => str ? str.toString().trim() : '';
+        const keyFor = (str) => normalizeIngredientKey(str);
+
+        // Treat name variations as the same (case/space/full-width) when matching.
+        const ignoredKeySet = new Set();
+        try {
+            for (const rawName of (ignoredNames || new Set()).values()) {
+                const k = keyFor(rawName);
+                if (k) ignoredKeySet.add(k);
+            }
+        } catch {
+            // ignore
+        }
+
+        const excludedKeySet = new Set();
+        try {
+            for (const rawName of (excludedNames || new Set()).values()) {
+                const k = keyFor(rawName);
+                if (k) excludedKeySet.add(k);
+            }
+        } catch {
+            // ignore
+        }
+
         const masterByName = new Map();
         try {
             for (const [name, row] of (ingredientMasterMap || new Map()).entries()) {
-                masterByName.set(normalize(name), row);
+                const k = keyFor(name);
+                if (!k) continue;
+                masterByName.set(k, row);
             }
         } catch {
             // ignore
@@ -880,9 +906,9 @@ export const Inventory = ({ onBack }) => {
         const csvByName = new Map();
         try {
             (csvData || []).forEach((row) => {
-                const name = normalize(row?.name);
-                if (!name) return;
-                csvByName.set(name, row);
+                const k = keyFor(row?.name);
+                if (!k) return;
+                csvByName.set(k, row);
             });
         } catch {
             // ignore
@@ -891,9 +917,9 @@ export const Inventory = ({ onBack }) => {
         const overridesByName = new Map();
         try {
             for (const [rawName, unit] of (csvUnitOverrideMap || new Map()).entries()) {
-                const name = normalize(rawName);
-                if (!name) continue;
-                overridesByName.set(name, unit);
+                const k = keyFor(rawName);
+                if (!k) continue;
+                overridesByName.set(k, unit);
             }
         } catch {
             // ignore
@@ -949,11 +975,11 @@ export const Inventory = ({ onBack }) => {
         };
 
         const applyMasterPriority = (base) => {
-            const normalizedName = normalize(base?.name);
-            const m = normalizedName ? masterByName.get(normalizedName) : null;
-            const csvRow = normalizedName ? csvByName.get(normalizedName) : null;
-            const csvUnit = (normalizedName && overridesByName.has(normalizedName))
-                ? String(overridesByName.get(normalizedName) || '')
+            const nameKey = keyFor(base?.name);
+            const m = nameKey ? masterByName.get(nameKey) : null;
+            const csvRow = nameKey ? csvByName.get(nameKey) : null;
+            const csvUnit = (nameKey && overridesByName.has(nameKey))
+                ? String(overridesByName.get(nameKey) || '')
                 : String(csvRow?.unit || '');
 
             // Always attach CSV info for UI display (e.g. show "¥1200/kg").
@@ -1042,18 +1068,26 @@ export const Inventory = ({ onBack }) => {
         };
 
         const effectiveItems = items.map(applyMasterPriority);
-        const inventoryMap = new Map(effectiveItems.map(i => [normalize(i.name), i]));
+        const inventoryMap = new Map();
+        effectiveItems.forEach((i) => {
+            const k = keyFor(i?.name);
+            if (!k) return;
+            inventoryMap.set(k, i);
+        });
         const merged = [...effectiveItems];
 
         csvData.forEach((csvItem, index) => {
-            const normalizedName = normalize(csvItem.name);
-            if (ignoredNames.has(csvItem.name) || ignoredNames.has(normalizedName)) return;
+            const rawName = String(csvItem?.name ?? '');
+            const trimmedName = normalize(rawName);
+            const nameKey = keyFor(rawName);
+            if (!nameKey) return;
+            if (ignoredNames.has(rawName) || (trimmedName && ignoredNames.has(trimmedName)) || ignoredKeySet.has(nameKey)) return;
 
-            if (!inventoryMap.has(normalizedName)) {
+            if (!inventoryMap.has(nameKey)) {
                 const base = {
                     id: `phantom-${index}`,
                     isPhantom: true,
-                    name: csvItem.name.trim(),
+                    name: trimmedName,
                     quantity: '',
                     unit: csvItem.unit || '',
                     category: '',
@@ -1066,9 +1100,11 @@ export const Inventory = ({ onBack }) => {
             }
         });
         return merged.filter(i => {
-            const name = normalize(i.name);
-            if (ignoredNames.has(i.name) || ignoredNames.has(name)) return false;
-            if (excludedNames.has(i.name) || excludedNames.has(name)) return false;
+            const rawName = String(i?.name ?? '');
+            const trimmedName = normalize(rawName);
+            const nameKey = keyFor(rawName);
+            if (ignoredNames.has(rawName) || (trimmedName && ignoredNames.has(trimmedName)) || (nameKey && ignoredKeySet.has(nameKey))) return false;
+            if (excludedNames.has(rawName) || (trimmedName && excludedNames.has(trimmedName)) || (nameKey && excludedKeySet.has(nameKey))) return false;
             if (isHiddenVendor(i.vendor)) return false;
             return true;
         });
@@ -1096,14 +1132,28 @@ export const Inventory = ({ onBack }) => {
         if (over.id === 'inventory-list-droppable') {
             const item = active.data.current.item;
             if (active.data.current.type === 'csv-item') {
-                const normalize = (str) => str ? str.toString().trim() : '';
-                const m = (ingredientMasterMap && ingredientMasterMap.get(normalize(item?.name))) || null;
-                    const preferredUnit = m?.packetUnit || item.unit;
-                    // For inventory, prefer per-unit price (normalized) when master exists
-                    const masterPricePerUnit = m ? masterUnitPriceFor(m, preferredUnit) : null;
-                    const preferredPrice = masterPricePerUnit !== null
-                        ? masterPricePerUnit
-                        : ((m?.lastPrice !== null && m?.lastPrice !== undefined && m?.lastPrice !== '') ? m.lastPrice : item.price);
+                const itemNameTrimmed = String(item?.name ?? '').trim();
+                const nameKey = normalizeIngredientKey(itemNameTrimmed);
+                let m = null;
+                if (ingredientMasterMap && ingredientMasterMap.size > 0 && nameKey) {
+                    // Prefer exact key, but also allow loose match (case/space/full-width).
+                    m = ingredientMasterMap.get(itemNameTrimmed) || null;
+                    if (!m) {
+                        for (const [rawName, row] of ingredientMasterMap.entries()) {
+                            if (normalizeIngredientKey(rawName) === nameKey) {
+                                m = row;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                const preferredUnit = m?.packetUnit || item.unit;
+                // For inventory, prefer per-unit price (normalized) when master exists
+                const masterPricePerUnit = m ? masterUnitPriceFor(m, preferredUnit) : null;
+                const preferredPrice = masterPricePerUnit !== null
+                    ? masterPricePerUnit
+                    : ((m?.lastPrice !== null && m?.lastPrice !== undefined && m?.lastPrice !== '') ? m.lastPrice : item.price);
                 setEditingItem({
                     name: item.name,
                     price: preferredPrice,

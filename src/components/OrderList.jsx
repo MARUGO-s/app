@@ -5,6 +5,7 @@ import { inventoryService } from '../services/inventoryService';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { unitConversionService } from '../services/unitConversionService';
 import { csvUnitOverrideService } from '../services/csvUnitOverrideService';
+import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
 import { Button } from './Button';
 import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../contexts/useToast';
@@ -115,6 +116,39 @@ export const OrderList = ({ onBack }) => {
                 csvUnitOverrideService.getAll(user.id),
             ]);
 
+            const convByKey = new Map();
+            try {
+                for (const [rawName, row] of (conversions || new Map()).entries()) {
+                    const k = normalizeIngredientKey(rawName);
+                    if (!k) continue;
+                    if (!convByKey.has(k)) convByKey.set(k, row);
+                }
+            } catch {
+                // ignore
+            }
+
+            const overrideByKey = new Map();
+            try {
+                for (const [rawName, unit] of (csvUnitOverrides || new Map()).entries()) {
+                    const k = normalizeIngredientKey(rawName);
+                    if (!k) continue;
+                    if (!overrideByKey.has(k)) overrideByKey.set(k, unit);
+                }
+            } catch {
+                // ignore
+            }
+
+            const inventoryByKey = new Map();
+            try {
+                (inventoryRaw || []).forEach((row) => {
+                    const k = normalizeIngredientKey(row?.name);
+                    if (!k) return;
+                    if (!inventoryByKey.has(k)) inventoryByKey.set(k, row);
+                });
+            } catch {
+                // ignore
+            }
+
             // 3. Aggregate Ingredients (normalized)
             const totals = {}; // name -> { quantity, unit }
 
@@ -126,7 +160,8 @@ export const OrderList = ({ onBack }) => {
                 allIngs.forEach(ing => {
                     if (!ing.name) return;
                     const name = normalize(ing.name);
-                    const conv = conversions?.get(name) || null;
+                    const key = normalizeIngredientKey(name);
+                    const conv = (key ? convByKey.get(key) : null) || (conversions?.get(name) || null);
                     const normalizedIng = normalizeByMasterIfNeeded(name, ing.quantity, ing.unit, conv);
                     const qty = normalizedIng.qty || 0;
                     const unit = normalizedIng.unit || '';
@@ -142,10 +177,11 @@ export const OrderList = ({ onBack }) => {
             // 4. Subtract Inventory + 20% rule + pack-based ordering
             const results = Object.keys(totals).map(name => {
                 const req = totals[name];
-                const conv = conversions?.get(name) || null;
-                const csvEntry = csvPriceMap?.get(name) || null; // { price, vendor, unit, dateStr }
+                const key = normalizeIngredientKey(name);
+                const conv = (key ? convByKey.get(key) : null) || (conversions?.get(name) || null);
+                const csvEntry = (key ? (csvPriceMap?.get(key) || null) : null); // { price, vendor, unit, dateStr }
 
-                const stockItem = inventoryRaw.find(i => normalize(i.name) === name);
+                const stockItem = key ? (inventoryByKey.get(key) || null) : null;
                 const stockNorm = normalizeByMasterIfNeeded(name, stockItem?.quantity ?? 0, stockItem?.unit ?? req.unit, conv);
 
                 const required = req.quantity || 0;
@@ -163,7 +199,7 @@ export const OrderList = ({ onBack }) => {
                 // Ordering unit should be "元の単位（CSV）" first, optionally overridden by user.
                 // This keeps the UI aligned with how vendors actually sell the item (袋/本/箱...).
                 const csvOrderUnit = csvEntry?.unit ? String(csvEntry.unit).trim() : '';
-                const overrideUnit = csvUnitOverrides?.get(name) ? String(csvUnitOverrides.get(name)).trim() : '';
+                const overrideUnit = (key && overrideByKey.has(key)) ? String(overrideByKey.get(key)).trim() : '';
                 const orderUnitLabel =
                     (overrideUnit ? overrideUnit : '') ||
                     (csvOrderUnit ? csvOrderUnit : '') ||

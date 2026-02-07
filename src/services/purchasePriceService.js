@@ -1,10 +1,11 @@
 import { supabase } from '../supabase.js';
+import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
 
 const BUCKET_NAME = 'app-data';
 // No fixed FILE_PATH anymore
 
 export const purchasePriceService = {
-    _cacheByUserId: new Map(), // userId -> Map(name -> {price,...})
+    _cacheByUserId: new Map(), // userId -> Map(normalizedNameKey -> {price,...})
 
     async _getCurrentUserId() {
         const { data, error } = await supabase.auth.getUser();
@@ -54,7 +55,7 @@ export const purchasePriceService = {
             }
 
             // 2. Download and Parse all CSVs
-            const masterMap = new Map(); // Key: Name, Value: { price, vendor, dateStr }
+            const masterMap = new Map(); // Key: normalizedNameKey, Value: { price, vendor, unit, dateStr, displayName }
 
             const promises = files
                 .filter(f => f.name.endsWith('.csv'))
@@ -88,20 +89,20 @@ export const purchasePriceService = {
 
             const csvTexts = await Promise.all(promises);
 
-            // 3. Merge Data
+            // 3. Merge Data (by normalized key)
             for (const text of csvTexts) {
                 if (!text) continue;
                 const fileMap = this.parseCSV(text);
 
-                for (const [name, entry] of fileMap) {
-                    if (masterMap.has(name)) {
-                        const existing = masterMap.get(name);
+                for (const [key, entry] of fileMap) {
+                    if (masterMap.has(key)) {
+                        const existing = masterMap.get(key);
                         // Keep latest date
-                        if (entry.dateStr > existing.dateStr) {
-                            masterMap.set(name, entry);
+                        if ((entry?.dateStr || '') > (existing?.dateStr || '')) {
+                            masterMap.set(key, entry);
                         }
                     } else {
-                        masterMap.set(name, entry);
+                        masterMap.set(key, entry);
                     }
                 }
             }
@@ -199,7 +200,7 @@ export const purchasePriceService = {
      * 18: Cost
      */
     parseCSV(csvText) {
-        const priceMap = new Map(); // Key: Name, Value: { price, vendor, dateStr }
+        const priceMap = new Map(); // Key: normalizedNameKey, Value: { price, vendor, unit, dateStr, displayName }
 
         // Split lines handling potential CRLF
         const lines = csvText.split(/\r?\n/).filter(line => line.trim());
@@ -240,19 +241,23 @@ export const purchasePriceService = {
 
                 const dateStr = columns[1];
                 const vendor = columns[8];
-                const name = columns[14];
+                const nameRaw = columns[14];
                 const priceStr = columns[18];
                 const unit = columns[20];
 
-                if (name && priceStr) {
+                const displayName = String(nameRaw ?? '').trim();
+                const key = normalizeIngredientKey(displayName);
+
+                if (key && priceStr) {
                     const price = parseFloat(priceStr);
                     if (!isNaN(price)) {
-                        const entry = { price, vendor, unit, dateStr };
-                        if (priceMap.has(name)) {
-                            const existing = priceMap.get(name);
-                            if (dateStr > existing.dateStr) priceMap.set(name, entry);
+                        const entry = { price, vendor, unit, dateStr, displayName };
+                        if (priceMap.has(key)) {
+                            const existing = priceMap.get(key);
+                            // Keep latest date. If same date, keep the last seen row.
+                            if ((dateStr || '') >= (existing?.dateStr || '')) priceMap.set(key, entry);
                         } else {
-                            priceMap.set(name, entry);
+                            priceMap.set(key, entry);
                         }
                     }
                 }
@@ -314,13 +319,16 @@ export const purchasePriceService = {
                 const unit = headerIndices.unit > -1 ? columns[headerIndices.unit] : '';
                 const vendor = headerIndices.vendor > -1 ? columns[headerIndices.vendor] : '';
 
-                if (name && priceStr) {
+                const displayName = String(name ?? '').trim();
+                const key = normalizeIngredientKey(displayName);
+
+                if (key && priceStr) {
                     const price = parseFloat(priceStr.replace(/[^0-9.]/g, '')); // clean currency symbols
                     if (!isNaN(price)) {
                         // For generic CSV, use current date as 'dateStr' since it's an import? 
                         // Or just empty. If merging with legacy, legacy has dates.
                         // Let's use Today.
-                        priceMap.set(name, { price, vendor, unit, dateStr: today });
+                        priceMap.set(key, { price, vendor, unit, dateStr: today, displayName });
                     }
                 }
             }
@@ -335,11 +343,12 @@ export const purchasePriceService = {
     async getPriceListArray(userId = null) {
         const map = await this.fetchPriceList(userId);
         const array = [];
-        for (const [name, data] of map.entries()) {
-            if (typeof data === 'object') {
-                array.push({ name, ...data });
+        for (const [key, data] of map.entries()) {
+            if (data && typeof data === 'object') {
+                const { displayName, ...rest } = data;
+                array.push({ name: displayName || key, ...rest });
             } else {
-                array.push({ name, price: data });
+                array.push({ name: key, price: data });
             }
         }
         // Sort by date desc, then name
@@ -359,6 +368,6 @@ export const purchasePriceService = {
     async getPrice(name, userId = null) {
         if (!name) return null;
         const map = await this.fetchPriceList(userId);
-        return map.get(name) || null;
+        return map.get(normalizeIngredientKey(name)) || null;
     }
 };
