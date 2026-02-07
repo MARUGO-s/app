@@ -1,6 +1,16 @@
--- Add show_master_recipes column to app_users table
-ALTER TABLE public.app_users 
-ADD COLUMN IF NOT EXISTS show_master_recipes BOOLEAN DEFAULT false;
+-- Add show_master_recipes column to app_users table when present.
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = 'app_users'
+  ) then
+    alter table public.app_users
+    add column if not exists show_master_recipes boolean default false;
 
--- Comment on column
-COMMENT ON COLUMN public.app_users.show_master_recipes IS 'Preference to show master recipes (owned by yoshito) for this user';
+    comment on column public.app_users.show_master_recipes is
+      'Preference to show master recipes (owned by yoshito) for this user';
+  end if;
+end $$;

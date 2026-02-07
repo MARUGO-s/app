@@ -3,11 +3,15 @@
 CREATE TABLE IF NOT EXISTS profiles (
   id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   display_id text UNIQUE NOT NULL,
+  email text,
   role text NOT NULL DEFAULT 'user', -- 'user' | 'admin'
   show_master_recipes boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS email text;
 
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
@@ -28,4 +32,3 @@ CREATE POLICY "profiles_update_own" ON profiles
   WITH CHECK (auth.uid() = id);
 
 CREATE INDEX IF NOT EXISTS idx_profiles_display_id ON profiles(display_id);
-
