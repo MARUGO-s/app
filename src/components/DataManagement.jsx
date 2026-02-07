@@ -24,6 +24,7 @@ export const DataManagement = ({ onBack }) => {
     const [dupItems, setDupItems] = useState([]); // summarized list
     const [dupSelectedKey, setDupSelectedKey] = useState('');
     const [dupSearch, setDupSearch] = useState('');
+    const [dupMonth, setDupMonth] = useState(''); // YYYY-MM (empty = all)
 
     // Sort & Search State
     const [sortConfig, setSortConfig] = useState({ key: 'dateStr', direction: 'desc' });
@@ -403,6 +404,23 @@ export const DataManagement = ({ onBack }) => {
                                 </h3>
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <Input
+                                    type="month"
+                                    value={dupMonth}
+                                    onChange={(e) => setDupMonth(e.target.value)}
+                                    style={{ width: '160px', fontSize: '0.9rem' }}
+                                    title="月を指定（空欄で全期間）"
+                                    wrapperClassName="input-group--no-margin"
+                                />
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setDupMonth('')}
+                                    disabled={!dupMonth}
+                                    title="全期間に戻す"
+                                >
+                                    全期間
+                                </Button>
                                 <Button variant="secondary" size="sm" onClick={loadDuplicates} disabled={dupLoading}>↻ 更新</Button>
                             </div>
                         </div>
@@ -436,8 +454,18 @@ export const DataManagement = ({ onBack }) => {
                                 });
                                 unique.sort((a, b) => String(a?.dateStr || '').localeCompare(String(b?.dateStr || '')));
 
-                                const withDiff = unique.map((r, idx) => {
-                                    const prev = idx > 0 ? unique[idx - 1] : null;
+                                const toMonthKey = (dateStr) => {
+                                    const s = String(dateStr || '');
+                                    if (!s) return '';
+                                    return s.slice(0, 7).replace('/', '-');
+                                };
+
+                                const filtered = dupMonth
+                                    ? unique.filter(r => toMonthKey(r?.dateStr) === dupMonth)
+                                    : unique;
+
+                                const withDiff = filtered.map((r, idx) => {
+                                    const prev = idx > 0 ? filtered[idx - 1] : null;
                                     const prevPrice = prev ? Number(prev?.price) : NaN;
                                     const curPrice = Number(r?.price);
                                     let diff = null;
@@ -448,6 +476,18 @@ export const DataManagement = ({ onBack }) => {
                                     }
                                     return { ...r, _diff: diff, _pct: pct };
                                 });
+
+                                const totalIncomingQty = filtered.reduce((sum, r) => {
+                                    const q = Number(r?.incomingQty);
+                                    return sum + (Number.isFinite(q) ? q : 0);
+                                }, 0);
+
+                                const totalIncomingAmount = filtered.reduce((sum, r) => {
+                                    const q = Number(r?.incomingQty);
+                                    const p = Number(r?.price);
+                                    if (!Number.isFinite(q) || !Number.isFinite(p)) return sum;
+                                    return sum + (q * p);
+                                }, 0);
 
                                 const displayRows = [...withDiff].reverse(); // newest first
 
@@ -460,13 +500,16 @@ export const DataManagement = ({ onBack }) => {
                                                 <th>材料名（CSV表記）</th>
                                                 <th style={{ textAlign: 'right', width: '120px' }}>入荷数</th>
                                                 <th style={{ textAlign: 'right', width: '160px' }}>単価</th>
+                                                <th style={{ textAlign: 'right', width: '180px' }}>入荷金額</th>
                                                 <th style={{ textAlign: 'right', width: '180px' }}>前回比</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {displayRows.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan="6" className="no-data">履歴がありません</td>
+                                                    <td colSpan="7" className="no-data">
+                                                        {dupMonth ? `指定月（${dupMonth}）の履歴がありません` : '履歴がありません'}
+                                                    </td>
                                                 </tr>
                                             ) : (
                                                 displayRows.map((r, idx) => {
@@ -486,6 +529,8 @@ export const DataManagement = ({ onBack }) => {
                                                     const priceLabel = Number.isFinite(price) ? `¥${Math.round(price).toLocaleString()}` : '¥-';
                                                     const qty = Number(r?.incomingQty);
                                                     const qtyLabel = Number.isFinite(qty) ? Math.round(qty).toLocaleString() : '-';
+                                                    const amount = (Number.isFinite(qty) && Number.isFinite(price)) ? (qty * price) : NaN;
+                                                    const amountLabel = Number.isFinite(amount) ? `¥${Math.round(amount).toLocaleString()}` : '-';
 
                                                     return (
                                                         <tr key={`${r?.dateStr || 'd'}-${idx}`}>
@@ -497,6 +542,7 @@ export const DataManagement = ({ onBack }) => {
                                                                 {priceLabel}
                                                                 {r?.unit && <span style={{ color: '#888', fontSize: '0.85em', marginLeft: '4px' }}>/ {r.unit}</span>}
                                                             </td>
+                                                            <td className="col-number">{amountLabel}</td>
                                                             <td className="col-number" style={{ color: diffColor }}>
                                                                 {diffLabel}{pctLabel}
                                                             </td>
@@ -505,6 +551,23 @@ export const DataManagement = ({ onBack }) => {
                                                 })
                                             )}
                                         </tbody>
+                                        {displayRows.length > 0 && (
+                                            <tfoot>
+                                                <tr>
+                                                    <td colSpan="3" style={{ fontWeight: 700 }}>
+                                                        合計{dupMonth ? `（${dupMonth}）` : ''}
+                                                    </td>
+                                                    <td className="col-number" style={{ fontWeight: 700 }}>
+                                                        {Math.round(totalIncomingQty).toLocaleString()}
+                                                    </td>
+                                                    <td className="col-number" style={{ color: '#888' }}>-</td>
+                                                    <td className="col-number" style={{ fontWeight: 700 }}>
+                                                        ¥{Math.round(totalIncomingAmount).toLocaleString()}
+                                                    </td>
+                                                    <td className="col-number" style={{ color: '#888' }}>-</td>
+                                                </tr>
+                                            </tfoot>
+                                        )}
                                     </table>
                                 );
                             })()}
