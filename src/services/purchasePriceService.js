@@ -354,6 +354,13 @@ export const purchasePriceService = {
         const lines = csvText.split(/\r?\n/).filter(line => line.trim());
         if (lines.length === 0) return entries;
 
+        const parseNumberMaybe = (raw) => {
+            const s = String(raw ?? '').trim();
+            if (!s) return null;
+            const n = parseFloat(s.replace(/[^0-9.]/g, ''));
+            return Number.isFinite(n) ? n : null;
+        };
+
         const splitRow = (row) => {
             const matches = [];
             let current = '';
@@ -395,13 +402,15 @@ export const purchasePriceService = {
                 const vendor = columns[8];
                 const nameRaw = columns[14];
                 const priceStr = columns[18];
+                // Column T (0-based 19) stores incoming quantity ("入荷個数") in the user's CSV.
+                const incomingQty = parseNumberMaybe(columns[19]);
                 const unit = columns[20];
 
                 const displayName = String(nameRaw ?? '').trim();
                 const key = normalizeIngredientKey(displayName);
                 if (!key || !priceStr) continue;
 
-                const price = parseFloat(priceStr);
+                const price = parseNumberMaybe(priceStr);
                 if (!Number.isFinite(price)) continue;
 
                 entries.push({
@@ -411,6 +420,7 @@ export const purchasePriceService = {
                     vendor,
                     unit,
                     dateStr,
+                    incomingQty,
                     sourceFile
                 });
             }
@@ -418,7 +428,7 @@ export const purchasePriceService = {
         }
 
         // --- Generic CSV Parser (history) ---
-        let headerIndices = { name: -1, price: -1, unit: -1, vendor: -1, date: -1 };
+        let headerIndices = { name: -1, price: -1, unit: -1, vendor: -1, date: -1, quantity: -1 };
         let startRow = 0;
 
         const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
@@ -429,10 +439,11 @@ export const purchasePriceService = {
             if (['単位', 'unit'].some(k => lower.includes(k))) headerIndices.unit = i;
             if (['業者', '問屋', '仕入', 'vendor', 'supplier'].some(k => lower.includes(k))) headerIndices.vendor = i;
             if (['日付', '入荷日', '納品日', 'date'].some(k => lower.includes(k))) headerIndices.date = i;
+            if (['数量', '個数', '入荷', '入荷数', '入荷個数', 'qty', 'quantity'].some(k => lower.includes(k))) headerIndices.quantity = i;
         });
 
         if (headerIndices.name === -1 && headerIndices.price === -1) {
-            headerIndices = { name: 0, price: 1, unit: 2, vendor: 3, date: -1 };
+            headerIndices = { name: 0, price: 1, unit: 2, vendor: 3, date: -1, quantity: -1 };
             const firstRowCols = lines[0].split(',');
             if (isNaN(parseFloat(firstRowCols[1]))) startRow = 1;
         } else {
@@ -448,12 +459,13 @@ export const purchasePriceService = {
             const unit = headerIndices.unit > -1 ? columns[headerIndices.unit] : '';
             const vendor = headerIndices.vendor > -1 ? columns[headerIndices.vendor] : '';
             const dateRaw = headerIndices.date > -1 ? columns[headerIndices.date] : '';
+            const incomingQty = headerIndices.quantity > -1 ? parseNumberMaybe(columns[headerIndices.quantity]) : null;
 
             const displayName = String(name ?? '').trim();
             const key = normalizeIngredientKey(displayName);
             if (!key || !priceStr) continue;
 
-            const price = parseFloat(String(priceStr).replace(/[^0-9.]/g, ''));
+            const price = parseNumberMaybe(priceStr);
             if (!Number.isFinite(price)) continue;
 
             entries.push({
@@ -463,6 +475,7 @@ export const purchasePriceService = {
                 vendor,
                 unit,
                 dateStr: normalizeDateStr(dateRaw) || today,
+                incomingQty,
                 sourceFile
             });
         }
