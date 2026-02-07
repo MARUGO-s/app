@@ -11,6 +11,8 @@ create table if not exists recipe_sources (
 alter table recipe_sources enable row level security;
 
 -- Policies
+drop policy if exists "Enable all access for anon" on recipe_sources;
+drop policy if exists "Enable all access for authenticated" on recipe_sources;
 create policy "Enable all access for anon" on recipe_sources
     for all using (true) with check (true);
 

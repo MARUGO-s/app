@@ -16,6 +16,10 @@ ALTER TABLE profiles
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
 -- Users can read their own profile
+DROP POLICY IF EXISTS "profiles_select_own" ON profiles;
+DROP POLICY IF EXISTS "profiles_insert_own" ON profiles;
+DROP POLICY IF EXISTS "profiles_update_own" ON profiles;
+
 CREATE POLICY "profiles_select_own" ON profiles
   FOR SELECT
   USING (auth.uid() = id);

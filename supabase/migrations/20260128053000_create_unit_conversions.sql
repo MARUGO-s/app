@@ -14,6 +14,9 @@ create table if not exists public.unit_conversions (
 alter table public.unit_conversions enable row level security;
 
 -- Policies
+drop policy if exists "Enable read access for all authenticated users" on public.unit_conversions;
+drop policy if exists "Enable insert for all authenticated users" on public.unit_conversions;
+drop policy if exists "Enable update for all authenticated users" on public.unit_conversions;
 create policy "Enable read access for all authenticated users"
   on public.unit_conversions for select
   using (auth.role() = 'authenticated');
