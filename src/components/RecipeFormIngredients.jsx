@@ -25,6 +25,7 @@ import { Card } from './Card';
 import UnitConversionModal from './UnitConversionModal';
 import { unitConversionService } from '../services/unitConversionService';
 import { ingredientSearchService } from '../services/ingredientSearchService';
+import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
 
 import { AutocompleteInput } from './AutocompleteInput';
 
@@ -620,7 +621,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
 
                 // Name Lookup Logic
                 if (field === 'name') {
-                    const refData = priceList.get(value);
+                    const refData = priceList.get(normalizeIngredientKey(value));
                     const conv = findConversionByName(conversionMap, value);
 
                     // Apply category-driven tax immediately even if this name is not in CSV price list.

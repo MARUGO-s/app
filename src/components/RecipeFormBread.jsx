@@ -6,6 +6,7 @@ import { purchasePriceService } from '../services/purchasePriceService';
 import { unitConversionService } from '../services/unitConversionService';
 import { AutocompleteInput } from './AutocompleteInput';
 import { ingredientSearchService } from '../services/ingredientSearchService';
+import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
 import './RecipeForm.css'; // Reuse basic styles
 import './RecipeFormBread.css'; // Add specialized styles
 
@@ -273,7 +274,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
         // Auto-lookup cost if name changes
         if (field === 'name') {
             // Suggestion logic
-            const refData = priceList.get(value);
+            const refData = priceList.get(normalizeIngredientKey(value));
             if (refData) {
                 const price = typeof refData === 'object' ? refData.price : refData;
                 const vendor = typeof refData === 'object' ? refData.vendor : null;
@@ -366,7 +367,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
 
         if (field === 'name') {
             // Suggestion logic
-            const refData = priceList.get(value);
+            const refData = priceList.get(normalizeIngredientKey(value));
             if (refData) {
                 const price = typeof refData === 'object' ? refData.price : refData;
                 const vendor = typeof refData === 'object' ? refData.vendor : null;

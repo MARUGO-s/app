@@ -3,6 +3,7 @@ import { unitConversionService } from '../services/unitConversionService';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { csvUnitOverrideService } from '../services/csvUnitOverrideService';
 import { useToast } from '../contexts/useToast';
+import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
 import { Button } from './Button';
 import { Input } from './Input';
 import './IngredientMaster.css';
@@ -167,7 +168,7 @@ export const IngredientMaster = () => {
     );
 
     const getCsvUnit = (ingredientName) => {
-        const key = (ingredientName ?? '').toString().trim();
+        const key = normalizeIngredientKey(ingredientName);
         if (!key) return '-';
         const entry = csvPriceMap?.get(key) || null;
         const unit = entry?.unit;
