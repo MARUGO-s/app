@@ -95,6 +95,7 @@ export const DataManagement = ({ onBack }) => {
                     const id = [
                         String(r?.dateStr || ''),
                         String(r?.price ?? ''),
+                        String(r?.incomingQty ?? ''),
                         String(r?.unit || ''),
                         String(r?.vendor || ''),
                         String(r?.displayName || ''),
@@ -127,6 +128,7 @@ export const DataManagement = ({ onBack }) => {
                     name: last?.displayName || key,
                     lastDate: last?.dateStr || '',
                     lastPrice: Number.isFinite(Number(last?.price)) ? Number(last?.price) : null,
+                    lastIncomingQty: Number.isFinite(Number(last?.incomingQty)) ? Number(last?.incomingQty) : null,
                     unit: last?.unit || '',
                     vendor: last?.vendor || '',
                     rows: unique.length,
@@ -366,6 +368,9 @@ export const DataManagement = ({ onBack }) => {
                                                             {item.lastPrice !== null ? `¥${Math.round(item.lastPrice).toLocaleString()}` : '¥-'}
                                                             {item.unit ? ` / ${item.unit}` : ''}
                                                         </span>
+                                                        <span>
+                                                            入荷: {item.lastIncomingQty !== null ? Math.round(item.lastIncomingQty).toLocaleString() : '-'}
+                                                        </span>
                                                         {item.vendor ? <span title={item.vendor}>業者: {item.vendor}</span> : <span>業者: -</span>}
                                                     </div>
                                                     {item.nameVariants > 1 && (
@@ -419,6 +424,7 @@ export const DataManagement = ({ onBack }) => {
                                     const id = [
                                         String(r?.dateStr || ''),
                                         String(r?.price ?? ''),
+                                        String(r?.incomingQty ?? ''),
                                         String(r?.unit || ''),
                                         String(r?.vendor || ''),
                                         String(r?.displayName || ''),
@@ -452,6 +458,7 @@ export const DataManagement = ({ onBack }) => {
                                                 <th style={{ width: '120px' }}>納品日</th>
                                                 <th>業者名</th>
                                                 <th>材料名（CSV表記）</th>
+                                                <th style={{ textAlign: 'right', width: '120px' }}>入荷数</th>
                                                 <th style={{ textAlign: 'right', width: '160px' }}>単価</th>
                                                 <th style={{ textAlign: 'right', width: '180px' }}>前回比</th>
                                             </tr>
@@ -459,7 +466,7 @@ export const DataManagement = ({ onBack }) => {
                                         <tbody>
                                             {displayRows.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan="5" className="no-data">履歴がありません</td>
+                                                    <td colSpan="6" className="no-data">履歴がありません</td>
                                                 </tr>
                                             ) : (
                                                 displayRows.map((r, idx) => {
@@ -477,12 +484,15 @@ export const DataManagement = ({ onBack }) => {
 
                                                     const price = Number(r?.price);
                                                     const priceLabel = Number.isFinite(price) ? `¥${Math.round(price).toLocaleString()}` : '¥-';
+                                                    const qty = Number(r?.incomingQty);
+                                                    const qtyLabel = Number.isFinite(qty) ? Math.round(qty).toLocaleString() : '-';
 
                                                     return (
                                                         <tr key={`${r?.dateStr || 'd'}-${idx}`}>
                                                             <td className="col-date">{r?.dateStr || '-'}</td>
                                                             <td>{r?.vendor || '-'}</td>
                                                             <td style={{ fontWeight: 500 }}>{r?.displayName || '-'}</td>
+                                                            <td className="col-number">{qtyLabel}</td>
                                                             <td className="col-number">
                                                                 {priceLabel}
                                                                 {r?.unit && <span style={{ color: '#888', fontSize: '0.85em', marginLeft: '4px' }}>/ {r.unit}</span>}
