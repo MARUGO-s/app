@@ -136,7 +136,47 @@ const isDecoration = (recipe) => {
     return /飾り|デコ|Decor/i.test(recipe.category || '') || tags.some(t => /飾り|デコ|Decor/i.test(t));
 };
 
-export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds, onToggleSelection, disableDrag, displayMode = 'normal', showOwner = false, ownerLabelFn, currentUser = null }) => {
+const isDressing = (recipe) => {
+    const cat = recipe.category || '';
+    const tags = normalizeTags(recipe.tags);
+    return /ドレッシング|Dressing|ヴィネグレット|Vinaigrette|マヨネーズ|Mayonnaise/i.test(cat) ||
+        tags.some(t => /ドレッシング|Dressing|ヴィネグレット|Vinaigrette|マヨネーズ|Mayonnaise/i.test(t));
+};
+
+const splitRecipesBySection = (list) => {
+    // Bread
+    const breadRecipes = list.filter(r => isBread(r));
+    const nonBread = list.filter(r => !isBread(r));
+
+    // Sauce
+    const sauceRecipes = nonBread.filter(r => isSauce(r));
+    const nonSauce = nonBread.filter(r => !isSauce(r));
+
+    // Decoration
+    const decorationRecipes = nonSauce.filter(r => isDecoration(r));
+    const nonDecoration = nonSauce.filter(r => !isDecoration(r));
+
+    // Dressing
+    const dressingRecipes = nonDecoration.filter(r => isDressing(r));
+    const nonDressing = nonDecoration.filter(r => !isDressing(r));
+
+    // Dessert
+    const dessertRecipes = nonDressing.filter(r => isDessert(r));
+
+    // Cooking (Rest)
+    const cookingRecipes = nonDressing.filter(r => !isDessert(r));
+
+    return {
+        cookingRecipes,
+        breadRecipes,
+        dessertRecipes,
+        sauceRecipes,
+        dressingRecipes,
+        decorationRecipes,
+    };
+};
+
+export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds, onToggleSelection, disableDrag, displayMode = 'normal', publicRecipeView = 'none', showOwner = false, ownerLabelFn, currentUser = null }) => {
     const [expandedSections, setExpandedSections] = useState({});
 
     const toggleSection = (sectionKey) => {
@@ -172,33 +212,14 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
     const otherUsersPublicRecipes = publicRecipes.filter(r => !isOwnedByCurrentUser(r));
     const nonPublicShared = recipes.filter(r => !isPublicRecipe(r));
 
-    // Bread
-    const breadRecipes = nonPublicShared.filter(r => isBread(r));
-    const nonBread = nonPublicShared.filter(r => !isBread(r));
-
-    // Sauce
-    const sauceRecipes = nonBread.filter(r => isSauce(r));
-    const nonSauce = nonBread.filter(r => !isSauce(r));
-
-    // Decoration
-    const decorationRecipes = nonSauce.filter(r => isDecoration(r));
-    const nonDecoration = nonSauce.filter(r => !isDecoration(r));
-
-    // Dressing (New)
-    const isDressing = (r) => {
-        const cat = r.category || '';
-        const tags = normalizeTags(r.tags);
-        return /ドレッシング|Dressing|ヴィネグレット|Vinaigrette|マヨネーズ|Mayonnaise/i.test(cat) ||
-            tags.some(t => /ドレッシング|Dressing|ヴィネグレット|Vinaigrette|マヨネーズ|Mayonnaise/i.test(t));
-    };
-    const dressingRecipes = nonDecoration.filter(r => isDressing(r));
-    const nonDressing = nonDecoration.filter(r => !isDressing(r));
-
-    // Dessert
-    const dessertRecipes = nonDressing.filter(r => isDessert(r));
-
-    // Cooking (Rest)
-    const cookingRecipes = nonDressing.filter(r => !isDessert(r));
+    const {
+        cookingRecipes,
+        breadRecipes,
+        dessertRecipes,
+        sauceRecipes,
+        dressingRecipes,
+        decorationRecipes,
+    } = splitRecipesBySection(nonPublicShared);
 
     // Dynamic limit based on screen width
     // Mobile/Tablet (< 1024px): 8 items
@@ -291,10 +312,47 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
         );
     };
 
+    const renderPublicRecipeSections = () => {
+        if (publicRecipeView !== 'mine' && publicRecipeView !== 'others') return null;
+
+        const isMine = publicRecipeView === 'mine';
+        const title = isMine ? '自分が公開中' : '他ユーザー公開';
+        const icon = isMine ? '🟢' : '🌐';
+        const sectionPrefix = isMine ? 'public-mine' : 'public-others';
+        const items = isMine ? myPublicRecipes : otherUsersPublicRecipes;
+        const emptyMessage = isMine
+            ? '自分が公開中のレシピはありません'
+            : '他ユーザーの公開レシピはありません';
+
+        const grouped = splitRecipesBySection(items);
+
+        return (
+            <div className="public-recipes-block">
+                <div className="public-recipes-block__header">
+                    <span>{icon}</span>
+                    <span>{title}</span>
+                    <span className="public-recipes-block__count">({items.length})</span>
+                </div>
+
+                {items.length === 0 ? (
+                    <div className="public-recipes-block__empty">{emptyMessage}</div>
+                ) : (
+                    <>
+                        {renderSection("料理", grouped.cookingRecipes, "🍽️", `${sectionPrefix}-cooking`)}
+                        {renderSection("パン", grouped.breadRecipes, "🍞", `${sectionPrefix}-bread`)}
+                        {renderSection("デザート", grouped.dessertRecipes, "🍰", `${sectionPrefix}-dessert`)}
+                        {renderSection("ソース", grouped.sauceRecipes, "🥣", `${sectionPrefix}-sauce`)}
+                        {renderSection("ドレッシング", grouped.dressingRecipes, "🥗", `${sectionPrefix}-dressing`)}
+                        {renderSection("飾り", grouped.decorationRecipes, "✨", `${sectionPrefix}-decoration`)}
+                    </>
+                )}
+            </div>
+        );
+    };
+
     return (
         <div className="recipe-list-container">
-            {renderSection("自分が公開中", myPublicRecipes, "🟢", "public-mine", { showWhenEmpty: true, emptyMessage: '自分が公開中のレシピはありません' })}
-            {renderSection("他ユーザー公開", otherUsersPublicRecipes, "🌐", "public-others", { showWhenEmpty: true, emptyMessage: '他ユーザーの公開レシピはありません' })}
+            {renderPublicRecipeSections()}
             {renderSection("料理", cookingRecipes, "🍽️", "cooking")}
             {renderSection("パン", breadRecipes, "🍞", "bread")}
             {renderSection("デザート", dessertRecipes, "🍰", "dessert")}
