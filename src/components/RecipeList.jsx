@@ -350,9 +350,19 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
         );
     };
 
+    const shouldShowPublicHiddenHint =
+        publicRecipeView === 'none' &&
+        publicRecipes.length > 0 &&
+        nonPublicShared.length === 0;
+
     return (
         <div className="recipe-list-container">
             {renderPublicRecipeSections()}
+            {shouldShowPublicHiddenHint && (
+                <div className="recipe-list-empty-hint">
+                    公開レシピは非表示です。上の「自分公開中」または「他ユーザー公開」を押すと表示されます。
+                </div>
+            )}
             {renderSection("料理", cookingRecipes, "🍽️", "cooking")}
             {renderSection("パン", breadRecipes, "🍞", "bread")}
             {renderSection("デザート", dessertRecipes, "🍰", "dessert")}
