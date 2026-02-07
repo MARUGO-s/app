@@ -49,7 +49,8 @@ export const purchasePriceService = {
         }
 
         const promises = files
-            .filter(f => f.name.endsWith('.csv'))
+            // Some environments upload files as ".CSV". Treat extension case-insensitively.
+            .filter(f => String(f?.name || '').toLowerCase().endsWith('.csv'))
             .map(async (file) => {
                 const path = this._getUserScopedPath(effectiveUserId, file.name);
                 const { data, error } = await supabase.storage
@@ -138,7 +139,7 @@ export const purchasePriceService = {
                 .list(effectiveUserId);
 
             if (error) throw error;
-            return data.filter(f => f.name.endsWith('.csv')) || [];
+            return data.filter(f => String(f?.name || '').toLowerCase().endsWith('.csv')) || [];
         } catch (err) {
             console.error('Error fetching file list:', err);
             return [];
