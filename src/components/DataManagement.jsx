@@ -18,6 +18,13 @@ export const DataManagement = ({ onBack }) => {
     const [isLoadingData, setIsLoadingData] = useState(false);
     const [confirmModal, setConfirmModal] = useState(null); // { message, onConfirm }
 
+    // Duplicate/History tab state
+    const [dupLoading, setDupLoading] = useState(false);
+    const [dupHistoryMap, setDupHistoryMap] = useState(new Map()); // key -> entry[]
+    const [dupItems, setDupItems] = useState([]); // summarized list
+    const [dupSelectedKey, setDupSelectedKey] = useState('');
+    const [dupSearch, setDupSearch] = useState('');
+
     // Sort & Search State
     const [sortConfig, setSortConfig] = useState({ key: 'dateStr', direction: 'desc' });
     const [searchQuery, setSearchQuery] = useState('');
@@ -25,7 +32,7 @@ export const DataManagement = ({ onBack }) => {
     // Allow deep-linking: ?view=data&tab=csv-import
     useEffect(() => {
         const tab = searchParams.get('tab');
-        if (tab === 'price' || tab === 'ingredients' || tab === 'csv-import') {
+        if (tab === 'price' || tab === 'ingredients' || tab === 'csv-import' || tab === 'duplicates') {
             setActiveTab(tab);
         }
         // Only apply on mount; internal tab buttons control subsequent changes.
@@ -72,6 +79,89 @@ export const DataManagement = ({ onBack }) => {
     useEffect(() => {
         loadData();
     }, []);
+
+    const loadDuplicates = async () => {
+        setDupLoading(true);
+        try {
+            const history = await purchasePriceService.fetchPriceHistory();
+            const map = history || new Map();
+            setDupHistoryMap(map);
+
+            const list = [];
+            for (const [key, rows] of map.entries()) {
+                const seen = new Set();
+                const unique = [];
+                (rows || []).forEach((r) => {
+                    const id = [
+                        String(r?.dateStr || ''),
+                        String(r?.price ?? ''),
+                        String(r?.unit || ''),
+                        String(r?.vendor || ''),
+                        String(r?.displayName || ''),
+                    ].join('|');
+                    if (seen.has(id)) return;
+                    seen.add(id);
+                    unique.push(r);
+                });
+
+                if (unique.length < 2) continue;
+                unique.sort((a, b) => String(a?.dateStr || '').localeCompare(String(b?.dateStr || '')));
+
+                const last = unique[unique.length - 1] || {};
+                const prices = unique.map(r => Number(r?.price)).filter(n => Number.isFinite(n));
+                const minPrice = prices.length ? Math.min(...prices) : null;
+                const maxPrice = prices.length ? Math.max(...prices) : null;
+
+                const dateCount = new Set(unique.map(r => String(r?.dateStr || ''))).size;
+                const nameVariantCount = new Set(unique.map(r => String(r?.displayName || ''))).size;
+
+                let changeCount = 0;
+                for (let i = 1; i < unique.length; i++) {
+                    const prev = Number(unique[i - 1]?.price);
+                    const cur = Number(unique[i]?.price);
+                    if (Number.isFinite(prev) && Number.isFinite(cur) && prev !== cur) changeCount++;
+                }
+
+                list.push({
+                    key,
+                    name: last?.displayName || key,
+                    lastDate: last?.dateStr || '',
+                    lastPrice: Number.isFinite(Number(last?.price)) ? Number(last?.price) : null,
+                    unit: last?.unit || '',
+                    vendor: last?.vendor || '',
+                    rows: unique.length,
+                    dates: dateCount,
+                    nameVariants: nameVariantCount,
+                    minPrice,
+                    maxPrice,
+                    changes: changeCount,
+                });
+            }
+
+            list.sort((a, b) => {
+                const ad = String(a?.lastDate || '');
+                const bd = String(b?.lastDate || '');
+                if (ad !== bd) return bd.localeCompare(ad);
+                if ((b?.changes || 0) !== (a?.changes || 0)) return (b?.changes || 0) - (a?.changes || 0);
+                if ((b?.rows || 0) !== (a?.rows || 0)) return (b?.rows || 0) - (a?.rows || 0);
+                return String(a?.name || '').localeCompare(String(b?.name || ''), 'ja');
+            });
+
+            setDupItems(list);
+            // Keep selection only if still present
+            if (dupSelectedKey && !map.has(dupSelectedKey)) setDupSelectedKey('');
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setDupLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab !== 'duplicates') return;
+        loadDuplicates();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab]);
 
     const loadData = async () => {
         setIsLoadingData(true);
@@ -198,6 +288,12 @@ export const DataManagement = ({ onBack }) => {
                     >
                         📥 CSV取込
                     </button>
+                    <button
+                        className={`tab ${activeTab === 'duplicates' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('duplicates')}
+                    >
+                        🔁 重複アイテム
+                    </button>
                 </div>
             </div>
 
@@ -205,6 +301,206 @@ export const DataManagement = ({ onBack }) => {
                 <IngredientMaster />
             ) : activeTab === 'csv-import' ? (
                 <CsvToMasterImporter />
+            ) : activeTab === 'duplicates' ? (
+                <div className="dashboard-content">
+                    <aside className="dashboard-sidebar">
+                        <div className="sidebar-card" style={{ flex: 1, minWidth: 0 }}>
+                            <div className="sidebar-title">
+                                <span>🔁</span> 重複アイテム一覧
+                                <span style={{ fontSize: '0.8rem', color: '#888', fontWeight: 'normal', marginLeft: 'auto' }}>
+                                    {dupItems.length.toLocaleString()}件
+                                </span>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                <Input
+                                    placeholder="材料名で検索..."
+                                    value={dupSearch}
+                                    onChange={(e) => setDupSearch(e.target.value)}
+                                    style={{ flex: 1, fontSize: '0.9rem' }}
+                                />
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={loadDuplicates}
+                                    disabled={dupLoading}
+                                    title="更新"
+                                >
+                                    ↻
+                                </Button>
+                            </div>
+
+                            <div className="dup-list">
+                                {dupLoading ? (
+                                    <div className="dup-empty">読み込み中...</div>
+                                ) : dupItems.length === 0 ? (
+                                    <div className="dup-empty">重複（履歴が2件以上）の材料がありません</div>
+                                ) : (
+                                    dupItems
+                                        .filter((item) => {
+                                            const q = String(dupSearch || '').trim();
+                                            if (!q) return true;
+                                            return String(item?.name || '').includes(q);
+                                        })
+                                        .map((item) => {
+                                            const isActive = item.key === dupSelectedKey;
+                                            const changed = (item.minPrice !== null && item.maxPrice !== null && item.minPrice !== item.maxPrice);
+                                            return (
+                                                <button
+                                                    key={item.key}
+                                                    type="button"
+                                                    className={`dup-item ${isActive ? 'active' : ''}`}
+                                                    onClick={() => setDupSelectedKey(item.key)}
+                                                >
+                                                    <div className="dup-item-top">
+                                                        <div className="dup-item-name" title={item.name}>{item.name}</div>
+                                                        {changed && <span className="dup-badge">価格変化</span>}
+                                                    </div>
+                                                    <div className="dup-item-meta">
+                                                        <span>最新: {item.lastDate || '-'}</span>
+                                                        <span>履歴: {item.rows}件</span>
+                                                        <span>日数: {item.dates}日</span>
+                                                    </div>
+                                                    <div className="dup-item-meta">
+                                                        <span>
+                                                            {item.lastPrice !== null ? `¥${Math.round(item.lastPrice).toLocaleString()}` : '¥-'}
+                                                            {item.unit ? ` / ${item.unit}` : ''}
+                                                        </span>
+                                                        {item.vendor ? <span title={item.vendor}>業者: {item.vendor}</span> : <span>業者: -</span>}
+                                                    </div>
+                                                    {item.nameVariants > 1 && (
+                                                        <div className="dup-item-note">
+                                                            表記ゆれ: {item.nameVariants}種類
+                                                        </div>
+                                                    )}
+                                                </button>
+                                            );
+                                        })
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="sidebar-card">
+                            <div className="sidebar-title">ℹ️ 使い方</div>
+                            <ul style={{ fontSize: '0.75rem', color: '#666', paddingLeft: '1.2rem', margin: 0 }}>
+                                <li style={{ marginBottom: '4px' }}>一覧から材料をクリックすると、入荷日ごとの単価履歴が表示されます。</li>
+                                <li style={{ marginBottom: '4px' }}>「価格変化」バッジは、履歴内で単価が変わったものです。</li>
+                                <li style={{ marginBottom: '4px' }}>表記ゆれ（空白/大文字小文字/全角半角など）も同一扱いでまとめています。</li>
+                            </ul>
+                        </div>
+                    </aside>
+
+                    <main className="dashboard-main">
+                        <div className="main-toolbar">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#333' }}>
+                                    {dupSelectedKey ? '価格履歴' : '価格履歴（未選択）'}
+                                </h3>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <Button variant="secondary" size="sm" onClick={loadDuplicates} disabled={dupLoading}>↻ 更新</Button>
+                            </div>
+                        </div>
+
+                        <div className="table-wrapper">
+                            {(() => {
+                                if (!dupSelectedKey) {
+                                    return (
+                                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '220px', color: '#888' }}>
+                                            左の一覧から材料を選択してください
+                                        </div>
+                                    );
+                                }
+
+                                const rows = dupHistoryMap.get(dupSelectedKey) || [];
+                                const seen = new Set();
+                                const unique = [];
+                                rows.forEach((r) => {
+                                    const id = [
+                                        String(r?.dateStr || ''),
+                                        String(r?.price ?? ''),
+                                        String(r?.unit || ''),
+                                        String(r?.vendor || ''),
+                                        String(r?.displayName || ''),
+                                        String(r?.sourceFile || ''),
+                                    ].join('|');
+                                    if (seen.has(id)) return;
+                                    seen.add(id);
+                                    unique.push(r);
+                                });
+                                unique.sort((a, b) => String(a?.dateStr || '').localeCompare(String(b?.dateStr || '')));
+
+                                const withDiff = unique.map((r, idx) => {
+                                    const prev = idx > 0 ? unique[idx - 1] : null;
+                                    const prevPrice = prev ? Number(prev?.price) : NaN;
+                                    const curPrice = Number(r?.price);
+                                    let diff = null;
+                                    let pct = null;
+                                    if (Number.isFinite(prevPrice) && Number.isFinite(curPrice)) {
+                                        diff = curPrice - prevPrice;
+                                        pct = prevPrice !== 0 ? (diff / prevPrice) * 100 : null;
+                                    }
+                                    return { ...r, _diff: diff, _pct: pct };
+                                });
+
+                                const displayRows = [...withDiff].reverse(); // newest first
+
+                                return (
+                                    <table className="enterprise-table">
+                                        <thead>
+                                            <tr>
+                                                <th style={{ width: '120px' }}>納品日</th>
+                                                <th>業者名</th>
+                                                <th>材料名（CSV表記）</th>
+                                                <th style={{ textAlign: 'right', width: '160px' }}>単価</th>
+                                                <th style={{ textAlign: 'right', width: '180px' }}>前回比</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {displayRows.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan="5" className="no-data">履歴がありません</td>
+                                                </tr>
+                                            ) : (
+                                                displayRows.map((r, idx) => {
+                                                    const diff = r?._diff;
+                                                    const pct = r?._pct;
+                                                    const diffLabel = (diff === null || diff === undefined || !Number.isFinite(diff))
+                                                        ? '-'
+                                                        : `${diff >= 0 ? '+' : ''}${Math.round(diff).toLocaleString()}`;
+                                                    const pctLabel = (pct === null || pct === undefined || !Number.isFinite(pct))
+                                                        ? ''
+                                                        : ` (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%)`;
+                                                    const diffColor = (diff === null || diff === undefined || !Number.isFinite(diff))
+                                                        ? '#888'
+                                                        : (diff > 0 ? '#c92a2a' : diff < 0 ? '#2b8a3e' : '#666');
+
+                                                    const price = Number(r?.price);
+                                                    const priceLabel = Number.isFinite(price) ? `¥${Math.round(price).toLocaleString()}` : '¥-';
+
+                                                    return (
+                                                        <tr key={`${r?.dateStr || 'd'}-${idx}`}>
+                                                            <td className="col-date">{r?.dateStr || '-'}</td>
+                                                            <td>{r?.vendor || '-'}</td>
+                                                            <td style={{ fontWeight: 500 }}>{r?.displayName || '-'}</td>
+                                                            <td className="col-number">
+                                                                {priceLabel}
+                                                                {r?.unit && <span style={{ color: '#888', fontSize: '0.85em', marginLeft: '4px' }}>/ {r.unit}</span>}
+                                                            </td>
+                                                            <td className="col-number" style={{ color: diffColor }}>
+                                                                {diffLabel}{pctLabel}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })
+                                            )}
+                                        </tbody>
+                                    </table>
+                                );
+                            })()}
+                        </div>
+                    </main>
+                </div>
             ) : (
 
                 <div className="dashboard-content">
@@ -371,6 +667,7 @@ export const DataManagement = ({ onBack }) => {
                             <div className="sidebar-title">ℹ️ ヒント</div>
                             <ul style={{ fontSize: '0.75rem', color: '#666', paddingLeft: '1.2rem', margin: 0 }}>
                                 <li style={{ marginBottom: '4px' }}>重複データは最新の日付が優先されます。</li>
+                                <li style={{ marginBottom: '4px' }}>「🔁 重複アイテム」タブで入荷日ごとの価格変化を確認できます。</li>
                                 <li style={{ marginBottom: '4px' }}>新しいファイルを追加すると既存データとマージされます。</li>
                             </ul>
                         </div>

@@ -6,6 +6,7 @@ const BUCKET_NAME = 'app-data';
 
 export const purchasePriceService = {
     _cacheByUserId: new Map(), // userId -> Map(normalizedNameKey -> {price,...})
+    _historyCacheByUserId: new Map(), // userId -> Map(normalizedNameKey -> entry[])
 
     async _getCurrentUserId() {
         const { data, error } = await supabase.auth.getUser();
@@ -24,8 +25,61 @@ export const purchasePriceService = {
      * Clear the in-memory cache
      */
     clearCache(userId = null) {
-        if (userId) this._cacheByUserId.delete(userId);
-        else this._cacheByUserId.clear();
+        if (userId) {
+            this._cacheByUserId.delete(userId);
+            this._historyCacheByUserId.delete(userId);
+        } else {
+            this._cacheByUserId.clear();
+            this._historyCacheByUserId.clear();
+        }
+    },
+
+    async _downloadAllCsvTexts(effectiveUserId) {
+        const { data: files, error: listError } = await supabase.storage
+            .from(BUCKET_NAME)
+            .list(effectiveUserId);
+
+        if (listError) {
+            console.warn('Failed to list price files:', listError.message);
+            return [];
+        }
+
+        if (!files || files.length === 0) {
+            return [];
+        }
+
+        const promises = files
+            .filter(f => f.name.endsWith('.csv'))
+            .map(async (file) => {
+                const path = this._getUserScopedPath(effectiveUserId, file.name);
+                const { data, error } = await supabase.storage
+                    .from(BUCKET_NAME)
+                    .download(path);
+
+                if (error) {
+                    console.error(`Failed to download ${file.name}:`, error);
+                    return null;
+                }
+
+                const buffer = await data.arrayBuffer();
+                // Some Android/WebView environments don't support Shift-JIS in TextDecoder.
+                // Fallback to UTF-8 to avoid "Loading..." deadlocks on mobile.
+                try {
+                    const decoder = new TextDecoder('shift-jis');
+                    return { fileName: file.name, text: decoder.decode(buffer) };
+                } catch (e) {
+                    try {
+                        const decoder = new TextDecoder('utf-8');
+                        return { fileName: file.name, text: decoder.decode(buffer) };
+                    } catch {
+                        console.warn('TextDecoder failed (shift-jis/utf-8). Skipping file:', file.name, e);
+                        return null;
+                    }
+                }
+            });
+
+        const results = await Promise.all(promises);
+        return results.filter(Boolean);
     },
 
     /**
@@ -40,57 +94,14 @@ export const purchasePriceService = {
         if (cached) return cached;
 
         try {
-            // 1. List all files
-            const { data: files, error: listError } = await supabase.storage
-                .from(BUCKET_NAME)
-                .list(effectiveUserId);
-
-            if (listError) {
-                console.warn('Failed to list price files:', listError.message);
-                return new Map();
-            }
-
-            if (!files || files.length === 0) {
-                return new Map();
-            }
-
-            // 2. Download and Parse all CSVs
+            // 1. Download and Parse all CSVs
             const masterMap = new Map(); // Key: normalizedNameKey, Value: { price, vendor, unit, dateStr, displayName }
 
-            const promises = files
-                .filter(f => f.name.endsWith('.csv'))
-                .map(async (file) => {
-                    const path = this._getUserScopedPath(effectiveUserId, file.name);
-                    const { data, error } = await supabase.storage
-                        .from(BUCKET_NAME)
-                        .download(path);
+            const csvFiles = await this._downloadAllCsvTexts(effectiveUserId);
+            if (!csvFiles || csvFiles.length === 0) return new Map();
 
-                    if (error) {
-                        console.error(`Failed to download ${file.name}:`, error);
-                        return null;
-                    }
-
-                    const buffer = await data.arrayBuffer();
-                    // Some Android/WebView environments don't support Shift-JIS in TextDecoder.
-                    // Fallback to UTF-8 to avoid "Loading..." deadlocks on mobile.
-                    try {
-                        const decoder = new TextDecoder('shift-jis');
-                        return decoder.decode(buffer);
-                    } catch (e) {
-                        try {
-                            const decoder = new TextDecoder('utf-8');
-                            return decoder.decode(buffer);
-                        } catch {
-                            console.warn('TextDecoder failed (shift-jis/utf-8). Skipping file:', file.name, e);
-                            return null;
-                        }
-                    }
-                });
-
-            const csvTexts = await Promise.all(promises);
-
-            // 3. Merge Data (by normalized key)
-            for (const text of csvTexts) {
+            // 2. Merge Data (by normalized key)
+            for (const { text } of csvFiles) {
                 if (!text) continue;
                 const fileMap = this.parseCSV(text);
 
@@ -335,6 +346,172 @@ export const purchasePriceService = {
         }
 
         return priceMap;
+    },
+
+    parseCSVEntries(csvText, sourceFile = '') {
+        const entries = [];
+
+        const lines = csvText.split(/\r?\n/).filter(line => line.trim());
+        if (lines.length === 0) return entries;
+
+        const splitRow = (row) => {
+            const matches = [];
+            let current = '';
+            let inQuote = false;
+            for (let i = 0; i < row.length; i++) {
+                const char = row[i];
+                if (char === '"') inQuote = !inQuote;
+                else if (char === ',' && !inQuote) { matches.push(current); current = ''; }
+                else current += char;
+            }
+            matches.push(current);
+            return matches.map(val => {
+                val = val.trim();
+                if (val.startsWith('"') && val.endsWith('"')) return val.slice(1, -1);
+                return val;
+            });
+        };
+
+        const normalizeDateStr = (raw) => {
+            const s = String(raw ?? '').trim();
+            if (!s) return '';
+            const m1 = s.match(/^(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})/);
+            if (m1) {
+                return `${m1[1]}/${String(m1[2]).padStart(2, '0')}/${String(m1[3]).padStart(2, '0')}`;
+            }
+            const m2 = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+            if (m2) return `${m2[1]}/${m2[2]}/${m2[3]}`;
+            return s;
+        };
+
+        const isLegacy = lines.some(line => line.startsWith('D,') || line.startsWith('"D",'));
+
+        if (isLegacy) {
+            for (let line of lines) {
+                const columns = splitRow(line);
+                if (columns[0] !== 'D') continue;
+
+                const dateStr = normalizeDateStr(columns[1]);
+                const vendor = columns[8];
+                const nameRaw = columns[14];
+                const priceStr = columns[18];
+                const unit = columns[20];
+
+                const displayName = String(nameRaw ?? '').trim();
+                const key = normalizeIngredientKey(displayName);
+                if (!key || !priceStr) continue;
+
+                const price = parseFloat(priceStr);
+                if (!Number.isFinite(price)) continue;
+
+                entries.push({
+                    key,
+                    displayName,
+                    price,
+                    vendor,
+                    unit,
+                    dateStr,
+                    sourceFile
+                });
+            }
+            return entries;
+        }
+
+        // --- Generic CSV Parser (history) ---
+        let headerIndices = { name: -1, price: -1, unit: -1, vendor: -1, date: -1 };
+        let startRow = 0;
+
+        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        headers.forEach((h, i) => {
+            const lower = String(h || '').toLowerCase();
+            if (['材料', '材料名', '品名', '商品名', 'name', 'item'].some(k => lower.includes(k))) headerIndices.name = i;
+            if (['単価', '価格', '原価', '金額', 'price', 'cost'].some(k => lower.includes(k))) headerIndices.price = i;
+            if (['単位', 'unit'].some(k => lower.includes(k))) headerIndices.unit = i;
+            if (['業者', '問屋', '仕入', 'vendor', 'supplier'].some(k => lower.includes(k))) headerIndices.vendor = i;
+            if (['日付', '入荷日', '納品日', 'date'].some(k => lower.includes(k))) headerIndices.date = i;
+        });
+
+        if (headerIndices.name === -1 && headerIndices.price === -1) {
+            headerIndices = { name: 0, price: 1, unit: 2, vendor: 3, date: -1 };
+            const firstRowCols = lines[0].split(',');
+            if (isNaN(parseFloat(firstRowCols[1]))) startRow = 1;
+        } else {
+            startRow = 1;
+        }
+
+        const today = normalizeDateStr(new Date().toISOString().slice(0, 10));
+
+        for (let i = startRow; i < lines.length; i++) {
+            const columns = splitRow(lines[i]);
+            const name = headerIndices.name > -1 ? columns[headerIndices.name] : null;
+            const priceStr = headerIndices.price > -1 ? columns[headerIndices.price] : null;
+            const unit = headerIndices.unit > -1 ? columns[headerIndices.unit] : '';
+            const vendor = headerIndices.vendor > -1 ? columns[headerIndices.vendor] : '';
+            const dateRaw = headerIndices.date > -1 ? columns[headerIndices.date] : '';
+
+            const displayName = String(name ?? '').trim();
+            const key = normalizeIngredientKey(displayName);
+            if (!key || !priceStr) continue;
+
+            const price = parseFloat(String(priceStr).replace(/[^0-9.]/g, ''));
+            if (!Number.isFinite(price)) continue;
+
+            entries.push({
+                key,
+                displayName,
+                price,
+                vendor,
+                unit,
+                dateStr: normalizeDateStr(dateRaw) || today,
+                sourceFile
+            });
+        }
+
+        return entries;
+    },
+
+    async fetchPriceHistory(userId = null) {
+        const effectiveUserId = userId || await this._getCurrentUserId();
+        if (!effectiveUserId) return new Map();
+
+        const cached = this._historyCacheByUserId.get(effectiveUserId);
+        if (cached) return cached;
+
+        try {
+            const csvFiles = await this._downloadAllCsvTexts(effectiveUserId);
+            if (!csvFiles || csvFiles.length === 0) return new Map();
+
+            const historyMap = new Map(); // key -> entry[]
+            for (const { fileName, text } of csvFiles) {
+                if (!text) continue;
+                const entries = this.parseCSVEntries(text, fileName);
+                entries.forEach((entry) => {
+                    const key = entry?.key;
+                    if (!key) return;
+                    if (!historyMap.has(key)) historyMap.set(key, []);
+                    historyMap.get(key).push(entry);
+                });
+            }
+
+            // Sort entries oldest -> newest for stable diffs (UI can reverse)
+            for (const arr of historyMap.values()) {
+                arr.sort((a, b) => {
+                    const da = String(a?.dateStr || '');
+                    const db = String(b?.dateStr || '');
+                    if (da !== db) return da.localeCompare(db);
+                    const pa = Number(a?.price);
+                    const pb = Number(b?.price);
+                    if (Number.isFinite(pa) && Number.isFinite(pb) && pa !== pb) return pa - pb;
+                    return String(a?.sourceFile || '').localeCompare(String(b?.sourceFile || ''));
+                });
+            }
+
+            this._historyCacheByUserId.set(effectiveUserId, historyMap);
+            return historyMap;
+        } catch (err) {
+            console.error('Error in fetchPriceHistory:', err);
+            return new Map();
+        }
     },
 
     /**
