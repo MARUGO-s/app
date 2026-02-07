@@ -421,3 +421,94 @@
     color: #8a3f0f;
     font-weight: 600;
 }
+
+/* --- Duplicates Tab --- */
+.dup-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow: auto;
+    max-height: 55vh;
+    padding-right: 2px;
+}
+
+@media (min-width: 750px) {
+    .dup-list {
+        max-height: calc(100vh - 320px);
+    }
+}
+
+.dup-empty {
+    text-align: center;
+    color: #999;
+    padding: 1.25rem 0;
+    font-size: 0.85rem;
+}
+
+.dup-item {
+    width: 100%;
+    text-align: left;
+    background: #fff;
+    border: 1px solid #e6e6e6;
+    border-radius: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+    color: #222;
+}
+
+.dup-item:hover {
+    background: #f8fafc;
+    border-color: #d6d6d6;
+}
+
+.dup-item:active {
+    transform: translateY(1px);
+}
+
+.dup-item.active {
+    border-color: var(--color-primary, #D2691E);
+    box-shadow: 0 0 0 2px rgba(210, 105, 30, 0.12);
+}
+
+.dup-item-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.dup-item-name {
+    font-weight: 700;
+    font-size: 0.92rem;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.dup-badge {
+    font-size: 0.72rem;
+    background: #fff4e6;
+    color: #8a3f0f;
+    border: 1px solid #ffd8a8;
+    border-radius: 999px;
+    padding: 2px 8px;
+    white-space: nowrap;
+}
+
+.dup-item-meta {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    color: #666;
+    font-size: 0.78rem;
+    line-height: 1.25;
+}
+
+.dup-item-note {
+    margin-top: 6px;
+    font-size: 0.76rem;
+    color: #666;
+}
