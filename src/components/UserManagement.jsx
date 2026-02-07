@@ -3,8 +3,10 @@ import { userService } from '../services/userService';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Modal } from './Modal';
+import { useAuth } from '../contexts/AuthContext';
 
 export const UserManagement = ({ onBack }) => {
+    const { user: currentUser, patchCurrentUserProfile } = useAuth();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -15,6 +17,7 @@ export const UserManagement = ({ onBack }) => {
     const [resetSuccess, setResetSuccess] = useState('');
     const [isResetting, setIsResetting] = useState(false);
     const [isSendingResetEmail, setIsSendingResetEmail] = useState(false);
+    const [savingMasterTargets, setSavingMasterTargets] = useState(new Set());
 
     useEffect(() => {
         loadUsers();
@@ -35,6 +38,44 @@ export const UserManagement = ({ onBack }) => {
 
     const admins = users.filter(u => u.role === 'admin');
     const regulars = users.filter(u => u.role !== 'admin');
+
+    const setSavingForUser = (userId, saving) => {
+        setSavingMasterTargets(prev => {
+            const next = new Set(prev);
+            if (saving) next.add(userId);
+            else next.delete(userId);
+            return next;
+        });
+    };
+
+    const handleToggleMasterRecipeVisibility = async (targetUser, newVal) => {
+        const previousVal = Boolean(targetUser.show_master_recipes);
+        setError(null);
+
+        setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, show_master_recipes: newVal } : u));
+        if (targetUser.id === currentUser?.id) {
+            patchCurrentUserProfile?.({ showMasterRecipes: newVal });
+        }
+        setSavingForUser(targetUser.id, true);
+
+        try {
+            const updated = await userService.updateProfile(targetUser.id, { show_master_recipes: newVal });
+            const confirmed = Boolean(updated?.show_master_recipes);
+            setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, show_master_recipes: confirmed } : u));
+            if (targetUser.id === currentUser?.id) {
+                patchCurrentUserProfile?.({ showMasterRecipes: confirmed });
+            }
+        } catch (err) {
+            console.error(err);
+            setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, show_master_recipes: previousVal } : u));
+            if (targetUser.id === currentUser?.id) {
+                patchCurrentUserProfile?.({ showMasterRecipes: previousVal });
+            }
+            setError('マスターレシピ共有設定の保存に失敗しました。権限設定（RLS）を確認してください。');
+        } finally {
+            setSavingForUser(targetUser.id, false);
+        }
+    };
 
     const UserCard = ({ user, isAdmin }) => (
         <Card key={user.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', backgroundColor: 'white' }}>
@@ -60,24 +101,8 @@ export const UserManagement = ({ onBack }) => {
                     <input
                         type="checkbox"
                         checked={user.show_master_recipes || false}
-                        onChange={async (e) => {
-                            const newVal = e.target.checked;
-                            // 1. Update Local State immediately
-                            setUsers(prev => prev.map(u => u.id === user.id ? { ...u, show_master_recipes: newVal } : u));
-
-                            // 2. Save to LocalStorage (per profile id)
-                            try {
-                                const key = `user_prefs_${user.id}`;
-                                const prefs = JSON.parse(localStorage.getItem(key) || '{}');
-                                prefs.show_master_recipes = newVal;
-                                localStorage.setItem(key, JSON.stringify(prefs));
-                            } catch (err) { console.error(err); }
-
-                            // 3. Update DB (profiles)
-                            try {
-                                await userService.updateProfile(user.id, { show_master_recipes: newVal });
-                            } catch (err) { console.error(err); }
-                        }}
+                        disabled={savingMasterTargets.has(user.id)}
+                        onChange={(e) => handleToggleMasterRecipeVisibility(user, e.target.checked)}
                     />
                     マスターレシピ表示
                 </label>

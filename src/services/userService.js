@@ -1,5 +1,17 @@
 import { supabase } from '../supabase';
 
+const normalizeProfileRow = (payload) => {
+    if (!payload) return null;
+    if (Array.isArray(payload)) return payload[0] || null;
+    if (typeof payload === 'object') {
+        if (payload.id && payload.display_id !== undefined) return payload;
+        const first = Object.values(payload)[0];
+        if (Array.isArray(first)) return first[0] || null;
+        if (first && typeof first === 'object' && first.id) return first;
+    }
+    return null;
+};
+
 export const userService = {
     async fetchAllProfiles() {
         // Prefer selecting email if schema supports it; fallback for older DBs.
@@ -23,6 +35,40 @@ export const userService = {
     },
 
     async updateProfile(profileId, updates) {
+        const updateKeys = Object.keys(updates || {});
+        const isMasterPrefOnlyUpdate =
+            updateKeys.length === 1 &&
+            Object.prototype.hasOwnProperty.call(updates, 'show_master_recipes');
+
+        let rpcError = null;
+
+        if (isMasterPrefOnlyUpdate) {
+            try {
+                const { data, error } = await supabase.rpc('admin_set_show_master_recipes', {
+                    target_profile_id: profileId,
+                    enabled: updates.show_master_recipes === true
+                });
+                if (error) throw error;
+                // If successful, return normalized data
+                if (data) {
+                    const row = normalizeProfileRow(data);
+                    if (row) return row;
+                }
+            } catch (e) {
+                // Determine if we should fallback
+                // If the error is "insufficient_privilege", fallback won't help either (RLS).
+                // But if it's "function not found" (migration missing), fallback IS needed.
+                console.warn('RPC admin_set_show_master_recipes failed:', e);
+                rpcError = e;
+            }
+        }
+
+        // Fallback to direct update (for non-master-pref updates OR if RPC failed)
+        // Note: For admin updating other users, this will FAIL if RLS 'profiles_update_own_safeguard' is active
+        // and 'profiles_update_own_or_admin' is gone.
+        // So we strictly rely on RPC for that specific field. 
+        // But we try anyway to support "own profile" updates or other fields.
+
         const res1 = await supabase
             .from('profiles')
             .update(updates)
@@ -31,6 +77,16 @@ export const userService = {
             .single();
 
         if (!res1.error) return res1.data;
+
+        // If direct update failed...
+        if (rpcError && isMasterPrefOnlyUpdate) {
+            // Check if direct update also failed. 
+            // If so, throw the RPC error as it's more relevant for "Master Share" feature.
+            // But if direct update failed with "PGRST116" (not found?) or "42501" (RLS), 
+            // and we had an RPC error, we should probably throw the RPC error message if meaningful.
+            console.error('Direct update also failed:', res1.error);
+            throw new Error(`設定の保存に失敗しました。(RPC: ${rpcError.message})`);
+        }
 
         if (String(res1.error.message || '').toLowerCase().includes('email')) {
             const res2 = await supabase
