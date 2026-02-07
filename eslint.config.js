@@ -5,7 +5,14 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // ESLint v9 no longer reads .eslintignore, so keep ignores here.
+  globalIgnores([
+    'dist',
+    'src_backup_v1',
+    'src_rejected_ui',
+    'src/scripts',
+    'scripts',
+  ]),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
