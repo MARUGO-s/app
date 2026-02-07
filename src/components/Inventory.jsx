@@ -29,6 +29,11 @@ export const Inventory = ({ onBack }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editingItem, setEditingItem] = useState(null); // null = create
 
+    // Unit Sync Modal State
+    const [unitSyncModalOpen, setUnitSyncModalOpen] = useState(false);
+    const [unitSyncTarget, setUnitSyncTarget] = useState(null); // inventory item
+    const [unitSyncSaving, setUnitSyncSaving] = useState(false);
+
     // Snapshot / Complete Modal State
     const [snapshotModalOpen, setSnapshotModalOpen] = useState(false);
     const [snapshotTitle, setSnapshotTitle] = useState('');
@@ -245,6 +250,25 @@ export const Inventory = ({ onBack }) => {
         if (pu === 'l' && tu === 'ml') return perPacketUnit / 1000;
 
         // Not convertible
+        return null;
+    };
+
+    const unitConversionFactor = (fromUnitRaw, toUnitRaw) => {
+        const from = normalizeUnit(fromUnitRaw);
+        const to = normalizeUnit(toUnitRaw);
+        if (!from || !to) return null;
+        if (from === to) return 1;
+
+        // g <-> kg
+        if (from === 'kg' && to === 'g') return 1000;
+        if (from === 'g' && to === 'kg') return 1 / 1000;
+
+        // ml/cc <-> l (treat cc as ml)
+        const f = from === 'cc' ? 'ml' : from;
+        const t = to === 'cc' ? 'ml' : to;
+        if (f === 'l' && t === 'ml') return 1000;
+        if (f === 'ml' && t === 'l') return 1 / 1000;
+
         return null;
     };
 
@@ -1078,6 +1102,73 @@ export const Inventory = ({ onBack }) => {
         setDeleteModalOpen(true);
     };
 
+    const handleRequestUnitSync = (item) => {
+        if (!item || item.isPhantom) return;
+        const masterUnit = item?._master?.packetUnit;
+        if (!masterUnit) return;
+        setUnitSyncTarget(item);
+        setUnitSyncModalOpen(true);
+    };
+
+    const closeUnitSyncModal = () => {
+        if (unitSyncSaving) return;
+        setUnitSyncModalOpen(false);
+        setUnitSyncTarget(null);
+    };
+
+    const executeUnitSync = async ({ convertQuantity }) => {
+        if (!userId) return;
+        const item = unitSyncTarget;
+        if (!item || item.isPhantom) return;
+
+        const masterUnit = item?._master?.packetUnit;
+        if (!masterUnit) return;
+
+        const nextUnit = masterUnit;
+        const nextPrice = masterUnitPriceFor(item?._master, nextUnit);
+        if (nextPrice === null) {
+            setNotification({ title: 'エラー', message: '単価の計算に失敗しました（材料マスターの価格/容量を確認してください）', type: 'error' });
+            return;
+        }
+
+        let nextQuantity = item.quantity;
+        let nextThreshold = item.threshold;
+
+        if (convertQuantity) {
+            const factor = unitConversionFactor(item.unit, nextUnit);
+            if (!factor) {
+                setNotification({ title: 'エラー', message: '単位の換算ができません（kg↔g / l↔ml のみ対応）', type: 'error' });
+                return;
+            }
+
+            const q = item.quantity === '' ? null : parseFloat(item.quantity);
+            if (q !== null && Number.isFinite(q)) nextQuantity = q * factor;
+
+            const t = item.threshold === '' ? null : parseFloat(item.threshold);
+            if (t !== null && Number.isFinite(t)) nextThreshold = t * factor;
+        }
+
+        setUnitSyncSaving(true);
+        try {
+            await inventoryService.update(userId, {
+                id: item.id,
+                unit: nextUnit,
+                price: nextPrice,
+                quantity: nextQuantity === '' ? 0 : (parseFloat(nextQuantity) || 0),
+                threshold: nextThreshold === '' ? 0 : (parseFloat(nextThreshold) || 0),
+                tax10: isTax10(item?.tax10)
+            });
+            await loadData(true);
+            setUnitSyncModalOpen(false);
+            setUnitSyncTarget(null);
+        } catch (error) {
+            console.error('Failed to sync unit:', error);
+            setNotification({ title: 'エラー', message: '単位の同期に失敗しました', type: 'error' });
+        } finally {
+            setUnitSyncSaving(false);
+        }
+    };
+
     const executeDelete = async () => {
         if (!itemToDelete) return;
         try {
@@ -1771,6 +1862,7 @@ export const Inventory = ({ onBack }) => {
                                 onDelete={handleDelete}
                                 onUpdateQuantity={handleUpdateQuantity}
                                 onToggleTax={handleToggleTax}
+                                onRequestUnitSync={handleRequestUnitSync}
                             />
                         )}
                     </div>
@@ -2300,6 +2392,87 @@ export const Inventory = ({ onBack }) => {
                                         </table>
                                     </div>
                                 )}
+                            </div>
+                        );
+                    })()}
+                </Modal>
+
+                {/* Unit Sync Modal */}
+                <Modal
+                    isOpen={unitSyncModalOpen}
+                    onClose={closeUnitSyncModal}
+                    title="単位をマスターに合わせる"
+                    size="small"
+                >
+                    {(() => {
+                        const item = unitSyncTarget;
+                        const masterUnit = item?._master?.packetUnit || '';
+                        const currentUnit = item?.unit || '';
+                        const factor = unitConversionFactor(currentUnit, masterUnit);
+                        const canConvert = factor !== null && factor !== 1;
+
+                        const price = parseFloat(item?.price) || 0;
+                        const qty = item?.quantity === '' ? 0 : (parseFloat(item?.quantity) || 0);
+                        const taxMultiplier = item ? getTaxMultiplier(item) : 1.08;
+                        const currentTotal = price * qty * taxMultiplier;
+
+                        const nextPrice = masterUnit ? masterUnitPriceFor(item?._master, masterUnit) : null;
+                        const nextTotalKeep = nextPrice === null ? null : (nextPrice * qty * taxMultiplier);
+                        const nextTotalConvert = (nextPrice === null || !canConvert) ? null : (nextPrice * (qty * factor) * taxMultiplier);
+
+                        const money = (v) => `¥${Math.round(v).toLocaleString()}`;
+                        const num = (v) => Number.isInteger(v) ? v.toLocaleString() : v.toLocaleString(undefined, { maximumFractionDigits: 3 });
+
+                        return (
+                            <div style={{ color: '#333' }}>
+                                <div style={{ marginBottom: '12px', lineHeight: 1.6 }}>
+                                    <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>{item?.name || '-'}</div>
+                                    <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                                        現在: {num(qty)} {currentUnit} / 単価 ¥{price.toLocaleString()} / 合計 {money(currentTotal)}
+                                    </div>
+                                    {!!masterUnit && (
+                                        <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                                            マスター単位: {masterUnit}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div style={{ background: '#f7fafc', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '10px', marginBottom: '14px' }}>
+                                    <div style={{ fontSize: '0.9rem', color: '#374151', lineHeight: 1.6 }}>
+                                        「材料マスター」の単位変更は、既存の在庫データ（単位/数量）までは自動で書き換えません。<br />
+                                        ここで同期できます。
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
+                                    <Button variant="ghost" type="button" onClick={closeUnitSyncModal} disabled={unitSyncSaving}>
+                                        キャンセル
+                                    </Button>
+
+                                    <Button
+                                        variant="secondary"
+                                        type="button"
+                                        onClick={() => executeUnitSync({ convertQuantity: false })}
+                                        isLoading={unitSyncSaving}
+                                        disabled={unitSyncSaving || !masterUnit || nextPrice === null}
+                                        title={nextTotalKeep === null ? '' : `同期後: 合計 ${money(nextTotalKeep)}`}
+                                    >
+                                        数量はそのまま
+                                    </Button>
+
+                                    {canConvert && (
+                                        <Button
+                                            variant="primary"
+                                            type="button"
+                                            onClick={() => executeUnitSync({ convertQuantity: true })}
+                                            isLoading={unitSyncSaving}
+                                            disabled={unitSyncSaving || !masterUnit || nextPrice === null}
+                                            title={nextTotalConvert === null ? '' : `同期後: 合計 ${money(nextTotalConvert)}`}
+                                        >
+                                            数量も換算
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
                         );
                     })()}

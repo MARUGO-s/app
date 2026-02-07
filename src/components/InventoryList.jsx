@@ -1,9 +1,19 @@
 import React from 'react';
 import { useDroppable } from '@dnd-kit/core';
-import { Button } from './Button';
-import { Input } from './Input';
 
-const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onToggleTax }) => {
+const normalizeUnit = (u) => {
+    const s = String(u ?? '').trim();
+    if (!s) return '';
+    const lower = s.toLowerCase();
+    if (lower === 'ｇ') return 'g';
+    if (lower === 'ｍｌ') return 'ml';
+    if (lower === 'ｃｃ') return 'cc';
+    if (lower === 'ｋｇ') return 'kg';
+    if (lower === 'ｌ') return 'l';
+    return lower;
+};
+
+const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onToggleTax, onEdit, onRequestUnitSync }) => {
     const [localQuantity, setLocalQuantity] = React.useState(item.quantity === '' ? '' : (parseFloat(item.quantity) || 0));
 
     const normalizeItemCategory = (value) => {
@@ -77,6 +87,9 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
         });
     };
 
+    const masterUnit = item?._master?.packetUnit || '';
+    const unitMismatch = !!masterUnit && normalizeUnit(masterUnit) !== normalizeUnit(item?.unit);
+
     return (
         <tr className={isLowStock(item) ? 'low-stock' : ''}>
             <td style={{ textAlign: 'center' }}>
@@ -96,7 +109,30 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
             <td style={{ textAlign: 'right' }}>
                 {price > 0 ? `¥${price.toLocaleString()}` : '-'}
             </td>
-            <td>{item.unit}</td>
+            <td>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>{item.unit}</span>
+                    {unitMismatch && typeof onRequestUnitSync === 'function' && (
+                        <button
+                            type="button"
+                            onClick={() => onRequestUnitSync(item)}
+                            title={`マスター単位（${masterUnit}）に合わせる`}
+                            style={{
+                                border: '1px solid #ddd',
+                                background: '#fff',
+                                borderRadius: '999px',
+                                padding: '0 6px',
+                                fontSize: '0.8rem',
+                                lineHeight: 1.6,
+                                cursor: 'pointer',
+                                opacity: 0.85
+                            }}
+                        >
+                            ↺
+                        </button>
+                    )}
+                </div>
+            </td>
             <td style={{ textAlign: 'right', fontSize: '0.85rem', color: '#666' }}>
                 {capacityLabel}
             </td>
@@ -130,7 +166,17 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
             <td style={{ fontSize: '0.8rem', color: '#666' }}>
                 {item.vendor || '-'}
             </td>
-            <td style={{ textAlign: 'center' }}>
+            <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                {typeof onEdit === 'function' && (
+                    <button
+                        type="button"
+                        onClick={() => onEdit(item)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', opacity: 0.7 }}
+                        title="編集"
+                    >
+                        ✎
+                    </button>
+                )}
                 <button
                     onClick={() => onDelete(item)}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', opacity: 0.6 }}
@@ -143,7 +189,7 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
     );
 };
 
-export const InventoryList = ({ items, loading, onDelete, onUpdateQuantity, onToggleTax }) => {
+export const InventoryList = ({ items, loading, onDelete, onUpdateQuantity, onToggleTax, onEdit, onRequestUnitSync }) => {
     const { setNodeRef, isOver } = useDroppable({
         id: 'inventory-list-droppable',
     });
@@ -227,8 +273,10 @@ export const InventoryList = ({ items, loading, onDelete, onUpdateQuantity, onTo
                                     item={item}
                                     isLowStock={isLowStock}
                                     onUpdateQuantity={onUpdateQuantity}
+                                    onEdit={onEdit}
                                     onDelete={onDelete}
                                     onToggleTax={onToggleTax}
+                                    onRequestUnitSync={onRequestUnitSync}
                                 />
                             ))}
                             {sortedItems.length === 0 && (
