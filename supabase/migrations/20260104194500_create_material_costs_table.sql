@@ -21,9 +21,19 @@ create policy "Allow anonymous insert" on material_costs for insert with check (
 create policy "Allow anonymous update" on material_costs for update using (true);
 create policy "Allow anonymous delete" on material_costs for delete using (true);
 
+-- Ensure the shared updated_at trigger function exists.
+-- Some environments may not have run legacy migrations that created it.
+create or replace function public.update_updated_at_column()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
 -- Create updated_at trigger
 drop trigger if exists update_material_costs_updated_at on material_costs;
 create trigger update_material_costs_updated_at
   before update on material_costs
   for each row
-  execute function update_updated_at_column();
+  execute function public.update_updated_at_column();
