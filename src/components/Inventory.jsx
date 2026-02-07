@@ -5,6 +5,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { inventoryService } from '../services/inventoryService';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { unitConversionService } from '../services/unitConversionService';
+import { csvUnitOverrideService } from '../services/csvUnitOverrideService';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Input } from './Input';
@@ -21,6 +22,7 @@ export const Inventory = ({ onBack }) => {
     const [deletedSnapshots, setDeletedSnapshots] = useState([]);
     const [csvData, setCsvData] = useState([]); // Master data from CSV
     const [ingredientMasterMap, setIngredientMasterMap] = useState(new Map()); // unit_conversions (材料マスター)
+    const [csvUnitOverrideMap, setCsvUnitOverrideMap] = useState(new Map()); // csv_unit_overrides (元の単位)
     const [ignoredNames, setIgnoredNames] = useState(new Set()); // Ignored item names
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -145,13 +147,14 @@ export const Inventory = ({ onBack }) => {
     const loadData = async (isSilent = false) => {
         if (!isSilent) setLoading(true);
         try {
-            const [inventoryData, csvList, ignored, snapshotList, deletedList, conversions] = await Promise.all([
+            const [inventoryData, csvList, ignored, snapshotList, deletedList, conversions, overrides] = await Promise.all([
                 inventoryService.getAll(userId),
                 purchasePriceService.getPriceListArray(),
                 inventoryService.getIgnoredItems(userId),
                 inventoryService.getSnapshots(userId),
                 inventoryService.getDeletedSnapshots(userId),
-                unitConversionService.getAllConversions()
+                unitConversionService.getAllConversions(),
+                csvUnitOverrideService.getAll(userId)
             ]);
             setItems(inventoryData);
             setCsvData(csvList);
@@ -159,6 +162,7 @@ export const Inventory = ({ onBack }) => {
             setSnapshots(snapshotList || []);
             setDeletedSnapshots(deletedList || []);
             setIngredientMasterMap(conversions || new Map());
+            setCsvUnitOverrideMap(overrides || new Map());
 
             // Initialize checkedItems with IDs of all existing inventory items
             // This ensures the count in "棚卸し一覧 ({checkedItems.size})" is correct after reload
@@ -871,6 +875,28 @@ export const Inventory = ({ onBack }) => {
             // ignore
         }
 
+        const csvByName = new Map();
+        try {
+            (csvData || []).forEach((row) => {
+                const name = normalize(row?.name);
+                if (!name) return;
+                csvByName.set(name, row);
+            });
+        } catch {
+            // ignore
+        }
+
+        const overridesByName = new Map();
+        try {
+            for (const [rawName, unit] of (csvUnitOverrideMap || new Map()).entries()) {
+                const name = normalize(rawName);
+                if (!name) continue;
+                overridesByName.set(name, unit);
+            }
+        } catch {
+            // ignore
+        }
+
         const normalizeUnit = (u) => {
             const s = String(u ?? '').trim();
             if (!s) return '';
@@ -923,8 +949,22 @@ export const Inventory = ({ onBack }) => {
         const applyMasterPriority = (base) => {
             const normalizedName = normalize(base?.name);
             const m = normalizedName ? masterByName.get(normalizedName) : null;
-            if (!m) return base;
-            const next = { ...base };
+            const csvRow = normalizedName ? csvByName.get(normalizedName) : null;
+            const csvUnit = (normalizedName && overridesByName.has(normalizedName))
+                ? String(overridesByName.get(normalizedName) || '')
+                : String(csvRow?.unit || '');
+
+            // Always attach CSV info for UI display (e.g. show "¥1200/kg").
+            const baseWithCsv = { ...base };
+            baseWithCsv._csv = {
+                unit: csvUnit,
+                price: csvRow?.price ?? null,
+                vendor: csvRow?.vendor ?? null,
+                dateStr: csvRow?.dateStr ?? null
+            };
+
+            if (!m) return baseWithCsv;
+            const next = { ...baseWithCsv };
             const normalizedCategory = normalizeItemCategory(m?.itemCategory);
 
             // 材料マスター（unit_conversions）の入力を優先
@@ -933,11 +973,13 @@ export const Inventory = ({ onBack }) => {
             //   normalize to master unit and convert quantity using packetSize (e.g., 1本 -> 500ml).
             const masterUnit = m.packetUnit || '';
             const packetSize = parseFloat(m.packetSize);
+            const masterPricePerUnit = masterUnit ? masterUnitPriceFor(m, masterUnit) : null;
 
             if (next.isPhantom) {
-                if (masterUnit) next.unit = masterUnit;
-                const p = masterUnitPriceFor(m, next.unit || masterUnit);
-                if (p !== null) next.price = p;
+                if (masterUnit && masterPricePerUnit !== null) {
+                    next.unit = masterUnit;
+                    next.price = masterPricePerUnit;
+                }
             } else {
                 // If existing inventory row is in count-unit and master provides measurable unit,
                 // convert quantity/threshold to master unit so calculations stay correct.
@@ -947,7 +989,7 @@ export const Inventory = ({ onBack }) => {
                     packetSize > 0 &&
                     (isCountUnit(next.unit) || !next.unit);
 
-                if (shouldConvertToMasterUnit) {
+                if (shouldConvertToMasterUnit && masterPricePerUnit !== null) {
                     // Convert quantity if it's numeric (keep empty string as-is)
                     const qRaw = next.quantity;
                     if (qRaw !== '' && qRaw !== null && qRaw !== undefined) {
@@ -964,12 +1006,21 @@ export const Inventory = ({ onBack }) => {
 
                     next.unit = masterUnit;
                 } else {
-                    // Keep unit unless blank
-                    if (!next.unit && masterUnit) next.unit = masterUnit;
+                    // Force unit to master when possible, but keep the numeric quantity as-is.
+                    // This matches "単位だけを変えて計算する" use-cases.
+                    if (masterUnit && masterPricePerUnit !== null) {
+                        next.unit = masterUnit;
+                    } else if (!next.unit && masterUnit) {
+                        next.unit = masterUnit;
+                    }
                 }
 
-                const p = masterUnitPriceFor(m, next.unit || masterUnit);
-                if (p !== null) next.price = p;
+                if (masterPricePerUnit !== null && normalizeUnit(next.unit) === normalizeUnit(masterUnit)) {
+                    next.price = masterPricePerUnit;
+                } else {
+                    const p = masterUnitPriceFor(m, next.unit || masterUnit);
+                    if (p !== null) next.price = p;
+                }
             }
 
             // Keep extra master info for future UI if needed
@@ -1019,7 +1070,7 @@ export const Inventory = ({ onBack }) => {
             if (isHiddenVendor(i.vendor)) return false;
             return true;
         });
-    }, [items, csvData, ignoredNames, excludedNames, ingredientMasterMap, isHiddenVendor]);
+    }, [items, csvData, ignoredNames, excludedNames, ingredientMasterMap, csvUnitOverrideMap, isHiddenVendor]);
 
     const handleDragEnd = (event) => {
         const { active, over } = event;

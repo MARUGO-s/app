@@ -13,6 +13,38 @@ const normalizeUnit = (u) => {
     return lower;
 };
 
+const unitConversionFactor = (fromUnitRaw, toUnitRaw) => {
+    const from = normalizeUnit(fromUnitRaw);
+    const to = normalizeUnit(toUnitRaw);
+    if (!from || !to) return null;
+    if (from === to) return 1;
+
+    // g <-> kg
+    if (from === 'kg' && to === 'g') return 1000;
+    if (from === 'g' && to === 'kg') return 1 / 1000;
+
+    // ml/cc <-> l (treat cc as ml)
+    const f = from === 'cc' ? 'ml' : from;
+    const t = to === 'cc' ? 'ml' : to;
+    if (f === 'l' && t === 'ml') return 1000;
+    if (f === 'ml' && t === 'l') return 1 / 1000;
+
+    return null;
+};
+
+const isCountUnit = (uRaw) => {
+    const u = String(uRaw ?? '').trim();
+    if (!u) return false;
+    return ['本', '個', '袋', '枚', 'パック', '缶', '箱', 'pc', 'PC', '包'].includes(u);
+};
+
+const formatNumber = (value) => {
+    if (!Number.isFinite(value)) return '-';
+    const rounded = Math.round(value * 1000) / 1000;
+    if (Number.isInteger(rounded)) return rounded.toLocaleString();
+    return rounded.toLocaleString(undefined, { maximumFractionDigits: 3 });
+};
+
 const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onToggleTax, onEdit, onRequestUnitSync }) => {
     const [localQuantity, setLocalQuantity] = React.useState(item.quantity === '' ? '' : (parseFloat(item.quantity) || 0));
 
@@ -37,6 +69,41 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
     }, [item.quantity]);
 
     const price = parseFloat(item.price) || 0;
+    const purchasePriceLabel = (() => {
+        if (!Number.isFinite(price) || price <= 0) return '-';
+
+        const originalUnitRaw = item?._csv?.unit;
+        const originalUnit = String(originalUnitRaw || '').trim();
+        const currentUnit = String(item?.unit || '').trim();
+        if (!originalUnit) {
+            return `¥${formatNumber(price)}`;
+        }
+
+        const currentUnitNorm = normalizeUnit(currentUnit);
+        const originalUnitNorm = normalizeUnit(originalUnit);
+
+        if (originalUnitNorm === currentUnitNorm) {
+            return `¥${formatNumber(price)}/${originalUnit}`;
+        }
+
+        // Convert price-per-currentUnit -> price-per-originalUnit.
+        // If 1 originalUnit == N currentUnit, then price/originalUnit = price/currentUnit * N.
+        const factor = unitConversionFactor(originalUnitNorm, currentUnitNorm);
+        if (factor !== null) {
+            return `¥${formatNumber(price * factor)}/${originalUnit}`;
+        }
+
+        // Order-unit (袋/本/箱...) -> measurable unit: use packetSize when available.
+        const packetSize = parseFloat(item?._master?.packetSize);
+        const packetUnit = String(item?._master?.packetUnit || '').trim();
+        const packetUnitNorm = normalizeUnit(packetUnit);
+        if (isCountUnit(originalUnit) && Number.isFinite(packetSize) && packetSize > 0 && packetUnitNorm === currentUnitNorm) {
+            return `¥${formatNumber(price * packetSize)}/${originalUnit}`;
+        }
+
+        // Fallback: show current unit price explicitly.
+        return `¥${formatNumber(price)}/${currentUnit || '-'}`;
+    })();
     const normalizedCategory = normalizeItemCategory(item?._master?.itemCategory);
     const isCategoryTaxLocked = !!normalizedCategory;
     const categoryBasedTax10 = normalizedCategory === 'alcohol' || normalizedCategory === 'supplies';
@@ -107,7 +174,7 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
                 {isLowStock(item) && <span style={{ marginLeft: '4px', fontSize: '0.7rem', color: 'red' }}>⚠️</span>}
             </td>
             <td style={{ textAlign: 'right' }}>
-                {price > 0 ? `¥${price.toLocaleString()}` : '-'}
+                {purchasePriceLabel}
             </td>
             <td>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
