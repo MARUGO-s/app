@@ -6,6 +6,17 @@
     padding: var(--space-sm) 0;
 }
 
+.recipe-list-empty-hint {
+    padding: 1.25rem;
+    border-radius: 12px;
+    border: 1px dashed rgba(255, 255, 255, 0.35);
+    background: rgba(0, 0, 0, 0.12);
+    color: rgba(255, 255, 255, 0.88);
+    text-align: center;
+    line-height: 1.6;
+    margin: 1rem 0 1.5rem;
+}
+
 .recipe-card {
     padding: 0;
     overflow: hidden;
