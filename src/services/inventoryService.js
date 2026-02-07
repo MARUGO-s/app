@@ -36,7 +36,7 @@ export const inventoryService = {
         // Let's strip the ID if it's not a real one from DB (though we can't easily know).
         // For new items, we usually don't send ID.
         // Strip any UI-only fields before DB insert
-        const { id: _id, isPhantom: _isPhantom, _master, ...itemData } = item;
+        const { id: _id, isPhantom: _isPhantom, _master, _csv, ...itemData } = item;
 
         const payload = {
             ...itemData,
@@ -81,7 +81,7 @@ export const inventoryService = {
         if (!item.id) throw new Error("Item ID is required for update");
 
         // Strip any UI-only fields before DB update
-        const { id: _id, isPhantom: _isPhantom, created_at: _createdAt, _master, ...itemData } = item;
+        const { id: _id, isPhantom: _isPhantom, created_at: _createdAt, _master, _csv, ...itemData } = item;
 
         const payload = {
             ...itemData,

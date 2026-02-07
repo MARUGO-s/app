@@ -1345,6 +1345,7 @@ export const Inventory = ({ onBack }) => {
                     const rest = { ...it };
                     delete rest.isPhantom;
                     delete rest._master;
+                    delete rest._csv;
                     return rest;
                 });
 
