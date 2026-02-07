@@ -1,5 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useMemo } from 'react';
 import { Button } from './Button';
 import { Input } from './Input';
 import { Card } from './Card';
@@ -11,30 +10,6 @@ import { purchasePriceService } from '../services/purchasePriceService';
 import './RecipeForm.css';
 import { ImportModal } from './ImportModal';
 
-import {
-    DndContext,
-    closestCenter,
-    KeyboardSensor,
-    MouseSensor,
-    TouchSensor,
-    useSensor,
-    useSensors,
-} from '@dnd-kit/core';
-import {
-    arrayMove,
-    SortableContext,
-    sortableKeyboardCoordinates,
-    verticalListSortingStrategy,
-    useSortable,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-
-// Internal Sortable Item Component
-
-
-
-
-
 export const RecipeForm = ({ onSave, onCancel, initialData }) => {
     const safeInitialData = initialData || {};
 
@@ -42,11 +17,6 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
 
     // Price list cache
     const [priceList, setPriceList] = useState(new Map());
-    const allIngredientNames = useMemo(() => Array.from(priceList.keys()), [priceList]);
-
-    // Suggestions State
-    const [activeSuggestionRow, setActiveSuggestionRow] = useState(null);
-    const [filteredSuggestions, setFilteredSuggestions] = useState([]);
 
     React.useEffect(() => {
         const loadPrices = async () => {
@@ -164,20 +134,6 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
 
     const [isDragActive, setIsDragActive] = useState(false);
 
-    // DnD Sensors
-    const sensors = useSensors(
-        useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
-        useSensor(TouchSensor, {
-            activationConstraint: {
-                delay: 1000,
-                tolerance: 5,
-            },
-        }),
-        useSensor(KeyboardSensor, {
-            coordinateGetter: sortableKeyboardCoordinates,
-        })
-    );
-
     const handleImportedRecipe = (importedData, sourceUrl = '') => {
         // Map imported ingredients to form structure
         // 1. Extract Groups
@@ -269,28 +225,6 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         setImportMode(null);
     };
 
-    const handleDragEnd = (event) => {
-        const { active, over } = event;
-
-        if (active.id !== over.id) {
-            setFormData((prev) => {
-                const isStep = prev.steps.some((item) => item.id === active.id);
-                const field = isStep ? 'steps' : 'ingredients';
-
-                const oldIndex = prev[field].findIndex((item) => item.id === active.id);
-                const newIndex = prev[field].findIndex((item) => item.id === over.id);
-
-                if (oldIndex !== -1 && newIndex !== -1) {
-                    return {
-                        ...prev,
-                        [field]: arrayMove(prev[field], oldIndex, newIndex),
-                    };
-                }
-                return prev;
-            });
-        }
-    };
-
     const handleDrag = (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -333,101 +267,6 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         }
     };
 
-    const handleArrayChange = (index, value, field, property = null) => {
-        const newArray = [...formData[field]];
-        if (field === 'steps') {
-            // Special handling for steps object array
-            newArray[index] = { ...newArray[index], text: value };
-        } else if (property) {
-            newArray[index] = { ...newArray[index], [property]: value };
-
-            if (field === 'ingredients') {
-                // Helper to calculate cost
-                const calculateCost = (item) => {
-                    const qty = parseFloat(item.quantity);
-                    const pCost = parseFloat(item.purchaseCost);
-                    if (!isNaN(qty) && !isNaN(pCost)) {
-                        const u = item.unit ? item.unit.trim().toLowerCase() : '';
-                        if (u === 'g' || u === 'ｇ') {
-                            return Math.round((qty / 1000) * pCost);
-                        }
-                        return Math.round(qty * pCost);
-                    }
-                    return item.cost; // Keep existing if invalid
-                };
-
-                // Auto-lookup for normal ingredients
-                if (property === 'name') {
-                    // Should show suggestions?
-                    if (value.trim()) {
-                        const matchVal = value.toLowerCase();
-                        const matches = allIngredientNames.filter(n => n.toLowerCase().includes(matchVal));
-                        setFilteredSuggestions(matches.slice(0, 10)); // Top 10
-                        setActiveSuggestionRow(index);
-                    } else {
-                        setFilteredSuggestions([]);
-                        setActiveSuggestionRow(null);
-                    }
-
-                    const refData = priceList.get(value);
-                    if (refData) {
-                        const price = typeof refData === 'object' ? refData.price : refData;
-                        const vendor = typeof refData === 'object' ? refData.vendor : null;
-                        const unit = typeof refData === 'object' ? refData.unit : null;
-
-                        newArray[index].purchaseCostRef = price;
-                        newArray[index].vendorRef = vendor;
-
-                        // Autofill if empty
-                        if (!newArray[index].purchaseCost) {
-                            newArray[index].purchaseCost = price;
-                        }
-                        if (!newArray[index].unit && unit) {
-                            newArray[index].unit = unit;
-                        }
-                    } else {
-                        newArray[index].purchaseCostRef = null;
-                        newArray[index].vendorRef = null;
-                    }
-                }
-
-                // Auto-calculate cost (原価) = Quantity (分量) * PurchaseCost (仕入れ)
-                if (property === 'quantity' || property === 'purchaseCost' || property === 'name' || property === 'unit') {
-                    const calculated = calculateCost(newArray[index]);
-                    if (calculated !== newArray[index].cost) {
-                        newArray[index].cost = calculated;
-                    }
-                }
-            }
-        } else {
-            newArray[index] = value;
-        }
-        setFormData(prev => ({ ...prev, [field]: newArray }));
-    };
-
-    const addArrayItem = (field, value = '') => {
-        let newItem = value;
-        if (field === 'ingredients') {
-            newItem = { id: crypto.randomUUID(), name: '', quantity: '', unit: '', cost: '', purchaseCost: '' };
-        } else if (field === 'steps') {
-            newItem = { id: crypto.randomUUID(), text: '' };
-        }
-        setFormData(prev => ({ ...prev, [field]: [...prev[field], newItem] }));
-    };
-
-    const handleSuggestionSelect = (index, name) => {
-        handleArrayChange(index, name, 'ingredients', 'name');
-        setActiveSuggestionRow(null);
-        setFilteredSuggestions([]);
-    };
-
-    const removeArrayItem = (index, field) => {
-        setFormData(prev => ({
-            ...prev,
-            [field]: prev[field].filter((_, i) => i !== index)
-        }));
-    };
-
     const handleSubmit = (e) => {
         e.preventDefault();
         // Basic validation could go here
@@ -436,21 +275,30 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         let finalGroups = [];
 
         if (formData.type === 'bread') {
-            finalIngredients = formData.ingredients.map(({ id, ...rest }) => rest);
+            finalIngredients = formData.ingredients.map((item) => {
+                const { id: _id, ...rest } = item;
+                return rest;
+            });
         } else {
             // Reconstruct ingredients from sections
             const sections = formData.ingredientSections || []; // Should be populated
 
             // If never populated (e.g. immediate submit without render?), fallback to ingredients
             if (sections.length === 0 && formData.ingredients.length > 0) {
-                finalIngredients = formData.ingredients.map(({ id, ...rest }) => rest);
+                finalIngredients = formData.ingredients.map((item) => {
+                    const { id: _id, ...rest } = item;
+                    return rest;
+                });
             } else {
                 finalIngredients = sections.flatMap(section =>
                     section.items.map(item => ({
                         ...item,
                         groupId: section.id,
                     }))
-                ).map(({ id, ...rest }) => rest); // Remove UI IDs
+                ).map((item) => {
+                    const { id: _id, ...rest } = item;
+                    return rest;
+                }); // Remove UI IDs
 
                 finalGroups = sections.map(s => ({ id: s.id, name: s.name }));
             }
@@ -843,7 +691,3 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         </form >
     );
 };
-
-
-
-

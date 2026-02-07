@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { unitConversionService } from '../services/unitConversionService';
 import { purchasePriceService } from '../services/purchasePriceService';
 
@@ -19,13 +19,7 @@ const UnitConversionModal = ({
     const [saveDefault, setSaveDefault] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
-    useEffect(() => {
-        if (isOpen && ingredientName) {
-            loadDefaults();
-        }
-    }, [isOpen, ingredientName]);
-
-    const loadDefaults = async () => {
+    const loadDefaults = useCallback(async () => {
         setIsLoading(true);
 
         // Priority 1: Use values passed from the specific ingredient instance (if they exist)
@@ -94,7 +88,17 @@ const UnitConversionModal = ({
             }
         }
         setIsLoading(false);
-    };
+    }, [ingredientName, initialPurchaseCost, initialContentAmount, unit, currentCost]);
+
+    useEffect(() => {
+        if (!isOpen || !ingredientName) return undefined;
+
+        // Avoid calling setState synchronously inside an effect body.
+        const t = setTimeout(() => {
+            void loadDefaults();
+        }, 0);
+        return () => clearTimeout(t);
+    }, [isOpen, ingredientName, loadDefaults]);
 
     const calculateNormalizedCost = () => {
         const price = parseFloat(packetPrice);

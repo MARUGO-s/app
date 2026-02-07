@@ -5,7 +5,7 @@ import { unitConversionService } from '../services/unitConversionService';
 import { Button } from './Button';
 import { Input } from './Input';
 import { Modal } from './Modal';
-import { useToast } from '../contexts/ToastContext';
+import { useToast } from '../contexts/useToast';
 
 const ALL_VENDORS_KEY = '__all_vendors__';
 const UNKNOWN_VENDOR_KEY = '__unknown_vendor__';

@@ -1,7 +1,6 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase';
-
-const AuthContext = createContext(null);
+import { AuthContext } from './authContext';
 
 const withTimeout = async (promise, ms, label) => {
     let t = null;
@@ -29,7 +28,7 @@ export const AuthProvider = ({ children }) => {
     const loadProfileAndSetUser = useCallback(async (sessionUser) => {
         if (!sessionUser) {
             setUser(null);
-            try { localStorage.removeItem('auth_user_cache'); } catch (e) { }
+            try { localStorage.removeItem('auth_user_cache'); } catch { /* ignore */ }
             return;
         }
 
@@ -377,5 +376,3 @@ export const AuthProvider = ({ children }) => {
         </AuthContext.Provider>
     );
 };
-
-export const useAuth = () => useContext(AuthContext);

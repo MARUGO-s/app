@@ -143,7 +143,7 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
     );
 };
 
-export const InventoryList = ({ items, loading, onSearch, searchQuery, onEdit, onDelete, onUpdateQuantity, onToggleTax }) => {
+export const InventoryList = ({ items, loading, onDelete, onUpdateQuantity, onToggleTax }) => {
     const { setNodeRef, isOver } = useDroppable({
         id: 'inventory-list-droppable',
     });

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { unitConversionService } from '../services/unitConversionService';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { csvUnitOverrideService } from '../services/csvUnitOverrideService';
-import { useToast } from '../contexts/ToastContext';
+import { useToast } from '../contexts/useToast';
 import { Button } from './Button';
 import { Input } from './Input';
 import './IngredientMaster.css';
@@ -35,11 +35,7 @@ export const IngredientMaster = () => {
     const [csvUnitOverrideMap, setCsvUnitOverrideMap] = useState(new Map()); // name -> unit override
     const [csvUnitEdits, setCsvUnitEdits] = useState({}); // name -> current input value
 
-    useEffect(() => {
-        loadIngredients();
-    }, []);
-
-    const loadIngredients = async () => {
+    const loadIngredients = useCallback(async () => {
         setLoading(true);
         try {
             const [conversionsMap, prices, overrides] = await Promise.all([
@@ -60,7 +56,15 @@ export const IngredientMaster = () => {
             console.error('Failed to load ingredients:', error);
         }
         setLoading(false);
-    };
+    }, [toast]);
+
+    useEffect(() => {
+        // Avoid calling setState synchronously inside an effect body.
+        const t = setTimeout(() => {
+            void loadIngredients();
+        }, 0);
+        return () => clearTimeout(t);
+    }, [loadIngredients]);
 
     const handleAddNew = () => {
         const newIngredient = {

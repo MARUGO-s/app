@@ -60,7 +60,6 @@ export const translationService = {
 
             if (recipe.type === 'bread') {
                 const floursCount = (recipe.flours || []).length;
-                const breadIngCount = (recipe.breadIngredients || []).length;
 
                 newRecipe.flours = (recipe.flours || []).map((f, i) => ({
                     ...f,

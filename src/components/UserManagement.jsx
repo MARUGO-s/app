@@ -3,7 +3,7 @@ import { userService } from '../services/userService';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Modal } from './Modal';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 
 export const UserManagement = ({ onBack }) => {
     const { user: currentUser, patchCurrentUserProfile } = useAuth();

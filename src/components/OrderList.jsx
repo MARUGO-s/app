@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { plannerService } from '../services/plannerService';
 import { recipeService } from '../services/recipeService';
 import { inventoryService } from '../services/inventoryService';
@@ -6,8 +6,8 @@ import { purchasePriceService } from '../services/purchasePriceService';
 import { unitConversionService } from '../services/unitConversionService';
 import { csvUnitOverrideService } from '../services/csvUnitOverrideService';
 import { Button } from './Button';
-import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/useAuth';
+import { useToast } from '../contexts/useToast';
 import { Modal } from './Modal';
 import './OrderList.css';
 
@@ -245,7 +245,7 @@ export const OrderList = ({ onBack }) => {
             try {
                 await navigator.clipboard.writeText(textarea.value);
                 toast.success('クリップボードにコピーしました✓');
-            } catch (err) {
+            } catch {
                 // フォールバック: 古いブラウザ用
                 document.execCommand('copy');
                 toast.success('クリップボードにコピーしました✓');

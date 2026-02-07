@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card } from './Card';
 import { Button } from './Button';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 
 export const PasswordResetPage = () => {
     const { updatePassword, finishPasswordRecovery, logout } = useAuth();
@@ -100,4 +100,3 @@ export const PasswordResetPage = () => {
         </div>
     );
 };
-

@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { plannerService } from '../services/plannerService';
 import { recipeService } from '../services/recipeService'; // Need access to recipes
 import { Button } from './Button';
 import { Input } from './Input';
 import { Card } from './Card';
-import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/useAuth';
+import { useToast } from '../contexts/useToast';
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import './Planner.css';
 
@@ -50,7 +50,7 @@ const DraggableMeal = ({ meal, dateStr, children }) => {
 };
 
 // Droppable Calendar Cell
-const CalendarCell = ({ dateStr, dayNum, isToday, isOutside, children, onDrop }) => {
+const CalendarCell = ({ dateStr, dayNum, isToday, isOutside, children }) => {
     const { setNodeRef, isOver } = useDroppable({
         id: `date-${dateStr}`,
         data: { dateStr }
@@ -86,11 +86,7 @@ export const Planner = ({ onBack, onSelectRecipe }) => {
         })
     );
 
-    useEffect(() => {
-        loadData();
-    }, [currentDate]);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         const r = await recipeService.fetchRecipes(user);
         setRecipes(r);
         if (user?.id) {
@@ -100,7 +96,15 @@ export const Planner = ({ onBack, onSelectRecipe }) => {
             const cleanedPlans = await plannerService.cleanupInvalidPlans(user.id, validIds);
             setPlans(cleanedPlans);
         }
-    };
+    }, [user]);
+
+    useEffect(() => {
+        // Avoid calling setState synchronously inside an effect body.
+        const t = setTimeout(() => {
+            void loadData();
+        }, 0);
+        return () => clearTimeout(t);
+    }, [loadData]);
 
     const handleDragEnd = async (event) => {
         const { active, over } = event;
