@@ -176,30 +176,6 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
             <td style={{ textAlign: 'right' }}>
                 {purchasePriceLabel}
             </td>
-            <td>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>{item.unit}</span>
-                    {unitMismatch && typeof onRequestUnitSync === 'function' && (
-                        <button
-                            type="button"
-                            onClick={() => onRequestUnitSync(item)}
-                            title={`マスター単位（${masterUnit}）に合わせる`}
-                            style={{
-                                border: '1px solid #ddd',
-                                background: '#fff',
-                                borderRadius: '999px',
-                                padding: '0 6px',
-                                fontSize: '0.8rem',
-                                lineHeight: 1.6,
-                                cursor: 'pointer',
-                                opacity: 0.85
-                            }}
-                        >
-                            ↺
-                        </button>
-                    )}
-                </div>
-            </td>
             <td style={{ textAlign: 'right', fontSize: '0.85rem', color: '#666' }}>
                 {capacityLabel}
             </td>
@@ -226,6 +202,30 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
                 <span className="print-only" style={{ display: 'none' }}>
                     {localQuantity}
                 </span>
+            </td>
+            <td>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>{item.unit}</span>
+                    {unitMismatch && typeof onRequestUnitSync === 'function' && (
+                        <button
+                            type="button"
+                            onClick={() => onRequestUnitSync(item)}
+                            title={`マスター単位（${masterUnit}）に合わせる`}
+                            style={{
+                                border: '1px solid #ddd',
+                                background: '#fff',
+                                borderRadius: '999px',
+                                padding: '0 6px',
+                                fontSize: '0.8rem',
+                                lineHeight: 1.6,
+                                cursor: 'pointer',
+                                opacity: 0.85
+                            }}
+                        >
+                            ↺
+                        </button>
+                    )}
+                </div>
             </td>
             <td style={{ textAlign: 'right' }}>
                 {totalValue > 0 ? `¥${Math.round(totalValue).toLocaleString()}` : '-'}
@@ -319,9 +319,9 @@ export const InventoryList = ({ items, loading, onDelete, onUpdateQuantity, onTo
                                 <th style={{ textAlign: 'center', width: '50px' }}>10%</th>
                                 <th>品名</th>
                                 <th style={{ textAlign: 'right' }}>仕入れ値</th>
-                                <th>単位</th>
                                 <th style={{ textAlign: 'right' }}>内容量</th>
                                 <th style={{ textAlign: 'right' }}>在庫数</th>
+                                <th>単位</th>
                                 <th style={{ textAlign: 'right' }}>在庫金額(税込)</th>
                                 <th
                                     onClick={() => handleSort('vendor')}
