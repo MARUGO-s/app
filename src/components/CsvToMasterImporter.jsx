@@ -21,6 +21,15 @@ const ITEM_CATEGORY_LABELS = ITEM_CATEGORY_OPTIONS.reduce((acc, option) => {
     acc[option.value] = option.label;
     return acc;
 }, {});
+const COUNTABLE_UNITS = new Set(['個', '本', '枚', '袋', 'PC', '箱', '缶', '包']);
+
+const toOptionalNumber = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const normalized = String(value).replace(/,/g, '').trim();
+    if (!normalized) return null;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+};
 
 const normalizeVendorKey = (vendor) => {
     const value = typeof vendor === 'string' ? vendor.trim() : '';
@@ -99,6 +108,12 @@ const CsvToMasterImporter = () => {
                 // masterDataMap keys are ingredient_name
                 const masterItem = masterDataMap.get(item.name);
                 const baseCategory = normalizeItemCategory(masterItem?.itemCategory);
+                const masterSizeValue = masterItem?.packetSize ?? '';
+                const masterUnitValue = masterItem?.packetUnit || item.unit || '';
+                const masterPriceValue = masterItem?.lastPrice ?? '';
+                const suggestedSize = masterItem
+                    ? masterSizeValue
+                    : (COUNTABLE_UNITS.has(masterUnitValue) ? 1 : '');
 
                 uniqueCsvItems.push({
                     name: item.name,
@@ -108,16 +123,16 @@ const CsvToMasterImporter = () => {
                     masterCategory: baseCategory,
 
                     // Master data (if exists)
-                    masterSize: masterItem ? masterItem.packetSize : '',
-                    masterUnit: masterItem ? masterItem.packetUnit : (item.unit || 'g'),
-                    masterPrice: masterItem ? masterItem.lastPrice : (item.price || 0),
+                    masterSize: masterSizeValue,
+                    masterUnit: masterUnitValue,
+                    masterPrice: masterPriceValue,
 
                     isRegistered: !!masterItem,
 
                     // Form state
-                    inputSize: masterItem ? masterItem.packetSize : '',
-                    inputUnit: masterItem ? masterItem.packetUnit : (item.unit || 'g'),
-                    inputPrice: masterItem ? masterItem.lastPrice : (item.price || 0),
+                    inputSize: suggestedSize,
+                    inputUnit: masterUnitValue,
+                    inputPrice: masterItem ? masterPriceValue : (item.price ?? ''),
                     inputCategory: baseCategory,
 
                     // Modification tracking
@@ -139,10 +154,10 @@ const CsvToMasterImporter = () => {
     const handleSave = async (item) => {
         setSaving(item.name);
         try {
-            const size = parseFloat(item.inputSize);
-            const price = parseFloat(item.inputPrice);
+            const size = toOptionalNumber(item.inputSize);
+            const price = toOptionalNumber(item.inputPrice);
 
-            if (isNaN(size) || size <= 0) {
+            if (size === null || size <= 0) {
                 toast.error("容量には正しい数値を入力してください。");
                 return;
             }
@@ -173,7 +188,7 @@ const CsvToMasterImporter = () => {
                         isModified: false, // Reset modification flag on save
                         masterSize: size,
                         masterUnit: item.inputUnit,
-                        masterPrice: price,
+                        masterPrice: price ?? '',
                         masterCategory: item.inputCategory,
                         inputCategory: item.inputCategory
                     };
@@ -198,12 +213,25 @@ const CsvToMasterImporter = () => {
         let failCount = 0;
 
         try {
+            const invalidItems = modifiedItems.filter((item) => {
+                const size = toOptionalNumber(item.inputSize);
+                const hasValidSize = size !== null && size > 0;
+                return !hasValidSize || !item.inputUnit || !item.inputCategory;
+            });
+
+            if (invalidItems.length > 0) {
+                const names = invalidItems.slice(0, 5).map(i => i.name).join('、');
+                const suffix = invalidItems.length > 5 ? ` ほか${invalidItems.length - 5}件` : '';
+                toast.error(`未入力があります（容量・単位・区分）: ${names}${suffix}`);
+                return;
+            }
+
             const results = await Promise.allSettled(modifiedItems.map(async (item) => {
-                const size = parseFloat(item.inputSize);
-                const price = parseFloat(item.inputPrice);
+                const size = toOptionalNumber(item.inputSize);
+                const price = toOptionalNumber(item.inputPrice);
 
                 // Basic validation
-                if (isNaN(size) || size <= 0) throw new Error("Invalid size");
+                if (size === null || size <= 0) throw new Error("Invalid size");
                 if (!item.inputUnit) throw new Error("Invalid unit");
                 if (!item.inputCategory) throw new Error("Invalid category");
 
@@ -237,9 +265,9 @@ const CsvToMasterImporter = () => {
                         ...d,
                         isRegistered: true,
                         isModified: false, // Reset modification flag
-                        masterSize: parseFloat(updated.inputSize),
+                        masterSize: toOptionalNumber(updated.inputSize) ?? '',
                         masterUnit: updated.inputUnit,
-                        masterPrice: parseFloat(updated.inputPrice),
+                        masterPrice: toOptionalNumber(updated.inputPrice) ?? '',
                         masterCategory: updated.inputCategory,
                         inputCategory: updated.inputCategory
                     };

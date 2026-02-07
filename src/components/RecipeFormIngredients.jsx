@@ -146,6 +146,7 @@ const SortableIngredientItem = React.memo(({
     const hasCategoryTaxRule = Boolean(itemCategory);
     const categoryLabel = ITEM_CATEGORY_LABELS[itemCategory] || 'カテゴリ';
     const taxLabel = hasCategoryTaxRule ? `${categoryLabel}（${isTax10Category(itemCategory) ? '10%' : '8%'}）` : '';
+    const checkedTax10 = hasCategoryTaxRule ? isTax10Category(itemCategory) : Boolean(item.isAlcohol);
 
     const {
         attributes,
@@ -244,7 +245,7 @@ const SortableIngredientItem = React.memo(({
             <div className="ingredient-alcohol" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                 <input
                     type="checkbox"
-                    checked={item.isAlcohol || false}
+                    checked={checkedTax10}
                     onChange={(e) => onChange(groupId, index, 'isAlcohol', e.target.checked)}
                     disabled={hasCategoryTaxRule}
                     style={{ cursor: hasCategoryTaxRule ? 'not-allowed' : 'pointer' }}
@@ -627,6 +628,17 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                 // Name Lookup Logic
                 if (field === 'name') {
                     const refData = priceList.get(value);
+                    const conv = findConversionByName(conversionMap, value);
+
+                    // Apply category-driven tax immediately even if this name is not in CSV price list.
+                    const matchedCategory = normalizeItemCategory(conv?.itemCategory);
+                    if (matchedCategory) {
+                        const updatedItem = applyCategoryTax(newItem, matchedCategory);
+                        Object.assign(newItem, updatedItem);
+                    } else if (!refData) {
+                        newItem.itemCategory = null;
+                    }
+
                     if (refData) {
                         const price = typeof refData === 'object' ? refData.price : refData;
                         const vendor = typeof refData === 'object' ? refData.vendor : null;
@@ -637,7 +649,6 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                         newItem.vendorRef = vendor;
 
                         // Check for saved conversion
-                        const conv = findConversionByName(conversionMap, value);
                         if (conv && conv.packetSize) {
                             // Prefer master lastPrice when available (CSV price may be pack total too)
                             const basePrice = (conv.lastPrice !== null && conv.lastPrice !== undefined && conv.lastPrice !== '')
@@ -698,14 +709,6 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                             if (!newItem.unit && calculatedUnit) newItem.unit = calculatedUnit;
                         }
 
-                        const matchedCategory = normalizeItemCategory(conv?.itemCategory);
-                        if (matchedCategory) {
-                            const updatedItem = applyCategoryTax(newItem, matchedCategory);
-                            Object.assign(newItem, updatedItem);
-                        } else {
-                            newItem.itemCategory = null;
-                        }
-
                         // Re-calc cost after autofill
                         const qty = parseFloat(newItem.quantity);
                         const pCost = parseFloat(newItem.purchaseCost);
@@ -722,7 +725,6 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                     } else {
                         newItem.purchaseCostRef = null;
                         newItem.vendorRef = null;
-                        newItem.itemCategory = null;
                     }
                     newItems[index] = newItem;
                 }

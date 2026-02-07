@@ -14,7 +14,13 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
     const [selectedIndex, setSelectedIndex] = useState(-1);
     const wrapperRef = useRef(null);
     const listRef = useRef(null); // Ref for the list
-    const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
+    const [coords, setCoords] = useState({
+        top: 0,
+        left: 0,
+        width: 0,
+        maxHeight: 250,
+        placeAbove: true
+    });
 
     useEffect(() => {
         // Close suggestions when clicking outside
@@ -52,16 +58,34 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
         };
     }, [showSuggestions]);
 
-    const calculatePosition = () => {
+    function calculatePosition() {
         if (wrapperRef.current) {
             const rect = wrapperRef.current.getBoundingClientRect();
+            const viewportPadding = 8;
+            const gap = 4;
+            const spaceAbove = rect.top - viewportPadding;
+            const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+            const preferAbove = spaceAbove >= 180 || spaceAbove >= spaceBelow;
+            const placeAbove = preferAbove && spaceAbove >= 110;
+            const maxHeight = Math.max(110, Math.min(280, placeAbove ? spaceAbove - gap : spaceBelow - gap));
+
+            const baseLeft = rect.left;
+            const maxWidth = Math.max(220, window.innerWidth - viewportPadding * 2);
+            const width = Math.min(Math.max(rect.width, 220), maxWidth);
+            const left = Math.min(
+                Math.max(viewportPadding, baseLeft),
+                window.innerWidth - viewportPadding - width
+            );
+
             setCoords({
-                bottom: window.innerHeight - rect.top, // Distance from bottom of viewport to top of input
-                left: rect.left,
-                width: rect.width
+                top: placeAbove ? rect.top - gap : rect.bottom + gap,
+                left,
+                width,
+                maxHeight,
+                placeAbove
             });
         }
-    };
+    }
 
     // Update position when showing
     useEffect(() => {
@@ -174,14 +198,12 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
                     ref={listRef}
                     style={{
                         position: 'fixed',
-                        top: 'auto', // Reset top to avoid conflict with bottom
-                        bottom: coords.bottom, // Display ABOVE: anchor to bottom
-                        left: Math.max(8, coords.left - 16), // Add padding on sides, min 8px margin from edge
-                        right: Math.max(8, window.innerWidth - (coords.left + coords.width + 16)), // Add padding on right
-                        minWidth: 'calc(100% - 16px)', // Ensure good width on mobile
-                        maxWidth: `${Math.min(600, window.innerWidth - 16)}px`, // Cap at 600px or screen width - 8px
-                        zIndex: 9999, // Ensure top layer
-                        marginBottom: '4px' // Space from input
+                        top: `${coords.top}px`,
+                        left: `${coords.left}px`,
+                        width: `${coords.width}px`,
+                        maxHeight: `${coords.maxHeight}px`,
+                        transform: coords.placeAbove ? 'translateY(-100%)' : 'none',
+                        zIndex: 9999 // Ensure top layer
                     }}
                 >
                     {suggestions.map((item, index) => (

@@ -1012,6 +1012,7 @@ function AppContent() {
                         displayMode={displayMode}
                         showOwner={user?.role === 'admin'}
                         ownerLabelFn={getRecipeOwnerLabel}
+                        currentUser={user}
                       />
                     </DndContext>
                   ) : (
@@ -1025,6 +1026,7 @@ function AppContent() {
                       displayMode={displayMode}
                       showOwner={user?.role === 'admin'}
                       ownerLabelFn={getRecipeOwnerLabel}
+                      currentUser={user}
                     />
                   )}
                 </div>
