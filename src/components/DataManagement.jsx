@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { IngredientMaster } from './IngredientMaster';
 import { Button } from './Button';
@@ -8,6 +9,7 @@ import CsvToMasterImporter from './CsvToMasterImporter';
 import './DataManagement.css'; // New styles
 
 export const DataManagement = ({ onBack }) => {
+    const [searchParams, setSearchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState('price'); // 'price' or 'ingredients'
     const [file, setFile] = useState(null);
     const [status, setStatus] = useState({ type: '', message: '' });
@@ -19,6 +21,16 @@ export const DataManagement = ({ onBack }) => {
     // Sort & Search State
     const [sortConfig, setSortConfig] = useState({ key: 'dateStr', direction: 'desc' });
     const [searchQuery, setSearchQuery] = useState('');
+
+    // Allow deep-linking: ?view=data&tab=csv-import
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab === 'price' || tab === 'ingredients' || tab === 'csv-import') {
+            setActiveTab(tab);
+        }
+        // Only apply on mount; internal tab buttons control subsequent changes.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handleSort = (key) => {
         let direction = 'asc';
@@ -149,9 +161,20 @@ export const DataManagement = ({ onBack }) => {
                         Admin Mode
                     </span>
                 </div>
-                <Button variant="ghost" onClick={onBack}>
-                    ← レシピ一覧に戻る
-                </Button>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {activeTab === 'csv-import' && (
+                        <Button
+                            variant="secondary"
+                            onClick={() => setSearchParams({ view: 'inventory' })}
+                            title="在庫管理へ"
+                        >
+                            📦 在庫管理へ
+                        </Button>
+                    )}
+                    <Button variant="ghost" onClick={onBack}>
+                        ← レシピ一覧に戻る
+                    </Button>
+                </div>
             </div>
 
             {/* Tabs */}

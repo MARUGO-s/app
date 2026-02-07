@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DndContext, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { useSearchParams } from 'react-router-dom';
 import { inventoryService } from '../services/inventoryService';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { unitConversionService } from '../services/unitConversionService';
@@ -17,6 +18,7 @@ import { useAuth } from '../contexts/useAuth';
 export const Inventory = ({ onBack }) => {
     const { user } = useAuth();
     const userId = user?.id;
+    const [, setSearchParams] = useSearchParams();
     const [items, setItems] = useState([]);
     const [snapshots, setSnapshots] = useState([]);
     const [deletedSnapshots, setDeletedSnapshots] = useState([]);
@@ -1572,6 +1574,15 @@ export const Inventory = ({ onBack }) => {
                     <h2 className="section-title">📦 在庫管理</h2>
                     <div className="header-actions inventory-header-actions">
                         <Button variant="ghost" onClick={onBack}>← メニュー</Button>
+
+                        <Button
+                            variant="secondary"
+                            className="inventory-header-actions__btn"
+                            onClick={() => setSearchParams({ view: 'data', tab: 'csv-import' })}
+                            title="データ管理のCSV取込へ"
+                        >
+                            📥 CSV取込へ
+                        </Button>
 
                         <Button
                             variant="primary"
