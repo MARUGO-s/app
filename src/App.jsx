@@ -922,7 +922,7 @@ function AppContent() {
                   type="button"
                   className={`public-recipe-toggle-btn ${publicRecipeView === 'mine' ? 'active' : ''}`}
                   aria-pressed={publicRecipeView === 'mine'}
-                  onClick={() => setPublicRecipeView((prev) => (prev === 'mine' ? 'none' : 'mine'))}
+                  onClick={() => setPublicRecipeView('mine')}
                 >
                   🟢 自分公開中
                 </button>
@@ -930,10 +930,19 @@ function AppContent() {
                   type="button"
                   className={`public-recipe-toggle-btn ${publicRecipeView === 'others' ? 'active' : ''}`}
                   aria-pressed={publicRecipeView === 'others'}
-                  onClick={() => setPublicRecipeView((prev) => (prev === 'others' ? 'none' : 'others'))}
+                  onClick={() => setPublicRecipeView('others')}
                 >
                   🌐 他ユーザー公開
                 </button>
+                {publicRecipeView !== 'none' && (
+                  <button
+                    type="button"
+                    className="public-recipe-toggle-btn public-recipe-toggle-btn--hide"
+                    onClick={() => setPublicRecipeView('none')}
+                  >
+                    ✕ 公開非表示
+                  </button>
+                )}
               </div>
             </div>
           )}

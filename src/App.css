@@ -101,6 +101,16 @@
   font-weight: 600;
 }
 
+.public-recipe-toggle-btn--hide {
+  border-style: dashed;
+  color: #222;
+}
+
+.public-recipe-toggle-btn--hide:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
 /* Tag Filter Styles */
 .tag-filter-container {
   display: flex;
