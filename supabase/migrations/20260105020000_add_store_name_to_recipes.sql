@@ -1,1 +1,2 @@
-alter table recipes add column store_name text;
+alter table public.recipes
+  add column if not exists store_name text;
