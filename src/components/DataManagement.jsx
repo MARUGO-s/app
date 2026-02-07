@@ -8,6 +8,13 @@ import { Card } from './Card';
 import CsvToMasterImporter from './CsvToMasterImporter';
 import './DataManagement.css'; // New styles
 
+const toMonthKey = (dateStr) => {
+    const s = String(dateStr || '');
+    if (!s) return '';
+    // Input is usually "YYYY/MM/DD" in this app; store month as "YYYY-MM" for <select>.
+    return s.slice(0, 7).replace('/', '-');
+};
+
 export const DataManagement = ({ onBack }) => {
     const [searchParams, setSearchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState('price'); // 'price' or 'ingredients'
@@ -25,6 +32,29 @@ export const DataManagement = ({ onBack }) => {
     const [dupSelectedKey, setDupSelectedKey] = useState('');
     const [dupSearch, setDupSearch] = useState('');
     const [dupMonth, setDupMonth] = useState(''); // YYYY-MM (empty = all)
+
+    const dupAvailableMonths = React.useMemo(() => {
+        if (!dupSelectedKey) return [];
+        const rows = dupHistoryMap.get(dupSelectedKey) || [];
+        const set = new Set();
+        rows.forEach((r) => {
+            const m = toMonthKey(r?.dateStr);
+            if (m) set.add(m);
+        });
+        return Array.from(set).sort((a, b) => b.localeCompare(a));
+    }, [dupHistoryMap, dupSelectedKey]);
+
+    useEffect(() => {
+        // If the selected key changes and the current month doesn't exist for it, reset to all.
+        if (!dupMonth) return;
+        if (!dupSelectedKey) {
+            setDupMonth('');
+            return;
+        }
+        if (dupAvailableMonths.length > 0 && !dupAvailableMonths.includes(dupMonth)) {
+            setDupMonth('');
+        }
+    }, [dupAvailableMonths, dupMonth, dupSelectedKey]);
 
     // Sort & Search State
     const [sortConfig, setSortConfig] = useState({ key: 'dateStr', direction: 'desc' });
@@ -404,23 +434,20 @@ export const DataManagement = ({ onBack }) => {
                                 </h3>
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <Input
-                                    type="month"
+                                <select
                                     value={dupMonth}
                                     onChange={(e) => setDupMonth(e.target.value)}
-                                    style={{ width: '160px', fontSize: '0.9rem' }}
-                                    title="月を指定（空欄で全期間）"
-                                    wrapperClassName="input-group--no-margin"
-                                />
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setDupMonth('')}
-                                    disabled={!dupMonth}
-                                    title="全期間に戻す"
+                                    disabled={!dupSelectedKey}
+                                    title={dupSelectedKey ? '月を指定（全期間も選べます）' : '先に材料を選択してください'}
+                                    className="dup-month-select"
                                 >
-                                    全期間
-                                </Button>
+                                    <option value="">全期間</option>
+                                    {dupAvailableMonths.map((m) => (
+                                        <option key={m} value={m}>
+                                            {m.replace('-', '/')}
+                                        </option>
+                                    ))}
+                                </select>
                                 <Button variant="secondary" size="sm" onClick={loadDuplicates} disabled={dupLoading}>↻ 更新</Button>
                             </div>
                         </div>
@@ -453,12 +480,6 @@ export const DataManagement = ({ onBack }) => {
                                     unique.push(r);
                                 });
                                 unique.sort((a, b) => String(a?.dateStr || '').localeCompare(String(b?.dateStr || '')));
-
-                                const toMonthKey = (dateStr) => {
-                                    const s = String(dateStr || '');
-                                    if (!s) return '';
-                                    return s.slice(0, 7).replace('/', '-');
-                                };
 
                                 const filtered = dupMonth
                                     ? unique.filter(r => toMonthKey(r?.dateStr) === dupMonth)

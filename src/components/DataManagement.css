@@ -517,3 +517,21 @@
     font-size: 0.76rem;
     color: #666;
 }
+
+.dup-month-select {
+    height: 28px;
+    padding: 0 0.6rem;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background: #fff;
+    color: #333;
+    font-size: 0.85rem;
+    min-width: 170px;
+    max-width: 220px;
+}
+
+.dup-month-select:disabled {
+    opacity: 0.85;
+    color: #666;
+    background: #f2f2f2;
+}
