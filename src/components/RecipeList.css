@@ -241,6 +241,40 @@
     box-shadow: 0 2px 4px rgba(235, 96, 21, 0.2);
 }
 
+.public-recipes-block {
+    margin-bottom: 2rem;
+    padding: 12px 12px 0;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.public-recipes-block__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #fff;
+    font-weight: 700;
+    padding: 6px 6px 0;
+    margin-bottom: 8px;
+}
+
+.public-recipes-block__count {
+    font-size: 0.85rem;
+    color: #ccc;
+    font-weight: 500;
+}
+
+.public-recipes-block__empty {
+    padding: 10px 6px 12px;
+    color: #9ca3af;
+    font-size: 0.9rem;
+}
+
+.public-recipes-block .recipe-section {
+    margin-bottom: 1.25rem !important;
+}
+
 .section-toggle-btn:hover {
     background-color: hsl(20, 85%, 45%);
     /* Slightly darker hover */

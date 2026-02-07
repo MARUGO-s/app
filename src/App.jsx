@@ -89,6 +89,7 @@ function AppContent() {
   const [importMode, setImportMode] = useState(null); // null | 'url' | 'image'
   const [importedData, setImportedData] = useState(null);
   const [searchQuery, setSearchQuery] = useState(''); // New search state
+  const [publicRecipeView, setPublicRecipeView] = useState('none'); // 'none' | 'mine' | 'others'
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedRecipeIds, setSelectedRecipeIds] = useState(new Set());
@@ -137,6 +138,10 @@ function AppContent() {
     }
     setPcRecommendModalView(currentView);
   }, [currentView, isMobileScreen]);
+
+  useEffect(() => {
+    if (currentView !== 'list') setPublicRecipeView('none');
+  }, [currentView]);
 
   // If auth init gets stuck for some reason, don't trap the UI on Loading forever.
   useEffect(() => {
@@ -901,15 +906,35 @@ function AppContent() {
           </div>
 
           {currentView === 'list' && (
-            <div className="search-container">
-              <span className="search-icon">🔍</span>
-              <input
-                type="text"
-                className="search-input"
-                placeholder="レシピ名、材料、メモから検索..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            <div className="list-toolbar">
+              <div className="search-container search-container--compact">
+                <span className="search-icon">🔍</span>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="レシピ名、材料、メモから検索..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <div className="public-recipe-toggles">
+                <button
+                  type="button"
+                  className={`public-recipe-toggle-btn ${publicRecipeView === 'mine' ? 'active' : ''}`}
+                  aria-pressed={publicRecipeView === 'mine'}
+                  onClick={() => setPublicRecipeView((prev) => (prev === 'mine' ? 'none' : 'mine'))}
+                >
+                  🟢 自分公開中
+                </button>
+                <button
+                  type="button"
+                  className={`public-recipe-toggle-btn ${publicRecipeView === 'others' ? 'active' : ''}`}
+                  aria-pressed={publicRecipeView === 'others'}
+                  onClick={() => setPublicRecipeView((prev) => (prev === 'others' ? 'none' : 'others'))}
+                >
+                  🌐 他ユーザー公開
+                </button>
+              </div>
             </div>
           )}
 
@@ -1012,6 +1037,7 @@ function AppContent() {
                         onToggleSelection={handleToggleSelection}
                         disableDrag={!isDragEnabled}
                         displayMode={displayMode}
+                        publicRecipeView={publicRecipeView}
                         showOwner={user?.role === 'admin'}
                         ownerLabelFn={getRecipeOwnerLabel}
                         currentUser={user}
@@ -1026,6 +1052,7 @@ function AppContent() {
                       onToggleSelection={handleToggleSelection}
                       disableDrag={true} // Disable drag for trash/filtered views if accidentally here
                       displayMode={displayMode}
+                      publicRecipeView={publicRecipeView}
                       showOwner={user?.role === 'admin'}
                       ownerLabelFn={getRecipeOwnerLabel}
                       currentUser={user}
