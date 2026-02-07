@@ -1,8 +1,9 @@
 -- Add order_index column to recipes table
-ALTER TABLE recipes ADD COLUMN order_index bigint;
+ALTER TABLE public.recipes
+  ADD COLUMN IF NOT EXISTS order_index bigint;
 
 -- Create an index for performance
-CREATE INDEX idx_recipes_order_index ON recipes (order_index);
+CREATE INDEX IF NOT EXISTS idx_recipes_order_index ON public.recipes (order_index);
 
 -- Optional: Initial population (order by created_at desc initially or similar)
 -- But effectively new items will be added. We can leave it null or auto-update.
