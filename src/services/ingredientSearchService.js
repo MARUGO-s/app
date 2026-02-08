@@ -1,6 +1,7 @@
 import { purchasePriceService } from './purchasePriceService';
 import { unitConversionService } from './unitConversionService';
 import { supabase } from '../supabase.js';
+import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
 
 export const ingredientSearchService = {
     /**
@@ -60,13 +61,15 @@ export const ingredientSearchService = {
      * @returns {Promise<Array>} List of merged search results
      */
     async search(query) {
-        if (!query || query.trim().length === 0) {
+        const rawQuery = String(query || '').trim();
+        if (!rawQuery) {
             this._lastDbResults = null;
             this._lastDbQuery = null;
             return [];
         }
 
-        const normalizedQuery = query.toLowerCase().trim();
+        const normalizedQuery = rawQuery.toLowerCase();
+        const queryKey = normalizeIngredientKey(rawQuery);
 
         try {
             // Try database search first (should be fast - max 15 results)
@@ -107,12 +110,58 @@ export const ingredientSearchService = {
                     }));
                 }
 
-                // Filter CSV results: only include if not in DB results
-                const dbNames = new Set(formattedDbResults.map(r => r.name));
-                const csvResults = this._csvCache.filter(item =>
-                    item.name.toLowerCase().includes(normalizedQuery) &&
-                    !dbNames.has(item.name)
-                ).slice(0, 5); // Limit CSV results to 5 to keep total under 20
+                const scoreFor = (nameKey) => {
+                    if (!queryKey) return null;
+                    const idx = String(nameKey || '').indexOf(queryKey);
+                    if (idx < 0) return null;
+                    const tier = (nameKey === queryKey) ? 0 : (idx === 0 ? 1 : 2);
+                    return { tier, idx, len: String(nameKey || '').length };
+                };
+
+                const compareEntry = (a, b) => {
+                    // Lower score is better
+                    if (a.score.tier !== b.score.tier) return a.score.tier - b.score.tier;
+                    if (a.score.idx !== b.score.idx) return a.score.idx - b.score.idx;
+                    if (a.score.len !== b.score.len) return a.score.len - b.score.len;
+                    return a.name.localeCompare(b.name, 'ja');
+                };
+
+                const pushTop = (arr, entry, limit) => {
+                    // Insert into sorted array (small N: <= 15)
+                    let i = 0;
+                    while (i < arr.length && compareEntry(arr[i], entry) <= 0) i++;
+                    arr.splice(i, 0, entry);
+                    if (arr.length > limit) arr.pop();
+                };
+
+                const MAX_TOTAL = 15;
+                const remaining = Math.max(0, MAX_TOTAL - formattedDbResults.length);
+
+                // Filter CSV results: only include if not in DB results (dedupe by normalized key)
+                const dbKeys = new Set(formattedDbResults.map(r => normalizeIngredientKey(r.name)));
+                const picked = [];
+                const pickedKeys = new Set(); // avoid duplicates within CSV matches
+                if (remaining > 0) {
+                    for (const item of this._csvCache) {
+                        const nameKey = normalizeIngredientKey(item?.name);
+                        if (!nameKey) continue;
+                        if (dbKeys.has(nameKey)) continue;
+                        if (pickedKeys.has(nameKey)) continue;
+                        const score = scoreFor(nameKey);
+                        if (!score) continue;
+                        pickedKeys.add(nameKey);
+                        pushTop(picked, { ...item, nameKey, score }, remaining);
+                    }
+                }
+
+                const csvResults = picked.map(e => ({
+                    name: e.name,
+                    price: e.price,
+                    size: e.size,
+                    unit: e.unit,
+                    source: e.source,
+                    displaySource: e.displaySource
+                }));
 
                 // Merge and return
                 return [...formattedDbResults, ...csvResults];
@@ -138,6 +187,7 @@ export const ingredientSearchService = {
      */
     async _fallbackSearch(normalizedQuery) {
         try {
+            const queryKey = normalizeIngredientKey(normalizedQuery);
             // Build cache if empty
             if (!this._csvCache) {
                 console.log('📥 Building cache from CSV and manual data...');
@@ -180,26 +230,51 @@ export const ingredientSearchService = {
                 console.log('✅ Cache built. Total items:', this._csvCache.length);
             }
 
-            // FILTER & SORT based on query
-            const results = this._csvCache.filter(item =>
-                item.name.toLowerCase().includes(normalizedQuery)
-            ).slice(0, 15); // Limit to 15 results
+            const scoreFor = (nameKey) => {
+                if (!queryKey) return null;
+                const idx = String(nameKey || '').indexOf(queryKey);
+                if (idx < 0) return null;
+                const tier = (nameKey === queryKey) ? 0 : (idx === 0 ? 1 : 2);
+                return { tier, idx, len: String(nameKey || '').length };
+            };
 
-            // Sort by relevance (exact match first, then starts with, then includes)
-            return results.sort((a, b) => {
-                const aName = a.name.toLowerCase();
-                const bName = b.name.toLowerCase();
+            const compareEntry = (a, b) => {
+                if (a.score.tier !== b.score.tier) return a.score.tier - b.score.tier;
+                if (a.score.idx !== b.score.idx) return a.score.idx - b.score.idx;
+                if (a.score.len !== b.score.len) return a.score.len - b.score.len;
+                return a.name.localeCompare(b.name, 'ja');
+            };
 
-                // Exact match
-                if (aName === normalizedQuery && bName !== normalizedQuery) return -1;
-                if (bName === normalizedQuery && aName !== normalizedQuery) return 1;
+            const pushTop = (arr, entry, limit) => {
+                let i = 0;
+                while (i < arr.length && compareEntry(arr[i], entry) <= 0) i++;
+                arr.splice(i, 0, entry);
+                if (arr.length > limit) arr.pop();
+            };
 
-                // Starts with
-                if (aName.startsWith(normalizedQuery) && !bName.startsWith(normalizedQuery)) return -1;
-                if (bName.startsWith(normalizedQuery) && !aName.startsWith(normalizedQuery)) return 1;
+            // FILTER & rank based on query (keep only top 15 for performance)
+            const TOP_N = 15;
+            const picked = [];
+            const pickedKeys = new Set();
+            for (const item of this._csvCache) {
+                const nameKey = normalizeIngredientKey(item?.name);
+                if (!nameKey) continue;
+                if (pickedKeys.has(nameKey)) continue;
+                const score = scoreFor(nameKey);
+                if (!score) continue;
+                pickedKeys.add(nameKey);
+                pushTop(picked, { ...item, nameKey, score }, TOP_N);
+            }
 
-                return aName.localeCompare(bName, 'ja');
-            });
+            return picked.map(e => ({
+                name: e.name,
+                price: e.price,
+                size: e.size,
+                unit: e.unit,
+                itemCategory: e.itemCategory || null,
+                source: e.source,
+                displaySource: e.displaySource
+            }));
 
         } catch (error) {
             console.error('Error in fallback search:', error);

@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { purchasePriceService } from '../services/purchasePriceService';
+import { userService } from '../services/userService';
+import { useAuth } from '../contexts/useAuth';
 import { IngredientMaster } from './IngredientMaster';
 import { Button } from './Button';
 import { Input } from './Input';
 import { Card } from './Card';
 import CsvToMasterImporter from './CsvToMasterImporter';
+import { Modal } from './Modal';
 import './DataManagement.css'; // New styles
 
 const toMonthKey = (dateStr) => {
@@ -17,6 +20,7 @@ const toMonthKey = (dateStr) => {
 
 export const DataManagement = ({ onBack }) => {
     const [searchParams, setSearchParams] = useSearchParams();
+    const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('price'); // 'price' or 'ingredients'
     const [file, setFile] = useState(null);
     const [status, setStatus] = useState({ type: '', message: '' });
@@ -24,6 +28,23 @@ export const DataManagement = ({ onBack }) => {
     const [previewData, setPreviewData] = useState([]);
     const [isLoadingData, setIsLoadingData] = useState(false);
     const [confirmModal, setConfirmModal] = useState(null); // { message, onConfirm }
+
+    // Recipe backup import (avoid browser confirm/alert)
+    const [backupStatus, setBackupStatus] = useState({ type: '', message: '' });
+    const [backupImportFile, setBackupImportFile] = useState(null);
+    const [backupImportModalOpen, setBackupImportModalOpen] = useState(false);
+    const [backupImportInProgress, setBackupImportInProgress] = useState(false);
+
+    // Copy price data to another account (one-time copy, no sync)
+    const [copyModalOpen, setCopyModalOpen] = useState(false);
+    const [copyProfiles, setCopyProfiles] = useState([]);
+    const [copyProfilesLoading, setCopyProfilesLoading] = useState(false);
+    const [copyProfilesError, setCopyProfilesError] = useState('');
+    const [copyTargetId, setCopyTargetId] = useState('');
+    const [copyInProgress, setCopyInProgress] = useState(false);
+    const [copyProgress, setCopyProgress] = useState({ total: 0, done: 0, current: '' });
+    const [copyResult, setCopyResult] = useState(null); // { type, message, failed?: [] }
+    const [copyConfirming, setCopyConfirming] = useState(false);
 
     // Duplicate/History tab state
     const [dupLoading, setDupLoading] = useState(false);
@@ -274,8 +295,119 @@ export const DataManagement = ({ onBack }) => {
         });
     };
 
+    const openBackupImportModal = (file) => {
+        if (!file) return;
+        setBackupImportFile(file);
+        setBackupImportModalOpen(true);
+        setBackupStatus({ type: '', message: '' });
+    };
+
+    const closeBackupImportModal = () => {
+        if (backupImportInProgress) return;
+        setBackupImportModalOpen(false);
+        setBackupImportFile(null);
+        const el = document.getElementById('backup-upload-input');
+        if (el) el.value = '';
+    };
+
+    const startBackupImport = async () => {
+        const file = backupImportFile;
+        if (!file || backupImportInProgress) return;
+
+        setBackupImportInProgress(true);
+        setBackupStatus({ type: 'info', message: '読み込み中...' });
+        try {
+            const text = await file.text();
+            const json = JSON.parse(text);
+
+            const { recipeService } = await import('../services/recipeService');
+            const result = await recipeService.importRecipes(json);
+
+            const okCount = Number(result?.count || 0);
+            const errCount = Array.isArray(result?.errors) ? result.errors.length : 0;
+            setBackupStatus({
+                type: errCount > 0 ? 'warning' : 'success',
+                message: `復元しました: ${okCount}件${errCount > 0 ? ` / 失敗: ${errCount}件` : ''}`
+            });
+            setBackupImportModalOpen(false);
+            setBackupImportFile(null);
+        } catch (err) {
+            console.error(err);
+            setBackupStatus({ type: 'error', message: '復元に失敗しました。ファイル形式を確認してください。' });
+        } finally {
+            setBackupImportInProgress(false);
+            const el = document.getElementById('backup-upload-input');
+            if (el) el.value = '';
+        }
+    };
+
+    const openCopyModal = async () => {
+        setCopyModalOpen(true);
+        setCopyResult(null);
+        setCopyProgress({ total: 0, done: 0, current: '' });
+        setCopyTargetId('');
+        setCopyProfilesError('');
+        setCopyConfirming(false);
+
+        // Fetch user list (admin-only). If it fails, show a message in the modal.
+        setCopyProfilesLoading(true);
+        try {
+            const profiles = await userService.fetchAllProfiles();
+            setCopyProfiles(profiles || []);
+        } catch (e) {
+            console.error(e);
+            setCopyProfiles([]);
+            setCopyProfilesError('ユーザー一覧の取得に失敗しました（管理者権限が必要です）。');
+        } finally {
+            setCopyProfilesLoading(false);
+        }
+    };
+
+    const closeCopyModal = () => {
+        if (copyInProgress) return;
+        setCopyConfirming(false);
+        setCopyModalOpen(false);
+    };
+
+    const startCopyToAccount = async () => {
+        if (!copyTargetId || copyInProgress) return;
+
+        setCopyInProgress(true);
+        setCopyResult({ type: 'info', message: 'コピーを開始しています...' });
+        setCopyProgress({ total: 0, done: 0, current: '' });
+
+        try {
+            const res = await purchasePriceService.copyPriceFilesToUser({
+                targetUserId: copyTargetId,
+                onProgress: ({ total, done, current }) => {
+                    setCopyProgress({ total: total || 0, done: done || 0, current: current || '' });
+                }
+            });
+
+            const copied = res?.copied?.length ?? 0;
+            const failed = res?.failed?.length ?? 0;
+
+            setCopyResult({
+                type: failed > 0 ? 'error' : 'success',
+                message: `コピー完了: ${copied}件${failed > 0 ? ` / 失敗: ${failed}件` : ''}`,
+                failed: res?.failed || []
+            });
+        } catch (e) {
+            console.error(e);
+            setCopyResult({ type: 'error', message: `コピーに失敗しました: ${String(e?.message || e)}` });
+        } finally {
+            setCopyInProgress(false);
+        }
+    };
+
     return (
-        <div className="dashboard-container fade-in">
+        <div
+            className={[
+                'dashboard-container',
+                'fade-in',
+                (activeTab === 'ingredients' || activeTab === 'csv-import') ? 'dashboard-container--auto-height' : '',
+            ].filter(Boolean).join(' ')}
+        >
             {/* Header */}
             <div className="dashboard-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -627,7 +759,7 @@ export const DataManagement = ({ onBack }) => {
                                             document.body.removeChild(a);
                                             URL.revokeObjectURL(url);
                                         } catch (e) {
-                                            alert("バックアップ作成に失敗しました");
+                                            setBackupStatus({ type: 'error', message: 'バックアップ作成に失敗しました' });
                                             console.error(e);
                                         }
                                     }}
@@ -645,34 +777,10 @@ export const DataManagement = ({ onBack }) => {
                                     accept=".json"
                                     id="backup-upload-input"
                                     style={{ display: 'none' }}
-                                    onChange={async (e) => {
-                                        const file = e.target.files[0];
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
                                         if (!file) return;
-
-                                        if (!window.confirm("バックアップファイルからレシピを読み込みますか？\n（既存の各レシピは維持され、バックアップ内のレシピが新規追加されます）")) {
-                                            e.target.value = '';
-                                            return;
-                                        }
-
-                                        try {
-                                            setStatus({ type: 'info', message: '読み込み中...' });
-                                            setIsUploading(true);
-                                            const text = await file.text();
-                                            const json = JSON.parse(text);
-
-                                            const { recipeService } = await import('../services/recipeService');
-                                            const result = await recipeService.importRecipes(json);
-
-                                            alert(`${result.count}件のレシピを復元しました。${result.errors.length > 0 ? `\n失敗: ${result.errors.length}件` : ''}`);
-                                            setStatus({ type: 'success', message: '復元完了' });
-                                        } catch (err) {
-                                            console.error(err);
-                                            alert("復元に失敗しました。ファイル形式を確認してください。");
-                                            setStatus({ type: 'error', message: '復元エラー' });
-                                        } finally {
-                                            setIsUploading(false);
-                                            e.target.value = '';
-                                        }
+                                        openBackupImportModal(file);
                                     }}
                                 />
                                 <Button
@@ -680,10 +788,16 @@ export const DataManagement = ({ onBack }) => {
                                     size="sm"
                                     block
                                     onClick={() => document.getElementById('backup-upload-input').click()}
-                                    disabled={isUploading}
+                                    disabled={isUploading || backupImportInProgress}
                                 >
                                     📤 バックアップから復元
                                 </Button>
+
+                                {backupStatus.message && (
+                                    <div className={`status-msg ${backupStatus.type}`} style={{ marginTop: '10px' }}>
+                                        {backupStatus.message}
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -726,6 +840,35 @@ export const DataManagement = ({ onBack }) => {
                                 </div>
                             )}
                         </div>
+
+                        {/* 2.5 Copy to another account (admin only) */}
+                        {user?.role === 'admin' && (
+                            <div className="sidebar-card">
+                                <div className="sidebar-title">
+                                    <span>👥</span> 共有（コピー）
+                                </div>
+                                <p style={{ fontSize: '0.85rem', color: '#333', margin: 0, lineHeight: 1.5 }}>
+                                    現在の価格CSVを、選択したアカウントへ複製します。
+                                    <br />
+                                    <span style={{ fontSize: '0.75rem', color: '#888' }}>※ 同期はされません（1回コピー）</span>
+                                </p>
+                                <div style={{ fontSize: '0.82rem', color: '#666', marginTop: '0.6rem' }}>
+                                    コピー対象: {uploadedFiles.length}件
+                                </div>
+                                <div style={{ marginTop: '0.75rem' }}>
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        block
+                                        onClick={openCopyModal}
+                                        disabled={copyInProgress || isUploading}
+                                        title="他アカウントへ価格データをコピーします"
+                                    >
+                                        他アカウントへコピー
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
 
                         {/* 3. Saved Files List */}
                         <div className="sidebar-card" style={{ flex: 1 }}>
@@ -837,6 +980,239 @@ export const DataManagement = ({ onBack }) => {
                     </main>
                 </div>
             )}
+
+            {/* Backup Import Modal */}
+            <Modal
+                isOpen={backupImportModalOpen}
+                onClose={closeBackupImportModal}
+                title="バックアップから復元 / 追加"
+                size="medium"
+                showCloseButton={!backupImportInProgress}
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ fontSize: '0.9rem', color: '#374151', lineHeight: 1.6 }}>
+                        バックアップJSONからレシピを読み込みます。
+                        <br />
+                        <span style={{ color: '#6b7280', fontSize: '0.85rem' }}>
+                            ※ 既存レシピは維持され、バックアップ内のレシピが新規追加されます。
+                        </span>
+                    </div>
+
+                    <div style={{
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '10px',
+                        padding: '12px',
+                        background: '#f8fafc',
+                        color: '#111827'
+                    }}>
+                        <div style={{ fontWeight: 700, marginBottom: '6px' }}>読み込むファイル</div>
+                        <div style={{ fontSize: '0.9rem', lineHeight: 1.6 }}>
+                            {backupImportFile?.name || '-'}
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                        <Button variant="ghost" onClick={closeBackupImportModal} disabled={backupImportInProgress}>
+                            キャンセル
+                        </Button>
+                        <Button
+                            variant="primary"
+                            onClick={startBackupImport}
+                            disabled={!backupImportFile || backupImportInProgress}
+                        >
+                            {backupImportInProgress ? '復元中...' : 'この内容で復元'}
+                        </Button>
+                    </div>
+
+                    {backupImportInProgress && (
+                        <div className="bulk-progress" style={{ marginTop: '10px' }}>
+                            <div className="bulk-progress-head">
+                                <div className="bulk-progress-spinner" />
+                                <div>
+                                    <div className="bulk-progress-title">復元中...</div>
+                                    <div className="bulk-progress-subtitle">完了までお待ちください</div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {backupStatus.message && (
+                        <div className={`status-msg ${backupStatus.type || 'info'}`} style={{ whiteSpace: 'pre-wrap' }}>
+                            {backupStatus.message}
+                        </div>
+                    )}
+                </div>
+            </Modal>
+
+            {/* Copy Modal */}
+            <Modal
+                isOpen={copyModalOpen}
+                onClose={closeCopyModal}
+                title="価格データを他アカウントへコピー"
+                size="medium"
+                showCloseButton={!copyInProgress}
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ fontSize: '0.9rem', color: '#374151', lineHeight: 1.6 }}>
+                        価格データ（保存済みCSVファイル）を、別アカウントへ複製します。
+                        <br />
+                        <span style={{ color: '#6b7280', fontSize: '0.85rem' }}>
+                            ※ 同期はされません（1回コピー）。同名ファイルは自動で <code>_copy</code> を付けて保存します。
+                        </span>
+                    </div>
+
+                    <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                        コピー元: <strong style={{ color: '#111827' }}>{user?.displayId || '現在のアカウント'}</strong> / 対象: {uploadedFiles.length}件
+                    </div>
+
+                    {!copyConfirming ? (
+                        <>
+                            <div>
+                                <div style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '6px', color: '#111827' }}>
+                                    コピー先アカウント
+                                </div>
+
+                                {copyProfilesLoading ? (
+                                    <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>ユーザー一覧を読み込み中...</div>
+                                ) : (
+                                    <select
+                                        value={copyTargetId}
+                                        onChange={(e) => setCopyTargetId(e.target.value)}
+                                        disabled={copyInProgress || !!copyProfilesError}
+                                        style={{
+                                            width: '100%',
+                                            padding: '10px 12px',
+                                            borderRadius: '8px',
+                                            border: '1px solid #d1d5db',
+                                            fontSize: '0.95rem',
+                                            background: copyInProgress ? '#f3f4f6' : 'white'
+                                        }}
+                                    >
+                                        <option value="">選択してください...</option>
+                                        {copyProfiles
+                                            .filter(p => String(p?.id) && String(p?.id) !== String(user?.id))
+                                            .map((p) => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.display_id}{p.email ? ` (${p.email})` : ''}{p.role === 'admin' ? ' [管理者]' : ''}
+                                                </option>
+                                            ))}
+                                    </select>
+                                )}
+
+                                {copyProfilesError && (
+                                    <div style={{ marginTop: '8px', color: '#c92a2a', fontSize: '0.85rem' }}>
+                                        {copyProfilesError}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+                                <Button variant="ghost" onClick={closeCopyModal} disabled={copyInProgress}>
+                                    閉じる
+                                </Button>
+                                <Button
+                                    variant="primary"
+                                    onClick={() => setCopyConfirming(true)}
+                                    disabled={!copyTargetId || copyInProgress || copyProfilesLoading || !!copyProfilesError}
+                                >
+                                    次へ
+                                </Button>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            {(() => {
+                                const target = copyProfiles.find(p => String(p?.id) === String(copyTargetId));
+                                const label = target
+                                    ? `${target.display_id}${target.email ? ` (${target.email})` : ''}`
+                                    : (copyTargetId ? String(copyTargetId).slice(0, 8) : '-');
+                                return (
+                                    <div style={{
+                                        border: '1px solid #e5e7eb',
+                                        borderRadius: '10px',
+                                        padding: '12px',
+                                        background: '#f8fafc',
+                                        color: '#111827'
+                                    }}>
+                                        <div style={{ fontWeight: 700, marginBottom: '6px' }}>この内容でコピーしますか？</div>
+                                        <div style={{ fontSize: '0.9rem', lineHeight: 1.6 }}>
+                                            コピー先: <strong>{label}</strong>
+                                            <br />
+                                            対象: <strong>{uploadedFiles.length.toLocaleString()}</strong> 件（CSVファイル）
+                                            <br />
+                                            同名ファイル: <code>_copy</code> を付けて保存（上書きしません）
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+                                <Button variant="ghost" onClick={() => setCopyConfirming(false)} disabled={copyInProgress}>
+                                    戻る
+                                </Button>
+                                <Button
+                                    variant="primary"
+                                    onClick={startCopyToAccount}
+                                    disabled={!copyTargetId || copyInProgress}
+                                >
+                                    {copyInProgress ? 'コピー中...' : 'この内容でコピー'}
+                                </Button>
+                            </div>
+                        </>
+                    )}
+
+                    {copyInProgress && (
+                        <div className="bulk-progress" style={{ marginTop: '10px' }}>
+                            <div className="bulk-progress-head">
+                                <div className="bulk-progress-spinner" />
+                                <div>
+                                    <div className="bulk-progress-title">コピー中...</div>
+                                    <div className="bulk-progress-subtitle">
+                                        {copyProgress.total ? `${copyProgress.done} / ${copyProgress.total}` : '準備中...'}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="bulk-progress-bar">
+                                <div
+                                    className="bulk-progress-bar-inner"
+                                    style={{
+                                        width: copyProgress.total ? `${Math.round((copyProgress.done / copyProgress.total) * 100)}%` : '0%'
+                                    }}
+                                />
+                            </div>
+                            <div className="bulk-progress-current" title={copyProgress.current}>
+                                {copyProgress.current}
+                            </div>
+                        </div>
+                    )}
+
+                    {copyResult?.message && (
+                        <div className={`status-msg ${copyResult.type || 'info'}`}>
+                            {copyResult.message}
+                        </div>
+                    )}
+
+                    {Array.isArray(copyResult?.failed) && copyResult.failed.length > 0 && (
+                        <div className="bulk-progress-failures">
+                            <div style={{ fontWeight: 700, marginBottom: '6px' }}>
+                                失敗: {copyResult.failed.length}件
+                            </div>
+                            <ul style={{ paddingLeft: '1.2rem', margin: 0 }}>
+                                {copyResult.failed.slice(0, 10).map((f, i) => (
+                                    <li key={`${f?.file || 'f'}-${i}`}>
+                                        {f?.file || '-'}: {f?.errorMessage || 'unknown error'}
+                                    </li>
+                                ))}
+                            </ul>
+                            {copyResult.failed.length > 10 && (
+                                <div style={{ marginTop: '6px' }}>
+                                    ...他 {copyResult.failed.length - 10}件
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </Modal>
 
             {/* Custom Confirm Modal */}
             {confirmModal && (

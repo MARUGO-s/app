@@ -202,6 +202,169 @@ export const purchasePriceService = {
         }
     },
 
+    _splitFileName(name) {
+        const raw = String(name || '');
+        const lastDot = raw.lastIndexOf('.');
+        if (lastDot <= 0) return { base: raw, ext: '' };
+        return { base: raw.slice(0, lastDot), ext: raw.slice(lastDot) };
+    },
+
+    _makeCopyFileName(originalName, existingNamesSet) {
+        const orig = String(originalName || '');
+        if (!existingNamesSet?.has?.(orig)) return orig;
+
+        const { base, ext } = this._splitFileName(orig);
+        const safeBase = base || orig || 'price';
+
+        // e.g. "12.csv" -> "12_copy.csv", then "12_copy2.csv"...
+        let n = 1;
+        // Limit attempts to avoid an infinite loop in weird edge cases.
+        while (n < 1000) {
+            const suffix = (n === 1) ? '_copy' : `_copy${n}`;
+            const candidate = `${safeBase}${suffix}${ext}`;
+            if (!existingNamesSet.has(candidate)) return candidate;
+            n++;
+        }
+        // Fallback: timestamp-based unique name
+        return `${safeBase}_copy_${Date.now()}${ext}`;
+    },
+
+    /**
+     * One-time copy (duplicate) price CSV files to another account.
+     * Note: This is NOT sync. It simply clones the CSV files under app-data/<sourceUserId>/ to app-data/<targetUserId>/.
+     */
+    async copyPriceFilesToUser({ targetUserId, sourceUserId = null, onProgress = null } = {}) {
+        const effectiveSourceUserId = sourceUserId || await this._getCurrentUserId();
+        if (!effectiveSourceUserId) throw new Error('ログインが必要です');
+
+        const destUserId = String(targetUserId || '').trim();
+        if (!destUserId) throw new Error('コピー先アカウントを選択してください');
+        if (destUserId === effectiveSourceUserId) throw new Error('同じアカウントにはコピーできません');
+
+        const { data: sourceFiles, error: sourceListError } = await supabase.storage
+            .from(BUCKET_NAME)
+            .list(effectiveSourceUserId);
+        if (sourceListError) throw sourceListError;
+
+        const sourceCsvFiles = (sourceFiles || [])
+            .map(f => f?.name)
+            .filter(Boolean)
+            .filter(name => String(name).toLowerCase().endsWith('.csv'));
+
+        const { data: destFiles, error: destListError } = await supabase.storage
+            .from(BUCKET_NAME)
+            .list(destUserId);
+
+        // If listing fails (rare), treat as empty only for "not found" style errors; otherwise fail.
+        let existingDestNames = new Set();
+        if (destListError) {
+            const msg = String(destListError?.message || '').toLowerCase();
+            if (msg.includes('not found') || msg.includes('404')) {
+                existingDestNames = new Set();
+            } else {
+                throw destListError;
+            }
+        } else {
+            existingDestNames = new Set((destFiles || []).map(f => f?.name).filter(Boolean));
+        }
+
+        const result = {
+            sourceUserId: effectiveSourceUserId,
+            targetUserId: destUserId,
+            copied: [], // { fromFile, toFile }
+            skipped: [], // { file, reason }
+            failed: [], // { file, errorMessage }
+        };
+
+        const total = sourceCsvFiles.length;
+        onProgress?.({ phase: 'start', total, done: 0, current: '' });
+
+        for (let idx = 0; idx < sourceCsvFiles.length; idx++) {
+            const fromFile = sourceCsvFiles[idx];
+            // Decide target filename (avoid overwriting existing destination files)
+            const toFile = this._makeCopyFileName(fromFile, existingDestNames);
+            existingDestNames.add(toFile);
+
+            const fromPath = this._getUserScopedPath(effectiveSourceUserId, fromFile);
+            const toPath = this._getUserScopedPath(destUserId, toFile);
+
+            onProgress?.({
+                phase: 'progress',
+                total,
+                done: idx,
+                current: `${fromFile} → ${toFile}`,
+                fromFile,
+                toFile,
+            });
+
+            try {
+                const { data: blob, error: downloadError } = await supabase.storage
+                    .from(BUCKET_NAME)
+                    .download(fromPath);
+                if (downloadError) throw downloadError;
+                if (!blob) throw new Error('ファイルのダウンロードに失敗しました');
+
+                // Upload without upsert to avoid accidental overwrite.
+                const { error: uploadError } = await supabase.storage
+                    .from(BUCKET_NAME)
+                    .upload(toPath, blob, {
+                        upsert: false,
+                        contentType: 'text/csv'
+                    });
+
+                if (uploadError) {
+                    // If the name unexpectedly conflicts, generate another name and retry a few times.
+                    const msg = String(uploadError?.message || '').toLowerCase();
+                    if (msg.includes('already exists') || msg.includes('exists') || msg.includes('409')) {
+                        let retry = 0;
+                        let lastErr = uploadError;
+                        while (retry < 5) {
+                            retry++;
+                            const retryName = this._makeCopyFileName(fromFile, existingDestNames);
+                            existingDestNames.add(retryName);
+                            const retryPath = this._getUserScopedPath(destUserId, retryName);
+                            const { error: retryErr } = await supabase.storage
+                                .from(BUCKET_NAME)
+                                .upload(retryPath, blob, {
+                                    upsert: false,
+                                    contentType: 'text/csv'
+                                });
+                            if (!retryErr) {
+                                result.copied.push({ fromFile, toFile: retryName });
+                                lastErr = null;
+                                break;
+                            }
+                            lastErr = retryErr;
+                        }
+                        if (lastErr) throw lastErr;
+                        continue;
+                    }
+                    throw uploadError;
+                }
+
+                result.copied.push({ fromFile, toFile });
+            } catch (e) {
+                console.error('copyPriceFilesToUser failed:', e);
+                result.failed.push({ file: fromFile, errorMessage: String(e?.message || e) });
+            }
+
+            onProgress?.({
+                phase: 'progress',
+                total,
+                done: idx + 1,
+                current: `${fromFile} → ${toFile}`,
+                fromFile,
+                toFile,
+            });
+        }
+
+        onProgress?.({ phase: 'done', total, done: total, current: '', result });
+
+        // Caches are per-user. Source didn't change, but destination might be read later in this session.
+        this.clearCache(destUserId);
+        return result;
+    },
+
     /**
      * Custom Parser for 12.csv format
      * Format: Quoted fields.

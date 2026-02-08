@@ -19,7 +19,15 @@ export const unitConversionService = {
         return data?.user?.id || null;
     },
 
-    async saveConversion(ingredientName, packetSize, packetUnit, packetPrice = null, itemCategory = null) {
+    async saveConversion(
+        ingredientName,
+        packetSize,
+        packetUnit,
+        packetPrice = null,
+        itemCategory = null,
+        vendor = undefined,
+        yieldPercent = undefined
+    ) {
         try {
             const userId = await this._getCurrentUserId();
             if (!userId) throw new Error('ログインが必要です');
@@ -35,6 +43,17 @@ export const unitConversionService = {
             if (itemCategory) {
                 payload.item_category = normalizeItemCategory(itemCategory);
             }
+            if (vendor !== undefined) {
+                const normalizedVendor = String(vendor ?? '').trim();
+                payload.vendor = normalizedVendor ? normalizedVendor : null;
+            }
+            if (yieldPercent !== undefined) {
+                const raw = parseFloat(yieldPercent);
+                let normalized = Number.isFinite(raw) ? raw : 100;
+                if (normalized <= 0) normalized = 100;
+                if (normalized > 100) normalized = 100;
+                payload.yield_percent = normalized;
+            }
 
             // Upsert to unit_conversions table
             const executeUpsert = async (body) => supabase
@@ -48,10 +67,18 @@ export const unitConversionService = {
             let { data, error } = await executeUpsert(payload);
 
             // Backward compatibility: allow save even before DB migration that adds item_category.
-            if (error && payload.item_category && String(error.message || '').includes('item_category')) {
-                const fallbackPayload = { ...payload };
-                delete fallbackPayload.item_category;
-                ({ data, error } = await executeUpsert(fallbackPayload));
+            if (error) {
+                const msg = String(error.message || '');
+                const shouldDropItemCategory = !!payload.item_category && msg.includes('item_category');
+                const shouldDropVendor = Object.prototype.hasOwnProperty.call(payload, 'vendor') && msg.includes('vendor');
+                const shouldDropYieldPercent = Object.prototype.hasOwnProperty.call(payload, 'yield_percent') && msg.includes('yield_percent');
+                if (shouldDropItemCategory || shouldDropVendor || shouldDropYieldPercent) {
+                    const fallbackPayload = { ...payload };
+                    if (shouldDropItemCategory) delete fallbackPayload.item_category;
+                    if (shouldDropVendor) delete fallbackPayload.vendor;
+                    if (shouldDropYieldPercent) delete fallbackPayload.yield_percent;
+                    ({ data, error } = await executeUpsert(fallbackPayload));
+                }
             }
 
             if (error) throw error;
@@ -62,7 +89,9 @@ export const unitConversionService = {
                 packetSize: data.packet_size,
                 packetUnit: data.packet_unit,
                 lastPrice: data.last_price,
+                vendor: data.vendor || '',
                 itemCategory: normalizeItemCategory(data.item_category),
+                yieldPercent: (data.yield_percent === null || data.yield_percent === undefined) ? 100 : data.yield_percent,
                 updatedAt: data.updated_at
             };
         } catch (err) {
@@ -100,7 +129,9 @@ export const unitConversionService = {
                 packetSize: data.packet_size,
                 packetUnit: data.packet_unit,
                 lastPrice: data.last_price,
+                vendor: data.vendor || '',
                 itemCategory: normalizeItemCategory(data.item_category),
+                yieldPercent: (data.yield_percent === null || data.yield_percent === undefined) ? 100 : data.yield_percent,
                 updatedAt: data.updated_at
             };
         } catch (err) {
@@ -130,7 +161,9 @@ export const unitConversionService = {
                     packetSize: item.packet_size,
                     packetUnit: item.packet_unit,
                     lastPrice: item.last_price,
+                    vendor: item.vendor || '',
                     itemCategory: normalizeItemCategory(item.item_category),
+                    yieldPercent: (item.yield_percent === null || item.yield_percent === undefined) ? 100 : item.yield_percent,
                     updatedAt: item.updated_at
                 });
             });
@@ -160,5 +193,20 @@ export const unitConversionService = {
             console.error('Error deleting conversion:', err);
             throw err;
         }
+    },
+
+    /**
+     * Admin-only: copy ingredient master (unit_conversions + csv_unit_overrides) to another account.
+     * One-time copy, no sync.
+     */
+    async adminCopyIngredientMasterToUser(targetProfileId, { overwrite = false } = {}) {
+        const id = String(targetProfileId || '').trim();
+        if (!id) throw new Error('コピー先アカウントを選択してください');
+        const { data, error } = await supabase.rpc('admin_copy_ingredient_master', {
+            target_profile_id: id,
+            overwrite: overwrite === true
+        });
+        if (error) throw error;
+        return data;
     }
 };

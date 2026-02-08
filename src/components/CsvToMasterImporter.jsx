@@ -47,6 +47,10 @@ const CsvToMasterImporter = () => {
     const [mergedData, setMergedData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(null); // id of item being saved (or 'bulk' for bulk save)
+    // Bulk progress modal state:
+    // null = closed
+    // { phase: 'running'|'done'|'error', total, processed, success, failed, currentName, failedNames, errorMessage? }
+    const [bulkProgress, setBulkProgress] = useState(null);
     const [filter, setFilter] = useState('all'); // all, unregistered, registered
     const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' }); // key: name,csvPrice,inputCategory,inputSize,inputUnit,inputPrice
     const [searchTerm, setSearchTerm] = useState('');
@@ -66,6 +70,14 @@ const CsvToMasterImporter = () => {
         message: '',
         onConfirm: null
     });
+
+    const closeBulkProgressModal = () => {
+        setBulkProgress((prev) => {
+            if (!prev) return prev;
+            if (prev.phase === 'running') return prev;
+            return null;
+        });
+    };
 
     useEffect(() => {
         loadData();
@@ -208,9 +220,6 @@ const CsvToMasterImporter = () => {
 
     const executeBulkSave = async (modifiedItems) => {
         setConfirmModal(prev => ({ ...prev, isOpen: false })); // Close modal first
-        setSaving('bulk');
-        let successCount = 0;
-        let failCount = 0;
 
         try {
             const invalidItems = modifiedItems.filter((item) => {
@@ -226,41 +235,98 @@ const CsvToMasterImporter = () => {
                 return;
             }
 
-            const results = await Promise.allSettled(modifiedItems.map(async (item) => {
-                const size = toOptionalNumber(item.inputSize);
-                const price = toOptionalNumber(item.inputPrice);
+            setSaving('bulk');
 
-                // Basic validation
-                if (size === null || size <= 0) throw new Error("Invalid size");
-                if (!item.inputUnit) throw new Error("Invalid unit");
-                if (!item.inputCategory) throw new Error("Invalid category");
+            const total = modifiedItems.length;
+            setBulkProgress({
+                phase: 'running',
+                total,
+                processed: 0,
+                success: 0,
+                failed: 0,
+                currentName: '',
+                failedNames: []
+            });
 
-                await unitConversionService.saveConversion(
-                    item.name,
-                    size,
-                    item.inputUnit,
-                    price,
-                    item.inputCategory
-                );
-                return item;
-            }));
+            // Concurrency-limited bulk save (avoid firing huge amounts of requests at once).
+            const CONCURRENCY = 5;
+            const UI_THROTTLE_MS = 120;
+
+            let processed = 0;
+            let successCount = 0;
+            let failCount = 0;
+            let lastUiUpdateAt = 0;
 
             const successItems = [];
-            results.forEach((res, idx) => {
-                if (res.status === 'fulfilled') {
-                    successCount++;
-                    successItems.push(modifiedItems[idx]);
-                } else {
-                    failCount++;
-                    console.error(`Failed to save ${modifiedItems[idx].name}: `, res.reason);
+            const failedNames = [];
+
+            const updateUi = (force = false, currentName = '') => {
+                const now = Date.now();
+                if (!force && now - lastUiUpdateAt < UI_THROTTLE_MS) return;
+                lastUiUpdateAt = now;
+
+                setBulkProgress((prev) => {
+                    if (!prev) return prev;
+                    if (prev.phase !== 'running') return prev;
+                    return {
+                        ...prev,
+                        processed,
+                        success: successCount,
+                        failed: failCount,
+                        currentName: currentName || prev.currentName
+                    };
+                });
+            };
+
+            let nextIndex = 0;
+            const worker = async () => {
+                while (true) {
+                    const idx = nextIndex++;
+                    if (idx >= modifiedItems.length) return;
+
+                    const item = modifiedItems[idx];
+                    const name = item?.name ? String(item.name) : '';
+
+                    try {
+                        const size = toOptionalNumber(item.inputSize);
+                        const price = toOptionalNumber(item.inputPrice);
+
+                        // Basic validation (guard; already checked above).
+                        if (size === null || size <= 0) throw new Error("Invalid size");
+                        if (!item.inputUnit) throw new Error("Invalid unit");
+                        if (!item.inputCategory) throw new Error("Invalid category");
+
+                        await unitConversionService.saveConversion(
+                            item.name,
+                            size,
+                            item.inputUnit,
+                            price,
+                            item.inputCategory
+                        );
+
+                        successCount++;
+                        successItems.push(item);
+                    } catch (err) {
+                        failCount++;
+                        failedNames.push(name || `#${idx + 1}`);
+                        console.error(`Failed to save ${name}:`, err);
+                    } finally {
+                        processed++;
+                        updateUi(false, name);
+                    }
                 }
-            });
+            };
+
+            const workerCount = Math.min(CONCURRENCY, modifiedItems.length);
+            await Promise.all(Array.from({ length: workerCount }, () => worker()));
+            updateUi(true);
 
             // Update local state for successful items
             const successNames = new Set(successItems.map(i => i.name));
+            const updatedByName = new Map(modifiedItems.map(i => [i.name, i]));
             setMergedData(prev => prev.map(d => {
                 if (successNames.has(d.name)) {
-                    const updated = modifiedItems.find(t => t.name === d.name);
+                    const updated = updatedByName.get(d.name);
                     return {
                         ...d,
                         isRegistered: true,
@@ -281,9 +347,28 @@ const CsvToMasterImporter = () => {
                 toast.warning(`処理完了: 成功 ${successCount} 件 / 失敗 ${failCount} 件`);
             }
 
+            setBulkProgress({
+                phase: 'done',
+                total,
+                processed,
+                success: successCount,
+                failed: failCount,
+                currentName: '',
+                failedNames: failedNames.slice(0, 10)
+            });
         } catch (err) {
             console.error("Bulk save error:", err);
             toast.error("一括保存中にエラーが発生しました");
+            setBulkProgress((prev) => ({
+                phase: 'error',
+                total: prev?.total ?? modifiedItems.length,
+                processed: prev?.processed ?? 0,
+                success: prev?.success ?? 0,
+                failed: prev?.failed ?? 0,
+                currentName: '',
+                failedNames: prev?.failedNames ?? [],
+                errorMessage: err?.message ? String(err.message) : '不明なエラー'
+            }));
         } finally {
             setSaving(null);
         }
@@ -312,6 +397,12 @@ const CsvToMasterImporter = () => {
             }
             return d;
         }));
+    };
+
+    const preventNumberArrowChange = (e) => {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+        }
     };
 
     const handleSort = (key) => {
@@ -579,7 +670,7 @@ const CsvToMasterImporter = () => {
                             variant="primary"
                             size="sm"
                             onClick={handleBulkSaveClick}
-                            disabled={saving === 'bulk'}
+                            disabled={saving !== null}
                             style={{ fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}
                         >
                             {saving === 'bulk' ? '処理中...' : `変更を一括登録(${modifiedCount})`}
@@ -638,6 +729,7 @@ const CsvToMasterImporter = () => {
                                             type="number"
                                             value={item.inputSize}
                                             onChange={(e) => handleInputChange(item.name, 'inputSize', e.target.value)}
+                                            onKeyDown={preventNumberArrowChange}
                                             placeholder={['個', '本', '枚', 'PC', '箱', '缶', '包'].includes(item.inputUnit) ? '数量 (例: 1)' : '例: 1000'}
                                             style={{ width: '100%' }}
                                         />
@@ -717,6 +809,96 @@ const CsvToMasterImporter = () => {
                         実行する
                     </Button>
                 </div>
+            </Modal>
+
+            <Modal
+                isOpen={!!bulkProgress}
+                onClose={closeBulkProgressModal}
+                title={
+                    bulkProgress?.phase === 'running'
+                        ? '一括登録中'
+                        : bulkProgress?.phase === 'error'
+                            ? '一括登録エラー'
+                            : '一括登録結果'
+                }
+                size="small"
+                showCloseButton={bulkProgress?.phase !== 'running'}
+            >
+                {bulkProgress?.phase === 'running' ? (
+                    <div className="bulk-progress">
+                        <div className="bulk-progress-head">
+                            <div className="bulk-progress-spinner" aria-hidden="true" />
+                            <div>
+                                <div className="bulk-progress-title">処理中です。しばらくお待ちください。</div>
+                                <div className="bulk-progress-subtitle">
+                                    {(bulkProgress.processed || 0).toLocaleString()} / {(bulkProgress.total || 0).toLocaleString()} 件
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bulk-progress-bar" aria-label="進捗">
+                            <div
+                                className="bulk-progress-bar-inner"
+                                style={{
+                                    width: bulkProgress.total > 0
+                                        ? `${Math.min(100, Math.round(((bulkProgress.processed || 0) / bulkProgress.total) * 100))}%`
+                                        : '0%'
+                                }}
+                            />
+                        </div>
+
+                        <div className="bulk-progress-meta">
+                            <div>成功: {(bulkProgress.success || 0).toLocaleString()} 件</div>
+                            <div>失敗: {(bulkProgress.failed || 0).toLocaleString()} 件</div>
+                            {bulkProgress.currentName && (
+                                <div className="bulk-progress-current" title={bulkProgress.currentName}>
+                                    現在: {bulkProgress.currentName}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : bulkProgress?.phase === 'error' ? (
+                    <div className="bulk-progress">
+                        <div style={{ color: '#991b1b', fontWeight: 700, marginBottom: '0.25rem' }}>
+                            処理中にエラーが発生しました。
+                        </div>
+                        {bulkProgress.errorMessage && (
+                            <div style={{ color: '#444', fontSize: '0.9rem' }}>
+                                {bulkProgress.errorMessage}
+                            </div>
+                        )}
+                        <div className="bulk-progress-meta" style={{ marginTop: '0.75rem' }}>
+                            <div>完了: {(bulkProgress.processed || 0).toLocaleString()} / {(bulkProgress.total || 0).toLocaleString()} 件</div>
+                            <div>成功: {(bulkProgress.success || 0).toLocaleString()} 件</div>
+                            <div>失敗: {(bulkProgress.failed || 0).toLocaleString()} 件</div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+                            <Button variant="primary" onClick={closeBulkProgressModal}>閉じる</Button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="bulk-progress">
+                        <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>
+                            処理が完了しました。
+                        </div>
+                        <div className="bulk-progress-meta">
+                            <div>合計: {(bulkProgress?.total || 0).toLocaleString()} 件</div>
+                            <div>成功: {(bulkProgress?.success || 0).toLocaleString()} 件</div>
+                            <div>失敗: {(bulkProgress?.failed || 0).toLocaleString()} 件</div>
+                        </div>
+                        {Array.isArray(bulkProgress?.failedNames) && bulkProgress.failedNames.length > 0 && (
+                            <div className="bulk-progress-failures">
+                                <div style={{ fontWeight: 700, marginBottom: '0.35rem' }}>失敗した材料（先頭10件）</div>
+                                <div style={{ lineHeight: 1.5 }}>
+                                    {bulkProgress.failedNames.join('、')}
+                                </div>
+                            </div>
+                        )}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+                            <Button variant="primary" onClick={closeBulkProgressModal}>閉じる</Button>
+                        </div>
+                    </div>
+                )}
             </Modal>
         </div>
     );
