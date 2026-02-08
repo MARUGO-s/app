@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { supabase } from '../supabase';
 import { Card } from './Card';
 import { Button } from './Button';
+import { useToast } from '../contexts/useToast';
 import './ImportModal.css';
 
 export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
+    const toast = useToast();
     const [mode, setMode] = useState(initialMode); // 'url' | 'image' | 'confirm-translation'
     const [pendingRecipe, setPendingRecipe] = useState(null);
     const [scrapedUrl, setScrapedUrl] = useState('');
@@ -125,7 +127,7 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
 
         } catch (err) {
             console.error("Translation failed:", err);
-            alert("翻訳に失敗しました。元の言語のまま取り込みます。");
+            toast.warning("翻訳に失敗しました。元の言語のまま取り込みます。");
             return recipe;
         }
     };
@@ -451,4 +453,3 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
         </div >
     );
 };
-

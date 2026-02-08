@@ -718,6 +718,41 @@
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 0.8rem;
+    display: inline-flex;
+    align-items: center;
+    line-height: 1.2;
+}
+
+.warning-badge[data-tooltip] {
+    position: relative;
+    cursor: help;
+}
+
+.warning-badge[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 8px);
+    transform: translate(-50%, -4px);
+    opacity: 0;
+    pointer-events: none;
+    white-space: nowrap;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: rgba(17, 24, 39, 0.92);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+    transition: opacity 0.12s ease, transform 0.12s ease;
+    z-index: 40;
+    will-change: opacity, transform;
+}
+
+.warning-badge[data-tooltip]:hover::after,
+.warning-badge[data-tooltip]:focus-visible::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
 }
 
 .form-group {

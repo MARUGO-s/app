@@ -8,6 +8,7 @@ export const PriceListManager = ({ onClose }) => {
     const [file, setFile] = useState(null);
     const [status, setStatus] = useState({ type: '', message: '' });
     const [isUploading, setIsUploading] = useState(false);
+    const [deleteConfirming, setDeleteConfirming] = useState(false);
 
     const handleFileChange = (e) => {
         if (e.target.files && e.target.files[0]) {
@@ -37,7 +38,7 @@ export const PriceListManager = ({ onClose }) => {
     };
 
     const handleDelete = async () => {
-        if (!window.confirm('本当に削除しますか？\n登録された価格リストは完全に削除されます。')) return;
+        setDeleteConfirming(false);
 
         setIsUploading(true);
         setStatus({ type: 'info', message: '削除中...' });
@@ -91,14 +92,30 @@ export const PriceListManager = ({ onClose }) => {
                     <div className="delete-section">
                         <hr />
                         <p className="danger-text">現在のリストを削除する場合:</p>
-                        <Button
-                            variant="danger"
-                            size="sm"
-                            onClick={handleDelete}
-                            disabled={isUploading}
-                        >
-                            価格リストを削除
-                        </Button>
+                        {!deleteConfirming ? (
+                            <Button
+                                variant="danger"
+                                size="sm"
+                                onClick={() => setDeleteConfirming(true)}
+                                disabled={isUploading}
+                            >
+                                価格リストを削除
+                            </Button>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <div style={{ color: '#c62828', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                                    本当に削除しますか？（この操作は取り消せません）
+                                </div>
+                                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                                    <Button variant="ghost" size="sm" onClick={() => setDeleteConfirming(false)} disabled={isUploading}>
+                                        キャンセル
+                                    </Button>
+                                    <Button variant="danger" size="sm" onClick={handleDelete} disabled={isUploading}>
+                                        削除する
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </Card>

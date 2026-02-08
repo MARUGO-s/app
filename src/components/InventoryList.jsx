@@ -1,5 +1,6 @@
 import React from 'react';
 import { useDroppable } from '@dnd-kit/core';
+import { normalizeNumericInput } from '../utils/normalizeNumericInput.js';
 
 const normalizeUnit = (u) => {
     const s = String(u ?? '').trim();
@@ -40,9 +41,9 @@ const isCountUnit = (uRaw) => {
 
 const formatNumber = (value) => {
     if (!Number.isFinite(value)) return '-';
-    const rounded = Math.round(value * 1000) / 1000;
+    const rounded = Math.round(value * 100) / 100;
     if (Number.isInteger(rounded)) return rounded.toLocaleString();
-    return rounded.toLocaleString(undefined, { maximumFractionDigits: 3 });
+    return rounded.toLocaleString('ja-JP', { maximumFractionDigits: 2 });
 };
 
 const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onToggleTax, onEdit, onRequestUnitSync }) => {
@@ -105,13 +106,15 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
         return `¥${formatNumber(price)}/${currentUnit || '-'}`;
     })();
     const normalizedCategory = normalizeItemCategory(item?._master?.itemCategory);
-    const isCategoryTaxLocked = !!normalizedCategory;
     const categoryBasedTax10 = normalizedCategory === 'alcohol' || normalizedCategory === 'supplies';
-    const isTax10 = isCategoryTaxLocked
-        ? categoryBasedTax10
+    const isTax10Override = item?.tax10_override === true || item?.tax10_override === 1 || item?.tax10_override === '1' || item?.tax10_override === 'true';
+    const isTax10 = normalizedCategory
+        ? (isTax10Override ? (item?.tax10 === true || item?.tax10 === 1 || item?.tax10 === '1' || item?.tax10 === 'true') : categoryBasedTax10)
         : (item?.tax10 === true || item?.tax10 === 1 || item?.tax10 === '1' || item?.tax10 === 'true');
-    const taxTitle = isCategoryTaxLocked
-        ? `区分「${categoryLabelMap[normalizedCategory] || normalizedCategory}」により${isTax10 ? '10%' : '8%'}固定`
+    const taxTitle = normalizedCategory
+        ? (isTax10Override
+            ? `区分「${categoryLabelMap[normalizedCategory] || normalizedCategory}」（自動: ${categoryBasedTax10 ? '10%' : '8%'}）/ 手動設定`
+            : `区分「${categoryLabelMap[normalizedCategory] || normalizedCategory}」により${isTax10 ? '10%' : '8%'}（自動）`)
         : '10%対象';
     const taxMultiplier = isTax10 ? 1.1 : 1.08;
     // Calculate total value based on LOCAL input immediately
@@ -134,24 +137,59 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
         }
     };
 
-    const handleKeyDown = (e) => {
-        if (e.key === 'Enter') {
-            e.target.blur();
-        }
+    const selectAllText = (el) => {
+        if (!el) return;
+        // Delay so click/mouseup doesn't collapse the selection.
+        setTimeout(() => {
+            try {
+                el.select();
+            } catch {
+                // Some input types/browsers don't support select()
+            }
+        }, 0);
     };
 
-    const moveCaretToEnd = (e) => {
-        const el = e?.target;
-        if (!el) return;
-        // Ensure caret moves to end even if user clicks middle
+    const getQtyInputsInTable = (currentEl) => {
+        const table = currentEl?.closest?.('table');
+        const root = table || document;
+        return Array.from(root.querySelectorAll('input.inventory-quantity-input'));
+    };
+
+    const focusAdjacentQtyInput = (currentEl, delta) => {
+        const inputs = getQtyInputsInTable(currentEl).filter((el) => !el.disabled);
+        const idx = inputs.indexOf(currentEl);
+        if (idx < 0) return false;
+        const next = inputs[idx + delta];
+        if (!next) return false;
+
         requestAnimationFrame(() => {
+            // Keep the next input visible when typing through long lists.
             try {
-                const len = String(el.value ?? '').length;
-                el.setSelectionRange(len, len);
+                next.scrollIntoView({ block: 'nearest' });
             } catch {
-                // Some input types/browsers don't support selection ranges
+                // ignore
             }
+            next.focus();
+            selectAllText(next);
         });
+        return true;
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            focusAdjacentQtyInput(e.currentTarget, e.shiftKey ? -1 : 1);
+            e.currentTarget.blur();
+            return;
+        }
+
+        if (e.key === 'Tab') {
+            const moved = focusAdjacentQtyInput(e.currentTarget, e.shiftKey ? -1 : 1);
+            if (moved) {
+                e.preventDefault();
+                e.currentTarget.blur();
+            }
+        }
     };
 
     const masterUnit = item?._master?.packetUnit || '';
@@ -163,7 +201,6 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
                 <input
                     type="checkbox"
                     checked={isTax10}
-                    disabled={isCategoryTaxLocked}
                     onChange={(e) => onToggleTax && onToggleTax(item, e.target.checked)}
                     title={taxTitle}
                     className="inventory-tax-checkbox"
@@ -171,7 +208,15 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
             </td>
             <td>
                 {item.name}
-                {isLowStock(item) && <span style={{ marginLeft: '4px', fontSize: '0.7rem', color: 'red' }}>⚠️</span>}
+                {isLowStock(item) && (
+                    <span
+                        className="warning-badge"
+                        data-tooltip="発注点以下"
+                        style={{ marginLeft: '6px' }}
+                    >
+                        発注推奨
+                    </span>
+                )}
             </td>
             <td style={{ textAlign: 'right' }}>
                 {purchasePriceLabel}
@@ -184,12 +229,12 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
                     type="text"
                     inputMode="decimal"
                     value={localQuantity}
-                    onChange={(e) => setLocalQuantity(e.target.value)}
+                    onChange={(e) => setLocalQuantity(normalizeNumericInput(e.target.value))}
                     className="inventory-quantity-input no-print"
                     onBlur={handleBlur}
                     onKeyDown={handleKeyDown}
-                    onFocus={moveCaretToEnd}
-                    onClick={moveCaretToEnd}
+                    onFocus={(e) => selectAllText(e.target)}
+                    onClick={(e) => selectAllText(e.target)}
                     style={{
                         width: '80px',
                         textAlign: 'right',

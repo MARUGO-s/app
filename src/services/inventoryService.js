@@ -38,41 +38,42 @@ export const inventoryService = {
         // Strip any UI-only fields before DB insert
         const { id: _id, isPhantom: _isPhantom, _master, _csv, ...itemData } = item;
 
+        const tax10OverrideRaw = item?.tax10_override ?? item?.tax10Override;
         const payload = {
             ...itemData,
             user_id: userId,
             tax10: !!item.tax10,
+            tax10_override: !!tax10OverrideRaw,
             // Ensure numeric fields are numbers
             quantity: parseFloat(item.quantity) || 0,
             threshold: parseFloat(item.threshold) || 0,
             price: parseFloat(item.price) || 0
         };
 
-        const res1 = await supabase
+        const executeInsert = async (body) => supabase
             .from(TABLE_NAME)
-            .insert([payload])
+            .insert([body])
             .select()
             .single();
 
-        if (res1.error && isMissingColumnError(res1.error, 'tax10')) {
-            const { tax10: _tax10, ...fallbackPayload } = payload;
-            const res2 = await supabase
-                .from(TABLE_NAME)
-                .insert([fallbackPayload])
-                .select()
-                .single();
-            if (res2.error) {
-                console.error('Error adding item:', res2.error);
-                throw res2.error;
+        let { data, error } = await executeInsert(payload);
+
+        if (error) {
+            const shouldDropTax10 = isMissingColumnError(error, 'tax10');
+            const shouldDropTax10Override = isMissingColumnError(error, 'tax10_override');
+            if (shouldDropTax10 || shouldDropTax10Override) {
+                const fallbackPayload = { ...payload };
+                if (shouldDropTax10) delete fallbackPayload.tax10;
+                if (shouldDropTax10Override) delete fallbackPayload.tax10_override;
+                ({ data, error } = await executeInsert(fallbackPayload));
             }
-            return res2.data;
         }
 
-        if (res1.error) {
-            console.error('Error adding item:', res1.error);
-            throw res1.error;
+        if (error) {
+            console.error('Error adding item:', error);
+            throw error;
         }
-        return res1.data;
+        return data;
     },
 
     update: async (userId, item) => {
@@ -83,44 +84,43 @@ export const inventoryService = {
         // Strip any UI-only fields before DB update
         const { id: _id, isPhantom: _isPhantom, created_at: _createdAt, _master, _csv, ...itemData } = item;
 
+        const tax10OverrideRaw = item?.tax10_override ?? item?.tax10Override;
         const payload = {
             ...itemData,
             tax10: !!item.tax10,
+            tax10_override: !!tax10OverrideRaw,
             quantity: parseFloat(item.quantity) || 0,
             threshold: parseFloat(item.threshold) || 0,
             price: parseFloat(item.price) || 0,
             updated_at: new Date().toISOString()
         };
 
-        const res1 = await supabase
+        const executeUpdate = async (body) => supabase
             .from(TABLE_NAME)
-            .update(payload)
+            .update(body)
             .eq('id', item.id)
             .eq('user_id', userId)
             .select()
             .single();
 
-        if (res1.error && isMissingColumnError(res1.error, 'tax10')) {
-            const { tax10: _tax10, ...fallbackPayload } = payload;
-            const res2 = await supabase
-                .from(TABLE_NAME)
-                .update(fallbackPayload)
-                .eq('id', item.id)
-                .eq('user_id', userId)
-                .select()
-                .single();
-            if (res2.error) {
-                console.error('Error updating item:', res2.error);
-                throw res2.error;
+        let { data, error } = await executeUpdate(payload);
+
+        if (error) {
+            const shouldDropTax10 = isMissingColumnError(error, 'tax10');
+            const shouldDropTax10Override = isMissingColumnError(error, 'tax10_override');
+            if (shouldDropTax10 || shouldDropTax10Override) {
+                const fallbackPayload = { ...payload };
+                if (shouldDropTax10) delete fallbackPayload.tax10;
+                if (shouldDropTax10Override) delete fallbackPayload.tax10_override;
+                ({ data, error } = await executeUpdate(fallbackPayload));
             }
-            return res2.data;
         }
 
-        if (res1.error) {
-            console.error('Error updating item:', res1.error);
-            throw res1.error;
+        if (error) {
+            console.error('Error updating item:', error);
+            throw error;
         }
-        return res1.data;
+        return data;
     },
 
     delete: async (userId, id) => {

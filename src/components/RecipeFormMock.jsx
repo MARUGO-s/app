@@ -7,11 +7,11 @@ import { RecipeFormBread } from './RecipeFormBread';
 import { RecipeFormIngredients } from './RecipeFormIngredients';
 import { RecipeFormSteps } from './RecipeFormSteps';
 import { purchasePriceService } from '../services/purchasePriceService';
-import './RecipeForm.css';
-import './RecipeFormMock.css';
 import { ImportModal } from './ImportModal';
+import './RecipeFormMock.css';
 
-export const RecipeForm = ({ onSave, onCancel, initialData }) => {
+// UI Mock for RecipeForm (keeps existing data behavior, only changes layout/styles).
+export const RecipeFormMock = ({ onSave, onCancel, initialData }) => {
     const safeInitialData = initialData || {};
 
     const [workTab, setWorkTab] = useState('ingredients'); // 'ingredients' | 'steps'
@@ -28,13 +28,11 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         loadPrices();
     }, []);
 
-    // Transform initial steps and extract groups (similar to ingredients)
+    // Transform initial steps and extract groups (same behavior as RecipeForm)
     const processedInitialSteps = useMemo(() => {
         const steps = safeInitialData.steps || [''];
         let stepGroups = safeInitialData.stepGroups || [];
 
-        // If no explicit groups but steps have 'group' property (from import)
-        // Steps might be strings or objects here
         const hasStepGroups = steps.some(s => typeof s === 'object' && s.group);
 
         if (stepGroups.length === 0 && hasStepGroups) {
@@ -48,7 +46,6 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         }
 
         const finalSteps = steps.map(s => {
-            // Handle string or object
             const text = typeof s === 'string' ? s : s.text || '';
             const id = (typeof s === 'object' && s.id) ? s.id : crypto.randomUUID();
 
@@ -69,36 +66,26 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
     const initialSteps = processedInitialSteps.steps;
     const initialStepGroups = processedInitialSteps.stepGroups;
 
-    // Transform initial ingredients and extract groups if present (for imported recipes)
+    // Transform initial ingredients and extract groups if present (same behavior as RecipeForm)
     const processedInitialData = useMemo(() => {
         const ingredients = safeInitialData.ingredients || [{ name: '', quantity: '', unit: '', cost: '', purchaseCost: '' }];
         let groups = safeInitialData.ingredientGroups || [];
 
-        // If no explicit groups but ingredients have 'group' property (from import)
         if (groups.length === 0 && ingredients.some(i => i.group)) {
             const groupMap = new Map(); // Name -> ID
-            // Create groups
             ingredients.forEach(i => {
                 if (i.group && !groupMap.has(i.group)) {
                     groupMap.set(i.group, crypto.randomUUID());
                 }
             });
-
-            // Build group array
             groups = Array.from(groupMap.entries()).map(([name, id]) => ({ id, name }));
-
-            // Assign groupIds to ingredients
-            // Note: Ingredients without group will go to default (handled by RecipeFormIngredients) or we can make a default Main group
-            if (groupMap.size > 0 && ingredients.some(i => !i.group)) {
-                // Ensure there is a default group if we have mixed content?
-                // Usually import is all grouped or not.
-            }
         }
 
         const finalIngredients = ingredients.map(ing => {
-            const base = typeof ing === 'string' ? { name: ing, quantity: '', unit: '', cost: '', purchaseCost: '' } : { ...ing, cost: ing.cost || '', purchaseCost: ing.purchaseCost || '' };
+            const base = typeof ing === 'string'
+                ? { name: ing, quantity: '', unit: '', cost: '', purchaseCost: '' }
+                : { ...ing, cost: ing.cost || '', purchaseCost: ing.purchaseCost || '' };
 
-            // Map group name to ID if applicable
             let groupId = base.groupId;
             if (!groupId && base.group && groups.length > 0) {
                 const grp = groups.find(g => g.name === base.group);
@@ -118,12 +105,12 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         title: safeInitialData.title || '',
         description: safeInitialData.description || '',
         image: safeInitialData.image || '',
-        imageFile: null, // New state for file upload
+        imageFile: null,
         storeName: safeInitialData.storeName || '',
         servings: safeInitialData.servings || '',
         ingredients: initialIngredients,
         ingredientGroups: initialIngredientGroups,
-        steps: initialSteps, // Use transformed steps
+        steps: initialSteps,
         stepGroups: initialStepGroups,
         tags: safeInitialData.tags || [''],
         course: safeInitialData.course || '',
@@ -131,38 +118,26 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         type: safeInitialData.type || 'normal', // 'normal' | 'bread'
         flours: safeInitialData.flours || [],
         breadIngredients: safeInitialData.breadIngredients || [],
-        sourceUrl: safeInitialData.sourceUrl || '' // Add sourceUrl state
+        sourceUrl: safeInitialData.sourceUrl || ''
     });
 
     const [isDragActive, setIsDragActive] = useState(false);
 
     const handleImportedRecipe = (importedData, sourceUrl = '') => {
-        // Map imported ingredients to form structure
-        // 1. Extract Groups
         const groupMap = new Map(); // Name -> ID
         const rawIngredients = importedData.ingredients || [];
 
         rawIngredients.forEach(ing => {
-            // Treat 'Main' as a group too (rename to '材料') to ensure it comes first if it appears first
             let gName = ing.group || '材料';
             if (gName === 'Main') gName = '材料';
-
-            if (!groupMap.has(gName)) {
-                groupMap.set(gName, crypto.randomUUID());
-            }
+            if (!groupMap.has(gName)) groupMap.set(gName, crypto.randomUUID());
         });
-
         const newGroups = Array.from(groupMap.entries()).map(([name, id]) => ({ id, name }));
 
-        // 2. Map Ingredients
         const mappedIngredients = rawIngredients.map(ing => {
             let gName = ing.group || '材料';
             if (gName === 'Main') gName = '材料';
-
-            let groupId = undefined;
-            if (groupMap.has(gName)) {
-                groupId = groupMap.get(gName);
-            }
+            const groupId = groupMap.get(gName);
 
             return {
                 id: crypto.randomUUID(),
@@ -171,41 +146,25 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                 unit: ing.unit || '',
                 cost: '',
                 purchaseCost: '',
-                groupId // Assign Group ID
+                groupId
             };
         });
 
-        // Map imported steps
         const stepGroupMap = new Map();
         const rawSteps = importedData.steps || [];
-
-        // 1. Extract Step Groups
         rawSteps.forEach(step => {
             if (typeof step === 'object' && step.group && step.group !== 'Main') {
-                if (!stepGroupMap.has(step.group)) {
-                    stepGroupMap.set(step.group, crypto.randomUUID());
-                }
+                if (!stepGroupMap.has(step.group)) stepGroupMap.set(step.group, crypto.randomUUID());
             }
         });
-
         const newStepGroups = Array.from(stepGroupMap.entries()).map(([name, id]) => ({ id, name }));
 
-        // 2. Map Steps
         const mappedSteps = rawSteps.map(step => {
             const isObj = typeof step === 'object';
             const text = isObj ? (step.text || '') : step;
             const groupName = isObj ? step.group : null;
-
-            let groupId = undefined;
-            if (groupName && stepGroupMap.has(groupName)) {
-                groupId = stepGroupMap.get(groupName);
-            }
-
-            return {
-                id: crypto.randomUUID(),
-                text,
-                groupId
-            };
+            const groupId = groupName && stepGroupMap.has(groupName) ? stepGroupMap.get(groupName) : undefined;
+            return { id: crypto.randomUUID(), text, groupId };
         });
 
         setFormData(prev => ({
@@ -216,13 +175,12 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
             image: importedData.image || prev.image,
             servings: importedData.recipeYield || prev.servings,
             ingredients: mappedIngredients,
-            ingredientGroups: newGroups, // Set the groups
+            ingredientGroups: newGroups,
             steps: mappedSteps,
-            stepGroups: newStepGroups, // Set step groups
-            // Reset sections 
+            stepGroups: newStepGroups,
             ingredientSections: undefined,
             stepSections: undefined,
-            sourceUrl: sourceUrl || prev.sourceUrl // Save Source URL
+            sourceUrl: sourceUrl || prev.sourceUrl
         }));
         setImportMode(null);
         setWorkTab('ingredients');
@@ -231,9 +189,9 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
     const handleDrag = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (e.type === "dragenter" || e.type === "dragover") {
+        if (e.type === 'dragenter' || e.type === 'dragover') {
             setIsDragActive(true);
-        } else if (e.type === "dragleave") {
+        } else if (e.type === 'dragleave') {
             setIsDragActive(false);
         }
     };
@@ -248,7 +206,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                 setFormData(prev => ({
                     ...prev,
                     imageFile: file,
-                    image: URL.createObjectURL(file) // Preview URL
+                    image: URL.createObjectURL(file)
                 }));
             }
         }
@@ -265,7 +223,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
             setFormData(prev => ({
                 ...prev,
                 imageFile: file,
-                image: URL.createObjectURL(file) // Preview URL
+                image: URL.createObjectURL(file)
             }));
         }
     };
@@ -291,7 +249,6 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        // Basic validation could go here
 
         let finalIngredients = [];
         let finalGroups = [];
@@ -302,10 +259,8 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                 return rest;
             });
         } else {
-            // Reconstruct ingredients from sections
-            const sections = formData.ingredientSections || []; // Should be populated
+            const sections = formData.ingredientSections || [];
 
-            // If never populated (e.g. immediate submit without render?), fallback to ingredients
             if (sections.length === 0 && formData.ingredients.length > 0) {
                 finalIngredients = formData.ingredients.map((item) => {
                     const { id: _id, ...rest } = item;
@@ -320,31 +275,23 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                 ).map((item) => {
                     const { id: _id, ...rest } = item;
                     return rest;
-                }); // Remove UI IDs
+                });
 
                 finalGroups = sections.map(s => ({ id: s.id, name: s.name }));
             }
         }
 
-        // Automatically derive tags from course and category
-        const tagSet = new Set(formData.tags || []); // Start with existing tags to preserve 'owner:*' etc.
+        const tagSet = new Set(formData.tags || []);
         if (formData.course) tagSet.add(formData.course);
         if (formData.category) tagSet.add(formData.category);
-        if (formData.type === 'bread') {
-            tagSet.add('パン');
-        }
-
-        // Remove empty strings
+        if (formData.type === 'bread') tagSet.add('パン');
         const derivedTags = Array.from(tagSet).filter(Boolean);
 
-        // Process Steps Sections
         let finalSteps = [];
         let finalStepGroups = [];
         const stepSections = formData.stepSections || [];
 
         if (stepSections.length === 0 && formData.steps.length > 0) {
-            // Fallback if no sections loaded/edited (though they should be init on mount)
-            // Ensure steps are objects if possible or strings
             finalSteps = formData.steps.map(s => typeof s === 'string' ? { text: s } : s);
         } else {
             finalSteps = stepSections.flatMap(section =>
@@ -360,33 +307,38 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
             ...formData,
             ingredients: finalIngredients,
             ingredientGroups: finalGroups,
-            steps: finalSteps, // Now passing objects with groupId instead of strings!
+            steps: finalSteps,
             stepGroups: finalStepGroups,
             image: formData.imageFile || formData.image,
             id: safeInitialData.id || Date.now(),
             tags: derivedTags,
-            // Clean up temporary UI state
             ingredientSections: undefined,
             stepSections: undefined,
         });
     };
 
-    const isEdit = Boolean(safeInitialData?.id);
+    const isEdit = Boolean(safeInitialData?.title);
 
     return (
         <form className="recipe-form-mock fade-in" onSubmit={handleSubmit}>
             {importMode && (
-                <ImportModal onClose={() => setImportMode(null)} onImport={handleImportedRecipe} initialMode={importMode} />
+                <ImportModal
+                    onClose={() => setImportMode(null)}
+                    onImport={handleImportedRecipe}
+                    initialMode={importMode}
+                />
             )}
+
             <div className="recipe-form-mock__page">
                 <div className="recipe-form-mock__commandbar" role="banner">
                     <div className="recipe-form-mock__commandbar-inner">
                         <div className="recipe-form-mock__crumb">
-                            <span className="recipe-form-mock__crumb-app">レシピ</span>
+                            <span className="recipe-form-mock__crumb-app">Recipe</span>
                             <span className="recipe-form-mock__crumb-sep">/</span>
                             <span className="recipe-form-mock__crumb-page">
                                 {isEdit ? 'レシピ編集' : '新規レシピ作成'}
                             </span>
+                            <span className="recipe-form-mock__crumb-badge">UIモック</span>
                         </div>
                         <div className="recipe-form-mock__actions">
                             <Button type="button" variant="ghost" onClick={onCancel}>キャンセル</Button>
@@ -485,7 +437,9 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                     <div className="recipe-form-mock__grid">
                         <aside className="recipe-form-mock__col recipe-form-mock__col--side">
                             <Card className="recipe-form-mock__card recipe-form-mock__card--notes">
-                                <div className="recipe-form-mock__card-title">メモ</div>
+                                <div className="recipe-form-mock__card-title">
+                                    メモ
+                                </div>
                                 <Input
                                     label="説明"
                                     id="description"
@@ -504,7 +458,9 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                             </Card>
 
                             <Card className="recipe-form-mock__card recipe-form-mock__card--image">
-                                <div className="recipe-form-mock__card-title">画像</div>
+                                <div className="recipe-form-mock__card-title">
+                                    画像
+                                </div>
                                 <div
                                     className={`recipe-form-mock__image-drop ${isDragActive ? 'is-active' : ''}`}
                                     onDragEnter={handleDrag}
@@ -545,21 +501,35 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
 
                             {!safeInitialData?.id && (
                                 <Card className="recipe-form-mock__card recipe-form-mock__card--import">
-                                    <div className="recipe-form-mock__card-title">取り込み</div>
+                                    <div className="recipe-form-mock__card-title">
+                                        取り込み
+                                    </div>
                                     <div className="recipe-form-mock__import-actions">
-                                        <Button variant="secondary" type="button" onClick={() => setImportMode('url')}>
+                                        <Button
+                                            variant="secondary"
+                                            type="button"
+                                            onClick={() => setImportMode('url')}
+                                        >
                                             URL取り込み
                                         </Button>
-                                        <Button variant="secondary" type="button" onClick={() => setImportMode('image')}>
+                                        <Button
+                                            variant="secondary"
+                                            type="button"
+                                            onClick={() => setImportMode('image')}
+                                        >
                                             画像解析
                                         </Button>
                                     </div>
-                                    <div className="recipe-form-mock__import-note">取り込み後も内容は編集できます。</div>
+                                    <div className="recipe-form-mock__import-note">
+                                        取り込み後も内容は編集できます。
+                                    </div>
                                 </Card>
                             )}
 
                             <Card className="recipe-form-mock__card recipe-form-mock__card--tips">
-                                <div className="recipe-form-mock__card-title">使い方</div>
+                                <div className="recipe-form-mock__card-title">
+                                    使い方
+                                </div>
                                 <ul className="recipe-form-mock__tips-list">
                                     <li>材料と手順はドラッグで並び替えできます。</li>
                                     <li>材料名は入力候補から選ぶと、仕入れ単価が自動入力されます。</li>
@@ -607,7 +577,9 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                                 </button>
                                             </div>
                                         ) : (
-                                            <div className="recipe-form-mock__hint">ドラッグで並び替えできます</div>
+                                            <div className="recipe-form-mock__hint">
+                                                ドラッグで並び替えできます
+                                            </div>
                                         )}
                                     </div>
                                 </div>

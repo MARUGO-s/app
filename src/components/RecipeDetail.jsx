@@ -6,6 +6,7 @@ import { translationService } from '../services/translationService';
 import { recipeService } from '../services/recipeService';
 import { unitConversionService } from '../services/unitConversionService';
 import { useAuth } from '../contexts/useAuth';
+import { useToast } from '../contexts/useToast';
 import { SUPPORTED_LANGUAGES } from '../constants';
 import './RecipeDetail.css';
 import QRCode from "react-qr-code";
@@ -64,6 +65,19 @@ const toFiniteNumber = (value) => {
     return Number.isFinite(n) ? n : NaN;
 };
 
+const normalizeYieldPercent = (value) => {
+    const n = toFiniteNumber(value);
+    if (!Number.isFinite(n)) return 100;
+    if (n <= 0) return 100;
+    if (n > 100) return 100;
+    return n;
+};
+
+const getYieldRate = (item, conversion) => {
+    const raw = conversion?.yieldPercent ?? conversion?.yield_percent ?? item?.yieldPercent ?? item?.yield_percent;
+    return normalizeYieldPercent(raw) / 100;
+};
+
 const normalizePurchaseCostByConversion = (basePrice, packetSize, packetUnit) => {
     const safeBase = toFiniteNumber(basePrice);
     const safePacketSize = toFiniteNumber(packetSize);
@@ -79,22 +93,24 @@ const normalizePurchaseCostByConversion = (basePrice, packetSize, packetUnit) =>
     return safeBase / safePacketSize;
 };
 
-const calculateCostByUnit = (quantity, purchaseCost, unit, { defaultWeightWhenUnitEmpty = false, forceWeightBased = false } = {}) => {
+const calculateCostByUnit = (quantity, purchaseCost, unit, { defaultWeightWhenUnitEmpty = false, forceWeightBased = false, yieldRate = 1 } = {}) => {
     const qty = toFiniteNumber(quantity);
     const pCost = toFiniteNumber(purchaseCost);
     if (!Number.isFinite(qty) || !Number.isFinite(pCost)) return NaN;
 
+    const safeYieldRate = (Number.isFinite(yieldRate) && yieldRate > 0) ? yieldRate : 1;
+
     const normalizedUnit = String(unit || '').trim().toLowerCase();
     if (forceWeightBased) {
-        return (qty / 1000) * pCost;
+        return ((qty / 1000) * pCost) / safeYieldRate;
     }
     if (!normalizedUnit && defaultWeightWhenUnitEmpty) {
-        return (qty / 1000) * pCost;
+        return ((qty / 1000) * pCost) / safeYieldRate;
     }
     if (['g', 'ｇ', 'ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(normalizedUnit)) {
-        return (qty / 1000) * pCost;
+        return ((qty / 1000) * pCost) / safeYieldRate;
     }
-    return qty * pCost;
+    return (qty * pCost) / safeYieldRate;
 };
 
 const isLikelyLegacyPackPrice = (item, normalizedCost) => {
@@ -112,6 +128,7 @@ const isLikelyLegacyPackPrice = (item, normalizedCost) => {
 
 export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onHardDelete, isDeleted, onView, onDuplicate, backLabel, onList }) => {
     const { user } = useAuth();
+    const toast = useToast();
     const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
     const [showDuplicateConfirm, setShowDuplicateConfirm] = React.useState(false);
     const [showHardDeleteConfirm, setShowHardDeleteConfirm] = React.useState(false);
@@ -189,6 +206,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
 
             const conv = findConversionByName(conversionMap, item.name);
             const normalizedCategory = normalizeItemCategory(item.itemCategory ?? item.item_category ?? conv?.itemCategory);
+            const yieldRate = getYieldRate(item, conv);
 
             let nextItem = item;
             if (normalizedCategory) {
@@ -204,10 +222,9 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                 const shouldWeightBased =
                     options.forceWeightBased || (options.defaultWeightWhenUnitEmpty && !unitRaw);
                 if (shouldWeightBased) {
-                    const qty = toFiniteNumber(item.quantity);
-                    const pCost = toFiniteNumber(nextItem.purchaseCost);
-                    const expectedCost = (Number.isFinite(qty) && Number.isFinite(pCost))
-                        ? Math.round(((qty / 1000) * pCost) * 100) / 100
+                    const expectedCostRaw = calculateCostByUnit(item.quantity, nextItem.purchaseCost, item.unit, { ...options, yieldRate });
+                    const expectedCost = Number.isFinite(expectedCostRaw)
+                        ? Math.round(expectedCostRaw * 100) / 100
                         : NaN;
                     const currentCost = toFiniteNumber(nextItem.cost);
                     if (Number.isFinite(expectedCost) && (!Number.isFinite(currentCost) || Math.abs(currentCost - expectedCost) > 0.01)) {
@@ -234,7 +251,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                 return nextItem;
             }
 
-            const recalculatedCost = calculateCostByUnit(item.quantity, normalizedCost, item.unit, options);
+            const recalculatedCost = calculateCostByUnit(item.quantity, normalizedCost, item.unit, { ...options, yieldRate });
 
             return {
                 ...nextItem,
@@ -308,7 +325,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
             // Ideally notify update parent, but local state is fine for switch
         } catch (e) {
             console.error("Failed to toggle public", e);
-            alert("公開設定の変更に失敗しました");
+            toast.error("公開設定の変更に失敗しました");
             setIsPublic(!newStatus); // Revert
         }
     };
@@ -347,7 +364,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
             setTranslationCache(prev => ({ ...prev, [langCode]: translated }));
         } catch (err) {
             console.error(err);
-            alert("翻訳に失敗しました");
+            toast.error("翻訳に失敗しました");
             setCurrentLang('ORIGINAL');
         } finally {
             setIsTranslating(false);
@@ -467,7 +484,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
             if (onDuplicate) onDuplicate(newRecipe);
         } catch (e) {
             console.error("Duplication failed", e);
-            alert("複製に失敗しました。");
+            toast.error("複製に失敗しました");
         }
     };
 

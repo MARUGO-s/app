@@ -14,6 +14,18 @@ const normalizeProfileRow = (payload) => {
 
 export const userService = {
     async fetchAllProfiles() {
+        // Prefer admin RPC if available (profiles RLS may restrict direct SELECT).
+        try {
+            const { data, error } = await supabase.rpc('admin_list_profiles');
+            if (!error && Array.isArray(data)) return data;
+            if (error) {
+                // Fall back to direct SELECT for older DBs or non-admin users.
+                console.warn('admin_list_profiles RPC failed (fallback to direct select):', error);
+            }
+        } catch (e) {
+            console.warn('admin_list_profiles RPC threw (fallback to direct select):', e);
+        }
+
         // Prefer selecting email if schema supports it; fallback for older DBs.
         const res1 = await supabase
             .from('profiles')

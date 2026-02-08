@@ -67,6 +67,10 @@ export const Inventory = ({ onBack }) => {
     // Generic Notification State (for replacing alerts)
     const [notification, setNotification] = useState(null); // { title, message, type }
 
+    // Confirm modal when switching tax to 10%
+    const [taxConfirm, setTaxConfirm] = useState(null); // { item }
+    const [taxConfirmSaving, setTaxConfirmSaving] = useState(false);
+
     // Sensors for DnD (activates on move of 8px to prevent accidental drag on click)
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -167,9 +171,44 @@ export const Inventory = ({ onBack }) => {
             setIngredientMasterMap(conversions || new Map());
             setCsvUnitOverrideMap(overrides || new Map());
 
-            // Initialize checkedItems with IDs of all existing inventory items
-            // This ensures the count in "棚卸し一覧 ({checkedItems.size})" is correct after reload
-            const existingIds = new Set(inventoryData.map(item => item.id));
+            // Initialize checkedItems with IDs of unique existing inventory items (deduped by vendor+name).
+            // This keeps the count aligned with what the user sees in the inventory table.
+            const toDateMs = (value) => {
+                if (!value) return -1;
+                const d = new Date(value);
+                const ms = d.getTime();
+                return Number.isFinite(ms) ? ms : -1;
+            };
+            const pickPreferred = (a, b) => {
+                const aMs = Math.max(
+                    toDateMs(a?.updated_at),
+                    toDateMs(a?.updatedAt),
+                    toDateMs(a?.created_at),
+                    toDateMs(a?.createdAt),
+                );
+                const bMs = Math.max(
+                    toDateMs(b?.updated_at),
+                    toDateMs(b?.updatedAt),
+                    toDateMs(b?.created_at),
+                    toDateMs(b?.createdAt),
+                );
+                if (aMs !== bMs) return bMs > aMs ? b : a;
+                return a;
+            };
+            const bestByKey = new Map();
+            (inventoryData || []).forEach((it) => {
+                const vendorKey = String(it?.vendor ?? '').trim() || '__no_vendor__';
+                const nameKey = normalizeIngredientKey(it?.name) || String(it?.name ?? '').trim();
+                if (!nameKey) return;
+                const key = `${vendorKey}@@${nameKey}`;
+                const prev = bestByKey.get(key);
+                if (!prev) {
+                    bestByKey.set(key, it);
+                    return;
+                }
+                bestByKey.set(key, pickPreferred(prev, it));
+            });
+            const existingIds = new Set(Array.from(bestByKey.values()).map(item => item.id));
             setCheckedItems(existingIds);
 
         } catch (error) {
@@ -984,10 +1023,12 @@ export const Inventory = ({ onBack }) => {
 
             // Always attach CSV info for UI display (e.g. show "¥1200/kg").
             const baseWithCsv = { ...base };
+            baseWithCsv.name = normalize(baseWithCsv.name);
+            baseWithCsv.vendor = normalize(baseWithCsv.vendor);
             baseWithCsv._csv = {
                 unit: csvUnit,
                 price: csvRow?.price ?? null,
-                vendor: csvRow?.vendor ?? null,
+                vendor: normalize(csvRow?.vendor) || null,
                 dateStr: csvRow?.dateStr ?? null
             };
 
@@ -1051,18 +1092,28 @@ export const Inventory = ({ onBack }) => {
                 }
             }
 
+            const tax10Override = isTax10(next?.tax10_override ?? next?.tax10Override);
+            const tax10Auto = normalizedCategory ? isTax10ByItemCategory(normalizedCategory) : null;
+
             // Keep extra master info for future UI if needed
             next._master = {
                 packetSize: m.packetSize,
                 packetUnit: m.packetUnit,
                 lastPrice: m.lastPrice,
                 itemCategory: normalizedCategory || null,
+                tax10Auto,
+                tax10Override,
                 updatedAt: m.updatedAt
             };
 
-            // 税率ルール: アルコール/備品は10%、食材/ソフトドリンクは8%
+            // 税率ルール: アルコール/備品は10%、食材/ソフトドリンクは8%（材料マスター区分がある場合）
+            // - tax10_override=false (default): 自動判定を適用
+            // - tax10_override=true : 明示設定を優先（手動でチェック可能にする）
             if (normalizedCategory) {
-                next.tax10 = isTax10ByItemCategory(normalizedCategory);
+                next.tax10_override = tax10Override;
+                if (!tax10Override && tax10Auto !== null) {
+                    next.tax10 = tax10Auto;
+                }
             }
             return next;
         };
@@ -1092,14 +1143,15 @@ export const Inventory = ({ onBack }) => {
                     unit: csvItem.unit || '',
                     category: '',
                     price: csvItem.price,
-                    vendor: csvItem.vendor,
+                    vendor: normalize(csvItem.vendor),
                     threshold: 0,
-                    tax10: false
+                    tax10: false,
+                    tax10_override: false
                 };
                 merged.push(applyMasterPriority(base));
             }
         });
-        return merged.filter(i => {
+        const filtered = merged.filter(i => {
             const rawName = String(i?.name ?? '');
             const trimmedName = normalize(rawName);
             const nameKey = keyFor(rawName);
@@ -1108,6 +1160,64 @@ export const Inventory = ({ onBack }) => {
             if (isHiddenVendor(i.vendor)) return false;
             return true;
         });
+
+        // Prevent duplicated rows in the inventory table.
+        // Dedupe by (vendor, normalized ingredient key).
+        // Prefer persisted rows over CSV phantom rows; if multiple persisted rows exist, pick the latest by updated_at/created_at.
+        const toDateMs = (value) => {
+            if (!value) return -1;
+            const d = new Date(value);
+            const ms = d.getTime();
+            return Number.isFinite(ms) ? ms : -1;
+        };
+
+        const pickPreferred = (a, b) => {
+            const aPhantom = !!a?.isPhantom;
+            const bPhantom = !!b?.isPhantom;
+            if (aPhantom !== bPhantom) return aPhantom ? b : a;
+
+            const aMs = Math.max(
+                toDateMs(a?.updated_at),
+                toDateMs(a?.updatedAt),
+                toDateMs(a?.created_at),
+                toDateMs(a?.createdAt),
+            );
+            const bMs = Math.max(
+                toDateMs(b?.updated_at),
+                toDateMs(b?.updatedAt),
+                toDateMs(b?.created_at),
+                toDateMs(b?.createdAt),
+            );
+            if (aMs !== bMs) return bMs > aMs ? b : a;
+
+            // If timestamps are equal/unknown, prefer non-empty quantity.
+            const aQtyRaw = a?.quantity;
+            const bQtyRaw = b?.quantity;
+            const aQty = aQtyRaw === '' || aQtyRaw === null || aQtyRaw === undefined ? null : parseFloat(aQtyRaw);
+            const bQty = bQtyRaw === '' || bQtyRaw === null || bQtyRaw === undefined ? null : parseFloat(bQtyRaw);
+            const aHasQty = aQty !== null && Number.isFinite(aQty);
+            const bHasQty = bQty !== null && Number.isFinite(bQty);
+            if (aHasQty !== bHasQty) return bHasQty ? b : a;
+
+            // Stable fallback: keep the first one.
+            return a;
+        };
+
+        const deduped = new Map();
+        filtered.forEach((it) => {
+            const nameKey = keyFor(it?.name) || normalize(it?.name);
+            if (!nameKey) return;
+            const vendorKey = normalize(it?.vendor) || '__no_vendor__';
+            const key = `${vendorKey}@@${nameKey}`;
+            const prev = deduped.get(key);
+            if (!prev) {
+                deduped.set(key, it);
+                return;
+            }
+            deduped.set(key, pickPreferred(prev, it));
+        });
+
+        return Array.from(deduped.values());
     }, [items, csvData, ignoredNames, excludedNames, ingredientMasterMap, csvUnitOverrideMap, isHiddenVendor]);
 
     const handleDragEnd = (event) => {
@@ -1362,13 +1472,14 @@ export const Inventory = ({ onBack }) => {
                     price: item.price,
                     vendor: item.vendor,
                     threshold: 0,
-                    tax10
+                    tax10,
+                    tax10_override: true
                 };
                 await inventoryService.add(userId, newItem);
                 await loadData(true);
             } else {
-                setItems(prev => prev.map(i => (i.id === item.id ? { ...i, tax10 } : i)));
-                await inventoryService.update(userId, { ...item, tax10 });
+                setItems(prev => prev.map(i => (i.id === item.id ? { ...i, tax10, tax10_override: true } : i)));
+                await inventoryService.update(userId, { ...item, tax10, tax10_override: true });
             }
         } catch (e) {
             console.error(e);
@@ -1380,6 +1491,32 @@ export const Inventory = ({ onBack }) => {
                 '更新に失敗しました';
             setNotification({ title: 'エラー', message: `税率の更新に失敗しました\n${msg}`, type: 'error' });
             loadData();
+        }
+    };
+
+    const handleRequestToggleTax = (item, nextTax10) => {
+        // Ask confirmation ONLY when switching to 10%.
+        if (nextTax10 === true) {
+            setTaxConfirm({ item });
+            return;
+        }
+        void handleToggleTax(item, nextTax10);
+    };
+
+    const closeTaxConfirmModal = () => {
+        if (taxConfirmSaving) return;
+        setTaxConfirm(null);
+    };
+
+    const confirmTax10Switch = async () => {
+        const item = taxConfirm?.item;
+        if (!item) return;
+        setTaxConfirmSaving(true);
+        try {
+            await handleToggleTax(item, true);
+            setTaxConfirm(null);
+        } finally {
+            setTaxConfirmSaving(false);
         }
     };
 
@@ -1514,56 +1651,6 @@ export const Inventory = ({ onBack }) => {
         // Vendor tab
         return item.vendor === activeTab;
     });
-
-    const handleBulkTax = async (tax10) => {
-        try {
-            if (!userId) return;
-            const targets = filteredItems;
-            if (!targets.length) return;
-
-            const toCreate = targets.filter(item => item.isPhantom);
-            const toUpdate = targets.filter(item => !item.isPhantom);
-
-            if (toUpdate.length) {
-                setItems(prev => prev.map(i => {
-                    const match = toUpdate.find(t => t.id === i.id);
-                    return match ? { ...i, tax10 } : i;
-                }));
-                await Promise.allSettled(
-                    toUpdate.map(item => inventoryService.update(userId, { ...item, tax10 }))
-                );
-            }
-
-            if (toCreate.length) {
-                await Promise.allSettled(
-                    toCreate.map(item => inventoryService.add(userId, {
-                        name: item.name.trim(),
-                        quantity: item.quantity === '' ? 0 : (parseFloat(item.quantity) || 0),
-                        unit: item.unit,
-                        category: item.category || '',
-                        price: item.price,
-                        vendor: item.vendor,
-                        threshold: 0,
-                        tax10
-                    }))
-                );
-            }
-
-            if (toCreate.length) {
-                await loadData(true);
-            }
-        } catch (e) {
-            console.error(e);
-            const msg =
-                e?.message ||
-                e?.error_description ||
-                (typeof e === 'string' ? e : null) ||
-                (() => { try { return JSON.stringify(e); } catch { return null; } })() ||
-                '更新に失敗しました';
-            setNotification({ title: 'エラー', message: `税率の一括更新に失敗しました\n${msg}`, type: 'error' });
-            loadData();
-        }
-    };
 
     if (isEditing) {
         return (
@@ -1750,25 +1837,6 @@ export const Inventory = ({ onBack }) => {
                                 </button>
 
                                 {!isSummaryTab && (
-                                    <>
-                                        <button
-                                            className="inventory-controls__btn"
-                                            onClick={() => handleBulkTax(true)}
-                                            title="表示中の品目を10%に一括設定"
-                                        >
-                                            10%一括
-                                        </button>
-                                        <button
-                                            className="inventory-controls__btn"
-                                            onClick={() => handleBulkTax(false)}
-                                            title="表示中の品目を8%に一括設定"
-                                        >
-                                            8%一括
-                                        </button>
-                                    </>
-                                )}
-
-                                {!isSummaryTab && (
                                     <button
                                         className="inventory-controls__btn"
                                         onClick={handleDownloadCsv}
@@ -1919,7 +1987,7 @@ export const Inventory = ({ onBack }) => {
                                                                                                         <td>{detailRow.name || '-'}</td>
                                                                                                         <td>{categoryLabel}</td>
                                                                                                         <td style={{ textAlign: 'right' }}>
-                                                                                                            ¥{Math.round(detailRow.price || 0).toLocaleString()}
+                                                                                                            ¥{Number(detailRow.price || 0).toLocaleString('ja-JP', { maximumFractionDigits: 2 })}
                                                                                                         </td>
                                                                                                         <td style={{ textAlign: 'right' }}>
                                                                                                             {Number(detailRow.quantity || 0).toLocaleString('ja-JP', {
@@ -1974,12 +2042,39 @@ export const Inventory = ({ onBack }) => {
                                 onEdit={(item) => { setEditingItem(item); setIsEditing(true); }}
                                 onDelete={handleDelete}
                                 onUpdateQuantity={handleUpdateQuantity}
-                                onToggleTax={handleToggleTax}
+                                onToggleTax={handleRequestToggleTax}
                                 onRequestUnitSync={handleRequestUnitSync}
                             />
                         )}
                     </div>
                 </div>
+
+                {/* Tax 10% confirm modal */}
+                <Modal
+                    isOpen={!!taxConfirm}
+                    onClose={closeTaxConfirmModal}
+                    title="税率10%へ切り替え"
+                    size="small"
+                    showCloseButton={!taxConfirmSaving}
+                >
+                    <div style={{ color: '#333' }}>
+                        <p style={{ fontSize: '1rem', marginBottom: '0.75rem', lineHeight: 1.6 }}>
+                            「{taxConfirm?.item?.name || 'このアイテム'}」を税率<strong>10%</strong>に切り替えます。よろしいですか？
+                        </p>
+                        <div style={{ fontSize: '0.85rem', color: '#555', lineHeight: 1.5 }}>
+                            在庫金額（税込）の計算結果が変わります。
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>
+                            <Button variant="secondary" onClick={closeTaxConfirmModal} disabled={taxConfirmSaving}>
+                                キャンセル
+                            </Button>
+                            <Button variant="primary" onClick={confirmTax10Switch} disabled={taxConfirmSaving}>
+                                {taxConfirmSaving ? '切り替え中...' : '切り替える'}
+                            </Button>
+                        </div>
+                    </div>
+                </Modal>
 
                 {/* Snapshot Confirmation Modal */}
                 <Modal
@@ -2493,7 +2588,9 @@ export const Inventory = ({ onBack }) => {
                                                                 )}
                                                             </td>
                                                             <td style={{ padding: '10px' }}>{categoryLabel}</td>
-                                                            <td style={{ padding: '10px', textAlign: 'right' }}>{price ? `¥${Math.round(price).toLocaleString()}` : '-'}</td>
+                                                            <td style={{ padding: '10px', textAlign: 'right' }}>
+                                                                {price ? `¥${Number(price).toLocaleString('ja-JP', { maximumFractionDigits: 2 })}` : '-'}
+                                                            </td>
                                                             <td style={{ padding: '10px' }}>{it?.unit || '-'}</td>
                                                             <td style={{ padding: '10px', textAlign: 'right' }}>{qty ? qty.toLocaleString() : '0'}</td>
                                                             <td style={{ padding: '10px', textAlign: 'right' }}>{rowTotal ? `¥${rowTotal.toLocaleString()}` : '-'}</td>

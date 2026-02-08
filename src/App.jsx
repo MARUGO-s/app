@@ -80,7 +80,9 @@ function AppContent() {
   const [profilesByDisplayId, setProfilesByDisplayId] = useState({});
 
   // Derived State from URL
-  const currentView = searchParams.get('view') || 'list'; // 'list', 'detail', 'create', 'edit', 'data', 'trash'
+  const rawView = searchParams.get('view');
+  // Back-compat: previously exposed a create-mock view for the new layout.
+  const currentView = (rawView === 'create-mock' ? 'create' : rawView) || 'list'; // 'list', 'detail', 'create', 'edit', 'data', 'trash'
   const selectedRecipeId = searchParams.get('id');
 
   const selectedRecipe = recipes.find(r => String(r.id) === selectedRecipeId) || null;
@@ -95,6 +97,7 @@ function AppContent() {
   const [selectedRecipeIds, setSelectedRecipeIds] = useState(new Set());
   const [displayMode, setDisplayMode] = useState('normal'); // 'normal' | 'all'
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [showBulkRestoreConfirm, setShowBulkRestoreConfirm] = useState(false);
   const [pcRecommendModalView, setPcRecommendModalView] = useState(null); // null | view string
   const [isMobileScreen, setIsMobileScreen] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -602,9 +605,17 @@ function AppContent() {
     }
   };
 
-  const handleBulkRestore = async () => {
-    if (!window.confirm(`${selectedRecipeIds.size}件のレシピを復元しますか？`)) return;
+  const handleBulkRestore = () => {
+    if (selectedRecipeIds.size === 0) return;
+    setShowBulkRestoreConfirm(true);
+  };
 
+  const cancelBulkRestore = () => {
+    setShowBulkRestoreConfirm(false);
+  };
+
+  const confirmBulkRestore = async () => {
+    setShowBulkRestoreConfirm(false);
     try {
       setLoading(true);
       for (const id of selectedRecipeIds) {
@@ -677,6 +688,33 @@ function AppContent() {
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
               <Button variant="ghost" onClick={cancelBulkDelete}>キャンセル</Button>
               <Button variant="danger" onClick={confirmBulkDelete}>{currentView === 'trash' ? '完全に削除' : '削除する'}</Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {showBulkRestoreConfirm && (
+        <div className="modal-overlay" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <Card style={{ width: '90%', maxWidth: '400px', padding: '1.5rem', border: '2px solid #2f9e44', backgroundColor: 'white' }}>
+            <h3 style={{ marginTop: 0, color: '#2f9e44', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>↩︎</span> {selectedRecipeIds.size}件のレシピを復元
+            </h3>
+            <p style={{ margin: '1rem 0', color: '#333' }}>
+              選択したレシピを復元しますか？
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+              <Button variant="ghost" onClick={cancelBulkRestore}>キャンセル</Button>
+              <Button
+                variant="secondary"
+                onClick={confirmBulkRestore}
+                style={{ backgroundColor: '#2f9e44', color: 'white', border: 'none' }}
+              >
+                復元する
+              </Button>
             </div>
           </Card>
         </div>
@@ -758,9 +796,17 @@ function AppContent() {
                   ) : (
                     <>
                       {currentView === 'list' ? (
-                        <Button onClick={() => setSearchParams({ view: 'create' })} className="primary-action-btn">
-                          + レシピ追加
-                        </Button>
+                        <>
+                          <Button
+                            onClick={() => {
+                              setImportedData(null);
+                              setSearchParams({ view: 'create' });
+                            }}
+                            className="primary-action-btn"
+                          >
+                            + レシピ追加
+                          </Button>
+                        </>
                       ) : (
                         // Trash View Default Actions
                         <Button variant="ghost" onClick={handleSwitchToMain}>

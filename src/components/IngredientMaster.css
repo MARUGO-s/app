@@ -22,6 +22,63 @@
     max-width: 400px;
 }
 
+.ingredient-master-stats {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.ingredient-master-stats strong {
+    color: #ffffff;
+    font-weight: 800;
+}
+
+.ingredient-master-stats-muted {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.ingredient-category-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 1rem;
+}
+
+.ingredient-category-tab {
+    padding: 6px 12px;
+    border: 1px solid #dddddd;
+    background: #ffffff;
+    color: #333333;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+
+.ingredient-category-tab:hover:not(:disabled) {
+    background: #f6f6f6;
+    border-color: #cccccc;
+}
+
+.ingredient-category-tab:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.ingredient-category-tab.active {
+    background: #ffeddc;
+    border-color: var(--color-primary, #D2691E);
+    color: #8a3f0f;
+    font-weight: 800;
+}
+
+.ingredient-category-tab:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 .master-loading {
     text-align: center;
     padding: 2rem;
@@ -87,6 +144,31 @@
 .csv-unit-cell {
     color: #6b7280;
     font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.ingredient-name-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ingredient-subtext {
+    font-size: 0.75rem;
+    color: #888;
+    line-height: 1.2;
+    word-break: break-word;
+}
+
+.input-with-hint {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.unit-hint {
+    font-size: 0.75rem;
+    color: #f59e0b;
     white-space: nowrap;
 }
 

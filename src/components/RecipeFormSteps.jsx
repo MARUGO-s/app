@@ -117,7 +117,7 @@ const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, 
             <div ref={setNodeRef} className="section-steps-list" style={{ minHeight: '50px', transition: 'min-height 0.2s', paddingBottom: '10px' }}>
                 {children}
                 {section.items.length === 0 && (
-                    <div style={{ padding: '10px', textAlign: 'center', color: '#aaa', fontSize: '0.85rem', border: '1px dashed #ddd', borderRadius: '4px' }}>
+                    <div className="recipe-form-drop-placeholder" style={{ padding: '10px', textAlign: 'center', color: '#aaa', fontSize: '0.85rem', border: '1px dashed #ddd', borderRadius: '4px' }}>
                         ここに手順をドロップ
                     </div>
                 )}

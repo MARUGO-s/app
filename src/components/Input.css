@@ -32,6 +32,18 @@
     box-sizing: border-box;
 }
 
+/* Remove number input spinners (keep clean UI for bulk editing). */
+.input-field[type='number']::-webkit-outer-spin-button,
+.input-field[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.input-field[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
 .input-field:focus {
     outline: none;
     border-color: hsl(var(--color-primary));
