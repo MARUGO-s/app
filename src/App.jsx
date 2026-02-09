@@ -881,6 +881,16 @@ function AppContent() {
                     >
                       <span style={{ marginRight: '8px' }}>❓</span> Q&A
                     </Button>
+
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        window.open(`${import.meta.env.BASE_URL}recipe_management.pdf`, '_blank', 'noopener,noreferrer');
+                        setIsMenuOpen(false);
+                      }}
+                    >
+                      <span style={{ marginRight: '8px' }}>📘</span> アプリガイド
+                    </Button>
                     <div className="menu-divider"></div>
 
                     {currentView === 'list' && (
