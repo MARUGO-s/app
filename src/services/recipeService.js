@@ -450,7 +450,26 @@ export const recipeService = {
             recipeData.image = await this.uploadImage(recipeData.image);
         }
 
-        const payload = toDbFormat(recipeData)
+        const payload = toDbFormat(recipeData);
+
+        // IMPORTANT:
+        // List-view recipe objects often do NOT include steps (and sometimes other heavy fields).
+        // If we blindly send `steps: []`, we will overwrite the stored steps.
+        // Only update fields that are explicitly provided by the caller.
+        if (recipeData.steps === undefined) delete payload.steps;
+
+        // Avoid wiping tags when doing partial updates.
+        if (recipeData.tags === undefined) delete payload.tags;
+
+        // Avoid wiping ingredients/meta when doing partial updates.
+        const shouldUpdateIngredients =
+            recipeData.ingredients !== undefined ||
+            recipeData.type !== undefined ||
+            recipeData.ingredientGroups !== undefined ||
+            recipeData.flours !== undefined ||
+            recipeData.breadIngredients !== undefined ||
+            recipeData.stepGroups !== undefined;
+        if (!shouldUpdateIngredients) delete payload.ingredients;
 
         try {
             const { data, error } = await supabase
