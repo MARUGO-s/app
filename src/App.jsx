@@ -86,6 +86,8 @@ function AppContent() {
   const selectedRecipeId = searchParams.get('id');
 
   const selectedRecipe = recipes.find(r => String(r.id) === selectedRecipeId) || null;
+  const [editRecipe, setEditRecipe] = useState(null);
+  const [isEditRecipeLoading, setIsEditRecipeLoading] = useState(false);
 
   const [selectedTag, setSelectedTag] = useState('すべて');
   const [importMode, setImportMode] = useState(null); // null | 'url' | 'image'
@@ -492,6 +494,42 @@ function AppContent() {
       toast.error(`保存に失敗しました\nエラー: ${error.message || error.error_description || JSON.stringify(error)}`);
     }
   };
+
+  // Ensure Edit view always has a full recipe (steps + recipe_sources) before saving,
+  // otherwise partial list-view objects can accidentally overwrite steps/sourceUrl.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadEditRecipe = async () => {
+      if (currentView !== 'edit' || !selectedRecipeId) {
+        setEditRecipe(null);
+        setIsEditRecipeLoading(false);
+        return;
+      }
+
+      setIsEditRecipeLoading(true);
+      try {
+        const data = await recipeService.getRecipe(selectedRecipeId);
+        if (cancelled) return;
+        setEditRecipe(data);
+      } catch (e) {
+        console.error('Failed to load edit recipe details', e);
+        if (cancelled) return;
+        // Fallback to whatever we have so the user can still open the form.
+        setEditRecipe(selectedRecipe);
+        toast.warning('編集用の詳細データ取得に失敗しました。内容が欠けている可能性があります。');
+      } finally {
+        if (!cancelled) setIsEditRecipeLoading(false);
+      }
+    };
+
+    loadEditRecipe();
+    return () => {
+      cancelled = true;
+    };
+    // selectedRecipe is only used as a fallback if detail fetch fails.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView, selectedRecipeId]);
 
   const handleImportRecipe = (recipeData, sourceUrl = '') => {
     // Smart detection for Bread recipes (Baker's %)
@@ -1166,13 +1204,22 @@ function AppContent() {
         />
       )}
 
-      {currentView === 'edit' && selectedRecipe && (
-        <RecipeForm
-          key={`edit-${selectedRecipe.id}`}
-          initialData={selectedRecipe}
-          onCancel={() => setSearchParams({ view: 'detail', id: selectedRecipe.id })}
-          onSave={(updatedRecipe) => handleSaveRecipe(updatedRecipe, true)}
-        />
+      {currentView === 'edit' && selectedRecipeId && (
+        isEditRecipeLoading ? (
+          <LoadingScreen
+            label="レシピを読み込み中"
+            subLabel="作り方とURLを取得しています"
+          />
+        ) : (
+          editRecipe && (
+            <RecipeForm
+              key={`edit-${selectedRecipeId}`}
+              initialData={editRecipe}
+              onCancel={() => setSearchParams({ view: 'detail', id: selectedRecipeId })}
+              onSave={(updatedRecipe) => handleSaveRecipe(updatedRecipe, true)}
+            />
+          )
+        )
       )}
 
       {currentView === 'create' && (

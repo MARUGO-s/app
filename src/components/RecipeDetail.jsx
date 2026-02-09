@@ -320,7 +320,8 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
             setIsPublic(newStatus);
 
             // Save
-            await recipeService.updateRecipe({ ...recipe, tags: newTags });
+            // Update tags only (avoid overwriting steps/sourceUrl when the list-view recipe is partial).
+            await recipeService.updateRecipe({ id: recipe.id, tags: newTags });
 
             // Ideally notify update parent, but local state is fine for switch
         } catch (e) {
