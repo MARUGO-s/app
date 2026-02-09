@@ -290,6 +290,82 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
     // State for streaming logs
     const [progressLog, setProgressLog] = useState([]);
 
+    // Direct Gemini API call from browser (bypasses Edge Function / Docker networking issues)
+    const analyzeImageWithGeminiDirect = async (file, signal) => {
+        const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+        if (!apiKey) return null;
+
+        const MAX_SIZE = 4_000_000;
+        if (file.size > MAX_SIZE) return null;
+
+        const arrayBuffer = await file.arrayBuffer();
+        const base64Image = btoa(
+            new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+        );
+
+        const mimeType = file.type || 'image/jpeg';
+
+        const prompt = `あなたは世界最高峰のパティシエかつ料理研究家です。
+渡された画像（手書きのメモやスクリーンショット）から料理のレシピ情報を正確に読み取ってください。
+
+【最重要: 手書き文字の認識】
+- 手書きの文字、特に数字や単位を文脈から推測して正確に読み取ってください。
+- 読み取れない箇所がある場合は、前後の文脈から推測するか、空欄にしてください。
+
+以下のJSONフォーマットで出力してください。JSON以外の文章は不要です。
+\`\`\`json
+{
+  "title": "料理名",
+  "description": "料理の説明",
+  "ingredients": [
+    { "name": "材料名", "quantity": "分量数値", "unit": "単位", "group": null }
+  ],
+  "steps": ["手順1...", "手順2..."]
+}
+\`\`\`
+
+【ルール】
+- 大さじ1→15ml, 小さじ1→5ml, 1カップ→200ml に換算してください。
+- 手順の番号プレフィックスは削除してください。
+- 画像から読み取れる情報のみ使用してください。`;
+
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [
+                            { text: prompt },
+                            { inline_data: { mime_type: mimeType, data: base64Image } }
+                        ]
+                    }]
+                }),
+                signal,
+            }
+        );
+
+        if (!response.ok) {
+            const errText = await response.text();
+            console.error("Gemini API Error:", response.status, errText);
+            throw new Error(`Gemini API Error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!rawText) throw new Error("Geminiからの応答が空です");
+
+        let jsonStr = rawText;
+        if (jsonStr.includes('```json')) {
+            jsonStr = jsonStr.split('```json')[1].split('```')[0];
+        } else if (jsonStr.includes('```')) {
+            jsonStr = jsonStr.split('```')[1].split('```')[0];
+        }
+
+        return { recipe: JSON.parse(jsonStr.trim()), rawText };
+    };
+
     const handleImport = async () => {
         setIsLoading(true);
         setError(null);
@@ -310,89 +386,114 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
             } else {
                 if (!imageFile) return;
                 clearAnalyzeTimers();
-                const formData = new FormData();
-                formData.append('image', imageFile);
-
-                // Use fetch directly for streaming support (Supabase client doesn't support streaming easily yet)
-                const { data: { session } } = await supabase.auth.getSession();
-                const functionUrl = `${supabase.supabaseUrl}/functions/v1/analyze-image`;
-
-                const headers = {
-                    'Authorization': `Bearer ${session?.access_token || supabase.supabaseKey}`
-                };
 
                 const controller = new AbortController();
                 analyzeAbortRef.current = controller;
-                const ANALYZE_TIMEOUT_MS = 180_000;
+                const ANALYZE_TIMEOUT_MS = 120_000;
                 analyzeTimeoutRef.current = setTimeout(() => {
                     cancelAnalyze('解析がタイムアウトしました。画像をトリミングして文字を大きくして再試行してください。');
                 }, ANALYZE_TIMEOUT_MS);
 
-                const response = await fetch(functionUrl, {
-                    method: 'POST',
-                    headers: headers,
-                    body: formData,
-                    signal: controller.signal
-                });
+                // Strategy 1: Try direct Gemini API call from browser (faster, no Docker issues)
+                const geminiApiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+                let geminiSuccess = false;
 
-                if (!response.ok) {
-                    throw new Error(`Server Error: ${response.statusText}`);
+                if (geminiApiKey) {
+                    setProgressLog(prev => [...prev, '🤖 Gemini APIで画像を解析中...']);
+                    try {
+                        const result = await analyzeImageWithGeminiDirect(imageFile, controller.signal);
+                        if (result && result.recipe && result.recipe.title) {
+                            setProgressLog(prev => [...prev, '✅ 画像解析に成功しました！']);
+                            data = { recipe: result.recipe, rawText: result.rawText };
+                            geminiSuccess = true;
+                        }
+                    } catch (geminiErr) {
+                        if (geminiErr.name === 'AbortError') throw geminiErr;
+                        console.warn("Direct Gemini failed, falling back to Edge Function:", geminiErr.message);
+                        setProgressLog(prev => [...prev, `⚠️ 直接API呼出し失敗: ${geminiErr.message}`]);
+                    }
                 }
 
-                // Some environments may not support streaming bodies; fallback to plain JSON.
-                if (!response.body) {
-                    data = await response.json();
-                } else {
-                    const reader = response.body.getReader();
-                    const decoder = new TextDecoder();
-                    let recipeResult = null;
-                    let buffer = '';
-                    let gotResult = false;
+                // Strategy 2: Fallback to Edge Function (for production / Azure)
+                if (!geminiSuccess) {
+                    setProgressLog(prev => [...prev, '🔄 サーバー経由で解析中...']);
 
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
+                    const formData = new FormData();
+                    formData.append('image', imageFile);
 
-                        buffer += decoder.decode(value, { stream: true });
-                        const lines = buffer.split('\n\n');
+                    const { data: { session } } = await supabase.auth.getSession();
+                    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl || 'https://hocbnifuactbvmyjraxy.supabase.co';
+                    const functionUrl = `${supabaseUrl}/functions/v1/analyze-image`;
 
-                        // Keep the last part in buffer as it might be incomplete
-                        buffer = lines.pop() || '';
+                    const headers = {
+                        'Authorization': `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY || supabase.supabaseKey}`
+                    };
 
-                        for (const line of lines) {
-                            const trimmedLine = line.trim();
-                            if (trimmedLine.startsWith('data: ')) {
-                                try {
-                                    const eventData = JSON.parse(trimmedLine.slice(6));
-                                    if (eventData.type === 'log') {
-                                        setProgressLog(prev => [...prev, eventData.message]);
-                                    } else if (eventData.type === 'result') {
-                                        recipeResult = eventData;
-                                        gotResult = true;
-                                    } else if (eventData.type === 'error') {
-                                        throw new Error(eventData.message);
+                    let response;
+                    try {
+                        response = await fetch(functionUrl, {
+                            method: 'POST',
+                            headers: headers,
+                            body: formData,
+                            signal: controller.signal
+                        });
+                    } catch (netErr) {
+                        console.error("Network Error:", netErr);
+                        throw new Error("サーバーに接続できませんでした。");
+                    }
+
+                    if (!response.ok) {
+                        const status = response.status;
+                        throw new Error(`Server Error: ${response.statusText} (${status})`);
+                    }
+
+                    if (!response.body) {
+                        data = await response.json();
+                    } else {
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        let recipeResult = null;
+                        let buffer = '';
+                        let gotResult = false;
+
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+
+                            buffer += decoder.decode(value, { stream: true });
+                            const lines = buffer.split('\n\n');
+                            buffer = lines.pop() || '';
+
+                            for (const line of lines) {
+                                const trimmedLine = line.trim();
+                                if (trimmedLine.startsWith('data: ')) {
+                                    try {
+                                        const eventData = JSON.parse(trimmedLine.slice(6));
+                                        if (eventData.type === 'log') {
+                                            setProgressLog(prev => [...prev, eventData.message]);
+                                        } else if (eventData.type === 'result') {
+                                            recipeResult = eventData;
+                                            gotResult = true;
+                                        } else if (eventData.type === 'error') {
+                                            throw new Error(eventData.message);
+                                        }
+                                    } catch (e) {
+                                        if (e.message && !e.message.includes('Failed to parse')) throw e;
+                                        console.warn("Failed to parse SSE event", e);
                                     }
-                                } catch (e) {
-                                    console.warn("Failed to parse SSE event", e);
                                 }
                             }
+
+                            if (gotResult) break;
                         }
 
-                        // Backends may keep SSE open; stop once we have a result.
-                        if (gotResult) break;
-                    }
+                        try { await reader.cancel(); } catch { /* ignore */ }
 
-                    try {
-                        await reader.cancel();
-                    } catch {
-                        // ignore
+                        if (!recipeResult) {
+                            throw new Error("サーバーからの結果を受信できませんでした。");
+                        }
+                        data = recipeResult;
                     }
-
-                    if (!recipeResult) {
-                        throw new Error("ストリームが終了しましたが、結果が受信できませんでした。");
-                    }
-                    data = recipeResult;
-                    // data.recipe is already inside recipeResult from backend (eventData.recipe)
                 }
             }
 
