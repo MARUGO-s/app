@@ -190,12 +190,16 @@ export const parseDeliveryLines = (lines) => {
     }
 
     // "取引先" marker: next line is vendor name
-    if (line === '取引先' || line.startsWith('取引先')) {
-      const inline = line.match(/^取引先\s*(.+)$/);
-      if (inline?.[1] && inline[1].trim() && !currentSlip.vendor) {
-        currentSlip.vendor = inline[1].trim();
-      } else if (isNonEmpty(next) && !currentSlip.vendor && next !== 'コード') {
-        currentSlip.vendor = next.trim();
+    if (line === '取引先' || (line.startsWith('取引先') && line !== '取引先コード')) {
+      if (line === '取引先') {
+        if (isNonEmpty(next) && !currentSlip.vendor) {
+          currentSlip.vendor = next.trim();
+        }
+      } else {
+        const rest = line.slice('取引先'.length).trim();
+        if (rest && rest !== 'コード' && !currentSlip.vendor) {
+          currentSlip.vendor = rest;
+        }
       }
       continue;
     }
@@ -214,9 +218,10 @@ export const parseDeliveryLines = (lines) => {
     }
 
     if (line.startsWith('コメント')) {
-      const inline = line.match(/^コメント:?\s*(.+)$/);
-      if (inline?.[1] && inline[1].trim()) {
-        currentSlip.comment = inline[1].trim();
+      const inline = line.match(/^コメント[:：]?\s*(.*)$/);
+      const inlineText = inline?.[1]?.trim() || '';
+      if (inlineText && inlineText !== 'No') {
+        currentSlip.comment = inlineText;
         continue;
       }
       // Collect until header markers
@@ -288,4 +293,3 @@ export const parseDeliveryPdfFile = async (pdfFile) => {
   }
   return parsed;
 };
-
