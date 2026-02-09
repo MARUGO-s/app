@@ -164,10 +164,21 @@ export const recipeService = {
         }
     },
 
-    async fetchRecipes(currentUser, { timeoutMs = 15000 } = {}) {
+    async fetchRecipes(currentUser, { timeoutMs = 15000, includeIngredients = true, includeSources = true } = {}) {
+        if (!currentUser) {
+            console.warn("fetchRecipes: No currentUser, returning empty list.");
+            return [];
+        }
+
+        const isAdmin = currentUser.role === 'admin';
+        // Kick off preference fetch early (in parallel with recipes.select) to reduce perceived latency.
+        const showMasterPromise = isAdmin
+            ? Promise.resolve(false)
+            : this._resolveShowMasterPreference(currentUser, timeoutMs);
+
         let allRecipes = [];
 
-        const tryList = async (selectSpec, { withOrderIndex }) => {
+        const tryList = async (selectSpec, { withOrderIndex, queryTimeoutMs }) => {
             let q = supabase
                 .from('recipes')
                 .select(selectSpec);
@@ -180,28 +191,41 @@ export const recipeService = {
                 q = q.order('created_at', { ascending: false });
             }
 
-            const { data, error } = await withTimeout(q, timeoutMs / 4, 'recipes.select(list)');
+            const { data, error } = await withTimeout(q, queryTimeoutMs, 'recipes.select(list)');
             if (error) throw error;
             return (data || []).map(fromDbFormat);
         };
 
         // Deprecated ingredients->0; it causes 400 if ingredients is not jsonb or null in a way Supabase dislikes.
         // We will just fetch 'ingredients' (jsonb) and parse it client-side if needed, but for list view we don't really need deep inspection yet.
-        const listSelectV1 = 'id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at,updated_at,order_index,recipe_sources(url)';
-        const listSelectV2 = 'id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at,updated_at,recipe_sources(url)';
-        const listSelectV3 = 'id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at,updated_at';
-        const listSelectV4 = 'id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at';
+        const listSelectV1 = includeIngredients
+            ? `id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at,updated_at,order_index${includeSources ? ',recipe_sources(url)' : ''}`
+            : `id,title,description,image,servings,course,category,store_name,tags,created_at,updated_at,order_index${includeSources ? ',recipe_sources(url)' : ''}`;
+        const listSelectV2 = includeIngredients
+            ? `id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at,updated_at${includeSources ? ',recipe_sources(url)' : ''}`
+            : `id,title,description,image,servings,course,category,store_name,tags,created_at,updated_at${includeSources ? ',recipe_sources(url)' : ''}`;
+        const listSelectV3 = includeIngredients
+            ? 'id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at,updated_at'
+            : 'id,title,description,image,servings,course,category,store_name,tags,created_at,updated_at';
+        const listSelectV4 = includeIngredients
+            ? 'id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at'
+            : 'id,title,description,image,servings,course,category,store_name,tags,created_at';
 
         let lastError = null;
 
         // OPTIMIZATION: Use cached query pattern if available
-        const cacheKey = 'recipe_query_pattern';
+        const cacheKey = `recipe_query_pattern:${includeIngredients ? 'ing' : 'noing'}:${includeSources ? 'src' : 'nosrc'}`;
         const cachedPattern = this._queryPatternCache.get(cacheKey);
+
+        const cachedTryTimeoutMs = Math.max(2500, timeoutMs);
 
         if (cachedPattern) {
             // Skip directly to known-working query pattern
             try {
-                allRecipes = await tryList(cachedPattern.spec, { withOrderIndex: cachedPattern.withOrderIndex });
+                allRecipes = await tryList(cachedPattern.spec, {
+                    withOrderIndex: cachedPattern.withOrderIndex,
+                    queryTimeoutMs: cachedTryTimeoutMs,
+                });
             } catch (err) {
                 // If cached pattern fails, fall back to detection
                 console.warn('Cached query pattern failed, re-detecting...', err);
@@ -209,26 +233,31 @@ export const recipeService = {
                 lastError = err;
             }
         } else {
+            const selectSpecs = includeIngredients
+                ? [listSelectV1, listSelectV2, listSelectV3, listSelectV4]
+                : [listSelectV1, listSelectV2, listSelectV4];
+            const perTryTimeoutMs = Math.max(2500, Math.round(timeoutMs / selectSpecs.length));
+
             // First time: detect schema by trying queries in order
             // Use Promise.all with catch to try all in parallel, but faster
             try {
-                allRecipes = await tryList(listSelectV1, { withOrderIndex: true });
+                allRecipes = await tryList(listSelectV1, { withOrderIndex: true, queryTimeoutMs: perTryTimeoutMs });
                 // Cache this pattern for future use
                 this._queryPatternCache.set(cacheKey, { spec: listSelectV1, withOrderIndex: true });
             } catch (e1) {
                 lastError = e1;
                 try {
-                    allRecipes = await tryList(listSelectV2, { withOrderIndex: false });
+                    allRecipes = await tryList(listSelectV2, { withOrderIndex: false, queryTimeoutMs: perTryTimeoutMs });
                     this._queryPatternCache.set(cacheKey, { spec: listSelectV2, withOrderIndex: false });
                 } catch (e2) {
                     lastError = e2;
                     try {
-                        allRecipes = await tryList(listSelectV3, { withOrderIndex: false });
+                        allRecipes = await tryList(listSelectV3, { withOrderIndex: false, queryTimeoutMs: perTryTimeoutMs });
                         this._queryPatternCache.set(cacheKey, { spec: listSelectV3, withOrderIndex: false });
                     } catch (e3) {
                         lastError = e3;
                         try {
-                            allRecipes = await tryList(listSelectV4, { withOrderIndex: false });
+                            allRecipes = await tryList(listSelectV4, { withOrderIndex: false, queryTimeoutMs: perTryTimeoutMs });
                             this._queryPatternCache.set(cacheKey, { spec: listSelectV4, withOrderIndex: false });
                         } catch (e4) {
                             lastError = e4;
@@ -255,23 +284,18 @@ export const recipeService = {
         }
 
         // 3. Apply Filtering Logic (App-side RLS)
-        if (!currentUser) {
-            console.warn("fetchRecipes: No currentUser, returning empty list.");
-            return [];
-        }
+        if (isAdmin) return allRecipes;
 
-        // Resolve from latest profile value (with short cache) to avoid stale auth-context state.
-        const showMaster = await this._resolveShowMasterPreference(currentUser, timeoutMs);
-        const masterOwnerTags = await this._resolveMasterOwnerTags(timeoutMs);
-
-        const isAdmin = currentUser.role === 'admin';
         const userIds = [String(currentUser.id)];
         if (currentUser.displayId) userIds.push(String(currentUser.displayId));
 
-        const filtered = allRecipes.filter(recipe => {
-            // Admin can see everything.
-            if (isAdmin) return true;
+        // Resolve from latest profile value (with short cache) to avoid stale auth-context state.
+        const showMaster = await showMasterPromise;
+        const masterOwnerTags = showMaster
+            ? await this._resolveMasterOwnerTags(timeoutMs)
+            : new Set();
 
+        const filtered = allRecipes.filter(recipe => {
             const tags = normalizeRecipeTags(recipe.tags);
             const ownerTags = tags.filter(t => t && t.startsWith('owner:'));
 
