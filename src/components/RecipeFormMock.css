@@ -8,14 +8,14 @@
     --mock-input: #141414;
     --mock-row: #242424;
     --mock-row-alt: #2a2a2a;
-    --mock-text: #f8fafc;
-    --mock-muted: rgba(226, 232, 240, 0.74);
+    --mock-text: #f3f4f6;
+    --mock-muted: #a1a1aa;
     --mock-shadow: 0 24px 55px rgba(0, 0, 0, 0.55);
     --mock-shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 22px rgba(0, 0, 0, 0.45);
-    --mock-glass: rgba(16, 185, 129, 0.05);
-    --mock-glass-strong: rgba(16, 185, 129, 0.09);
-    --mock-glass-border: rgba(16, 185, 129, 0.18);
-    --mock-glass-border-strong: rgba(16, 185, 129, 0.26);
+    --mock-glass: rgba(255, 255, 255, 0.06);
+    --mock-glass-strong: rgba(255, 255, 255, 0.10);
+    --mock-glass-border: rgba(255, 255, 255, 0.16);
+    --mock-glass-border-strong: rgba(255, 255, 255, 0.24);
     --mock-glass-blur: 16px;
     --mock-glass-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
 
@@ -52,7 +52,7 @@
 }
 
 .recipe-form-mock .input-field::placeholder {
-    color: rgba(236, 253, 245, 0.60);
+    color: rgba(161, 161, 170, 0.75);
 }
 
 .recipe-form-mock .input-field:focus {
@@ -129,7 +129,6 @@
     background:
         radial-gradient(1200px 650px at 12% 0%, rgba(249, 115, 22, 0.14), transparent 58%),
         radial-gradient(1000px 620px at 92% 18%, rgba(14, 165, 233, 0.12), transparent 60%),
-        radial-gradient(900px 620px at 50% 100%, rgba(16, 185, 129, 0.10), transparent 62%),
         var(--mock-base);
     border: 1px solid var(--mock-border);
     border-radius: 18px;
@@ -454,7 +453,7 @@
 
 .recipe-form-mock__editor-surface {
     position: relative;
-    background: linear-gradient(180deg, rgba(16, 185, 129, 0.05), rgba(0, 0, 0, 0.18));
+    background: rgba(0, 0, 0, 0.12);
     border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 14px;
     padding: 12px;
@@ -557,7 +556,7 @@
     border-radius: 14px !important;
     overflow: hidden;
     box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32) !important;
-    background: linear-gradient(180deg, rgba(16, 185, 129, 0.10), rgba(255, 255, 255, 0.04)) !important;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.04)) !important;
     backdrop-filter: blur(calc(var(--mock-glass-blur) - 2px)) saturate(140%);
     -webkit-backdrop-filter: blur(calc(var(--mock-glass-blur) - 2px)) saturate(140%);
 }
@@ -608,13 +607,13 @@
 }
 
 .recipe-form-mock .group-delete-btn {
-    color: rgba(255, 255, 255, 0.82) !important;
+    color: rgba(255, 255, 255, 0.62) !important;
     text-shadow: none !important;
 }
 
 .recipe-form-mock .recipe-list-header {
     background: rgba(0, 0, 0, 0.14) !important;
-    color: rgba(236, 253, 245, 0.74) !important;
+    color: rgba(255, 255, 255, 0.55) !important;
     border: none !important;
     border-top: 1px solid rgba(255, 255, 255, 0.10) !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
@@ -723,7 +722,7 @@
 
 .recipe-form-mock .ingredient-cost-ref,
 .recipe-form-mock .ingredient-yield-indicator {
-    color: rgba(255, 255, 255, 0.74) !important;
+    color: rgba(255, 255, 255, 0.62) !important;
 }
 
 /* Bread form overrides (bread CSS is light by default). */
