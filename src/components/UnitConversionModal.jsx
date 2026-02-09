@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { unitConversionService } from '../services/unitConversionService';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { Button } from './Button';
@@ -135,7 +136,7 @@ const UnitConversionModal = ({
     // Preview usage cost
     const usageCost = currentQuantity ? (normalizedCost * (currentQuantity / (['g', 'ml'].includes(unit) ? 1000 : 1))) : 0;
 
-    return (
+    const modal = (
         <div
             className="unit-conversion-modal__overlay"
             role="dialog"
@@ -246,6 +247,9 @@ const UnitConversionModal = ({
             </div>
         </div>
     );
+
+    // Render via portal so `position: fixed` is relative to the viewport (not a transformed/scroll container).
+    return createPortal(modal, document.body);
 };
 
 export default UnitConversionModal;

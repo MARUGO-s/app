@@ -17,6 +17,21 @@ const formatDate = (dateString) => {
     return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
 };
 
+const toFiniteCurrencyNumber = (value) => {
+    if (value == null) return NaN;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
+    const normalized = String(value).trim().replace(/[¥,\s]/g, '');
+    if (!normalized) return NaN;
+    const n = parseFloat(normalized);
+    return Number.isFinite(n) ? n : NaN;
+};
+
+const formatYen = (value, { maximumFractionDigits = 1 } = {}) => {
+    const n = toFiniteCurrencyNumber(value);
+    if (!Number.isFinite(n)) return null;
+    return `¥${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits })}`;
+};
+
 const ALLOWED_ITEM_CATEGORIES = new Set(['food', 'alcohol', 'soft_drink', 'supplies']);
 const TAX10_ITEM_CATEGORIES = new Set(['alcohol', 'supplies']);
 
@@ -1125,7 +1140,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                             <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-primary)' }}>
                                                                                 {calcPercent(item.quantity)}%
                                                                             </td>
-                                                                            <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
+                                                                            <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{formatYen(item.purchaseCost) ?? '-'}</td>
                                                                             <td style={{ textAlign: 'right' }}>
                                                                                 {item.cost ? `¥${formatCost(getScaledCost(item.cost))}` : '-'}
                                                                             </td>
@@ -1177,7 +1192,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                             <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--color-text-muted)' }}>
                                                                                 {calcPercent(item.quantity)}%
                                                                             </td>
-                                                                            <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
+                                                                            <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{formatYen(item.purchaseCost) ?? '-'}</td>
                                                                             <td style={{ textAlign: 'right' }}>
                                                                                 {item.cost ? `¥${formatCost(getScaledCost(item.cost))}` : '-'}
                                                                             </td>
@@ -1347,9 +1362,9 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                                     {scaledQty}
                                                                                 </td>
                                                                                 <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
-                                                                                <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
+                                                                                <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{formatYen(ing.purchaseCost) ?? '-'}</td>
                                                                                 <td style={{ textAlign: 'right' }}>
-                                                                                    {scaledCost ? `¥${scaledCost}` : '-'}
+                                                                                    {formatYen(scaledCost) ?? '-'}
                                                                                     {isTax10Item(ing) && <span style={{ fontSize: '0.7em', color: '#d35400', marginLeft: '2px' }}>(税10%)</span>}
                                                                                 </td>
                                                                             </tr>
@@ -1397,9 +1412,9 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                             {scaledQty}
                                                                         </td>
                                                                         <td style={{ paddingLeft: '0.5rem' }}>{ing.unit}</td>
-                                                                        <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{ing.purchaseCost ? `¥${ing.purchaseCost}` : '-'}</td>
+                                                                        <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{formatYen(ing.purchaseCost) ?? '-'}</td>
                                                                         <td style={{ textAlign: 'right' }}>
-                                                                            {scaledCost ? `¥${scaledCost}` : '-'}
+                                                                            {formatYen(scaledCost) ?? '-'}
                                                                             {isTax10Item(ing) && <span style={{ fontSize: '0.7em', color: '#d35400', marginLeft: '2px' }}>(税10%)</span>}
                                                                         </td>
                                                                     </tr>
@@ -1932,7 +1947,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                     <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#555' }}>
                                                         {breadPrintContext.calcPercent(item.quantity)}%
                                                     </td>
-                                                    <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
+                                                    <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{formatYen(item.purchaseCost) ?? '-'}</td>
                                                     <td style={{ textAlign: 'right' }}>
                                                         {item.cost ? `¥${breadPrintContext.formatCostValue(item.cost)}` : '-'}
                                                     </td>
@@ -1963,7 +1978,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                     <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#555' }}>
                                                         {breadPrintContext.calcPercent(item.quantity)}%
                                                     </td>
-                                                    <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{item.purchaseCost ? `¥${item.purchaseCost}` : '-'}</td>
+                                                    <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{formatYen(item.purchaseCost) ?? '-'}</td>
                                                     <td style={{ textAlign: 'right' }}>
                                                         {item.cost ? `¥${breadPrintContext.formatCostValue(item.cost)}` : '-'}
                                                     </td>
@@ -2002,8 +2017,8 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                         <td>{name}</td>
                                                         <td style={{ textAlign: 'right', paddingRight: '0.5rem' }}>{scaledQty}</td>
                                                         <td style={{ paddingLeft: '0.5rem' }}>{unit}</td>
-                                                        <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{purchase ? `¥${purchase}` : '-'}</td>
-                                                        <td style={{ textAlign: 'right' }}>{costVal ? `¥${costVal}` : '-'}</td>
+                                                        <td className="ingredient-cost-muted" style={{ textAlign: 'right' }}>{formatYen(purchase) ?? '-'}</td>
+                                                        <td style={{ textAlign: 'right' }}>{formatYen(costVal) ?? '-'}</td>
                                                     </tr>
                                                 );
                                             })}
