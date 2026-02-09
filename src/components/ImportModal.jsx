@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabase';
 import { Card } from './Card';
 import { Button } from './Button';
@@ -17,6 +17,49 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [isDragActive, setIsDragActive] = useState(false);
+    const cameraInputRef = useRef(null);
+    const galleryInputRef = useRef(null);
+    const analyzeAbortRef = useRef(null);
+    const analyzeTimeoutRef = useRef(null);
+
+    const clearAnalyzeTimers = () => {
+        if (analyzeTimeoutRef.current) {
+            clearTimeout(analyzeTimeoutRef.current);
+            analyzeTimeoutRef.current = null;
+        }
+    };
+
+    const cancelAnalyze = (message = '解析を中断しました。') => {
+        clearAnalyzeTimers();
+
+        if (analyzeAbortRef.current) {
+            try {
+                analyzeAbortRef.current.abort();
+            } catch {
+                // ignore
+            }
+            analyzeAbortRef.current = null;
+        }
+
+        setIsLoading(false);
+        if (message) setError(message);
+    };
+
+    useEffect(() => {
+        return () => {
+            // Cleanup without setting state.
+            clearAnalyzeTimers();
+            if (analyzeAbortRef.current) {
+                try {
+                    analyzeAbortRef.current.abort();
+                } catch {
+                    // ignore
+                }
+                analyzeAbortRef.current = null;
+            }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     useEffect(() => {
         if (!imageFile) {
@@ -31,24 +74,44 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
 
     const optimizeImageFile = (file) => new Promise((resolve) => {
         if (!file || typeof file !== 'object') return resolve(file);
-        if (!String(file.type || '').startsWith('image/')) return resolve(file);
 
-        // Camera photos can be huge; keep OCR-friendly but shrink for reliability.
+        const type = String(file.type || '').toLowerCase();
+        if (!type.startsWith('image/')) return resolve(file);
+
+        // Camera photos can be huge. Also, HEIC/HEIF may not be supported server-side.
+        // Keep OCR-friendly but shrink/convert for reliability.
         const SIZE_THRESHOLD_BYTES = 2_000_000; // ~2MB
         const MAX_SIDE_PX = 2000;
         const JPEG_QUALITY = 0.86;
+        const isHeicLike = type.includes('heic') || type.includes('heif');
 
-        if (file.size <= SIZE_THRESHOLD_BYTES) return resolve(file);
+        if (!isHeicLike && file.size <= SIZE_THRESHOLD_BYTES) return resolve(file);
 
         const srcUrl = URL.createObjectURL(file);
+
+        let didResolve = false;
+        const resolveOnce = (next) => {
+            if (didResolve) return;
+            didResolve = true;
+            try {
+                URL.revokeObjectURL(srcUrl);
+            } catch {
+                // ignore
+            }
+            resolve(next);
+        };
+
+        // Safety net: avoid hanging forever on decode/encode in some browsers.
+        const safety = setTimeout(() => resolveOnce(file), 15_000);
+
         const img = new Image();
-
         img.onload = () => {
-            URL.revokeObjectURL(srcUrl);
-
             const width = img.naturalWidth || img.width || 0;
             const height = img.naturalHeight || img.height || 0;
-            if (!width || !height) return resolve(file);
+            if (!width || !height) {
+                clearTimeout(safety);
+                return resolveOnce(file);
+            }
 
             const scale = Math.min(1, MAX_SIDE_PX / Math.max(width, height));
             const targetW = Math.max(1, Math.round(width * scale));
@@ -59,23 +122,27 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
             canvas.height = targetH;
 
             const ctx = canvas.getContext('2d');
-            if (!ctx) return resolve(file);
+            if (!ctx) {
+                clearTimeout(safety);
+                return resolveOnce(file);
+            }
 
             ctx.drawImage(img, 0, 0, targetW, targetH);
             canvas.toBlob((blob) => {
-                if (!blob) return resolve(file);
+                clearTimeout(safety);
+                if (!blob) return resolveOnce(file);
 
                 const baseName = String(file.name || 'recipe')
                     .replace(/\.[^/.]+$/, '')
                     .slice(0, 80);
 
-                resolve(new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' }));
+                resolveOnce(new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' }));
             }, 'image/jpeg', JPEG_QUALITY);
         };
 
         img.onerror = () => {
-            URL.revokeObjectURL(srcUrl);
-            resolve(file);
+            clearTimeout(safety);
+            resolveOnce(file);
         };
 
         img.src = srcUrl;
@@ -97,6 +164,9 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
             setIsImagePreparing(false);
         }
     };
+
+    const openCameraPicker = () => cameraInputRef.current?.click?.();
+    const openGalleryPicker = () => galleryInputRef.current?.click?.();
 
     const handleDrag = (e) => {
         e.preventDefault();
@@ -234,6 +304,7 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                 data = resData;
             } else {
                 if (!imageFile) return;
+                clearAnalyzeTimers();
                 const formData = new FormData();
                 formData.append('image', imageFile);
 
@@ -245,55 +316,79 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                     'Authorization': `Bearer ${session?.access_token || supabase.supabaseKey}`
                 };
 
+                const controller = new AbortController();
+                analyzeAbortRef.current = controller;
+                const ANALYZE_TIMEOUT_MS = 180_000;
+                analyzeTimeoutRef.current = setTimeout(() => {
+                    cancelAnalyze('解析がタイムアウトしました。画像をトリミングして文字を大きくして再試行してください。');
+                }, ANALYZE_TIMEOUT_MS);
+
                 const response = await fetch(functionUrl, {
                     method: 'POST',
                     headers: headers,
-                    body: formData
+                    body: formData,
+                    signal: controller.signal
                 });
 
                 if (!response.ok) {
                     throw new Error(`Server Error: ${response.statusText}`);
                 }
 
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let recipeResult = null;
-                let buffer = '';
+                // Some environments may not support streaming bodies; fallback to plain JSON.
+                if (!response.body) {
+                    data = await response.json();
+                } else {
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let recipeResult = null;
+                    let buffer = '';
+                    let gotResult = false;
 
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
 
-                    buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split('\n\n');
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n\n');
 
-                    // Keep the last part in buffer as it might be incomplete
-                    buffer = lines.pop() || '';
+                        // Keep the last part in buffer as it might be incomplete
+                        buffer = lines.pop() || '';
 
-                    for (const line of lines) {
-                        const trimmedLine = line.trim();
-                        if (trimmedLine.startsWith('data: ')) {
-                            try {
-                                const eventData = JSON.parse(trimmedLine.slice(6));
-                                if (eventData.type === 'log') {
-                                    setProgressLog(prev => [...prev, eventData.message]);
-                                } else if (eventData.type === 'result') {
-                                    recipeResult = eventData;
-                                } else if (eventData.type === 'error') {
-                                    throw new Error(eventData.message);
+                        for (const line of lines) {
+                            const trimmedLine = line.trim();
+                            if (trimmedLine.startsWith('data: ')) {
+                                try {
+                                    const eventData = JSON.parse(trimmedLine.slice(6));
+                                    if (eventData.type === 'log') {
+                                        setProgressLog(prev => [...prev, eventData.message]);
+                                    } else if (eventData.type === 'result') {
+                                        recipeResult = eventData;
+                                        gotResult = true;
+                                    } else if (eventData.type === 'error') {
+                                        throw new Error(eventData.message);
+                                    }
+                                } catch (e) {
+                                    console.warn("Failed to parse SSE event", e);
                                 }
-                            } catch (e) {
-                                console.warn("Failed to parse SSE event", e);
                             }
                         }
-                    }
-                }
 
-                if (!recipeResult) {
-                    throw new Error("ストリームが終了しましたが、結果が受信できませんでした。");
+                        // Backends may keep SSE open; stop once we have a result.
+                        if (gotResult) break;
+                    }
+
+                    try {
+                        await reader.cancel();
+                    } catch {
+                        // ignore
+                    }
+
+                    if (!recipeResult) {
+                        throw new Error("ストリームが終了しましたが、結果が受信できませんでした。");
+                    }
+                    data = recipeResult;
+                    // data.recipe is already inside recipeResult from backend (eventData.recipe)
                 }
-                data = recipeResult;
-                // data.recipe is already inside recipeResult from backend (eventData.recipe)
             }
 
             if (data.error) throw new Error(data.error);
@@ -360,9 +455,15 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
 
         } catch (err) {
             console.error("Import failed details:", err);
+            if (err?.name === 'AbortError') {
+                // Cancel/timeout sets a user-facing message via `cancelAnalyze`.
+                return;
+            }
             const msg = err.message || "Import failed. Please try again.";
             setError(msg);
         } finally {
+            clearAnalyzeTimers();
+            analyzeAbortRef.current = null;
             if (mode !== 'confirm-translation') {
                 setIsLoading(false);
             }
@@ -391,6 +492,8 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
     const handleFileChange = (e) => {
         const file = e.target.files[0];
         if (file) void setSelectedImageFile(file);
+        // Allow selecting the same file again.
+        e.target.value = '';
     };
 
     return (
@@ -411,6 +514,11 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                             </div>
                         </div>
                     )}
+                    <div style={{ marginTop: '0.9rem', display: 'flex', justifyContent: 'center' }}>
+                        <Button type="button" variant="secondary" onClick={() => cancelAnalyze()}>
+                            中断
+                        </Button>
+                    </div>
                 </div>
             )}
 
@@ -486,27 +594,64 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                                 <p>レシピの画像（スクリーンショットや写真）をアップロードしてください。スマホはカメラで撮影して取り込めます。</p>
                                 <div className="image-upload-wrapper">
                                     <input
+                                        ref={cameraInputRef}
                                         type="file"
                                         accept="image/*"
                                         capture="environment"
                                         onChange={handleFileChange}
-                                        id="recipe-image-upload"
                                         className="image-upload-input"
                                     />
-                                    <label
-                                        htmlFor="recipe-image-upload"
+                                    <input
+                                        ref={galleryInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleFileChange}
+                                        className="image-upload-input"
+                                    />
+                                    <div
                                         onDragEnter={handleDrag}
                                         onDragLeave={handleDrag}
                                         onDragOver={handleDrag}
                                         onDrop={handleDrop}
                                         className={`image-upload-label ${isDragActive ? 'drag-active' : ''}`}
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={() => {
+                                            if (isLoading || isImagePreparing) return;
+                                            openGalleryPicker();
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (isLoading || isImagePreparing) return;
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                openGalleryPicker();
+                                            }
+                                        }}
                                     >
                                         {imagePreview ? (
                                             <img src={imagePreview} alt="Preview" className="image-upload-preview" />
                                         ) : (
-                                            isDragActive ? "ここに画像をドロップ" : "クリックして画像を選択、またはドラッグ＆ドロップ"
+                                            isDragActive ? "ここに画像をドロップ" : "カメラで撮影、または写真から選択"
                                         )}
-                                    </label>
+                                    </div>
+                                    <div className="image-upload-actions">
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            onClick={openCameraPicker}
+                                            disabled={isLoading || isImagePreparing}
+                                        >
+                                            カメラで撮影
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            onClick={openGalleryPicker}
+                                            disabled={isLoading || isImagePreparing}
+                                        >
+                                            写真から選択
+                                        </Button>
+                                    </div>
                                 </div>
                                 {isImagePreparing && (
                                     <p style={{ fontSize: '0.85rem', opacity: 0.8, marginTop: '0.5rem' }}>画像を最適化しています...</p>
