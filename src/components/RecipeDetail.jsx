@@ -969,7 +969,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                             </div>
                             {/* QR Code */}
                             <div style={{ background: 'white', padding: '4px', width: 'fit-content' }}>
-                                <QRCode value={displayRecipe.sourceUrl} size={64} style={{ height: "auto", maxWidth: "100%", width: "100%" }} />
+                                <QRCode value={displayRecipe.sourceUrl} size={128} style={{ display: 'block' }} />
                             </div>
                         </div>
                     )}
