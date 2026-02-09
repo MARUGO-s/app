@@ -19,11 +19,13 @@ const UnitConversionModal = ({
     const [packetPrice, setPacketPrice] = useState('');
     const [packetSize, setPacketSize] = useState('');
     const [packetUnit, setPacketUnit] = useState(unit);
+    const [vendor, setVendor] = useState('');
     const [saveDefault, setSaveDefault] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
     const loadDefaults = useCallback(async () => {
         setIsLoading(true);
+        setVendor('');
 
         // Priority 1: Use values passed from the specific ingredient instance (if they exist)
         if (initialPurchaseCost && initialContentAmount) {
@@ -36,8 +38,15 @@ const UnitConversionModal = ({
             const saved = await unitConversionService.getConversion(ingredientName);
             if (saved) {
                 setPacketUnit(saved.packetUnit || unit);
+                setVendor(saved.vendor || '');
             } else {
                 setPacketUnit(unit);
+                try {
+                    const masterData = await purchasePriceService.getPrice(ingredientName);
+                    setVendor(masterData?.vendor || '');
+                } catch {
+                    // ignore
+                }
             }
         } else {
             // Priority 2: Global Saved Default
@@ -46,6 +55,7 @@ const UnitConversionModal = ({
                 setPacketSize(saved.packetSize);
                 setPacketUnit(saved.packetUnit || unit);
                 if (saved.lastPrice) setPacketPrice(saved.lastPrice);
+                setVendor(saved.vendor || '');
             } else {
                 // Priority 3: Master Data / Heuristics
                 // Try to find in master CSV data
@@ -54,6 +64,7 @@ const UnitConversionModal = ({
 
                     if (masterData) {
                         setPacketPrice(currentCost || masterData.price);
+                        setVendor(masterData.vendor || '');
 
                         if (masterData.unit) {
                             const match = masterData.unit.match(/^(\d+(?:\.\d+)?)?\s*(.*)$/);
@@ -81,12 +92,14 @@ const UnitConversionModal = ({
                         setPacketSize('');
                         setPacketPrice(currentCost || '');
                         setPacketUnit(unit);
+                        setVendor('');
                     }
                 } catch (err) {
                     console.warn('Failed to load master price:', err);
                     setPacketSize('');
                     setPacketPrice(currentCost || '');
                     setPacketUnit(unit);
+                    setVendor('');
                 }
             }
         }
@@ -119,14 +132,14 @@ const UnitConversionModal = ({
 
         if (saveDefault && packetSize) {
             try {
-                await unitConversionService.saveConversion(ingredientName, packetSize, packetUnit, packetPrice);
+                await unitConversionService.saveConversion(ingredientName, packetSize, packetUnit, packetPrice, null, vendor);
             } catch (err) {
                 console.error('Failed to save default conversion:', err);
             }
         }
 
         // Pass back all details needed for persistence
-        onApply(normalizedCost, packetUnit, packetPrice, packetSize);
+        onApply(normalizedCost, packetUnit, packetPrice, packetSize, vendor);
         onClose();
     };
 
@@ -153,10 +166,10 @@ const UnitConversionModal = ({
                         <div className="unit-conversion-modal__value">{ingredientName || '(未入力)'}</div>
                     </div>
 
-                    <div className="unit-conversion-modal__inputs">
-                        <div>
-                            <label className="unit-conversion-modal__label">仕入れ値 (円)</label>
-                            <input
+	                    <div className="unit-conversion-modal__inputs">
+	                        <div>
+	                            <label className="unit-conversion-modal__label">仕入れ値 (円)</label>
+	                            <input
                                 type="number"
                                 value={packetPrice}
                                 onChange={(e) => setPacketPrice(e.target.value)}
@@ -165,10 +178,10 @@ const UnitConversionModal = ({
                             />
                         </div>
 
-                        <div>
-                            <label className="unit-conversion-modal__label">内容量</label>
-                            <div className="unit-conversion-modal__row">
-                                <input
+	                        <div>
+	                            <label className="unit-conversion-modal__label">内容量</label>
+	                            <div className="unit-conversion-modal__row">
+	                                <input
                                     type="number"
                                     value={packetSize}
                                     onChange={(e) => setPacketSize(e.target.value)}
@@ -192,9 +205,20 @@ const UnitConversionModal = ({
                                         <option value={packetUnit}>{packetUnit}</option>
                                     )}
                                 </select>
+	                            </div>
+	                        </div>
+
+                            <div>
+                                <label className="unit-conversion-modal__label">業者名</label>
+                                <input
+                                    type="text"
+                                    value={vendor}
+                                    onChange={(e) => setVendor(e.target.value)}
+                                    className="input-field unit-conversion-modal__input"
+                                    placeholder="例: ◯◯商会"
+                                />
                             </div>
-                        </div>
-                    </div>
+	                    </div>
 
                     <div className="unit-conversion-modal__summary" aria-live="polite">
                         {isLoading ? (
