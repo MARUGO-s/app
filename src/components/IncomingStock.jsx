@@ -141,9 +141,22 @@ export const IncomingStock = ({ onBack }) => {
         unit: consumeTarget.unit,
         delta: -amount
       });
+
+      // Optimistic update: update local state directly instead of reloading
+      // from Storage (which may return cached/stale data).
+      setStock(prev => ({
+        ...prev,
+        items: (prev.items || []).map(item => {
+          if (item.name === consumeTarget.name && (item.unit || '') === (consumeTarget.unit || '')) {
+            const newQty = Math.max(0, (item.quantity || 0) - amount);
+            return { ...item, quantity: Math.round(newQty * 1000) / 1000 };
+          }
+          return item;
+        })
+      }));
+
       setConsumeModalOpen(false);
       setConsumeTarget(null);
-      await reload();
     } catch (e) {
       console.error(e);
       setError(e?.message || String(e));
