@@ -288,7 +288,13 @@ function AppContent() {
   const loadRecipes = async () => {
     try {
       setLoading(true);
-      const data = await recipeService.fetchRecipes(user, { timeoutMs: 15000 });
+      // Initial list view only needs lightweight recipe data (no full ingredients JSON),
+      // otherwise the first load can become very slow on large datasets.
+      const data = await recipeService.fetchRecipes(user, {
+        timeoutMs: 15000,
+        includeIngredients: false,
+        includeSources: false,
+      });
       setRecipes(data || []);
     } catch (error) {
       console.error("Failed to fetch recipes:", error);
