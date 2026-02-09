@@ -219,13 +219,13 @@ const SortableIngredientItem = React.memo(({
                     wrapperClassName="input-group--no-margin"
                 />
             </div>
-            <div className="ingredient-cost" style={{ position: 'relative' }}>
+            <div className="ingredient-cost" style={{ position: 'relative' }} data-label="仕入れ">
                 <Input
                     type="number"
                     value={item.purchaseCost}
                     onChange={(e) => onChange(groupId, index, 'purchaseCost', e.target.value)}
                     step="0.01"
-                    placeholder={item.purchaseCostRef ? "Ref" : ""}
+                    placeholder={item.purchaseCostRef ? "Ref" : "仕入"}
                     style={{ width: '100%', borderColor: item.purchaseCostRef && !item.purchaseCost ? 'orange' : '', paddingRight: '20px' }}
                     title={item.purchaseCostRef ? `参考: ¥${item.purchaseCostRef}${item.vendorRef ? ` (${item.vendorRef})` : ''}` : "No data"}
                     wrapperClassName="input-group--no-margin"
@@ -248,13 +248,13 @@ const SortableIngredientItem = React.memo(({
                     </div>
                 )}
             </div>
-            <div className="ingredient-cost">
+            <div className="ingredient-cost" data-label="原価">
                 <Input
                     type="number"
                     step="0.01"
                     value={item.cost}
                     onChange={(e) => onChange(groupId, index, 'cost', e.target.value)}
-                    placeholder=""
+                    placeholder="原価"
                     style={{ width: '100%' }}
                     wrapperClassName="input-group--no-margin"
                 />

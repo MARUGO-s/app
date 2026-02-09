@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase, SUPABASE_URL } from '../supabase.js';
 import { incomingDeliveryService } from '../services/incomingDeliveryService.js';
 import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
@@ -107,9 +108,11 @@ const safeNumber = (value) => {
 const normalizeUnit = (value) => String(value || '').trim();
 
 export const IncomingDeliveries = ({ onBack }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [listLoading, setListLoading] = React.useState(true);
   const [files, setFiles] = React.useState([]);
   const [selectedPdf, setSelectedPdf] = React.useState(null);
+  const [isDragging, setIsDragging] = React.useState(false);
   const [parsing, setParsing] = React.useState(false);
   const [parsed, setParsed] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
@@ -142,6 +145,32 @@ export const IncomingDeliveries = ({ onBack }) => {
   React.useEffect(() => {
     reloadList();
   }, [reloadList]);
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type === 'application/pdf') {
+      setSelectedPdf(file);
+      setParsed(null);
+      setAggregate(null);
+      setError('');
+    } else {
+      // Optional: Show error for non-PDF
+      // setError('PDFファイルのみアップロード可能です');
+    }
+  };
 
   const handleParsePdf = async () => {
     if (!selectedPdf) return;
@@ -296,6 +325,9 @@ export const IncomingDeliveries = ({ onBack }) => {
       <div className="incoming-deliveries__header">
         <h2 className="incoming-deliveries__title">入荷PDF（在庫の積み上げ）</h2>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <Button variant="secondary" onClick={() => setSearchParams({ view: 'incoming-stock' })}>
+            📦 入荷在庫へ
+          </Button>
           <Button variant="ghost" onClick={onBack}>← 戻る</Button>
         </div>
       </div>
@@ -312,17 +344,28 @@ export const IncomingDeliveries = ({ onBack }) => {
           接続先: {SUPABASE_URL}
         </div>
         <div className="incoming-deliveries__upload">
-          <input
-            type="file"
-            accept="application/pdf"
-            onChange={(e) => {
-              const file = e.target.files?.[0] || null;
-              setSelectedPdf(file);
-              setParsed(null);
-              setAggregate(null);
-              setError('');
-            }}
-          />
+          <div
+            className={`incoming-deliveries__upload-zone ${isDragging ? 'incoming-deliveries__upload-zone--dragging' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <div style={{ textAlign: 'center', marginBottom: '10px', fontWeight: 'bold', color: isDragging ? 'var(--color-primary)' : 'inherit' }}>
+              {isDragging ? 'ここにドロップしてアップロード' : 'PDFファイルをここにドラッグ＆ドロップ'}
+            </div>
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={(e) => {
+                const file = e.target.files?.[0] || null;
+                setSelectedPdf(file);
+                setParsed(null);
+                setAggregate(null);
+                setError('');
+              }}
+              style={{ width: '100%' }}
+            />
+          </div>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <Button
               variant="secondary"
