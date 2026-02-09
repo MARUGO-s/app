@@ -127,19 +127,37 @@ app-main-22/
 │   └── mockData.js
 │
 ├── supabase/
-│   └── migrations/          # データベース マイグレーション
-│       ├── 20260203100000_create_ingredient_search_rpc.sql
-│       ├── 20260204000000_add_performance_indexes.sql
-│       ├── 20260202160000_create_csv_unit_overrides.sql
-│       └── ...
+│   ├── migrations/          # データベース マイグレーション
+│   │   ├── 20260203100000_create_ingredient_search_rpc.sql
+│   │   ├── 20260204000000_add_performance_indexes.sql
+│   │   ├── 20260202160000_create_csv_unit_overrides.sql
+│   │   └── ...
+│   └── maintenance/         # 運用・調整用SQL（必要に応じて手動実行）
+│       ├── fix_admin_visibility.sql
+│       ├── fix_public_recipe_final.sql
+│       ├── fix_public_recipe_v2.sql
+│       ├── fix_public_recipe_visibility.sql
+│       └── fix_rls.sql
+│
+├── scripts/                 # 開発用スクリプト（データ変換/インポートなど）
+│   ├── parse_chiffon_pdf.js
+│   ├── parse_pdf_to_json.js
+│   ├── convert_units.js
+│   └── import_chiffon_recipes.js
 │
 ├── public/                  # 静的アセット
-├── dist/                    # ビルド出力（GitHub Pages に デプロイ）
+├── dist/                    # ビルド出力（gitignore / GitHub Pages artifact）
+├── docs/                    # ドキュメント
+│   ├── APP_MANUAL_DETAILED.md
+│   ├── FAQ_QUICK_START.md
+│   ├── MASTER_MANUAL.md
+│   ├── OPERATION_MANUAL.md
+│   ├── TECHNICAL_DOCUMENTATION.md
+│   └── USER_GUIDE.md
+├── samples/                 # サンプルデータ（gitignore）
 ├── package.json
 ├── vite.config.js           # Vite 設定
-├── USER_GUIDE.md            # ユーザーガイド
-├── OPERATION_MANUAL.md      # 運用マニュアル
-└── TECHNICAL_DOCUMENTATION.md (このファイル)
+└── README.md
 ```
 
 ---

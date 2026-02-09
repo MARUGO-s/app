@@ -366,16 +366,15 @@ npm run deploy
 
 ### 16-1. 主要ドキュメント
 
-- `MASTER_MANUAL.md`（本書）
+- `docs/MASTER_MANUAL.md`（本書）
 - `README.md`（概要・開発の入口）
-- `USER_GUIDE.md`（ユーザー向け簡易ガイド ※一部過去仕様あり）
-- `OPERATION_MANUAL.md`（運用ルール中心の説明）
+- `docs/USER_GUIDE.md`（ユーザー向け簡易ガイド ※一部過去仕様あり）
+- `docs/OPERATION_MANUAL.md`（運用ルール中心の説明）
 
 ### 16-2. 補助ページ
 
-- `levain-guide.html`（ルヴァン種ガイド。アプリ内の「ルヴァンガイド」画面から参照）
+- ルヴァン種ガイドはアプリ内「ルヴァンガイド」画面（`src/components/LevainGuide.jsx`）に統合されています
 
 ### 16-3. 注意（別用途のHTML）
 
 `public/Instructions.html` / `public/flaro.html` は、別システム（フラロ勤怠）のQ&Aドキュメントで、本アプリの運用説明とは別物です。
-

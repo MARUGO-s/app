@@ -1,8 +1,10 @@
 
 import fs from 'fs';
+import path from 'path';
 
-const RECIPES_FILE = process.argv[2] || 'recipes.json';
-const OUTPUT_FILE = process.argv[3] || 'recipes_converted.json';
+// Default locations for local sample artifacts (gitignored).
+const RECIPES_FILE = process.argv[2] || 'samples/json/recipes.json';
+const OUTPUT_FILE = process.argv[3] || 'samples/json/recipes_converted.json';
 
 // Density Map (g/ml per Tbsp/15ml)
 // Default liquid: 15g (1g/ml)
@@ -182,6 +184,7 @@ function main() {
         return { ...r, ingredients: newIng };
     });
 
+    fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });
     fs.writeFileSync(OUTPUT_FILE, JSON.stringify(converted, null, 2));
     console.log(`Converted ${converted.length} recipes.`);
 }

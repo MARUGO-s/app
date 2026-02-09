@@ -7,7 +7,8 @@ const require = createRequire(import.meta.url);
 const pdf = require('pdf-parse');
 
 const inputFile = process.argv[2];
-const outputFile = process.argv[3] || 'recipes.json';
+// Default locations for local sample artifacts (gitignored).
+const outputFile = process.argv[3] || 'samples/json/recipes.json';
 
 if (!inputFile) {
     console.error('Usage: node parse_pdf_to_json.js <input_pdf> [output_json]');
@@ -134,6 +135,7 @@ async function parse() {
     // Normalize structure for DB import script later
     // The DB script typically expects: title, description, ingredients: [{name, quantity...}], steps: ["..."]
 
+    fs.mkdirSync(path.dirname(outputFile), { recursive: true });
     fs.writeFileSync(outputFile, JSON.stringify(recipes, null, 2));
     console.log(`Saved to ${outputFile}`);
 }

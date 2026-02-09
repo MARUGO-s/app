@@ -865,14 +865,14 @@ A: 管理者画面で基本的なアクティビティ（ログイン/ログア�
 A: いいえ、各ユーザーが個別にパスワード復旧メールから設定する必要があります。
 
 **Q: ロールの権限を詳しく知りたいのですが？**
-A: [技術ドキュメント](./TECHNICAL_DOCUMENTATION.md)の「認証とセキュリティ」セクションを参照してください。
+A: [技術ドキュメント](./docs/TECHNICAL_DOCUMENTATION.md)の「認証とセキュリティ」セクションを参照してください。
 
 ---
 
 ### 技術・デプロイメントについて
 
 **Q: このアプリを自分のサーバーでホストできますか？**
-A: はい、本リポジトリをフォークして自分のサーバーにデプロイすることが可能です。詳細は [TECHNICAL_DOCUMENTATION.md](./TECHNICAL_DOCUMENTATION.md) を参照してください。
+A: はい、本リポジトリをフォークして自分のサーバーにデプロイすることが可能です。詳細は [TECHNICAL_DOCUMENTATION.md](./docs/TECHNICAL_DOCUMENTATION.md) を参照してください。
 
 **Q: APIエンドポイントを外部アプリから呼び出せますか？**
 A: はい、Supabase APIを使用して外部から呼び出し可能です。詳細は技術ドキュメントを参照してください。
@@ -887,9 +887,10 @@ A: Chrome、Firefox、Safari、Edgeの最新バージョンで動作確認済み
 
 ## 📚 関連ドキュメント
 
-- [技術ドキュメント](./TECHNICAL_DOCUMENTATION.md) - システムアーキテクチャ、API仕様、データベーススキーマ、デプロイメント手順など
-- [操作マニュアル](./OPERATION_MANUAL.md) - 管理者向けの詳細な運用ガイド
-- [FAQ・クイックスタート](./FAQ_QUICK_START.md) - よくある質問と初期セットアップ
+- [技術ドキュメント](./docs/TECHNICAL_DOCUMENTATION.md) - システムアーキテクチャ、API仕様、データベーススキーマ、デプロイメント手順など
+- [操作マニュアル](./docs/OPERATION_MANUAL.md) - 管理者向けの詳細な運用ガイド
+- [FAQ・クイックスタート](./docs/FAQ_QUICK_START.md) - よくある質問と初期セットアップ
+- [操作説明書（詳細版）](./docs/APP_MANUAL_DETAILED.md) - 画面ごとの手順・注意点・運用のコツ
 
 ---
 
