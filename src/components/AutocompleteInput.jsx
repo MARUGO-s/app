@@ -215,7 +215,10 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
                         >
                             <div className="suggestion-main">
                                 <span className="suggestion-name">{item.name}</span>
-                                <span className="suggestion-source">{item.displaySource}</span>
+                                {/* "マスター" バッジは表示しない（候補リストをシンプルにする） */}
+                                {item?.source && item.source !== 'manual' && (
+                                    <span className="suggestion-source">{item.displaySource}</span>
+                                )}
                             </div>
                             <div className="suggestion-details">
                                 {item.price && `¥${Number(item.price).toLocaleString()}`}
