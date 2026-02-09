@@ -12,6 +12,7 @@ import { RecentRecipes } from './components/RecentRecipes';
 import { LevainGuide } from './components/LevainGuide';
 import { UserManagement } from './components/UserManagement';
 import { Inventory } from './components/Inventory';
+import { IncomingDeliveries } from './components/IncomingDeliveries';
 import { Planner } from './components/Planner';
 import { OrderList } from './components/OrderList';
 import { recipeService } from './services/recipeService';
@@ -108,6 +109,7 @@ function AppContent() {
 
   const PC_RECOMMEND_VIEWS = {
     inventory: '在庫管理',
+    'incoming-deliveries': '入荷PDF',
     planner: '仕込みカレンダー',
     data: 'データ管理',
     users: 'ユーザー管理',
@@ -954,6 +956,9 @@ function AppContent() {
                         <Button variant="secondary" onClick={() => { setSearchParams({ view: 'inventory' }); setIsMenuOpen(false); }}>
                           <span style={{ marginRight: '8px' }}>📦</span> 在庫管理
                         </Button>
+                        <Button variant="secondary" onClick={() => { setSearchParams({ view: 'incoming-deliveries' }); setIsMenuOpen(false); }}>
+                          <span style={{ marginRight: '8px' }}>📄</span> 入荷PDF
+                        </Button>
                         <Button variant="secondary" onClick={() => { setSearchParams({ view: 'planner' }); setIsMenuOpen(false); }}>
                           <span style={{ marginRight: '8px' }}>📅</span> 仕込みカレンダー
                         </Button>
@@ -1263,6 +1268,10 @@ function AppContent() {
 
       {currentView === 'inventory' && (
         <Inventory onBack={() => setSearchParams({ view: 'list' })} />
+      )}
+
+      {currentView === 'incoming-deliveries' && (
+        <IncomingDeliveries onBack={() => setSearchParams({ view: 'list' })} />
       )}
 
       {currentView === 'planner' && (
