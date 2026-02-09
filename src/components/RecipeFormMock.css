@@ -12,6 +12,12 @@
     --mock-muted: #a1a1aa;
     --mock-shadow: 0 24px 55px rgba(0, 0, 0, 0.55);
     --mock-shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 22px rgba(0, 0, 0, 0.45);
+    --mock-glass: rgba(255, 255, 255, 0.06);
+    --mock-glass-strong: rgba(255, 255, 255, 0.10);
+    --mock-glass-border: rgba(255, 255, 255, 0.16);
+    --mock-glass-border-strong: rgba(255, 255, 255, 0.24);
+    --mock-glass-blur: 16px;
+    --mock-glass-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
 
     padding: 0 var(--space-sm) 2rem;
     color: var(--mock-text);
@@ -120,7 +126,10 @@
 }
 
 .recipe-form-mock__sheet {
-    background: var(--mock-base);
+    background:
+        radial-gradient(1200px 650px at 12% 0%, rgba(249, 115, 22, 0.14), transparent 58%),
+        radial-gradient(1000px 620px at 92% 18%, rgba(14, 165, 233, 0.12), transparent 60%),
+        var(--mock-base);
     border: 1px solid var(--mock-border);
     border-radius: 18px;
     box-shadow: var(--mock-shadow);
@@ -203,7 +212,7 @@
     grid-template-columns: 1fr;
     gap: 14px;
     padding: 16px;
-    background: var(--mock-base);
+    background: transparent;
 }
 
 @media (min-width: 1100px) {
@@ -311,11 +320,13 @@
 }
 
 .recipe-form-mock__workspace {
-    background: var(--mock-surface);
-    border: 1px solid var(--mock-border);
+    background: linear-gradient(180deg, var(--mock-glass-strong), rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--mock-glass-border);
     border-radius: 16px;
     overflow: hidden;
-    box-shadow: var(--mock-shadow-sm);
+    box-shadow: var(--mock-glass-shadow);
+    backdrop-filter: blur(var(--mock-glass-blur)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--mock-glass-blur)) saturate(140%);
     min-width: 0;
 }
 
@@ -326,8 +337,8 @@
     gap: 12px;
     flex-wrap: wrap;
     padding: 10px 10px;
-    background: var(--mock-base-2);
-    border-bottom: 1px solid var(--mock-border);
+    background: rgba(0, 0, 0, 0.16);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
 }
 
 .recipe-form-mock__nav {
@@ -437,16 +448,17 @@
 
 .recipe-form-mock__workspace-body {
     padding: 12px;
-    background: var(--mock-base);
+    background: rgba(0, 0, 0, 0.10);
 }
 
 .recipe-form-mock__editor-surface {
     position: relative;
-    background: var(--mock-surface);
-    border: 1px solid var(--mock-border);
+    background: rgba(0, 0, 0, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 14px;
     padding: 12px;
     overflow: hidden;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .recipe-form-mock__editor-surface::before {
@@ -539,24 +551,28 @@
 /* --- Embedded ingredient / step editors (table-like) --- */
 .recipe-form-mock .ingredient-section,
 .recipe-form-mock .step-section {
-    border: 1px solid var(--mock-border) !important;
+    position: relative;
+    border: 1px solid var(--mock-glass-border) !important;
     border-radius: 14px !important;
     overflow: hidden;
-    box-shadow: none !important;
-    background: var(--mock-surface);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32) !important;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.04)) !important;
+    backdrop-filter: blur(calc(var(--mock-glass-blur) - 2px)) saturate(140%);
+    -webkit-backdrop-filter: blur(calc(var(--mock-glass-blur) - 2px)) saturate(140%);
 }
 
 /* Section header (first child div inside Card) */
 .recipe-form-mock .ingredient-section > div:first-child,
 .recipe-form-mock .step-section > div:first-child {
     position: relative;
-    border-bottom: 1px solid var(--mock-border) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
     padding: 10px 12px !important;
     margin: 0 !important;
+    background: rgba(0, 0, 0, 0.14) !important;
 }
 
 .recipe-form-mock .step-section > div:first-child {
-    background: var(--mock-surface) !important;
+    background: rgba(0, 0, 0, 0.14) !important;
 }
 
 .recipe-form-mock .section-header-input {
@@ -596,11 +612,11 @@
 }
 
 .recipe-form-mock .recipe-list-header {
-    background: var(--mock-base-2) !important;
+    background: rgba(0, 0, 0, 0.14) !important;
     color: rgba(255, 255, 255, 0.55) !important;
     border: none !important;
-    border-top: 1px solid var(--mock-border) !important;
-    border-bottom: 1px solid var(--mock-border) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.10) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
     border-radius: 0 !important;
     padding: 8px 10px !important;
 }
@@ -612,22 +628,21 @@
 }
 
 .recipe-form-mock .form-ingredient-row {
-    border: 1px solid transparent;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 10px;
     padding: 6px 8px;
-    background: var(--mock-row);
+    background: rgba(255, 255, 255, 0.04);
     margin-bottom: 8px;
     box-shadow: none;
 }
 
 .recipe-form-mock .section-ingredients-list .form-ingredient-row:nth-child(even) {
-    background: var(--mock-row-alt);
+    background: rgba(255, 255, 255, 0.06);
 }
 
 .recipe-form-mock .form-ingredient-row:hover {
     border-color: rgba(255, 255, 255, 0.18);
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .recipe-form-mock .form-ingredient-row .input-field {
@@ -637,10 +652,10 @@
 }
 
 .recipe-form-mock .step-row {
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 12px;
     padding: 10px;
-    background: var(--mock-row);
+    background: rgba(255, 255, 255, 0.04);
     box-shadow: none;
 }
 
@@ -693,8 +708,21 @@
 .recipe-form-mock .recipe-form-drop-placeholder {
     border: 1px dashed rgba(255, 255, 255, 0.25) !important;
     color: rgba(255, 255, 255, 0.68) !important;
-    background: transparent !important;
+    background: rgba(0, 0, 0, 0.10) !important;
     border-radius: 12px !important;
+}
+
+.recipe-form-mock .ingredient-cost-conversion-btn {
+    color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.recipe-form-mock .ingredient-cost-conversion-btn:hover {
+    color: rgba(255, 255, 255, 0.94) !important;
+}
+
+.recipe-form-mock .ingredient-cost-ref,
+.recipe-form-mock .ingredient-yield-indicator {
+    color: rgba(255, 255, 255, 0.62) !important;
 }
 
 /* Bread form overrides (bread CSS is light by default). */
