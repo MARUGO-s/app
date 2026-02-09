@@ -80,6 +80,7 @@ function AppContent() {
   const [authStuckFallback, setAuthStuckFallback] = useState(false);
   const [profilesById, setProfilesById] = useState({});
   const [profilesByDisplayId, setProfilesByDisplayId] = useState({});
+  const [isFromCache, setIsFromCache] = useState(false); // true when showing cached data
 
   // Derived State from URL
   const rawView = searchParams.get('view');
@@ -182,6 +183,7 @@ function AppContent() {
     const cached = recipeService.getCachedRecipes(cachedUserId);
     if (cached && cached.length > 0) {
       setRecipes(cached);
+      setIsFromCache(true);
       setLoading(false); // Show cached list immediately
     }
   }, [user?.id]); // Run once when user becomes available (or from cache)
@@ -315,7 +317,11 @@ function AppContent() {
 
   const loadRecipes = async () => {
     try {
-      setLoading(true);
+      // If we already have cached data showing, don't show the full loading spinner.
+      // Instead, update silently in the background.
+      if (!isFromCache) {
+        setLoading(true);
+      }
       // Initial list view only needs lightweight recipe data (no full ingredients JSON),
       // otherwise the first load can become very slow on large datasets.
       const data = await recipeService.fetchRecipes(user, {
@@ -329,6 +335,7 @@ function AppContent() {
       toast.error(`レシピの読み込みに時間がかかっています。\nネットワークをご確認の上、再読み込みしてください。\n(${error?.message || 'unknown error'})`);
     } finally {
       setLoading(false);
+      setIsFromCache(false);
     }
   };
 
@@ -729,12 +736,24 @@ function AppContent() {
   }, [currentView, authLoading, user?.id]);
 
   if (authLoading && !authStuckFallback) {
-    return (
-      <LoadingScreen
-        label="レシピデータを読み込み中"
-        subLabel="通信状況によって時間がかかる場合があります"
-      />
-    );
+    // Check if we have cached recipes to show (if so, we'll skip this full-screen loading)
+    let hasCachedData = false;
+    try {
+      const cachedUser = JSON.parse(localStorage.getItem('auth_user_cache') || 'null');
+      if (cachedUser?.id) {
+        hasCachedData = !!recipeService.getCachedRecipes(cachedUser.id);
+      }
+    } catch { /* ignore */ }
+
+    if (!hasCachedData) {
+      return (
+        <LoadingScreen
+          label="初回データを読み込み中"
+          subLabel="初回はサーバーからデータを取得するため少しお時間がかかります"
+        />
+      );
+    }
+    // If cached data exists, skip full-screen loading → the cached list will render below
   }
   if (!user) return <LoginPage />;
   if (isPasswordRecovery) return <PasswordResetPage />;
@@ -1154,7 +1173,8 @@ function AppContent() {
 
           {loading ? (
             <LoadingScreen
-              label="レシピ一覧を読み込み中"
+              label={isFromCache ? "最新データに更新中" : "レシピ一覧を読み込み中"}
+              subLabel={isFromCache ? undefined : "初回はサーバーからデータを取得するため少しお時間がかかります"}
               variant="inline"
               showLogo={false}
             />
