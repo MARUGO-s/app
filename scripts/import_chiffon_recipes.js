@@ -19,7 +19,8 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const recipesFile = process.argv[2] || 'chiffon_recipes.json';
+// Default locations for local sample artifacts (gitignored).
+const recipesFile = process.argv[2] || 'samples/json/chiffon_recipes.json';
 
 async function importRecipes() {
     if (!fs.existsSync(recipesFile)) {

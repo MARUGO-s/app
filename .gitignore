@@ -11,3 +11,11 @@ supabase/functions/*/deno.lock
 supabase/functions/*/.npmrc
 recipe.pdf
 bread_recipe.html
+
+# Local sample artifacts (not committed)
+samples/*
+!samples/README.md
+
+# One-off debug outputs
+curl_output*.txt
+verify_price_service.txt

@@ -6,8 +6,9 @@ import path from 'path';
 const require = createRequire(import.meta.url);
 const pdf = require('pdf-parse');
 
-const inputFile = process.argv[2] || 'シフォンケーキ10選.pdf';
-const outputFile = process.argv[3] || 'chiffon_recipes.json';
+// Default locations for local sample artifacts (gitignored).
+const inputFile = process.argv[2] || 'samples/pdfs/シフォンケーキ10選.pdf';
+const outputFile = process.argv[3] || 'samples/json/chiffon_recipes.json';
 
 async function parse() {
     if (!fs.existsSync(inputFile)) {
@@ -144,6 +145,7 @@ async function parse() {
     });
 
     console.log(`Parsed ${recipes.length} recipes.`);
+    fs.mkdirSync(path.dirname(outputFile), { recursive: true });
     fs.writeFileSync(outputFile, JSON.stringify(recipes, null, 2));
     console.log(`Saved to ${outputFile}`);
 }
