@@ -1,6 +1,8 @@
 // Local PDF text extraction + deterministic parser for "納品予定一覧" style PDFs.
 // Avoids external API calls (Gemini/Azure) to keep local/dev reliable.
 
+import pdfWorkerUrl from 'pdf-parse/lib/pdf.js/v2.0.550/build/pdf.worker.js?url';
+
 const isNonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;
 
 const toCleanLine = (v) => String(v ?? '').replace(/\u0000/g, '').trim();
@@ -269,11 +271,10 @@ export const parseDeliveryPdfFile = async (pdfFile) => {
 
   if (!pdfjs?.getDocument) throw new Error('PDF解析モジュールの読み込みに失敗しました');
 
-  // Avoid worker complexities in static hosting environments.
-  try {
-    pdfjs.disableWorker = true;
-  } catch {
-    // ignore
+  // Configure worker for browser environments (required).
+  // If you don't set this, PDF.js throws: "No 'GlobalWorkerOptions.workerSrc' specified."
+  if (pdfjs?.GlobalWorkerOptions) {
+    pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
   }
 
   const doc = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
