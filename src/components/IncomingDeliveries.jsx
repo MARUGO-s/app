@@ -1,5 +1,5 @@
 import React from 'react';
-import { supabase } from '../supabase.js';
+import { supabase, SUPABASE_URL } from '../supabase.js';
 import { incomingDeliveryService } from '../services/incomingDeliveryService.js';
 import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
 import { Button } from './Button';
@@ -8,6 +8,69 @@ import { Modal } from './Modal';
 import './IncomingDeliveries.css';
 
 const toBaseName = (fileName) => String(fileName || '').replace(/\.json$/i, '');
+
+const truncateText = (value, max = 800) => {
+  const s = String(value ?? '');
+  if (s.length <= max) return s;
+  return `${s.slice(0, max)}…`;
+};
+
+const tryParseJson = (value) => {
+  if (!value) return null;
+  if (typeof value === 'object') return value;
+  if (typeof value !== 'string') return null;
+  const s = value.trim();
+  if (!s) return null;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+};
+
+const extractServerErrorMessage = (body) => {
+  const parsed = tryParseJson(body);
+  if (!parsed || typeof parsed !== 'object') return null;
+  return parsed?.error || parsed?.message || parsed?.msg || null;
+};
+
+const formatInvokeError = (err) => {
+  if (!err) return '不明なエラーです';
+
+  const status = err?.context?.status ?? err?.status ?? null;
+  const body = err?.context?.body ?? null;
+  const serverMessage = extractServerErrorMessage(body);
+  const baseMessage = serverMessage || err?.message || String(err);
+
+  const lines = [baseMessage];
+  if (status != null) lines.push(`status: ${status}`);
+
+  // If server didn't give a clear JSON { error }, show a small body snippet.
+  if (!serverMessage && body) {
+    const bodyText = typeof body === 'string' ? body : JSON.stringify(body);
+    const trimmed = String(bodyText || '').trim();
+    if (trimmed && trimmed !== baseMessage) {
+      lines.push(`body: ${truncateText(trimmed, 500)}`);
+    }
+  }
+
+  const hints = [];
+  if (status === 404 || /function not found/i.test(String(body || ''))) {
+    hints.push('ローカルの場合: `supabase functions serve parse-delivery-pdf --env-file supabase/functions/.env` を実行してください');
+  }
+
+  if (/azure/i.test(String(baseMessage))) {
+    hints.push('Azureの環境変数が未設定の可能性があります: `AZURE_DI_ENDPOINT` と `AZURE_DI_KEY`（または `AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT` / `AZURE_DOCUMENT_INTELLIGENCE_KEY`）を `supabase/functions/.env` に追加してください');
+  }
+
+  if (/google_api_key/i.test(String(baseMessage))) {
+    hints.push('`GOOGLE_API_KEY` が未設定の可能性があります（Supabase Functionsの環境変数）');
+  }
+
+  if (hints.length) lines.push(hints.join('\n'));
+
+  return lines.join('\n');
+};
 
 const formatDateTime = (value) => {
   if (!value) return '-';
@@ -102,7 +165,7 @@ export const IncomingDeliveries = ({ onBack }) => {
       setParsed(data.data || null);
     } catch (e) {
       console.error(e);
-      setError(`PDF解析に失敗しました: ${e?.message || String(e)}`);
+      setError(`PDF解析に失敗しました:\n${formatInvokeError(e)}`);
     } finally {
       setParsing(false);
     }
@@ -254,6 +317,9 @@ export const IncomingDeliveries = ({ onBack }) => {
 
       <Card className="incoming-deliveries__card">
         <h3 className="incoming-deliveries__section-title">PDFを読み込む</h3>
+        <div style={{ fontSize: '0.85rem', opacity: 0.75, marginTop: '-4px', marginBottom: '10px' }}>
+          接続先: {SUPABASE_URL}
+        </div>
         <div className="incoming-deliveries__upload">
           <input
             type="file"
@@ -482,4 +548,3 @@ export const IncomingDeliveries = ({ onBack }) => {
     </div>
   );
 };
-
