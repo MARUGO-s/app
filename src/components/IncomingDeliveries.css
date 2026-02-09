@@ -17,6 +17,8 @@
 
 .incoming-deliveries__card {
   padding: 16px;
+  /* Cards are light surfaces in this app; ensure readable dark text. */
+  color: rgba(0, 0, 0, 0.88);
 }
 
 .incoming-deliveries__section-title {
@@ -33,7 +35,7 @@
   border: 1px solid rgba(239, 68, 68, 0.5);
   background: rgba(239, 68, 68, 0.08);
   padding: 12px 14px;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(0, 0, 0, 0.9);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -46,10 +48,10 @@
 }
 
 .incoming-deliveries__slip {
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(0, 0, 0, 0.12);
   border-radius: 12px;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .incoming-deliveries__slip-head {
@@ -79,9 +81,9 @@
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(0, 0, 0, 0.12);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .incoming-deliveries__file-info {
@@ -101,14 +103,18 @@
 .incoming-deliveries__table th,
 .incoming-deliveries__table td {
   padding: 8px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
   vertical-align: top;
 }
 
 .incoming-deliveries__table th {
   text-align: left;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(0, 0, 0, 0.85);
   font-weight: 700;
+}
+
+.incoming-deliveries__table td {
+  color: rgba(0, 0, 0, 0.82);
 }
 
 @media (max-width: 700px) {
