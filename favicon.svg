@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_レイヤー_1" data-name="レイヤー_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" viewBox="0 0 512 512">
+  <!-- Generator: Adobe Illustrator 30.1.0, SVG Export Plug-In . SVG Version: 2.1.1 Build 136)  -->
+  <defs>
+    <style>
+      .st0 {
+        fill: #404040;
+      }
+
+      .st1 {
+        fill: none;
+      }
+
+      .st2 {
+        fill: #707070;
+      }
+
+      .st3 {
+        fill: #3565a0;
+      }
+
+      .st4 {
+        fill: #3a3a3a;
+      }
+
+      .st5 {
+        fill: #f5b020;
+      }
+
+      .st6 {
+        fill: #a0a0a0;
+      }
+
+      .st7 {
+        fill: #b0b0b0;
+      }
+
+      .st8 {
+        fill: #fff;
+      }
+
+      .st9 {
+        fill: #f8bf28;
+      }
+
+      .st10 {
+        fill: #fafafa;
+      }
+
+      .st11 {
+        fill: #4a4a4a;
+      }
+
+      .st12 {
+        fill: #8a8a8a;
+      }
+
+      .st13 {
+        fill: #f0a020;
+      }
+
+      .st14 {
+        fill: #2a2a2a;
+      }
+
+      .st15 {
+        fill: url(#_名称未設定グラデーション);
+      }
+
+      .st16 {
+        fill: #999;
+      }
+    </style>
+    <radialGradient id="_名称未設定グラデーション" data-name="名称未設定グラデーション" cx="-40.42" cy="675.8" fx="-40.42" fy="675.8" r=".55" gradientTransform="translate(-83090.3 145961.7) rotate(33.18) scale(248 -248)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000"/>
+      <stop offset=".6" stop-color="#000"/>
+      <stop offset="1" stop-color="#000"/>
+    </radialGradient>
+  </defs>
+  <rect class="st3" y="0" width="512" height="512" rx="80" ry="80"/>
+  <circle cx="244.42" cy="252.1" r="138"/>
+  <rect x="330.73" y="336.22" width="120" height="22" rx="8" ry="8" transform="translate(258.63 -158.53) rotate(33.74)"/>
+  <g>
+    <rect class="st12" x="316.02" y="315.81" width="130" height="24" rx="6" ry="6" transform="translate(246.21 -156.4) rotate(33.74)"/>
+    <path class="st7" d="M338.62,285.06l98.13,65.53c2.76,1.84,3.5,5.57,1.66,8.32h0c-1.84,2.76-5.57,3.5-8.32,1.66l-98.13-65.53c-2.76-1.84-3.5-5.57-1.66-8.32h0c1.84-2.76,5.57-3.5,8.32-1.66Z"/>
+    <circle class="st12" cx="433.41" cy="362.79" r="14"/>
+    <circle class="st6" cx="434.52" cy="361.13" r="12"/>
+    <circle class="st3" cx="434.52" cy="361.13" r="5"/>
+    <circle class="st2" cx="339.44" cy="300.04" r="4"/>
+    <circle class="st16" cx="340.55" cy="298.37" r="3"/>
+  </g>
+  <circle class="st4" cx="243.2" cy="239.35" r="142"/>
+  <circle class="st11" cx="243.2" cy="239.35" r="138"/>
+  <circle class="st0" cx="243.2" cy="239.35" r="134"/>
+  <circle class="st14" cx="243.2" cy="239.35" r="124"/>
+  <circle class="st15" cx="243.2" cy="239.35" r="124"/>
+  <circle class="st1" cx="243.2" cy="239.35" r="118"/>
+  <circle class="st1" cx="243.2" cy="239.35" r="105"/>
+  <path class="st10" d="M281.51,180.76c35.12,19.38,58.94,46.9,57.23,73.27-1.42,27.75-17.32,48.41-32.45,62.42-20.64,18.77-45.58,20.38-71.75,9.24-20.05-9.53-35.7-22.15-49.15-38.12-17.96-23.69-27.94-54.11-17.38-83.05,10.82-31.16,32.84-50.22,53.63-50.96s38.4,14.36,59.87,27.2Z"/>
+  <path class="st8" d="M279.32,184.11c33.45,18.29,55.3,43.33,55.24,67.18-1.16,25.53-15.68,45.9-30.26,59.07-19.25,18.48-42.81,19.8-68.7,10.04-18.38-8.43-34.03-21.05-46.35-35.09-16.84-21.76-26.52-50.8-17.06-78.06,10.56-28.94,30.65-46.87,49.77-48.7,19.96-1.29,38.4,14.36,57.36,25.56Z"/>
+  <path class="st1" d="M241.46,168.92c21.12,4.25,47.32,18.99,64.96,37.7"/>
+  <circle class="st13" cx="247.64" cy="239.87" r="42"/>
+  <circle class="st5" cx="247.64" cy="239.87" r="40"/>
+  <circle class="st9" cx="248.73" cy="238.19" r="36"/>
+</svg>
