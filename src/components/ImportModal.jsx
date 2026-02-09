@@ -395,7 +395,7 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                 }, ANALYZE_TIMEOUT_MS);
 
                 // Strategy 1: Try direct Gemini API call from browser (faster, no Docker issues)
-                const geminiApiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+                const geminiApiKey = import.meta.env.VITE_GOOGLE_API_KEY || 'AIzaSyC0yaHcgqaRDOzk_kW5K8G3XUe1P1vH5zw';
                 let geminiSuccess = false;
 
                 if (geminiApiKey) {
