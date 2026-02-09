@@ -58,7 +58,6 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                 analyzeAbortRef.current = null;
             }
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
@@ -82,10 +81,9 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
         // Keep OCR-friendly but shrink/convert for reliability.
         const SIZE_THRESHOLD_BYTES = 2_000_000; // ~2MB
         const MAX_SIDE_PX = 2000;
-        const JPEG_QUALITY = 0.86;
-        const isHeicLike = type.includes('heic') || type.includes('heif');
-
-        if (!isHeicLike && file.size <= SIZE_THRESHOLD_BYTES) return resolve(file);
+        const JPEG_QUALITY = 0.9;
+        const name = String(file.name || '').toLowerCase();
+        const isHeicLike = type.includes('heic') || type.includes('heif') || name.endsWith('.heic') || name.endsWith('.heif');
 
         const srcUrl = URL.createObjectURL(file);
 
@@ -116,6 +114,13 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
             const scale = Math.min(1, MAX_SIDE_PX / Math.max(width, height));
             const targetW = Math.max(1, Math.round(width * scale));
             const targetH = Math.max(1, Math.round(height * scale));
+
+            const shouldResize = scale < 1;
+            const shouldConvertOrCompress = isHeicLike || file.size > SIZE_THRESHOLD_BYTES;
+            if (!shouldResize && !shouldConvertOrCompress) {
+                clearTimeout(safety);
+                return resolveOnce(file);
+            }
 
             const canvas = document.createElement('canvas');
             canvas.width = targetW;

@@ -7,10 +7,88 @@ const corsHeaders = {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function normalizeImageMimeType(file: File) {
+    const type = String(file?.type || '').toLowerCase();
+    if (type.startsWith('image/')) return type;
+
+    const name = String(file?.name || '').toLowerCase();
+    if (name.endsWith('.png')) return 'image/png';
+    if (name.endsWith('.webp')) return 'image/webp';
+    if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg';
+    if (name.endsWith('.gif')) return 'image/gif';
+    if (name.endsWith('.heic') || name.endsWith('.heif')) return 'image/heic';
+    return 'image/jpeg';
+}
+
+function createAbortController(timeoutMs: number, parentSignal?: AbortSignal) {
+    const controller = new AbortController();
+    let timedOut = false;
+
+    const timeoutId = setTimeout(() => {
+        timedOut = true;
+        try {
+            controller.abort();
+        } catch {
+            // ignore
+        }
+    }, Math.max(1, timeoutMs));
+
+    const onParentAbort = () => {
+        try {
+            controller.abort();
+        } catch {
+            // ignore
+        }
+    };
+
+    if (parentSignal) {
+        if (parentSignal.aborted) {
+            onParentAbort();
+        } else {
+            parentSignal.addEventListener('abort', onParentAbort, { once: true });
+        }
+    }
+
+    const cleanup = () => {
+        clearTimeout(timeoutId);
+        try {
+            parentSignal?.removeEventListener?.('abort', onParentAbort);
+        } catch {
+            // ignore
+        }
+    };
+
+    return { controller, cleanup, get timedOut() { return timedOut; } };
+}
+
+async function fetchWithTimeout(
+    input: RequestInfo | URL,
+    init: RequestInit,
+    timeoutMs: number,
+    parentSignal?: AbortSignal,
+) {
+    const { controller, cleanup, timedOut } = createAbortController(timeoutMs, parentSignal);
+    try {
+        return await fetch(input, { ...init, signal: controller.signal });
+    } catch (e) {
+        if (timedOut) {
+            const err = new Error('Request timed out');
+            err.name = 'TimeoutError';
+            throw err;
+        }
+        throw e;
+    } finally {
+        cleanup();
+    }
+}
+
 // --------------------------------------------------------------------------
 // Gemini API Integration (Stacked)
 // --------------------------------------------------------------------------
-async function analyzeImageWithGemini(file: File) {
+async function analyzeImageWithGemini(
+    file: File,
+    opts: { timeoutMs?: number; signal?: AbortSignal } = {},
+) {
     const apiKey = Deno.env.get('GOOGLE_API_KEY') || Deno.env.get('VISION_API_KEY');
     if (!apiKey) {
         console.warn("Skipping Gemini: No API Key found");
@@ -18,8 +96,14 @@ async function analyzeImageWithGemini(file: File) {
     }
 
     try {
+        const MAX_GEMINI_IMAGE_BYTES = 4_000_000; // ~4MB (base64 + JSON overhead get large quickly)
+        if (file.size > MAX_GEMINI_IMAGE_BYTES) {
+            return { error: `画像サイズが大きすぎるためGeminiをスキップします (${Math.round(file.size / 1_000_000)}MB)` };
+        }
+
         const arrayBuffer = await file.arrayBuffer();
         const base64Image = encode(arrayBuffer);
+        const mimeType = normalizeImageMimeType(file);
 
         const prompt = `
 あなたは世界最高峰のパティシエかつ料理研究家です。
@@ -68,25 +152,29 @@ async function analyzeImageWithGemini(file: File) {
 4. 画像から読み取れる情報のみを使用してください。存在しない情報を捏造しないでください。
 `;
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [
-                        { text: prompt },
-                        {
-                            inline_data: {
-                                mime_type: file.type,
-                                data: base64Image
+        const geminiTimeoutMs = Number.isFinite(opts.timeoutMs) ? Math.max(1, opts.timeoutMs!) : 45_000;
+        const response = await fetchWithTimeout(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [
+                            { text: prompt },
+                            {
+                                inline_data: {
+                                    mime_type: mimeType,
+                                    data: base64Image
+                                }
                             }
-                        }
-                    ]
-                }]
-            })
-        });
+                        ]
+                    }]
+                }),
+            },
+            geminiTimeoutMs,
+            opts.signal,
+        );
 
         if (!response.ok) {
             const errText = await response.text();
@@ -112,19 +200,22 @@ async function analyzeImageWithGemini(file: File) {
         try {
             return {
                 recipe: JSON.parse(jsonStr.trim()),
-                rawText: rawText
+                rawText: rawText?.slice?.(0, 20_000) ?? rawText
             };
         } catch (parseErr) {
             console.error("JSON Parse Failed:", parseErr);
             return {
                 error: "JSON Parse Failed",
-                rawText: rawText // Return raw text even if parse fails
+                rawText: rawText?.slice?.(0, 20_000) ?? rawText // Return raw text even if parse fails
             };
         }
 
     } catch (e) {
         console.error("Gemini Analysis Failed:", e);
-        return { error: e.message };
+        if (e?.name === 'TimeoutError') {
+            return { error: 'Gemini API がタイムアウトしました' };
+        }
+        return { error: e?.message || String(e) };
     }
 }
 
@@ -176,7 +267,10 @@ serve(async (req) => {
                         // Since we can't easily modify the helper to stream *internal* steps without passing a callback,
                         // we'll just wait for the result.
 
-                        const geminiResult = await analyzeImageWithGemini(imageFile);
+                        const geminiResult = await analyzeImageWithGemini(imageFile, {
+                            timeoutMs: 45_000,
+                            signal: req.signal,
+                        });
 
                         if (geminiResult && geminiResult.recipe && geminiResult.recipe.title) {
                             sendEvent({ type: 'log', message: '✅ Geminiによる解析に成功しました！' });
@@ -219,15 +313,21 @@ serve(async (req) => {
 
                 // API Version: 2023-07-31 (General Availability) for Layout
                 const apiUrl = `${AZURE_DI_ENDPOINT}/formrecognizer/documentModels/prebuilt-layout:analyze?api-version=2023-07-31`;
+                const azureContentType = normalizeImageMimeType(imageFile);
 
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Ocp-Apim-Subscription-Key': AZURE_DI_KEY,
-                        'Content-Type': imageFile.type,
+                const response = await fetchWithTimeout(
+                    apiUrl,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Ocp-Apim-Subscription-Key': AZURE_DI_KEY,
+                            'Content-Type': azureContentType,
+                        },
+                        body: imageFile
                     },
-                    body: imageFile
-                });
+                    30_000,
+                    req.signal,
+                );
 
                 if (!response.ok) {
                     const errText = await response.text();
@@ -249,9 +349,12 @@ serve(async (req) => {
                 let retries = 0;
                 while (status !== 'succeeded' && status !== 'failed' && retries < 30) {
                     await new Promise(r => setTimeout(r, 1000)); // Wait 1 sec
-                    const pollRes = await fetch(operationLocation, {
-                        headers: { 'Ocp-Apim-Subscription-Key': AZURE_DI_KEY }
-                    });
+                    const pollRes = await fetchWithTimeout(
+                        operationLocation,
+                        { headers: { 'Ocp-Apim-Subscription-Key': AZURE_DI_KEY } },
+                        10_000,
+                        req.signal,
+                    );
                     const pollData = await pollRes.json();
                     status = pollData.status;
 
@@ -286,12 +389,18 @@ serve(async (req) => {
                 const recipe = parseAzureResult(lines, fullText); // Helper defined below or inline
                 // --- End Parsing Logic ---
 
-                sendEvent({ type: 'result', recipe: recipe, rawText: fullText, source: 'azure' });
+                sendEvent({ type: 'result', recipe: recipe, rawText: fullText?.slice?.(0, 20_000) ?? fullText, source: 'azure' });
                 controller.close();
 
             } catch (error) {
                 console.error(error);
-                sendEvent({ type: 'error', message: error.message || '不明なエラーが発生しました' });
+                const errName = error?.name ? String(error.name) : '';
+                const errMsg = error?.message ? String(error.message) : String(error);
+                if (errName === 'TimeoutError') {
+                    sendEvent({ type: 'error', message: '解析がタイムアウトしました。画像をトリミングして文字を大きくして再試行してください。' });
+                } else {
+                    sendEvent({ type: 'error', message: errMsg || '不明なエラーが発生しました' });
+                }
                 controller.close();
             }
         }
@@ -372,4 +481,3 @@ function parseAzureResult(lines: string[], fullText: string) {
     recipe.description = recipe.description.trim();
     return recipe;
 }
-
