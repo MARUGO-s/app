@@ -980,6 +980,7 @@ const fromDbFormat = (recipe) => {
     let ingredientGroups = [];
     let stepGroups = [];
     let cleanIngredients = rawIngs;
+    const normalizedTags = normalizeRecipeTags(recipe.tags);
 
     // UNPACKING STRATEGY:
     // OPTIMIZATION: Check for lightweight metadata first (from List View)
@@ -1069,6 +1070,7 @@ const fromDbFormat = (recipe) => {
         stepGroups,
         ingredients: cleanIngredients,
         steps: stepsWithIds.length > 0 && typeof stepsWithIds[0] === 'object' ? stepsWithIds : recipe.steps, // Return objects if grouped
+        tags: normalizedTags,
         sourceUrl: (recipe.recipe_sources && recipe.recipe_sources.length > 0) ? recipe.recipe_sources[0].url : ''
     }
 }
