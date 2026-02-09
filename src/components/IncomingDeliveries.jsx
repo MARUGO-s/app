@@ -166,9 +166,27 @@ export const IncomingDeliveries = ({ onBack }) => {
       setParsed(null);
       setAggregate(null);
       setError('');
-    } else {
-      // Optional: Show error for non-PDF
-      // setError('PDFファイルのみアップロード可能です');
+      // Auto-parse on drop for better UX
+      autoParseFile(file);
+    } else if (file) {
+      setError('PDFファイルのみアップロード可能です');
+    }
+  };
+
+  const autoParseFile = async (file) => {
+    if (!file) return;
+    setError('');
+    setParsing(true);
+    setParsed(null);
+    setAggregate(null);
+    try {
+      const localParsed = await parseDeliveryPdfFile(file);
+      setParsed(localParsed || null);
+    } catch (e) {
+      console.error(e);
+      setError(`PDF解析に失敗しました:\n${e?.message || String(e)}`);
+    } finally {
+      setParsing(false);
     }
   };
 
