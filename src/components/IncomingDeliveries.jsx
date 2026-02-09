@@ -2,6 +2,7 @@ import React from 'react';
 import { supabase, SUPABASE_URL } from '../supabase.js';
 import { incomingDeliveryService } from '../services/incomingDeliveryService.js';
 import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
+import { parseDeliveryPdfFile } from '../utils/parseDeliveryPdf.js';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Modal } from './Modal';
@@ -149,23 +150,13 @@ export const IncomingDeliveries = ({ onBack }) => {
     setParsed(null);
     setAggregate(null);
     try {
-      const dataUrl = await readFileAsDataUrl(selectedPdf);
-      const base64 = stripDataUrlPrefix(dataUrl);
-
-      const { data, error: fnError } = await supabase.functions.invoke('parse-delivery-pdf', {
-        body: {
-          fileBase64: base64,
-          fileName: selectedPdf.name || '',
-        },
-      });
-
-      if (fnError) throw fnError;
-      if (!data?.ok) throw new Error(data?.error || '解析に失敗しました');
-
-      setParsed(data.data || null);
+      // Prefer local parsing (no external API). This avoids "終わらない" issues when
+      // Edge Function / external AI APIs are unavailable.
+      const localParsed = await parseDeliveryPdfFile(selectedPdf);
+      setParsed(localParsed || null);
     } catch (e) {
       console.error(e);
-      setError(`PDF解析に失敗しました:\n${formatInvokeError(e)}`);
+      setError(`PDF解析に失敗しました:\n${e?.message || String(e)}`);
     } finally {
       setParsing(false);
     }
