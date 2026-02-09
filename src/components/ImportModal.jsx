@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { Card } from './Card';
 import { Button } from './Button';
@@ -13,9 +13,90 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
     const [url, setUrl] = useState('');
     const [imageFile, setImageFile] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
+    const [isImagePreparing, setIsImagePreparing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [isDragActive, setIsDragActive] = useState(false);
+
+    useEffect(() => {
+        if (!imageFile) {
+            setImagePreview(null);
+            return undefined;
+        }
+
+        const url = URL.createObjectURL(imageFile);
+        setImagePreview(url);
+        return () => URL.revokeObjectURL(url);
+    }, [imageFile]);
+
+    const optimizeImageFile = (file) => new Promise((resolve) => {
+        if (!file || typeof file !== 'object') return resolve(file);
+        if (!String(file.type || '').startsWith('image/')) return resolve(file);
+
+        // Camera photos can be huge; keep OCR-friendly but shrink for reliability.
+        const SIZE_THRESHOLD_BYTES = 2_000_000; // ~2MB
+        const MAX_SIDE_PX = 2000;
+        const JPEG_QUALITY = 0.86;
+
+        if (file.size <= SIZE_THRESHOLD_BYTES) return resolve(file);
+
+        const srcUrl = URL.createObjectURL(file);
+        const img = new Image();
+
+        img.onload = () => {
+            URL.revokeObjectURL(srcUrl);
+
+            const width = img.naturalWidth || img.width || 0;
+            const height = img.naturalHeight || img.height || 0;
+            if (!width || !height) return resolve(file);
+
+            const scale = Math.min(1, MAX_SIDE_PX / Math.max(width, height));
+            const targetW = Math.max(1, Math.round(width * scale));
+            const targetH = Math.max(1, Math.round(height * scale));
+
+            const canvas = document.createElement('canvas');
+            canvas.width = targetW;
+            canvas.height = targetH;
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return resolve(file);
+
+            ctx.drawImage(img, 0, 0, targetW, targetH);
+            canvas.toBlob((blob) => {
+                if (!blob) return resolve(file);
+
+                const baseName = String(file.name || 'recipe')
+                    .replace(/\.[^/.]+$/, '')
+                    .slice(0, 80);
+
+                resolve(new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' }));
+            }, 'image/jpeg', JPEG_QUALITY);
+        };
+
+        img.onerror = () => {
+            URL.revokeObjectURL(srcUrl);
+            resolve(file);
+        };
+
+        img.src = srcUrl;
+    });
+
+    const setSelectedImageFile = async (file) => {
+        if (!file) return;
+        if (!String(file.type || '').startsWith('image/')) {
+            setError('画像ファイルを選択してください。');
+            return;
+        }
+
+        setError(null);
+        setIsImagePreparing(true);
+        try {
+            const optimized = await optimizeImageFile(file);
+            setImageFile(optimized || file);
+        } finally {
+            setIsImagePreparing(false);
+        }
+    };
 
     const handleDrag = (e) => {
         e.preventDefault();
@@ -34,8 +115,7 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
             const file = e.dataTransfer.files[0];
             if (file.type.startsWith('image/')) {
-                setImageFile(file);
-                setImagePreview(URL.createObjectURL(file));
+                void setSelectedImageFile(file);
             }
         }
     };
@@ -310,10 +390,7 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
-        if (file) {
-            setImageFile(file);
-            setImagePreview(URL.createObjectURL(file));
-        }
+        if (file) void setSelectedImageFile(file);
     };
 
     return (
@@ -406,11 +483,12 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                             </>
                         ) : (
                             <>
-                                <p>レシピの画像（スクリーンショットや写真）をアップロードしてください。</p>
+                                <p>レシピの画像（スクリーンショットや写真）をアップロードしてください。スマホはカメラで撮影して取り込めます。</p>
                                 <div className="image-upload-wrapper">
                                     <input
                                         type="file"
                                         accept="image/*"
+                                        capture="environment"
                                         onChange={handleFileChange}
                                         id="recipe-image-upload"
                                         className="image-upload-input"
@@ -430,6 +508,9 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                                         )}
                                     </label>
                                 </div>
+                                {isImagePreparing && (
+                                    <p style={{ fontSize: '0.85rem', opacity: 0.8, marginTop: '0.5rem' }}>画像を最適化しています...</p>
+                                )}
                             </>
                         )}
 
@@ -442,7 +523,7 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                                 variant="primary"
                                 onClick={handleImport}
                                 isLoading={isLoading}
-                                disabled={mode === 'url' ? !url : !imageFile}
+                                disabled={isImagePreparing || (mode === 'url' ? !url : !imageFile)}
                             >
                                 取り込む
                             </Button>
