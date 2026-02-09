@@ -798,6 +798,12 @@ function AppContent() {
                       {currentView === 'list' ? (
                         <>
                           <Button
+                            variant="secondary"
+                            onClick={() => window.open(`${import.meta.env.BASE_URL}recipe.html`, '_blank', 'noopener,noreferrer')}
+                          >
+                            Q&A
+                          </Button>
+                          <Button
                             onClick={() => {
                               setImportedData(null);
                               setSearchParams({ view: 'create' });
