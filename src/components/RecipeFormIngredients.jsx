@@ -232,6 +232,7 @@ const SortableIngredientItem = React.memo(({
                 />
                 <button
                     type="button"
+                    className="ingredient-cost-conversion-btn"
                     onClick={onOpenConversion}
                     style={{
                         position: 'absolute', right: 2, top: '50%', transform: 'translateY(-50%)',
@@ -242,7 +243,7 @@ const SortableIngredientItem = React.memo(({
                     🧮
                 </button>
                 {item.purchaseCostRef && (
-                    <div style={{ fontSize: '10px', color: '#666', lineHeight: '1.2', marginTop: '2px', wordBreak: 'break-all', textAlign: 'center' }}>
+                    <div className="ingredient-cost-ref" style={{ fontSize: '10px', color: '#666', lineHeight: '1.2', marginTop: '2px', wordBreak: 'break-all', textAlign: 'center' }}>
                         ¥{item.purchaseCostRef}
                     </div>
                 )}
@@ -259,6 +260,7 @@ const SortableIngredientItem = React.memo(({
                 />
                 {Number.isFinite(toFiniteNumber(yieldPercentApplied)) && toFiniteNumber(yieldPercentApplied) < 99.999 && (
                     <div
+                        className="ingredient-yield-indicator"
                         style={{ fontSize: '10px', color: '#666', lineHeight: '1.2', marginTop: '2px', textAlign: 'center' }}
                         title="歩留まり（可食率）を適用中"
                     >
