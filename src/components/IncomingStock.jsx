@@ -1,8 +1,11 @@
 import React from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { incomingDeliveryService } from '../services/incomingDeliveryService.js';
 import { incomingStockService } from '../services/incomingStockService.js';
 import { Button } from './Button';
 import { Card } from './Card';
+import { Modal } from './Modal';
+import { Input } from './Input';
 import './IncomingStock.css';
 
 const toBaseName = (fileName) => String(fileName || '').replace(/\.json$/i, '');
@@ -20,12 +23,19 @@ const formatDateTime = (value) => {
 };
 
 export const IncomingStock = ({ onBack }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
   const [deliveries, setDeliveries] = React.useState([]); // json file list
   const [appliedSet, setAppliedSet] = React.useState(new Set());
   const [stock, setStock] = React.useState({ items: [] });
   const [applyLoading, setApplyLoading] = React.useState(null); // null | 'all' | baseName
+
+  // Consume Modal State
+  const [consumeModalOpen, setConsumeModalOpen] = React.useState(false);
+  const [consumeTarget, setConsumeTarget] = React.useState(null); // { name, unit, currentQty }
+  const [consumeAmount, setConsumeAmount] = React.useState('');
+  const [consumeLoading, setConsumeLoading] = React.useState(false);
 
   const reload = React.useCallback(async () => {
     setLoading(true);
@@ -98,11 +108,60 @@ export const IncomingStock = ({ onBack }) => {
     }
   };
 
+  const openConsumeModal = (item) => {
+    setConsumeTarget(item);
+    setConsumeAmount('');
+    setConsumeModalOpen(true);
+    setError('');
+  };
+
+  const addToConsumeAmount = (val) => {
+    setConsumeAmount((prev) => {
+      const current = parseFloat(prev) || 0;
+      const next = current + val;
+      // Precision handling for float addition
+      return String(Math.round(next * 100) / 100);
+    });
+  };
+
+  const handleConsume = async () => {
+    if (!consumeTarget) return;
+    const amount = Number(consumeAmount);
+    if (!consumeAmount || isNaN(amount) || amount <= 0) {
+      setError('有効な数量を入力してください');
+      return;
+    }
+
+    setConsumeLoading(true);
+    setError('');
+    try {
+      // Delta is negative for consumption
+      await incomingStockService.updateStockItem({
+        name: consumeTarget.name,
+        unit: consumeTarget.unit,
+        delta: -amount
+      });
+      setConsumeModalOpen(false);
+      setConsumeTarget(null);
+      await reload();
+    } catch (e) {
+      console.error(e);
+      setError(e?.message || String(e));
+    } finally {
+      setConsumeLoading(false);
+    }
+  };
+
   return (
     <div className="incoming-stock">
       <div className="incoming-stock__header">
         <h2 className="incoming-stock__title">入荷在庫（PDF反映）</h2>
-        <Button variant="ghost" onClick={onBack}>← 戻る</Button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <Button variant="secondary" onClick={() => setSearchParams({ view: 'incoming-deliveries' })}>
+            📄 入荷PDFへ
+          </Button>
+          <Button variant="ghost" onClick={onBack}>← 戻る</Button>
+        </div>
       </div>
 
       {error && (
@@ -181,7 +240,8 @@ export const IncomingStock = ({ onBack }) => {
                 <tr>
                   <th style={{ width: '60%' }}>材料/商品</th>
                   <th style={{ width: '20%', textAlign: 'right' }}>数量</th>
-                  <th style={{ width: '20%' }}>単位</th>
+                  <th style={{ width: '10%' }}>単位</th>
+                  <th style={{ width: '10%' }}>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -190,6 +250,11 @@ export const IncomingStock = ({ onBack }) => {
                     <td>{it.name}</td>
                     <td style={{ textAlign: 'right' }}>{Number.isFinite(it.quantity) ? it.quantity : '-'}</td>
                     <td>{it.unit || '-'}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <Button variant="secondary" size="sm" onClick={() => openConsumeModal(it)}>
+                        使用
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -201,6 +266,60 @@ export const IncomingStock = ({ onBack }) => {
           </div>
         )}
       </Card>
+
+      <Modal
+        isOpen={consumeModalOpen}
+        onClose={() => setConsumeModalOpen(false)}
+        title="在庫を使用"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '4px' }}>対象商品</div>
+            <div style={{ fontWeight: 'bold' }}>{consumeTarget?.name}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '4px' }}>現在の在庫</div>
+            <div>{consumeTarget?.quantity} {consumeTarget?.unit}</div>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.9rem', color: '#666', marginBottom: '4px' }}>使用量</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <Input
+                type="number"
+                value={consumeAmount}
+                onChange={(e) => setConsumeAmount(e.target.value)}
+                placeholder="0"
+                style={{ width: '100%', fontSize: '1.2rem', padding: '10px' }}
+                autoFocus
+              />
+              <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{consumeTarget?.unit}</span>
+            </div>
+
+            <div className="incoming-stock__calc-grid">
+              <button className="incoming-stock__calc-btn" onClick={() => addToConsumeAmount(0.1)}>+0.1</button>
+              <button className="incoming-stock__calc-btn" onClick={() => addToConsumeAmount(0.5)}>+0.5</button>
+              <button className="incoming-stock__calc-btn" onClick={() => addToConsumeAmount(1)}>+1</button>
+              <button className="incoming-stock__calc-btn" onClick={() => addToConsumeAmount(5)}>+5</button>
+              <button className="incoming-stock__calc-btn" onClick={() => addToConsumeAmount(10)}>+10</button>
+              <button
+                className="incoming-stock__calc-btn incoming-stock__calc-btn--clear"
+                onClick={() => setConsumeAmount('')}
+              >
+                クリア
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+            <Button variant="ghost" onClick={() => setConsumeModalOpen(false)} disabled={consumeLoading}>
+              キャンセル
+            </Button>
+            <Button variant="primary" onClick={handleConsume} disabled={consumeLoading || !consumeAmount}>
+              {consumeLoading ? '処理中…' : '使用する'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

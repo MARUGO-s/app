@@ -124,3 +124,32 @@
   }
 }
 
+.incoming-stock__calc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.incoming-stock__calc-btn {
+  padding: 12px;
+  font-size: 1rem;
+  font-weight: 500;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.incoming-stock__calc-btn:active {
+  background: rgba(0, 0, 0, 0.05);
+  transform: translateY(1px);
+}
+
+.incoming-stock__calc-btn--clear {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.05);
+}

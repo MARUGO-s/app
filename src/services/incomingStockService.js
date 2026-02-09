@@ -26,17 +26,53 @@ const normalizeUnit = (value) => String(value || '').trim();
 const buildKey = (name, unit) => `${normalizeIngredientKey(name)}@@${normalizeUnit(unit)}`;
 
 const isNotFoundError = (error) => {
-  const status = error?.statusCode ?? error?.status ?? null;
+  const raw = error?.statusCode ?? error?.status ?? null;
+  const status = typeof raw === 'string' ? parseInt(raw, 10) : raw;
   if (status === 404) return true;
   const msg = String(error?.message || '').toLowerCase();
   return msg.includes('not found') || msg.includes('object not found');
 };
 
 const isAlreadyExistsError = (error) => {
-  const status = error?.statusCode ?? error?.status ?? null;
+  const raw = error?.statusCode ?? error?.status ?? null;
+  const status = typeof raw === 'string' ? parseInt(raw, 10) : raw;
   if (status === 409) return true;
   const msg = String(error?.message || '').toLowerCase();
   return msg.includes('already exists') || msg.includes('duplicate') || msg.includes('409');
+};
+
+const parseResponseJsonSafe = async (res) => {
+  if (!res || typeof res !== 'object') return null;
+  const clone = typeof res.clone === 'function' ? res.clone() : res;
+  if (!clone || typeof clone.json !== 'function') return null;
+  try {
+    return await clone.json();
+  } catch {
+    return null;
+  }
+};
+
+const isMissingObjectDownloadError = async (error) => {
+  // Storage download() uses `noResolveJson: true`, so errors can be StorageUnknownError
+  // with `originalError` being a Response. In that case, `error.message` is often "{}".
+  if (isNotFoundError(error)) return true;
+
+  const res = error?.originalError;
+  const status = typeof res?.status === 'number' ? res.status : null;
+  if (status === 404) return true;
+
+  // Supabase Storage returns 400 with JSON { statusCode:"404", error:"not_found", message:"Object not found" }
+  // for missing objects.
+  if (status === 400) {
+    const body = await parseResponseJsonSafe(res);
+    const statusCodeRaw = body?.statusCode ?? null;
+    const statusCode = typeof statusCodeRaw === 'string' ? parseInt(statusCodeRaw, 10) : statusCodeRaw;
+    const errCode = String(body?.error || '').toLowerCase();
+    const msg = String(body?.message || '').toLowerCase();
+    if (statusCode === 404 && (errCode === 'not_found' || msg.includes('object not found'))) return true;
+  }
+
+  return false;
 };
 
 const computeDeltaItems = (parsed) => {
@@ -161,7 +197,7 @@ export const incomingStockService = {
     const path = this._stockPath(effectiveUserId);
     const { data, error } = await supabase.storage.from(BUCKET_NAME).download(path);
     if (error) {
-      if (isNotFoundError(error)) {
+      if (await isMissingObjectDownloadError(error)) {
         return { _meta: { version: 1, updatedAt: null }, items: [] };
       }
       throw error;
@@ -249,5 +285,48 @@ export const incomingStockService = {
       throw e;
     }
   },
-};
 
+  async updateStockItem({ name, unit, delta }, userId = null) {
+    const effectiveUserId = userId || await this._getCurrentUserId();
+    if (!effectiveUserId) throw new Error('ログインが必要です');
+    const cleanName = String(name || '').trim();
+    if (!cleanName) throw new Error('商品名が必要です');
+
+    // Normalize unit for consistency
+    const cleanUnit = normalizeUnit(unit);
+    const key = buildKey(cleanName, cleanUnit);
+    const numericDelta = safeNumber(delta);
+
+    if (numericDelta === null || !Number.isFinite(numericDelta)) {
+      throw new Error('変更数量が無効です');
+    }
+
+    const stock = await this.loadStock(effectiveUserId);
+    const items = stock.items || [];
+    const nowIso = new Date().toISOString();
+
+    let found = false;
+    const newItems = items.map(item => {
+      const itemKey = buildKey(item.name, item.unit);
+      if (itemKey === key) {
+        found = true;
+        const newQty = Math.max(0, (safeNumber(item.quantity) ?? 0) + numericDelta);
+        return { ...item, quantity: newQty, updatedAt: nowIso };
+      }
+      return item;
+    });
+
+    if (!found) {
+      // Item not found? Should we error or ignore? 
+      // For "consumption", it usually implies item exists. 
+      // But if someone tries to consume a phantom item, maybe error.
+      throw new Error('対象の在庫が見つかりません');
+    }
+
+    // Filter out 0 quantity items? Or keep them?
+    // Current logic keeps them. Let's keep them for now so user can see 0 stock.
+
+    await this.saveStock({ items: newItems }, effectiveUserId);
+    return { status: 'updated', name: cleanName, unit: cleanUnit };
+  },
+};
