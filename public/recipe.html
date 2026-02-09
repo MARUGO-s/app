@@ -39,6 +39,36 @@
     padding: 48px 24px 40px;
     position: relative;
   }
+  .header-back {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.14);
+    color: #fff;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+    transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+  }
+  .header-back:hover {
+    background: rgba(255,255,255,0.22);
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.22);
+  }
+  .header-back:active {
+    transform: translateY(0);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+  }
   .header-icon { font-size: 48px; margin-bottom: 10px; }
   .header h1 { font-size: 28px; font-weight: 800; margin-bottom: 6px; }
   .header p { font-size: 15px; opacity: 0.8; }
@@ -449,6 +479,7 @@
 
   @media (max-width: 600px) {
     .header { padding: 36px 16px 32px; }
+    .header-back { top: 12px; left: 12px; padding: 7px 10px; font-size: 12px; }
     .header h1 { font-size: 22px; }
     .qa-q { padding: 14px 14px; gap: 10px; }
     .qa-a-inner { padding: 14px 16px 16px 48px; }
@@ -461,6 +492,7 @@
 <body>
 
 <header class="header">
+  <a class="header-back" href="./">← トップへ戻る</a>
   <div class="header-icon">🍳</div>
   <h1>レシピ管理アプリ Q&A</h1>
   <p>操作説明書（よくある質問形式）</p>
