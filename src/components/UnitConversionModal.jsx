@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { unitConversionService } from '../services/unitConversionService';
 import { purchasePriceService } from '../services/purchasePriceService';
+import { Button } from './Button';
+import './UnitConversionModal.css';
 
 const UnitConversionModal = ({
     isOpen,
@@ -134,119 +136,112 @@ const UnitConversionModal = ({
     const usageCost = currentQuantity ? (normalizedCost * (currentQuantity / (['g', 'ml'].includes(unit) ? 1000 : 1))) : 0;
 
     return (
-        <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-            <div style={{
-                backgroundColor: 'white', padding: '20px', borderRadius: '8px',
-                width: '90%', maxWidth: '350px',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
-            }}>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', color: '#000' }}>原価計算アシスト</h3>
+        <div
+            className="unit-conversion-modal__overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label="原価計算アシスト"
+            onClick={onClose}
+        >
+            <div className="unit-conversion-modal__card" onClick={(e) => e.stopPropagation()}>
+                <div className="unit-conversion-modal__body">
+                    <h3 className="unit-conversion-modal__title">原価計算アシスト</h3>
 
-                <div style={{ marginBottom: '12px' }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#666' }}>材料名</label>
-                    <div style={{ fontWeight: 'bold' }}>{ingredientName || '(未入力)'}</div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '12px' }}>
-                    <div>
-                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#666' }}>仕入れ値 (円)</label>
-                        <input
-                            type="number"
-                            value={packetPrice}
-                            onChange={(e) => setPacketPrice(e.target.value)}
-                            className="input-field"
-                            style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                            placeholder="例: 1000"
-                        />
+                    <div className="unit-conversion-modal__field">
+                        <span className="unit-conversion-modal__label">材料名</span>
+                        <div className="unit-conversion-modal__value">{ingredientName || '(未入力)'}</div>
                     </div>
-                    <div>
-                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#666' }}>内容量</label>
-                        <div style={{ display: 'flex', gap: '4px' }}>
+
+                    <div className="unit-conversion-modal__inputs">
+                        <div>
+                            <label className="unit-conversion-modal__label">仕入れ値 (円)</label>
                             <input
                                 type="number"
-                                value={packetSize}
-                                onChange={(e) => setPacketSize(e.target.value)}
-                                className="input-field"
-                                style={{ flex: 1, padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                                value={packetPrice}
+                                onChange={(e) => setPacketPrice(e.target.value)}
+                                className="input-field unit-conversion-modal__input"
                                 placeholder="例: 1000"
                             />
-                            <select
-                                value={packetUnit}
-                                onChange={(e) => setPacketUnit(e.target.value)}
-                                style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: 'white' }}
-                            >
-                                <option value="g">g</option>
-                                <option value="ml">ml</option>
-                                <option value="個">個</option>
-                                <option value="袋">袋</option>
-                                <option value="本">本</option>
-                                <option value="枚">枚</option>
-                                <option value="パック">p</option>
-                                <option value="cc">cc</option>
-                                {!['g', 'ml', '個', '袋', '本', '枚', 'パック', 'cc'].includes(packetUnit) && (
-                                    <option value={packetUnit}>{packetUnit}</option>
-                                )}
-                            </select>
+                        </div>
+
+                        <div>
+                            <label className="unit-conversion-modal__label">内容量</label>
+                            <div className="unit-conversion-modal__row">
+                                <input
+                                    type="number"
+                                    value={packetSize}
+                                    onChange={(e) => setPacketSize(e.target.value)}
+                                    className="input-field unit-conversion-modal__input"
+                                    placeholder="例: 1000"
+                                />
+                                <select
+                                    value={packetUnit}
+                                    onChange={(e) => setPacketUnit(e.target.value)}
+                                    className="unit-conversion-modal__select"
+                                >
+                                    <option value="g">g</option>
+                                    <option value="ml">ml</option>
+                                    <option value="個">個</option>
+                                    <option value="袋">袋</option>
+                                    <option value="本">本</option>
+                                    <option value="枚">枚</option>
+                                    <option value="パック">p</option>
+                                    <option value="cc">cc</option>
+                                    {!['g', 'ml', '個', '袋', '本', '枚', 'パック', 'cc'].includes(packetUnit) && (
+                                        <option value={packetUnit}>{packetUnit}</option>
+                                    )}
+                                </select>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div style={{ backgroundColor: '#f5f5f5', padding: '12px', borderRadius: '4px', marginBottom: '16px' }}>
-                    {isLoading ? (
-                        <div style={{ textAlign: 'center', color: '#666', fontSize: '0.8rem' }}>CSVデータを検索中...</div>
-                    ) : (
-                        <>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                <span style={{ fontSize: '0.9rem' }}>換算単価 (1kg/1単位):</span>
-                                <span style={{ fontWeight: 'bold' }}>¥{Math.round(normalizedCost).toLocaleString()}</span>
-                            </div>
-                            {currentQuantity && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#666', fontSize: '0.85rem' }}>
-                                    <span>今回分 ({currentQuantity}{unit}):</span>
-                                    <span>¥{Math.round(usageCost).toLocaleString()}</span>
+                    <div className="unit-conversion-modal__summary" aria-live="polite">
+                        {isLoading ? (
+                            <div className="unit-conversion-modal__summary-sub" style={{ textAlign: 'center' }}>CSVデータを検索中...</div>
+                        ) : (
+                            <>
+                                <div className="unit-conversion-modal__summary-row">
+                                    <span className="unit-conversion-modal__summary-label">換算単価 (1kg/1単位):</span>
+                                    <span className="unit-conversion-modal__summary-value">¥{Math.round(normalizedCost).toLocaleString()}</span>
                                 </div>
-                            )}
-                        </>
-                    )}
-                </div>
+                                {currentQuantity && (
+                                    <div className="unit-conversion-modal__summary-row unit-conversion-modal__summary-sub">
+                                        <span>今回分 ({currentQuantity}{unit}):</span>
+                                        <span>¥{Math.round(usageCost).toLocaleString()}</span>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
 
-                <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center' }}>
-                    <input
-                        type="checkbox"
-                        id="saveDefault"
-                        checked={saveDefault}
-                        onChange={(e) => setSaveDefault(e.target.checked)}
-                        style={{ marginRight: '8px' }}
-                    />
-                    <label htmlFor="saveDefault" style={{ fontSize: '0.9rem', cursor: 'pointer' }}>
-                        この容量({packetSize}{packetUnit})を保存する
+                    <label className="unit-conversion-modal__checkbox" htmlFor="saveDefault">
+                        <input
+                            type="checkbox"
+                            id="saveDefault"
+                            checked={saveDefault}
+                            onChange={(e) => setSaveDefault(e.target.checked)}
+                        />
+                        <span>この容量({packetSize}{packetUnit})を保存する</span>
                     </label>
-                </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        style={{ flex: 1, padding: '10px', border: '1px solid #ccc', background: 'white', borderRadius: '4px', cursor: 'pointer' }}
-                    >
-                        キャンセル
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleApply}
-                        disabled={!packetPrice || !packetSize}
-                        style={{
-                            flex: 1, padding: '10px', border: 'none',
-                            background: (!packetPrice || !packetSize) ? '#ccc' : '#D2691E',
-                            color: 'white', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold'
-                        }}
-                    >
-                        反映する
-                    </button>
+                    <div className="unit-conversion-modal__actions">
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={onClose}
+                            disabled={isLoading}
+                        >
+                            キャンセル
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="primary"
+                            onClick={handleApply}
+                            disabled={!packetPrice || !packetSize || isLoading}
+                        >
+                            反映する
+                        </Button>
+                    </div>
                 </div>
             </div>
         </div>
