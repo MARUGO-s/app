@@ -14,4 +14,7 @@ const getEnv = (key) => {
 const supabaseUrl = getEnv('VITE_SUPABASE_URL') || 'https://hocbnifuactbvmyjraxy.supabase.co';
 const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY') || 'sb_publishable_CmEv4H4dXwtqm65i_jpsCQ_8BtDOucx';
 
+// Export URL for diagnostics in UI (safe to expose).
+export const SUPABASE_URL = supabaseUrl;
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
