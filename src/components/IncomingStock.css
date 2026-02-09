@@ -1,0 +1,126 @@
+.incoming-stock {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.incoming-stock__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.incoming-stock__title {
+  margin: 0;
+}
+
+.incoming-stock__card {
+  padding: 16px;
+  /* Cards are light surfaces in this app; ensure readable dark text. */
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.incoming-stock__card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.incoming-stock__section-title {
+  margin: 0;
+}
+
+.incoming-stock__error {
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.08);
+  padding: 12px 14px;
+  color: rgba(0, 0, 0, 0.9);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.incoming-stock__file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.incoming-stock__file-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.incoming-stock__file-info {
+  min-width: 0;
+}
+
+.incoming-stock__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.12);
+  color: rgba(0, 0, 0, 0.78);
+  white-space: nowrap;
+}
+
+.incoming-stock__badge--pending {
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.12);
+  color: rgba(0, 0, 0, 0.78);
+}
+
+.incoming-stock__table-wrap {
+  overflow: auto;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.incoming-stock__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.incoming-stock__table th,
+.incoming-stock__table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  vertical-align: top;
+}
+
+.incoming-stock__table th {
+  text-align: left;
+  color: rgba(0, 0, 0, 0.85);
+  font-weight: 700;
+}
+
+.incoming-stock__table td {
+  color: rgba(0, 0, 0, 0.82);
+}
+
+.incoming-stock__table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+@media (max-width: 700px) {
+  .incoming-stock__file-row {
+    align-items: flex-start;
+  }
+}
+
