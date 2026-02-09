@@ -95,12 +95,66 @@ const shouldUseLocalRecipeFallback = (error) => {
     );
 };
 
+const RECIPE_LIST_CACHE_KEY = 'recipe_list_cache';
+const RECIPE_LIST_CACHE_MAX_AGE = 5 * 60 * 1000; // 5 minutes
+
+const saveRecipeListCache = (recipes, userId) => {
+    try {
+        // Save minimal data for list display (strip heavy fields)
+        const minimal = (recipes || []).map(r => ({
+            id: r.id,
+            title: r.title,
+            description: r.description,
+            image: r.image,
+            servings: r.servings,
+            course: r.course,
+            category: r.category,
+            storeName: r.storeName,
+            store_name: r.store_name,
+            tags: r.tags,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+            type: r.type,
+            sourceUrl: r.sourceUrl,
+        }));
+        localStorage.setItem(RECIPE_LIST_CACHE_KEY, JSON.stringify({
+            userId,
+            updatedAt: Date.now(),
+            recipes: minimal,
+        }));
+    } catch {
+        // Storage full or not available – ignore
+    }
+};
+
+const loadRecipeListCache = (userId) => {
+    try {
+        const raw = localStorage.getItem(RECIPE_LIST_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        // Must belong to same user and not be too old
+        if (parsed.userId !== userId) return null;
+        if (Date.now() - parsed.updatedAt > RECIPE_LIST_CACHE_MAX_AGE) return null;
+        return parsed.recipes || null;
+    } catch {
+        return null;
+    }
+};
+
 export const recipeService = {
     // Cache for detected query pattern (avoid repeated fallback attempts)
     _queryPattern: null,
     _queryPatternCache: new Map(),
     _showMasterPrefCache: new Map(), // userId -> { value: boolean, updatedAt: number }
     _masterOwnerTagsCache: { value: new Set(['owner:yoshito', 'owner:admin']), updatedAt: 0 },
+
+    /**
+     * Return cached recipe list from localStorage (synchronous, instant).
+     * Returns null if no valid cache exists.
+     */
+    getCachedRecipes(userId) {
+        return loadRecipeListCache(userId);
+    },
 
     async _resolveShowMasterPreference(currentUser, timeoutMs = 15000) {
         const fallback = currentUser?.showMasterRecipes === true;
@@ -284,7 +338,10 @@ export const recipeService = {
         }
 
         // 3. Apply Filtering Logic (App-side RLS)
-        if (isAdmin) return allRecipes;
+        if (isAdmin) {
+            saveRecipeListCache(allRecipes, currentUser.id);
+            return allRecipes;
+        }
 
         const userIds = [String(currentUser.id)];
         if (currentUser.displayId) userIds.push(String(currentUser.displayId));
@@ -325,6 +382,7 @@ export const recipeService = {
             return false;
         });
 
+        saveRecipeListCache(filtered, currentUser.id);
         return filtered;
     },
 

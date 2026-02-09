@@ -68,7 +68,7 @@ export const AuthProvider = ({ children }) => {
                             .single()
                             .then(data => ({ data, error: null }))
                             .catch(error => ({ data: null, error })),
-                        4000,
+                        2500,
                         'profiles.select(with_email)'
                     ).catch(error => ({ data: null, error })),
                     withTimeout(
@@ -79,7 +79,7 @@ export const AuthProvider = ({ children }) => {
                             .single()
                             .then(data => ({ data, error: null }))
                             .catch(error => ({ data: null, error })),
-                        4000,
+                        2500,
                         'profiles.select'
                     ).catch(error => ({ data: null, error }))
                 ]);
@@ -227,7 +227,7 @@ export const AuthProvider = ({ children }) => {
             try {
                 const { data } = await withTimeout(
                     supabase.auth.getSession(),
-                    8000,
+                    5000,
                     'auth.getSession'
                 );
                 // Only set user if we didn't already get it from onAuthStateChange (though safe to call twice)
