@@ -20,75 +20,10 @@ function normalizeImageMimeType(file: File) {
     return 'image/jpeg';
 }
 
-function createAbortController(timeoutMs: number, parentSignal?: AbortSignal) {
-    const controller = new AbortController();
-    let timedOut = false;
-
-    const timeoutId = setTimeout(() => {
-        timedOut = true;
-        try {
-            controller.abort();
-        } catch {
-            // ignore
-        }
-    }, Math.max(1, timeoutMs));
-
-    const onParentAbort = () => {
-        try {
-            controller.abort();
-        } catch {
-            // ignore
-        }
-    };
-
-    if (parentSignal) {
-        if (parentSignal.aborted) {
-            onParentAbort();
-        } else {
-            parentSignal.addEventListener('abort', onParentAbort, { once: true });
-        }
-    }
-
-    const cleanup = () => {
-        clearTimeout(timeoutId);
-        try {
-            parentSignal?.removeEventListener?.('abort', onParentAbort);
-        } catch {
-            // ignore
-        }
-    };
-
-    return { controller, cleanup, get timedOut() { return timedOut; } };
-}
-
-async function fetchWithTimeout(
-    input: RequestInfo | URL,
-    init: RequestInit,
-    timeoutMs: number,
-    parentSignal?: AbortSignal,
-) {
-    const { controller, cleanup, timedOut } = createAbortController(timeoutMs, parentSignal);
-    try {
-        return await fetch(input, { ...init, signal: controller.signal });
-    } catch (e) {
-        if (timedOut) {
-            const err = new Error('Request timed out');
-            err.name = 'TimeoutError';
-            throw err;
-        }
-        throw e;
-    } finally {
-        cleanup();
-    }
-}
-
 // --------------------------------------------------------------------------
-// Gemini API Integration (Stacked)
+// Gemini API Integration
 // --------------------------------------------------------------------------
-async function analyzeImageWithGemini(
-    file: File,
-    opts: { timeoutMs?: number; signal?: AbortSignal } = {},
-) {
+async function analyzeImageWithGemini(file: File) {
     const apiKey = Deno.env.get('GOOGLE_API_KEY') || Deno.env.get('VISION_API_KEY');
     if (!apiKey) {
         console.warn("Skipping Gemini: No API Key found");
@@ -96,7 +31,7 @@ async function analyzeImageWithGemini(
     }
 
     try {
-        const MAX_GEMINI_IMAGE_BYTES = 4_000_000; // ~4MB (base64 + JSON overhead get large quickly)
+        const MAX_GEMINI_IMAGE_BYTES = 4_000_000;
         if (file.size > MAX_GEMINI_IMAGE_BYTES) {
             return { error: `画像サイズが大きすぎるためGeminiをスキップします (${Math.round(file.size / 1_000_000)}MB)` };
         }
@@ -138,7 +73,7 @@ async function analyzeImageWithGemini(
 
 【詳細ルール】
 1. タイトル: 画像内で一番目立つ料理名を採用してください。
-2. 材料: 
+2. 材料:
    - 「A」「●」などでグループ化されている場合は \`group\` フィールドに入れてください。
    - "卵 1個" -> name: "卵", quantity: "1", unit: "個"
    - "塩コショウ 少々" -> name: "塩コショウ", quantity: "", unit: "少々" (quantityは数字のみが望ましいですが、"少々"などの場合はunitに入れてquantityは空でも可)
@@ -152,73 +87,150 @@ async function analyzeImageWithGemini(
 4. 画像から読み取れる情報のみを使用してください。存在しない情報を捏造しないでください。
 `;
 
-        const geminiTimeoutMs = Number.isFinite(opts.timeoutMs) ? Math.max(1, opts.timeoutMs!) : 45_000;
-        const response = await fetchWithTimeout(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [
-                            { text: prompt },
-                            {
-                                inline_data: {
-                                    mime_type: mimeType,
-                                    data: base64Image
-                                }
-                            }
-                        ]
-                    }]
-                }),
-            },
-            geminiTimeoutMs,
-            opts.signal,
-        );
-
-        if (!response.ok) {
-            const errText = await response.text();
-            console.error("Gemini API Error:", response.status, errText);
-            return { error: `Gemini API Error: ${response.status} ${errText}` };
-        }
-
-        const data = await response.json();
-        const candidate = data.candidates?.[0];
-        if (!candidate) return { error: "No candidate returned from Gemini" };
-
-        const rawText = candidate.content?.parts?.[0]?.text;
-        if (!rawText) return { error: "No text content in Gemini response" };
-
-        // Extract JSON from code blocks if present
-        let jsonStr = rawText;
-        if (jsonStr.includes('```json')) {
-            jsonStr = jsonStr.split('```json')[1].split('```')[0];
-        } else if (jsonStr.includes('```')) {
-            jsonStr = jsonStr.split('```')[1].split('```')[0];
-        }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 55_000);
 
         try {
-            return {
-                recipe: JSON.parse(jsonStr.trim()),
-                rawText: rawText?.slice?.(0, 20_000) ?? rawText
-            };
-        } catch (parseErr) {
-            console.error("JSON Parse Failed:", parseErr);
-            return {
-                error: "JSON Parse Failed",
-                rawText: rawText?.slice?.(0, 20_000) ?? rawText // Return raw text even if parse fails
-            };
+            const response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [
+                                { text: prompt },
+                                {
+                                    inline_data: {
+                                        mime_type: mimeType,
+                                        data: base64Image
+                                    }
+                                }
+                            ]
+                        }]
+                    }),
+                    signal: controller.signal,
+                },
+            );
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                const errText = await response.text();
+                console.error("Gemini API Error:", response.status, errText);
+                return { error: `Gemini API Error: ${response.status} ${errText}` };
+            }
+
+            const data = await response.json();
+            const candidate = data.candidates?.[0];
+            if (!candidate) return { error: "No candidate returned from Gemini" };
+
+            const rawText = candidate.content?.parts?.[0]?.text;
+            if (!rawText) return { error: "No text content in Gemini response" };
+
+            // Extract JSON from code blocks if present
+            let jsonStr = rawText;
+            if (jsonStr.includes('```json')) {
+                jsonStr = jsonStr.split('```json')[1].split('```')[0];
+            } else if (jsonStr.includes('```')) {
+                jsonStr = jsonStr.split('```')[1].split('```')[0];
+            }
+
+            try {
+                return {
+                    recipe: JSON.parse(jsonStr.trim()),
+                    rawText: rawText?.slice?.(0, 20_000) ?? rawText
+                };
+            } catch (parseErr) {
+                console.error("JSON Parse Failed:", parseErr);
+                return {
+                    error: "JSON Parse Failed",
+                    rawText: rawText?.slice?.(0, 20_000) ?? rawText
+                };
+            }
+        } catch (fetchErr) {
+            clearTimeout(timeoutId);
+            throw fetchErr;
         }
 
     } catch (e) {
         console.error("Gemini Analysis Failed:", e);
-        if (e?.name === 'TimeoutError') {
+        if (e?.name === 'AbortError') {
             return { error: 'Gemini API がタイムアウトしました' };
         }
         return { error: e?.message || String(e) };
     }
 }
 
+// --------------------------------------------------------------------------
+// Azure Document Intelligence Fallback
+// --------------------------------------------------------------------------
+async function analyzeImageWithAzure(file: File) {
+    const AZURE_DI_KEY = Deno.env.get('AZURE_DI_KEY');
+    const AZURE_DI_ENDPOINT = Deno.env.get('AZURE_DI_ENDPOINT');
+
+    if (!AZURE_DI_KEY || !AZURE_DI_ENDPOINT) {
+        return { error: 'Azure credentials are not configured on the server.' };
+    }
+
+    try {
+        const apiUrl = `${AZURE_DI_ENDPOINT}/formrecognizer/documentModels/prebuilt-layout:analyze?api-version=2023-07-31`;
+        const azureContentType = normalizeImageMimeType(file);
+
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Ocp-Apim-Subscription-Key': AZURE_DI_KEY,
+                'Content-Type': azureContentType,
+            },
+            body: file,
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            return { error: `Azure API Failed: ${response.statusText} (${errText})` };
+        }
+
+        const operationLocation = response.headers.get('Operation-Location');
+        if (!operationLocation) {
+            return { error: 'Azureからの応答に Operation-Location が含まれていません。' };
+        }
+
+        // Poll for results
+        let result = null;
+        let status = 'notStarted';
+        let retries = 0;
+        while (status !== 'succeeded' && status !== 'failed' && retries < 30) {
+            await new Promise(r => setTimeout(r, 1000));
+            const pollRes = await fetch(operationLocation, {
+                headers: { 'Ocp-Apim-Subscription-Key': AZURE_DI_KEY },
+            });
+            const pollData = await pollRes.json();
+            status = pollData.status;
+
+            if (status === 'succeeded') {
+                result = pollData.analyzeResult;
+            } else if (status === 'failed') {
+                return { error: 'Azureでの解析処理が失敗しました。' };
+            }
+            retries++;
+        }
+
+        if (!result) {
+            return { error: '解析がタイムアウトしました。' };
+        }
+
+        const fullText = result.content || "";
+        const lines = (result.pages?.[0]?.lines || []).map((l: any) => l.content);
+        const recipe = parseAzureResult(lines, fullText);
+
+        return { recipe, rawText: fullText?.slice?.(0, 20_000) ?? fullText, source: 'azure' };
+
+    } catch (e) {
+        console.error("Azure Analysis Failed:", e);
+        return { error: e?.message || String(e) };
+    }
+}
 
 
 serve(async (req) => {
@@ -227,198 +239,114 @@ serve(async (req) => {
         return new Response('ok', { headers: corsHeaders })
     }
 
-    // Set up a stream for Server-Sent Events (SSE)
-    const stream = new ReadableStream({
-        async start(controller) {
-            const encoder = new TextEncoder();
+    try {
+        const formData = await req.formData();
+        const imageFile = formData.get('image');
 
-            // Helper to send events to the client
-            const sendEvent = (data: any) => {
-                const message = `data: ${JSON.stringify(data)}\n\n`;
-                controller.enqueue(encoder.encode(message));
-            };
-
-            try {
-                sendEvent({ type: 'log', message: '🚀 画像解析プロセスを開始しました...' });
-
-                const formData = await req.formData();
-                const imageFile = formData.get('image');
-
-                if (!imageFile || !(imageFile instanceof File)) {
-                    throw new Error('No image file provided');
-                }
-
-                sendEvent({ type: 'log', message: '📸 画像を受信しました。解析準備中...' });
-
-                // --------------------------------------------------------------------------
-                // 1. Try Gemini (LLM)
-                // --------------------------------------------------------------------------
-                const geminiKey = Deno.env.get('GOOGLE_API_KEY') || Deno.env.get('VISION_API_KEY');
-
-                if (geminiKey) {
-                    sendEvent({ type: 'log', message: '🤖 Gemini (最新AI) を検出しました。手書き文字の解析を試みます...' });
-
-                    try {
-                        sendEvent({ type: 'log', message: '⏳ Gemini APIに問い合わせ中...' });
-
-                        // Call Helper (we inline a simplified version here or call the separate function but we need to await it)
-                        // Note: To keep it clean, we'll call the analyzeImageWithGemini helper, 
-                        // but we need to modify it or just check the result.
-                        // Since we can't easily modify the helper to stream *internal* steps without passing a callback,
-                        // we'll just wait for the result.
-
-                        const geminiResult = await analyzeImageWithGemini(imageFile, {
-                            timeoutMs: 45_000,
-                            signal: req.signal,
-                        });
-
-                        if (geminiResult && geminiResult.recipe && geminiResult.recipe.title) {
-                            sendEvent({ type: 'log', message: '✅ Geminiによる解析に成功しました！' });
-                            sendEvent({ type: 'log', message: '📝 レシピデータを生成中...' });
-
-                            // Send Final Result
-                            sendEvent({ type: 'result', recipe: geminiResult.recipe, rawText: geminiResult.rawText, source: 'gemini' });
-                            controller.close();
-                            return;
-                        } else {
-                            let failureReason = "JSONの抽出に失敗";
-                            if (geminiResult && geminiResult.error) {
-                                failureReason = `エラー: ${geminiResult.error}`;
-                            }
-
-                            // Truncate raw text to avoid overflowing logs (e.g. 500 chars)
-                            const rawDebug = geminiResult?.rawText ? geminiResult.rawText.substring(0, 500) : "No response text";
-                            sendEvent({ type: 'log', message: `⚠️ Gemini解析失敗: ${failureReason} (Raw: ${rawDebug})` });
-                        }
-                    } catch (e) {
-                        sendEvent({ type: 'log', message: `❌ Geminiでの解析中にエラーが発生しました: ${e.message}` });
-                    }
-                } else {
-                    sendEvent({ type: 'log', message: '⚠️ Google API Keyが見つかりません。Geminiをスキップします。' });
-                }
-
-                // --------------------------------------------------------------------------
-                // 2. Fallback to Azure Document Intelligence
-                // --------------------------------------------------------------------------
-                sendEvent({ type: 'log', message: '🔄 従来の解析エンジン（Azure AI）に切り替えています...' });
-
-                const AZURE_DI_KEY = Deno.env.get('AZURE_DI_KEY');
-                const AZURE_DI_ENDPOINT = Deno.env.get('AZURE_DI_ENDPOINT');
-
-                if (!AZURE_DI_KEY || !AZURE_DI_ENDPOINT) {
-                    throw new Error('Azure credentials are not configured on the server.');
-                }
-
-                sendEvent({ type: 'log', message: '☁️ Azure Document Intelligenceへ送信中...' });
-
-                // API Version: 2023-07-31 (General Availability) for Layout
-                const apiUrl = `${AZURE_DI_ENDPOINT}/formrecognizer/documentModels/prebuilt-layout:analyze?api-version=2023-07-31`;
-                const azureContentType = normalizeImageMimeType(imageFile);
-
-                const response = await fetchWithTimeout(
-                    apiUrl,
-                    {
-                        method: 'POST',
-                        headers: {
-                            'Ocp-Apim-Subscription-Key': AZURE_DI_KEY,
-                            'Content-Type': azureContentType,
-                        },
-                        body: imageFile
-                    },
-                    30_000,
-                    req.signal,
-                );
-
-                if (!response.ok) {
-                    const errText = await response.text();
-                    throw new Error(`Azure API Failed: ${response.statusText} (${errText})`);
-                }
-
-                const pollerHeaders = response.headers;
-                const operationLocation = pollerHeaders.get('Operation-Location');
-
-                if (!operationLocation) {
-                    throw new Error('Azureからの応答に Operation-Location が含まれていません。');
-                }
-
-                sendEvent({ type: 'log', message: '⏳ 解析を実行中... (Azure)' });
-
-                // Poll for results
-                let result = null;
-                let status = 'notStarted';
-                let retries = 0;
-                while (status !== 'succeeded' && status !== 'failed' && retries < 30) {
-                    await new Promise(r => setTimeout(r, 1000)); // Wait 1 sec
-                    const pollRes = await fetchWithTimeout(
-                        operationLocation,
-                        { headers: { 'Ocp-Apim-Subscription-Key': AZURE_DI_KEY } },
-                        10_000,
-                        req.signal,
-                    );
-                    const pollData = await pollRes.json();
-                    status = pollData.status;
-
-                    if (retries % 3 === 0) {
-                        sendEvent({ type: 'log', message: `running... (${status})` });
-                    }
-
-                    if (status === 'succeeded') {
-                        result = pollData.analyzeResult;
-                    } else if (status === 'failed') {
-                        throw new Error('Azureでの解析処理が失敗しました。');
-                    }
-                    retries++;
-                }
-
-                if (!result) {
-                    throw new Error('解析がタイムアウトしました。');
-                }
-
-                // Parse Azure Result (using the existing logic structure)
-                // We'll reimplement the heuristic parsing here or call a helper if we extracted it.
-                // For safety vs complexity, I'll copy the core parsing logic here briefly or wrapped below.
-
-                sendEvent({ type: 'log', message: '✅ 解析完了。データを構造化しています...' });
-
-                // ... (Parsing logic reused) ... 
-                // Since simpler to just reuse the function logic but inside this try block:
-
-                // --- Start Parsing Logic ---
-                let fullText = result.content || "";
-                const lines = (result.pages?.[0]?.lines || []).map((l: any) => l.content);
-                const recipe = parseAzureResult(lines, fullText); // Helper defined below or inline
-                // --- End Parsing Logic ---
-
-                sendEvent({ type: 'result', recipe: recipe, rawText: fullText?.slice?.(0, 20_000) ?? fullText, source: 'azure' });
-                controller.close();
-
-            } catch (error) {
-                console.error(error);
-                const errName = error?.name ? String(error.name) : '';
-                const errMsg = error?.message ? String(error.message) : String(error);
-                if (errName === 'TimeoutError') {
-                    sendEvent({ type: 'error', message: '解析がタイムアウトしました。画像をトリミングして文字を大きくして再試行してください。' });
-                } else {
-                    sendEvent({ type: 'error', message: errMsg || '不明なエラーが発生しました' });
-                }
-                controller.close();
-            }
+        if (!imageFile || !(imageFile instanceof File)) {
+            return new Response(
+                JSON.stringify({ error: 'No image file provided' }),
+                { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
         }
-    });
 
-    return new Response(stream, {
-        headers: {
-            ...corsHeaders,
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-        },
-    });
+        const logs: string[] = [];
+        logs.push('🚀 画像解析プロセスを開始しました...');
+        logs.push('📸 画像を受信しました。解析準備中...');
+
+        // --------------------------------------------------------------------------
+        // 1. Try Gemini
+        // --------------------------------------------------------------------------
+        const geminiKey = Deno.env.get('GOOGLE_API_KEY') || Deno.env.get('VISION_API_KEY');
+
+        if (geminiKey) {
+            logs.push('🤖 Gemini (最新AI) で解析中...');
+
+            const geminiResult = await analyzeImageWithGemini(imageFile);
+
+            if (geminiResult && geminiResult.recipe && geminiResult.recipe.title) {
+                logs.push('✅ Geminiによる解析に成功しました！');
+
+                // Return SSE-formatted response for compatibility with existing frontend
+                const events = [
+                    ...logs.map(msg => `data: ${JSON.stringify({ type: 'log', message: msg })}\n\n`),
+                    `data: ${JSON.stringify({ type: 'result', recipe: geminiResult.recipe, rawText: geminiResult.rawText, source: 'gemini' })}\n\n`
+                ].join('');
+
+                return new Response(events, {
+                    headers: {
+                        ...corsHeaders,
+                        'Content-Type': 'text/event-stream',
+                        'Cache-Control': 'no-cache',
+                    },
+                });
+            } else {
+                const reason = geminiResult?.error || 'JSONの抽出に失敗';
+                logs.push(`⚠️ Gemini解析失敗: ${reason}`);
+            }
+        } else {
+            logs.push('⚠️ Google API Keyが見つかりません。Geminiをスキップします。');
+        }
+
+        // --------------------------------------------------------------------------
+        // 2. Fallback to Azure Document Intelligence
+        // --------------------------------------------------------------------------
+        logs.push('🔄 従来の解析エンジン（Azure AI）に切り替えています...');
+
+        const azureResult = await analyzeImageWithAzure(imageFile);
+
+        if (azureResult && azureResult.recipe) {
+            logs.push('✅ Azure解析に成功しました！');
+
+            const events = [
+                ...logs.map(msg => `data: ${JSON.stringify({ type: 'log', message: msg })}\n\n`),
+                `data: ${JSON.stringify({ type: 'result', recipe: azureResult.recipe, rawText: azureResult.rawText, source: azureResult.source })}\n\n`
+            ].join('');
+
+            return new Response(events, {
+                headers: {
+                    ...corsHeaders,
+                    'Content-Type': 'text/event-stream',
+                    'Cache-Control': 'no-cache',
+                },
+            });
+        }
+
+        // Both failed
+        const errorMsg = azureResult?.error || '画像の解析に失敗しました。';
+        logs.push(`❌ ${errorMsg}`);
+
+        const events = [
+            ...logs.map(msg => `data: ${JSON.stringify({ type: 'log', message: msg })}\n\n`),
+            `data: ${JSON.stringify({ type: 'error', message: errorMsg })}\n\n`
+        ].join('');
+
+        return new Response(events, {
+            headers: {
+                ...corsHeaders,
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+            },
+        });
+
+    } catch (error) {
+        console.error(error);
+        const errMsg = error?.message ? String(error.message) : String(error);
+
+        const events = `data: ${JSON.stringify({ type: 'error', message: errMsg || '不明なエラーが発生しました' })}\n\n`;
+
+        return new Response(events, {
+            headers: {
+                ...corsHeaders,
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+            },
+        });
+    }
 })
 
-// Helper functions for parsing (moved out of main block for cleanliness)
+// Helper functions for parsing Azure results
 function parseAzureResult(lines: string[], fullText: string) {
-    // Simple Heuristic Parser (copied from original implementation)
     const recipe = {
         title: "",
         description: "",
@@ -435,7 +363,6 @@ function parseAzureResult(lines: string[], fullText: string) {
     const stepKeywords = ['作り方', 'つくり方', '手順', 'Directions', 'Method', 'Steps', 'How to cook'];
     const excludeKeywords = ['保存方法', '使いみち', 'ポイント', 'advice', 'memo'];
 
-    // Heuristics Regex
     const ingredientPattern = /(\d+|g|ml|kg|cc|tbsp|tsp|cup|個|本|枚|円)/i;
     const stepNumberPattern = /^(\d+[\.\)\s]|①|②|③|❶|❷|❸|I\s|II\s|■|●|・)/;
     const sentencePattern = /[。\.]$/;
@@ -468,9 +395,6 @@ function parseAzureResult(lines: string[], fullText: string) {
                     continue;
                 }
             }
-            // Simple parsing for ingredients (simplified for brevity in this replace block, 
-            // but keeping the core idea: pushing raw text if parsing fails is better than nothing)
-            // ideally we rely on the analyzeImageWithGemini for high quality.
             recipe.ingredients.push({ name: line, quantity: '', unit: '', group: currentGroup });
         } else if (currentSection === 'steps') {
             recipe.steps.push(line);

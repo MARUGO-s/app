@@ -292,7 +292,7 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
 
     // Direct Gemini API call from browser (bypasses Edge Function / Docker networking issues)
     const analyzeImageWithGeminiDirect = async (file, signal) => {
-        const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+        const apiKey = import.meta.env.VITE_GOOGLE_API_KEY || 'REDACTED_GOOGLE_API_KEY';
         if (!apiKey) return null;
 
         const MAX_SIZE = 4_000_000;
