@@ -162,6 +162,30 @@ function AppContent() {
     return () => clearTimeout(t);
   }, [authLoading]);
 
+  // FAST PATH: Load cached recipes immediately while auth is still resolving.
+  // This eliminates the perceived wait time after login.
+  useEffect(() => {
+    // Try to show cached recipes as soon as we have *any* user info (even from cache)
+    if (recipes.length > 0) return; // Already have data
+    if (currentView === 'trash') return; // Don't show cached data for trash
+
+    // Try cached user from localStorage for the userId
+    let cachedUserId = user?.id;
+    if (!cachedUserId) {
+      try {
+        const cachedUser = JSON.parse(localStorage.getItem('auth_user_cache') || 'null');
+        cachedUserId = cachedUser?.id;
+      } catch { /* ignore */ }
+    }
+    if (!cachedUserId) return;
+
+    const cached = recipeService.getCachedRecipes(cachedUserId);
+    if (cached && cached.length > 0) {
+      setRecipes(cached);
+      setLoading(false); // Show cached list immediately
+    }
+  }, [user?.id]); // Run once when user becomes available (or from cache)
+
   // Initial data load should run only after auth is resolved and user exists.
   useEffect(() => {
     if (authLoading) return;
