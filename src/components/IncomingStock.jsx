@@ -472,12 +472,13 @@ export const IncomingStock = ({ onBack }) => {
             <label style={{ display: 'block', fontSize: '0.9rem', color: '#666', marginBottom: '4px' }}>使用量</label>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <Input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 value={consumeAmount}
                 onChange={(e) => setConsumeAmount(e.target.value)}
+                readOnly
                 placeholder="0"
-                style={{ width: '100%', fontSize: '1.2rem', padding: '10px' }}
-                autoFocus
+                style={{ width: '100%', fontSize: '1.2rem', padding: '10px', textAlign: 'center', backgroundColor: '#f9f9f9', cursor: 'default' }}
               />
               <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{consumeTarget?.unit}</span>
             </div>
