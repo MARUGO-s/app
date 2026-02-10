@@ -1284,19 +1284,52 @@ export const Inventory = ({ onBack }) => {
         e.preventDefault();
         if (!userId) return;
         const formData = new FormData(e.target);
+
+        const name = formData.get('name');
+        const quantity = parseFloat(formData.get('quantity'));
+        const unit = formData.get('unit');
+        const category = formData.get('category');
+        const threshold = parseFloat(formData.get('threshold'));
+
+        // New fields
+        const vendor = formData.get('vendor');
+        const price = parseFloat(formData.get('price'));
+
+        // Packet info (Master data)
+        const packetSize = formData.get('packetSize'); // string
+        const packetUnit = formData.get('packetUnit'); // string
+
         const newItem = {
-            name: formData.get('name'),
-            quantity: parseFloat(formData.get('quantity')),
-            unit: formData.get('unit'),
-            category: formData.get('category'),
-            threshold: parseFloat(formData.get('threshold')),
-            vendor: editingItem.vendor || '',
-            price: editingItem.price || 0,
+            name,
+            quantity: Number.isFinite(quantity) ? quantity : 0,
+            unit,
+            category,
+            threshold: Number.isFinite(threshold) ? threshold : 0,
+            vendor: vendor || (editingItem?.vendor || ''),
+            price: Number.isFinite(price) ? price : (editingItem?.price || 0),
             tax10: isTax10(editingItem?.tax10)
         };
 
         try {
-            if (editingItem.id && !editingItem.isPhantom) {
+            // 1. Save Packet Info to Material Master (unit_conversions) if provided
+            if (packetSize && packetUnit) {
+                const sizeVal = parseFloat(packetSize);
+                if (Number.isFinite(sizeVal) && sizeVal > 0) {
+                    await unitConversionService.saveConversion(
+                        name,
+                        sizeVal,
+                        packetUnit,
+                        Number.isFinite(price) ? price : null, // lastPrice
+                        category, // itemCategory,
+                        vendor // vendor
+                    );
+                    // Refresh in-memory map so the new conversion is applied immediately?
+                    // We call loadData() at the end which refreshes everything.
+                }
+            }
+
+            // 2. Save Inventory Item
+            if (editingItem?.id && !editingItem.isPhantom) {
                 await inventoryService.update(userId, { ...editingItem, ...newItem });
             } else {
                 await inventoryService.add(userId, newItem);
@@ -1653,6 +1686,10 @@ export const Inventory = ({ onBack }) => {
     });
 
     if (isEditing) {
+        // Pre-fill packet info if available in _master
+        const currentPacketSize = editingItem?._master?.packetSize || '';
+        const currentPacketUnit = editingItem?._master?.packetUnit || '';
+
         return (
             <div className="inventory-edit-container fade-in">
                 <div className="container-header">
@@ -1661,20 +1698,60 @@ export const Inventory = ({ onBack }) => {
                 <Card className="edit-form-card">
                     <form onSubmit={handleSave}>
                         <div className="form-group">
-                            <label>材料名</label>
-                            <Input name="name" defaultValue={editingItem?.name} required placeholder="例: 薄力粉" />
+                            <label>材料名 <span className="badge-required">必須</span></label>
+                            <Input name="name" defaultValue={editingItem?.name} required placeholder="例: リロンデル" />
                         </div>
+
                         <div className="form-row">
                             <div className="form-group">
-                                <label>現在庫数</label>
+                                <label>業者名</label>
+                                <Input
+                                    name="vendor"
+                                    defaultValue={editingItem?.vendor}
+                                    list="vendor-list"
+                                    placeholder="例: 株式会社◯◯"
+                                />
+                                <datalist id="vendor-list">
+                                    {uniqueVendors.filter(v => v !== 'その他').map(v => <option key={v} value={v} />)}
+                                </datalist>
+                            </div>
+                            <div className="form-group">
+                                <label>仕入れ値 (円)</label>
+                                <Input name="price" type="number" step="1" defaultValue={editingItem?.price} placeholder="0" />
+                            </div>
+                        </div>
+
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label>現在庫数 <span className="badge-required">必須</span></label>
                                 <Input name="quantity" type="number" step="0.01" defaultValue={editingItem?.quantity} required />
                             </div>
                             <div className="form-group">
-                                <label>単位</label>
-                                <Input name="unit" defaultValue={editingItem?.unit || 'g'} required placeholder="g, ml, 個..." />
+                                <label>単位 <span className="badge-required">必須</span></label>
+                                <Input name="unit" defaultValue={editingItem?.unit || 'pc'} required placeholder="g, ml, 個, pc..." />
                             </div>
                         </div>
-                        <div className="form-row">
+
+                        <div style={{ marginTop: '16px', padding: '12px', background: '#f8f9fa', borderRadius: '6px', border: '1px solid #e9ecef' }}>
+                            <div style={{ fontSize: '0.9rem', fontWeight: 'bold', marginBottom: '8px', color: '#495057' }}>
+                                📦 荷姿・内容量 (任意)
+                                <span style={{ fontSize: '0.8rem', fontWeight: 'normal', marginLeft: '8px', color: '#868e96' }}>
+                                    ※ 1pc = 400g のように設定すると、自動計算に使われます
+                                </span>
+                            </div>
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label style={{ fontSize: '0.85rem' }}>内容量 (1つあたり)</label>
+                                    <Input name="packetSize" type="number" step="0.01" defaultValue={currentPacketSize} placeholder="例: 400" />
+                                </div>
+                                <div className="form-group">
+                                    <label style={{ fontSize: '0.85rem' }}>内容量単位</label>
+                                    <Input name="packetUnit" defaultValue={currentPacketUnit} placeholder="例: g" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="form-row" style={{ marginTop: '16px' }}>
                             <div className="form-group">
                                 <label>カテゴリー</label>
                                 <Input
@@ -2482,12 +2559,12 @@ export const Inventory = ({ onBack }) => {
                         if (!s) return null;
                         const list = getSnapshotItemsArray(s);
 
-        const filteredRows = list.filter((it) => {
-            if (isHiddenVendor(it?.vendor)) return false;
-            if (!hideZeroSnapshotItems) return true;
-            const qty = it?.quantity === '' ? 0 : (parseFloat(it?.quantity) || 0);
-            return qty !== 0;
-        });
+                        const filteredRows = list.filter((it) => {
+                            if (isHiddenVendor(it?.vendor)) return false;
+                            if (!hideZeroSnapshotItems) return true;
+                            const qty = it?.quantity === '' ? 0 : (parseFloat(it?.quantity) || 0);
+                            return qty !== 0;
+                        });
 
                         const sortedRows = [...filteredRows].sort((a, b) => {
                             const dir = snapshotDetailSort.direction === 'desc' ? -1 : 1;

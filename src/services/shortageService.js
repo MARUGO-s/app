@@ -62,18 +62,18 @@ export const shortageService = {
         const end = new Date(endDateStr);
         end.setHours(23, 59, 59, 999);
 
-        const recipesToCook = [];
+        const mealsToCook = [];
 
         Object.keys(allPlans).forEach(dateStr => {
             const planDate = new Date(dateStr);
             if (planDate >= start && planDate <= end) {
                 allPlans[dateStr].forEach(meal => {
-                    recipesToCook.push(meal.recipeId);
+                    mealsToCook.push(meal);
                 });
             }
         });
 
-        if (recipesToCook.length === 0) return []; // No plans, no shortages from plan
+        if (mealsToCook.length === 0) return [];
 
         // 2. Fetch Recipes Details / Master Data
         const [allRecipes, conversions, csvPriceMap, inventoryRaw, csvUnitOverrides] = await Promise.all([
@@ -84,7 +84,8 @@ export const shortageService = {
             csvUnitOverrideService.getAll(user.id),
         ]);
 
-        const recipeDetails = recipesToCook.map(id => allRecipes.find(r => r.id === id)).filter(Boolean);
+        const recipesMap = new Map();
+        allRecipes.forEach(r => recipesMap.set(r.id, r));
 
         const convByKey = new Map();
         try {
@@ -117,22 +118,54 @@ export const shortageService = {
         // 3. Aggregate Ingredients (normalized)
         const totals = {}; // name -> { quantity, unit }
 
-        recipeDetails.forEach(r => {
-            const ingredients = r.ingredients || [];
-            const allIngs = [...ingredients, ...(r.flours || []), ...(r.breadIngredients || [])];
+        mealsToCook.forEach(meal => {
+            const recipe = recipesMap.get(meal.recipeId);
+            if (!recipe) return;
+
+            let scale = 1;
+
+            // Determine Scale Factor
+            if (meal.totalWeight && meal.totalWeight > 0) {
+                // Calculate original weight of the recipe (sum of simple units)
+                let originalWeight = 0;
+                (recipe.ingredients || []).forEach(ing => {
+                    const { qty, unit } = toBaseUnit(ing.quantity, ing.unit);
+                    // Treat g and ml as 1:1 for dough weight approximation
+                    if (unit === 'g' || unit === 'ml') {
+                        originalWeight += qty;
+                    }
+                });
+
+                if (originalWeight > 0) {
+                    scale = meal.totalWeight / originalWeight;
+                }
+            } else if (meal.multiplier && meal.multiplier > 0) {
+                scale = meal.multiplier;
+            }
+
+            const ingredients = recipe.ingredients || [];
+            // ingredients array already contains flours and breadIngredients due to recipeService.fromDbFormat logic
+            // providing a combined list. Merging them again causes double counting.
+            const allIngs = [...ingredients];
+
 
             allIngs.forEach(ing => {
                 if (!ing.name) return;
                 const name = normalize(ing.name);
                 const key = normalizeIngredientKey(name);
                 const conv = (key ? convByKey.get(key) : null) || (conversions?.get(name) || null);
-                const normalizedIng = normalizeByMasterIfNeeded(name, ing.quantity, ing.unit, conv);
+
+                // Apply Scale
+                const scaledQtyRaw = (parseFloat(ing.quantity) || 0) * scale;
+
+                const normalizedIng = normalizeByMasterIfNeeded(name, scaledQtyRaw, ing.unit, conv);
                 const qty = normalizedIng.qty || 0;
                 const unit = normalizedIng.unit || '';
 
                 if (!totals[name]) {
                     totals[name] = { quantity: 0, unit: unit, count: 0 };
                 }
+
                 totals[name].quantity += qty;
             });
         });

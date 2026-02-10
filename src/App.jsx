@@ -1331,11 +1331,15 @@ function AppContent() {
         <Planner
           onBack={() => setSearchParams({ view: 'list' })}
           onSelectRecipe={(r) => handleSelectRecipe(r, { from: 'planner' })}
+          onNavigateToOrderList={() => setSearchParams({ view: 'order-list' })}
         />
       )}
 
       {currentView === 'order-list' && (
-        <OrderList onBack={() => setSearchParams({ view: 'list' })} />
+        <OrderList
+          onBack={() => setSearchParams({ view: 'list' })}
+          onNavigateToPlanner={() => setSearchParams({ view: 'planner' })}
+        />
       )}
     </Layout>
   );

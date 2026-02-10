@@ -160,6 +160,7 @@
 }
 
 .draggable-meal-wrapper {
+    position: relative;
     touch-action: none;
     cursor: grab;
 }

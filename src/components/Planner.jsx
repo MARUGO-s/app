@@ -42,9 +42,35 @@ const DraggableMeal = ({ meal, dateStr, children }) => {
         zIndex: 999
     } : undefined;
 
+    const { type, totalWeight, multiplier } = meal;
+
+    // Format quantity string
+    let qtyStr = '';
+    if (totalWeight) {
+        qtyStr = `${totalWeight}g`;
+    } else if (multiplier && multiplier !== 1) {
+        qtyStr = `x${multiplier}`;
+    }
+
     return (
         <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="draggable-meal-wrapper">
             {children}
+            {qtyStr && (
+                <div style={{
+                    position: 'absolute',
+                    bottom: '2px',
+                    right: '4px',
+                    fontSize: '0.75rem',
+                    fontWeight: 'bold',
+                    color: '#666',
+                    backgroundColor: 'rgba(255,255,255,0.8)',
+                    padding: '0 2px',
+                    borderRadius: '2px',
+                    pointerEvents: 'none' // Click through to whatever
+                }}>
+                    {qtyStr}
+                </div>
+            )}
         </div>
     );
 };
@@ -68,7 +94,12 @@ const CalendarCell = ({ dateStr, dayNum, isToday, isOutside, children }) => {
     );
 };
 
-export const Planner = ({ onBack, onSelectRecipe }) => {
+// Helper for date formatting (YYYY-MM-DD)
+const formatDateStr = (date) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
+export const Planner = ({ onBack, onSelectRecipe, onNavigateToOrderList }) => {
     const { user } = useAuth();
     const toast = useToast();
     const [recipes, setRecipes] = useState([]);
@@ -77,6 +108,16 @@ export const Planner = ({ onBack, onSelectRecipe }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deletingMeal, setDeletingMeal] = useState(null);
+
+    const [showQuantityModal, setShowQuantityModal] = useState(false);
+    const [pendingDrop, setPendingDrop] = useState(null); // { type: 'new'|'move', ...data }
+    const [inputMultiplier, setInputMultiplier] = useState(1);
+    const [inputTotalWeight, setInputTotalWeight] = useState('');
+
+    // Bulk Delete State
+    const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+    const [deleteStartDate, setDeleteStartDate] = useState(formatDateStr(new Date()));
+    const [deleteEndDate, setDeleteEndDate] = useState(formatDateStr(new Date()));
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -116,8 +157,15 @@ export const Planner = ({ onBack, onSelectRecipe }) => {
             // Case 1: Dragging a Recipe from Sidebar (New)
             if (active.id.startsWith('recipe-')) {
                 const recipe = active.data.current.recipe;
-                await plannerService.addMeal(user.id, targetDateStr, recipe.id, 'dinner');
-                loadData();
+                // Open modal to ask for Details
+                setPendingDrop({
+                    type: 'new',
+                    recipe,
+                    targetDateStr
+                });
+                setInputMultiplier(1);
+                setInputTotalWeight('');
+                setShowQuantityModal(true);
             }
             // Case 2: Dragging an existing Meal (Move)
             else if (active.id.startsWith('meal-')) {
@@ -127,12 +175,52 @@ export const Planner = ({ onBack, onSelectRecipe }) => {
                 if (sourceDateStr === targetDateStr) return;
 
                 // Move logic: Add to target, Remove from source
-                // (Ideally atomic, but sequential is fine here)
-                await plannerService.addMeal(user.id, targetDateStr, meal.recipeId, meal.type || 'dinner');
+                // For move, we preserve existing quantites.
+                // If user wants to change quantity, they should delete and re-add or we add an edit feature later.
+                // Assuming move preserves the original "meal" object properties.
+                // But addMeal creates a new ID. We must copy over properties.
+
+                // Since plannerService.addMeal doesn't support "cloning" arbitrary props easily without changes,
+                // let's just pass the existing options.
+                const options = {
+                    multiplier: meal.multiplier,
+                    totalWeight: meal.totalWeight
+                };
+
+                await plannerService.addMeal(user.id, targetDateStr, meal.recipeId, meal.type || 'dinner', options);
                 await plannerService.removeMeal(user.id, sourceDateStr, meal.id);
                 loadData();
             }
         }
+    };
+
+    const confirmQuantity = async () => {
+        if (!pendingDrop) return;
+        const { type, recipe, targetDateStr } = pendingDrop;
+
+        if (type === 'new') {
+            const options = {};
+            if (recipe.type === 'bread') {
+                const w = parseFloat(inputTotalWeight);
+                options.totalWeight = Number.isFinite(w) ? w : null;
+                options.multiplier = 1; // Default
+            } else {
+                const m = parseFloat(inputMultiplier);
+                options.multiplier = Number.isFinite(m) ? m : 1;
+                options.totalWeight = null;
+            }
+
+            await plannerService.addMeal(user.id, targetDateStr, recipe.id, 'dinner', options);
+        }
+
+        setShowQuantityModal(false);
+        setPendingDrop(null);
+        loadData();
+    };
+
+    const cancelQuantity = () => {
+        setShowQuantityModal(false);
+        setPendingDrop(null);
     };
 
     const handleDeleteMeal = async (dateStr, mealId, e) => {
@@ -163,6 +251,25 @@ export const Planner = ({ onBack, onSelectRecipe }) => {
     const cancelDelete = () => {
         setShowDeleteConfirm(false);
         setDeletingMeal(null);
+    };
+
+    const handleOpenBulkDelete = () => {
+        setDeleteStartDate(formatDateStr(new Date()));
+        setDeleteEndDate(formatDateStr(new Date()));
+        setShowBulkDeleteModal(true);
+    };
+
+    const handleBulkDelete = async () => {
+        if (!user?.id) return;
+        try {
+            await plannerService.clearPeriod(user.id, deleteStartDate, deleteEndDate);
+            await loadData();
+            setShowBulkDeleteModal(false);
+            toast.success(`${deleteStartDate}〜${deleteEndDate}の全予定を削除しました`);
+        } catch (e) {
+            console.error(e);
+            toast.error('一括削除に失敗しました');
+        }
     };
 
     // Calendar generation
@@ -197,9 +304,7 @@ export const Planner = ({ onBack, onSelectRecipe }) => {
         return days;
     };
 
-    const formatDateStr = (date) => {
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    };
+
 
     const filteredRecipes = recipes.filter(r => r.title.toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -232,10 +337,102 @@ export const Planner = ({ onBack, onSelectRecipe }) => {
                     </Card>
                 </div>
             )}
+
+            {/* Bulk Delete Modal */}
+            {showBulkDeleteModal && (
+                <div className="modal-overlay" style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                    <Card style={{ width: '90%', maxWidth: '500px', padding: '1.5rem', border: '2px solid var(--color-danger)', backgroundColor: 'white' }}>
+                        <h3 style={{ marginTop: 0, color: '#dc3545', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>🗑️</span> 仕込み一括削除
+                        </h3>
+                        <p style={{ margin: '1rem 0', color: '#333' }}>
+                            指定した期間内の全ての仕込み予定を削除します。<br />
+                            <strong>この操作は取り消せません。ご注意ください。</strong>
+                        </p>
+
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1.5rem' }}>
+                            <div style={{ flex: 1 }}>
+                                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.9rem', fontWeight: 'bold' }}>開始日</label>
+                                <Input type="date" value={deleteStartDate} onChange={e => setDeleteStartDate(e.target.value)} />
+                            </div>
+                            <span style={{ paddingTop: '24px' }}>〜</span>
+                            <div style={{ flex: 1 }}>
+                                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.9rem', fontWeight: 'bold' }}>終了日</label>
+                                <Input type="date" value={deleteEndDate} onChange={e => setDeleteEndDate(e.target.value)} />
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                            <Button variant="ghost" onClick={() => setShowBulkDeleteModal(false)}>キャンセル</Button>
+                            <Button variant="danger" onClick={handleBulkDelete}>一括削除実行</Button>
+                        </div>
+                    </Card>
+                </div>
+            )}
+            {/* Quantity Modal */}
+            {showQuantityModal && pendingDrop && (
+                <div className="modal-overlay" style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                    <Card style={{ width: '90%', maxWidth: '400px', padding: '1.5rem', backgroundColor: 'white' }}>
+                        <h3 style={{ marginTop: 0 }}>
+                            {pendingDrop.recipe.type === 'bread' ? 'パンの仕込み量' : '仕込み倍率'}
+                        </h3>
+                        <p style={{ margin: '1rem 0', color: '#666' }}>
+                            {pendingDrop.recipe.title}
+                        </p>
+
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            {pendingDrop.recipe.type === 'bread' ? (
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>総量 (g)</label>
+                                    <Input
+                                        type="number"
+                                        value={inputTotalWeight}
+                                        onChange={e => setInputTotalWeight(e.target.value)}
+                                        placeholder="例: 1200"
+                                        autoFocus
+                                    />
+                                    <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
+                                        ※ 生地全体の総重量を入力してください
+                                    </div>
+                                </div>
+                            ) : (
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>倍率</label>
+                                    <Input
+                                        type="number"
+                                        step="0.1"
+                                        value={inputMultiplier}
+                                        onChange={e => setInputMultiplier(e.target.value)}
+                                        placeholder="例: 1, 1.5, 2"
+                                        autoFocus
+                                    />
+                                    <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
+                                        ※ 基本レシピに対する倍率 (1 = そのまま)
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                            <Button variant="ghost" onClick={cancelQuantity}>キャンセル</Button>
+                            <Button variant="primary" onClick={confirmQuantity}>決定</Button>
+                        </div>
+                    </Card>
+                </div>
+            )}
             <div className="container-header">
                 <h2 className="section-title">📅 仕込みカレンダー</h2>
                 <div className="header-actions">
-
+                    <Button variant="secondary" onClick={onNavigateToOrderList} style={{ marginRight: '8px' }}>📋 発注リストへ</Button>
+                    <Button variant="danger" onClick={handleOpenBulkDelete} style={{ marginRight: '8px' }}>🗑️ 一括削除</Button>
                     <Button variant="ghost" onClick={onBack}>← メニュー</Button>
                 </div>
             </div>

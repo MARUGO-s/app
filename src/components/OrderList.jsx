@@ -13,7 +13,7 @@ import { useToast } from '../contexts/useToast';
 import { Modal } from './Modal';
 import './OrderList.css';
 
-export const OrderList = ({ onBack }) => {
+export const OrderList = ({ onBack, onNavigateToPlanner }) => {
     const { user } = useAuth();
     const toast = useToast();
     const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
@@ -26,6 +26,13 @@ export const OrderList = ({ onBack }) => {
     // モーダル用のステート
     const [showCopyModal, setShowCopyModal] = useState(false);
     const [showPrintModal, setShowPrintModal] = useState(false);
+
+    // DEBUG: Expose services for verification
+    React.useEffect(() => {
+        window.plannerService = plannerService;
+        window.shortageService = shortageService;
+        window.recipeService = recipeService;
+    }, []);
 
     const generateList = async () => {
         setLoading(true);
@@ -102,6 +109,7 @@ export const OrderList = ({ onBack }) => {
             <div className="container-header">
                 <h2 className="section-title">🛒 発注リスト作成</h2>
                 <div className="header-actions">
+                    <Button variant="secondary" onClick={onNavigateToPlanner} style={{ marginRight: '8px' }}>📅 仕込みカレンダーへ</Button>
                     <Button variant="ghost" onClick={onBack}>← メニュー</Button>
                 </div>
             </div>
