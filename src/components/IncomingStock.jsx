@@ -30,6 +30,7 @@ export const IncomingStock = ({ onBack }) => {
   const [appliedSet, setAppliedSet] = React.useState(new Set());
   const [stock, setStock] = React.useState({ items: [] });
   const [applyLoading, setApplyLoading] = React.useState(null); // null | 'all' | baseName
+  const [activeTab, setActiveTab] = React.useState('need_order'); // 'need_order' | vendorName
 
   // Consume Modal State
   const [consumeModalOpen, setConsumeModalOpen] = React.useState(false);
@@ -139,6 +140,7 @@ export const IncomingStock = ({ onBack }) => {
       await incomingStockService.updateStockItem({
         name: consumeTarget.name,
         unit: consumeTarget.unit,
+        vendor: consumeTarget.vendor,
         delta: -amount
       });
 
@@ -147,7 +149,12 @@ export const IncomingStock = ({ onBack }) => {
       setStock(prev => ({
         ...prev,
         items: (prev.items || []).map(item => {
-          if (item.name === consumeTarget.name && (item.unit || '') === (consumeTarget.unit || '')) {
+          const isMatch =
+            item.name === consumeTarget.name &&
+            (item.unit || '') === (consumeTarget.unit || '') &&
+            (item.vendor || '') === (consumeTarget.vendor || '');
+
+          if (isMatch) {
             const newQty = Math.max(0, (item.quantity || 0) - amount);
             return { ...item, quantity: Math.round(newQty * 1000) / 1000 };
           }
@@ -192,6 +199,27 @@ export const IncomingStock = ({ onBack }) => {
             </Button>
             <Button variant="primary" onClick={applyAll} disabled={loading || !!applyLoading}>
               {applyLoading === 'all' ? '反映中…' : '未反映をすべて反映'}
+            </Button>
+            <Button
+              variant="secondary"
+              style={{ marginLeft: 'auto', color: '#d32f2f', borderColor: '#d32f2f' }}
+              onClick={async () => {
+                if (!window.confirm('現在の「入荷在庫」をすべて消去しますか？\n（入荷PDFデータ自体は消えませんが、反映状態がリセットされます）')) return;
+                setApplyLoading('clearing');
+                setError('');
+                try {
+                  await incomingStockService.clearStock();
+                  await reload();
+                } catch (e) {
+                  console.error(e);
+                  setError('消去に失敗しました: ' + (e.message || String(e)));
+                } finally {
+                  setApplyLoading(null);
+                }
+              }}
+              disabled={loading || !!applyLoading || !stock?.items?.length}
+            >
+              ⚠ 在庫を全消去
             </Button>
           </div>
         </div>
@@ -246,38 +274,84 @@ export const IncomingStock = ({ onBack }) => {
           <h3 className="incoming-stock__section-title">入荷在庫（別管理）</h3>
         </div>
 
-        {stock?.items?.length ? (
-          <div className="incoming-stock__table-wrap">
-            <table className="incoming-stock__table">
-              <thead>
-                <tr>
-                  <th style={{ width: '60%' }}>材料/商品</th>
-                  <th style={{ width: '20%', textAlign: 'right' }}>数量</th>
-                  <th style={{ width: '10%' }}>単位</th>
-                  <th style={{ width: '10%' }}>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stock.items.map((it) => (
-                  <tr key={`${it.name}@@${it.unit || ''}`}>
-                    <td>{it.name}</td>
-                    <td style={{ textAlign: 'right' }}>{Number.isFinite(it.quantity) ? it.quantity : '-'}</td>
-                    <td>{it.unit || '-'}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <Button variant="secondary" size="sm" onClick={() => openConsumeModal(it)}>
-                        使用
-                      </Button>
-                    </td>
+        <div className="incoming-stock__tabs">
+          <button
+            className={`incoming-stock__tab-button ${activeTab === 'need_order' ? 'incoming-stock__tab-button--active' : ''}`}
+            onClick={() => setActiveTab('need_order')}
+          >
+            ⚠ 要発注
+            <span className="incoming-stock__tab-count">
+              {(stock?.items || []).filter(i => (i.quantity || 0) <= 0).length}
+            </span>
+          </button>
+
+          {Array.from(new Set((stock?.items || []).map(i => i.vendor || '（取引先なし）'))).sort().map(vendorName => (
+            <button
+              key={vendorName}
+              className={`incoming-stock__tab-button ${activeTab === vendorName ? 'incoming-stock__tab-button--active' : ''}`}
+              onClick={() => setActiveTab(vendorName)}
+            >
+              {vendorName}
+            </button>
+          ))}
+        </div>
+
+        {(() => {
+          // Filter items based on activeTab
+          let currentList = [];
+          if (activeTab === 'need_order') {
+            currentList = (stock?.items || []).filter(i => (i.quantity || 0) <= 0);
+          } else {
+            const targetVendor = activeTab === '（取引先なし）' ? '' : activeTab;
+            currentList = (stock?.items || []).filter(i => (i.vendor || '') === targetVendor);
+          }
+
+          if (currentList.length === 0) {
+            return (
+              <div style={{ padding: '20px', textAlign: 'center', opacity: 0.6 }}>
+                {activeTab === 'need_order'
+                  ? '現在、発注が必要な商品（在庫0）はありません。'
+                  : 'この取引先の在庫はありません。'}
+              </div>
+            );
+          }
+
+          return (
+            <div className="incoming-stock__table-wrap">
+              <table className="incoming-stock__table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '50%' }}>材料/商品</th>
+                    <th style={{ width: '20%', textAlign: 'right' }}>現在在庫</th>
+                    <th style={{ width: '10%' }}>単位</th>
+                    <th style={{ width: '20%', textAlign: 'center' }}>操作</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div style={{ padding: '10px 0', opacity: 0.75 }}>
-            まだ入荷在庫はありません（上で「在庫に反映」してください）
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {currentList.map((it) => (
+                    <tr key={`${it.vendor}@@${it.name}@@${it.unit || ''}`}>
+                      <td>
+                        <div style={{ fontWeight: 500 }}>{it.name}</div>
+                        {activeTab === 'need_order' && it.vendor && (
+                          <div style={{ fontSize: '0.8rem', color: '#666' }}>{it.vendor}</div>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 'bold', color: (it.quantity || 0) <= 0 ? '#ef4444' : 'inherit' }}>
+                        {Number.isFinite(it.quantity) ? it.quantity : '-'}
+                      </td>
+                      <td>{it.unit || '-'}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <Button variant="secondary" size="sm" onClick={() => openConsumeModal(it)}>
+                          使用/入庫
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
       </Card>
 
       <Modal
