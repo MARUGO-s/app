@@ -3,7 +3,7 @@
 -- 翻訳レシピメインテーブル
 CREATE TABLE IF NOT EXISTS translation_recipes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  original_recipe_id UUID REFERENCES recipes(id) ON DELETE CASCADE,
+  original_recipe_id BIGINT REFERENCES recipes(id) ON DELETE CASCADE,
   translated_title TEXT NOT NULL,
   original_title TEXT NOT NULL,
   translated_description TEXT,

@@ -191,15 +191,28 @@ export const parseDeliveryLines = (lines) => {
       continue;
     }
 
-    // "取引先" marker: next line is vendor name
-    if (line === '取引先' || (line.startsWith('取引先') && line !== '取引先コード')) {
-      if (line === '取引先') {
+    // "取引先" or "仕入先" marker
+    if (/^(取引先|仕入先|発注先)/.test(line) && !line.includes('コード') && !line.includes('住所') && !line.includes('電話')) {
+      let labelLen = 3;
+      if (line.startsWith('取引先名') || line.startsWith('仕入先名') || line.startsWith('発注先名')) {
+        labelLen = 4;
+      }
+
+      let rest = line.slice(labelLen).trim();
+      if (rest.startsWith(':') || rest.startsWith('：')) rest = rest.slice(1).trim();
+
+      if (!rest) {
         if (isNonEmpty(next) && !currentSlip.vendor) {
-          currentSlip.vendor = next.trim();
+          if (!/^\d+$/.test(next) && !next.includes('コード')) {
+            currentSlip.vendor = next.trim();
+          }
         }
       } else {
-        const rest = line.slice('取引先'.length).trim();
-        if (rest && rest !== 'コード' && !currentSlip.vendor) {
+        const matchCode = rest.match(/^(\d+)\s+(.+)$/);
+        if (matchCode) {
+          rest = matchCode[2].trim();
+        }
+        if (rest && !currentSlip.vendor) {
           currentSlip.vendor = rest;
         }
       }

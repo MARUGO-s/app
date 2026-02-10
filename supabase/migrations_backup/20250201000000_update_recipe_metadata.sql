@@ -16,7 +16,7 @@ BEGIN
     -- 2. レシピテーブルのカラム追加
     ALTER TABLE recipes ADD COLUMN IF NOT EXISTS display_format VARCHAR(20) DEFAULT 'normal';
     ALTER TABLE recipes ADD COLUMN IF NOT EXISTS language_code VARCHAR(10);
-    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS original_recipe_id UUID REFERENCES recipes(id) ON DELETE SET NULL;
+    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS original_recipe_id BIGINT REFERENCES recipes(id) ON DELETE SET NULL;
     ALTER TABLE recipes ADD COLUMN IF NOT EXISTS translation_layout JSONB;
 
     CREATE INDEX IF NOT EXISTS idx_recipes_display_format ON recipes(display_format);
@@ -56,7 +56,7 @@ BEGIN
     -- 5. recipe_translations テーブルの整備
     CREATE TABLE IF NOT EXISTS recipe_translations (
       id SERIAL PRIMARY KEY,
-      recipe_id UUID REFERENCES recipes(id) ON DELETE CASCADE,
+      recipe_id BIGINT REFERENCES recipes(id) ON DELETE CASCADE,
       language_code VARCHAR(10) NOT NULL,
       translated_title TEXT NOT NULL,
       html_content TEXT,

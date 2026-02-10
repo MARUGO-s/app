@@ -23,7 +23,10 @@ const safeNumber = (value) => {
 
 const normalizeUnit = (value) => String(value || '').trim();
 
-const buildKey = (name, unit) => `${normalizeIngredientKey(name)}@@${normalizeUnit(unit)}`;
+const buildKey = (name, unit, vendor) => {
+  const v = String(vendor || '').trim();
+  return `${v}@@${normalizeIngredientKey(name)}@@${normalizeUnit(unit)}`;
+};
 
 const isNotFoundError = (error) => {
   const raw = error?.statusCode ?? error?.status ?? null;
@@ -76,22 +79,23 @@ const isMissingObjectDownloadError = async (error) => {
 };
 
 const computeDeltaItems = (parsed) => {
-  const acc = new Map(); // key -> { name, unit, quantity }
+  const acc = new Map(); // key -> { vendor, name, unit, quantity }
   const slips = parsed?.slips || parsed?.receipts || [];
 
   slips.forEach((slip) => {
+    const vendor = String(slip?.vendor || '').trim();
     (slip?.items || []).forEach((it) => {
       const name = String(it?.name || '').trim();
       if (!name) return;
       const unit = normalizeUnit(it?.deliveryUnit || it?.unit || it?.unitName || '');
       const qty = safeNumber(it?.deliveryQty ?? it?.quantity ?? it?.qty);
       if (qty == null) return;
-      const key = buildKey(name, unit);
+      const key = buildKey(name, unit, vendor);
       const prev = acc.get(key);
       if (prev) {
         prev.quantity += qty;
       } else {
-        acc.set(key, { name, unit, quantity: qty });
+        acc.set(key, { vendor, name, unit, quantity: qty });
       }
     });
   });
@@ -105,8 +109,10 @@ const mergeStockItems = (stockItems, deltaItems, nowIso) => {
     const name = String(it?.name || '').trim();
     if (!name) return;
     const unit = normalizeUnit(it?.unit || '');
+    const vendor = String(it?.vendor || '').trim();
     const quantity = safeNumber(it?.quantity) ?? 0;
-    map.set(buildKey(name, unit), {
+    map.set(buildKey(name, unit, vendor), {
+      vendor,
       name,
       unit,
       quantity,
@@ -115,13 +121,14 @@ const mergeStockItems = (stockItems, deltaItems, nowIso) => {
   });
 
   deltaItems.forEach((d) => {
-    const key = buildKey(d.name, d.unit);
+    const key = buildKey(d.name, d.unit, d.vendor);
     const prev = map.get(key);
     if (prev) {
       prev.quantity = Math.max(0, (safeNumber(prev.quantity) ?? 0) + (safeNumber(d.quantity) ?? 0));
       prev.updatedAt = nowIso;
     } else {
       map.set(key, {
+        vendor: d.vendor,
         name: d.name,
         unit: normalizeUnit(d.unit),
         quantity: Math.max(0, safeNumber(d.quantity) ?? 0),
@@ -131,6 +138,7 @@ const mergeStockItems = (stockItems, deltaItems, nowIso) => {
   });
 
   return Array.from(map.values()).sort((a, b) => {
+    if (a.vendor !== b.vendor) return a.vendor.localeCompare(b.vendor, 'ja');
     if (a.name !== b.name) return a.name.localeCompare(b.name, 'ja');
     return String(a.unit || '').localeCompare(String(b.unit || ''), 'ja');
   });
@@ -286,7 +294,9 @@ export const incomingStockService = {
     }
   },
 
-  async updateStockItem({ name, unit, delta }, userId = null) {
+
+
+  async updateStockItem({ name, unit, vendor, delta }, userId = null) {
     const effectiveUserId = userId || await this._getCurrentUserId();
     if (!effectiveUserId) throw new Error('ログインが必要です');
     const cleanName = String(name || '').trim();
@@ -294,7 +304,10 @@ export const incomingStockService = {
 
     // Normalize unit for consistency
     const cleanUnit = normalizeUnit(unit);
-    const key = buildKey(cleanName, cleanUnit);
+    const cleanVendor = String(vendor || '').trim();
+
+    // Key now includes vendor
+    const key = buildKey(cleanName, cleanUnit, cleanVendor);
     const numericDelta = safeNumber(delta);
 
     if (numericDelta === null || !Number.isFinite(numericDelta)) {
@@ -307,7 +320,7 @@ export const incomingStockService = {
 
     let found = false;
     const newItems = items.map(item => {
-      const itemKey = buildKey(item.name, item.unit);
+      const itemKey = buildKey(item.name, item.unit, item.vendor);
       if (itemKey === key) {
         found = true;
         const newQty = Math.max(0, (safeNumber(item.quantity) ?? 0) + numericDelta);
@@ -328,5 +341,34 @@ export const incomingStockService = {
 
     await this.saveStock({ items: newItems }, effectiveUserId);
     return { status: 'updated', name: cleanName, unit: cleanUnit };
+  },
+
+  async clearStock(userId = null) {
+    const effectiveUserId = userId || await this._getCurrentUserId();
+    if (!effectiveUserId) throw new Error('ログインが必要です');
+
+    // 1. Clear stock file
+    const stockPath = this._stockPath(effectiveUserId);
+    const emptyPayload = {
+      _meta: { version: 1, updatedAt: new Date().toISOString() },
+      items: [],
+    };
+    await supabase.storage.from(BUCKET_NAME).upload(
+      stockPath,
+      new Blob([JSON.stringify(emptyPayload, null, 2)], { type: 'application/json' }),
+      { upsert: true, contentType: 'application/json' }
+    );
+
+    // 2. Clear all applied markers
+    // Listing all triggers might be heavy if many files, but for now we list 1000 which should cover most.
+    const folder = this._appliedFolder(effectiveUserId);
+    const { data: list } = await supabase.storage.from(BUCKET_NAME).list(folder, { limit: 1000 });
+
+    if (list?.length) {
+      const paths = list.map(f => `${folder}/${f.name}`);
+      await supabase.storage.from(BUCKET_NAME).remove(paths);
+    }
+
+    return { status: 'cleared' };
   },
 };

@@ -258,29 +258,33 @@ export const IncomingDeliveries = ({ onBack }) => {
   };
 
   const buildAggregateFromData = (allData) => {
-    const acc = new Map(); // key -> { name, unit, qty }
-    const pushItem = (item) => {
+    const acc = new Map(); // key -> { vendor, name, unit, qty }
+    const pushItem = (item, vendor) => {
       const name = String(item?.name || '').trim();
       if (!name) return;
       const unit = normalizeUnit(item?.deliveryUnit || item?.unit || item?.unitName || '');
       const qty = safeNumber(item?.deliveryQty ?? item?.quantity ?? item?.qty);
       if (!Number.isFinite(qty) || qty === null) return;
-      const key = `${normalizeIngredientKey(name)}@@${unit || ''}`;
+      const v = String(vendor || '').trim();
+
+      const key = `${v}@@${normalizeIngredientKey(name)}@@${unit || ''}`;
       const prev = acc.get(key);
       if (prev) {
         prev.qty += qty;
       } else {
-        acc.set(key, { name, unit, qty });
+        acc.set(key, { vendor: v, name, unit, qty });
       }
     };
 
     const slips = allData?.slips || allData?.receipts || [];
     slips.forEach((slip) => {
+      const vendor = slip?.vendor || '';
       const items = slip?.items || [];
-      items.forEach(pushItem);
+      items.forEach(item => pushItem(item, vendor));
     });
 
     return Array.from(acc.values()).sort((a, b) => {
+      if (a.vendor !== b.vendor) return a.vendor.localeCompare(b.vendor, 'ja');
       if (a.name !== b.name) return a.name.localeCompare(b.name, 'ja');
       return String(a.unit || '').localeCompare(String(b.unit || ''), 'ja');
     });
@@ -315,7 +319,7 @@ export const IncomingDeliveries = ({ onBack }) => {
       all.forEach((data) => {
         const rows = buildAggregateFromData(data);
         rows.forEach((row) => {
-          const key = `${normalizeIngredientKey(row.name)}@@${row.unit || ''}`;
+          const key = `${row.vendor}@@${normalizeIngredientKey(row.name)}@@${row.unit || ''}`;
           const prev = merged.get(key);
           if (prev) prev.qty += row.qty;
           else merged.set(key, { ...row });
@@ -323,6 +327,7 @@ export const IncomingDeliveries = ({ onBack }) => {
       });
 
       const result = Array.from(merged.values()).sort((a, b) => {
+        if (a.vendor !== b.vendor) return a.vendor.localeCompare(b.vendor, 'ja');
         if (a.name !== b.name) return a.name.localeCompare(b.name, 'ja');
         return String(a.unit || '').localeCompare(String(b.unit || ''), 'ja');
       });
@@ -507,6 +512,7 @@ export const IncomingDeliveries = ({ onBack }) => {
               <table className="incoming-deliveries__table">
                 <thead>
                   <tr>
+                    <th>取引先</th>
                     <th>材料/商品</th>
                     <th style={{ textAlign: 'right' }}>累計数量</th>
                     <th>単位</th>
@@ -514,7 +520,8 @@ export const IncomingDeliveries = ({ onBack }) => {
                 </thead>
                 <tbody>
                   {aggregate.slice(0, 60).map((row) => (
-                    <tr key={`${row.name}@@${row.unit || ''}`}>
+                    <tr key={`${row.vendor}@@${row.name}@@${row.unit || ''}`}>
+                      <td>{row.vendor || '-'}</td>
                       <td>{row.name}</td>
                       <td style={{ textAlign: 'right' }}>{Number.isFinite(row.qty) ? row.qty : '-'}</td>
                       <td>{row.unit || '-'}</td>
