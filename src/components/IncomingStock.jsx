@@ -583,6 +583,27 @@ export const IncomingStock = ({ onBack }) => {
           </div>
         </div>
       </Modal>
+
+      {/* Processing Modal - for PDF application */}
+      <Modal
+        isOpen={!!applyLoading}
+        onClose={() => { }} // Non-dismissable
+        title="データ反映中"
+        size="small"
+        showCloseButton={false}
+      >
+        <div style={{ textAlign: 'center', padding: '20px 0' }}>
+          <div className="incoming-stock__spinner"></div>
+          <p style={{ margin: '0 0 8px', fontWeight: 'bold' }}>
+            PDFデータを在庫に反映しています...
+          </p>
+          <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
+            {applyLoading === 'all' ? '複数のファイルを処理中' : 'データを解析・保存中'}
+            <br />
+            ブラウザを閉じずにそのままお待ちください。
+          </p>
+        </div>
+      </Modal>
     </div>
   );
 };
