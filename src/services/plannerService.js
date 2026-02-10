@@ -53,7 +53,7 @@ export const plannerService = {
         return plans;
     },
 
-    addMeal: async (userId, dateStr, recipeId, type) => {
+    addMeal: async (userId, dateStr, recipeId, type, options = {}) => {
         const plans = getPlans(userId);
         if (!plans[dateStr]) plans[dateStr] = [];
 
@@ -61,7 +61,9 @@ export const plannerService = {
             id: Date.now().toString(),
             recipeId,
             type, // 'breakfast', 'lunch', 'dinner', 'prep'
-            note: ''
+            note: '',
+            multiplier: options?.multiplier || 1,
+            totalWeight: options?.totalWeight || null
         };
 
         plans[dateStr].push(newMeal);
@@ -86,6 +88,23 @@ export const plannerService = {
                 plans[dateStr][idx] = { ...plans[dateStr][idx], ...updates };
                 savePlans(userId, plans);
             }
+        }
+    },
+
+    clearPeriod: async (userId, startDate, endDate) => {
+        const plans = getPlans(userId);
+        let hasChanges = false;
+
+        // Simple string comparison works for YYYY-MM-DD
+        Object.keys(plans).forEach(dateStr => {
+            if (dateStr >= startDate && dateStr <= endDate) {
+                delete plans[dateStr];
+                hasChanges = true;
+            }
+        });
+
+        if (hasChanges) {
+            savePlans(userId, plans);
         }
     }
 };

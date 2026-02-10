@@ -356,25 +356,25 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
             const qty = parseFloat(item.quantity);
             const pCost = parseFloat(item.purchaseCost);
 
-                if (!isNaN(qty) && !isNaN(pCost)) {
-                    let calculated = 0;
-                    // Bread flours usually 'g'.
-                    const unit = (item.unit || '').trim().toLowerCase();
-                    if (unit === 'g' || unit === 'ｇ' || unit === 'ml' || unit === 'ｍｌ' || unit === 'cc' || unit === 'ｃｃ' || !unit) {
-                        calculated = (qty / 1000) * pCost;
-                    } else {
-                        calculated = qty * pCost;
-                    }
-                    // Round to 2 decimals
-                    const convForYield = findConversionByName(conversionMap, item.name);
-                    const yieldRate = getYieldRate(item, convForYield);
-                    const safeYieldRate = (Number.isFinite(yieldRate) && yieldRate > 0) ? yieldRate : 1;
-                    const rounded = Math.round(((calculated / safeYieldRate) * 100)) / 100;
-                    if (rounded !== item.cost) {
-                        newFlours[index].cost = rounded;
-                    }
+            if (!isNaN(qty) && !isNaN(pCost)) {
+                let calculated = 0;
+                // Bread flours usually 'g'.
+                const unit = (item.unit || '').trim().toLowerCase();
+                if (unit === 'g' || unit === 'ｇ' || unit === 'ml' || unit === 'ｍｌ' || unit === 'cc' || unit === 'ｃｃ' || !unit) {
+                    calculated = (qty / 1000) * pCost;
+                } else {
+                    calculated = qty * pCost;
+                }
+                // Round to 2 decimals
+                const convForYield = findConversionByName(conversionMap, item.name);
+                const yieldRate = getYieldRate(item, convForYield);
+                const safeYieldRate = (Number.isFinite(yieldRate) && yieldRate > 0) ? yieldRate : 1;
+                const rounded = Math.round(((calculated / safeYieldRate) * 100)) / 100;
+                if (rounded !== item.cost) {
+                    newFlours[index].cost = rounded;
                 }
             }
+        }
 
         // If updating quantity, allow decimal input but store as string. Calculation handles parsing.
         setFormData(prev => ({ ...prev, flours: newFlours }));
@@ -451,25 +451,25 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
             const qty = parseFloat(item.quantity);
             const pCost = parseFloat(item.purchaseCost);
 
-                if (!isNaN(qty) && !isNaN(pCost)) {
-                    let calculated = 0;
-                    // Check unit
-                    const u = item.unit ? item.unit.trim().toLowerCase() : 'g'; // default to g for bread ings if empty?
-                    if (u === 'g' || u === 'ｇ' || u === 'ml' || u === 'ｍｌ' || u === 'cc' || u === 'ｃｃ') {
-                        calculated = (qty / 1000) * pCost;
-                    } else {
-                        calculated = qty * pCost;
-                    }
-                    // Round to 2 decimals
-                    const convForYield = findConversionByName(conversionMap, item.name);
-                    const yieldRate = getYieldRate(item, convForYield);
-                    const safeYieldRate = (Number.isFinite(yieldRate) && yieldRate > 0) ? yieldRate : 1;
-                    const rounded = Math.round(((calculated / safeYieldRate) * 100)) / 100;
-                    if (rounded !== item.cost) {
-                        newIngs[index].cost = rounded;
-                    }
+            if (!isNaN(qty) && !isNaN(pCost)) {
+                let calculated = 0;
+                // Check unit
+                const u = item.unit ? item.unit.trim().toLowerCase() : 'g'; // default to g for bread ings if empty?
+                if (u === 'g' || u === 'ｇ' || u === 'ml' || u === 'ｍｌ' || u === 'cc' || u === 'ｃｃ') {
+                    calculated = (qty / 1000) * pCost;
+                } else {
+                    calculated = qty * pCost;
+                }
+                // Round to 2 decimals
+                const convForYield = findConversionByName(conversionMap, item.name);
+                const yieldRate = getYieldRate(item, convForYield);
+                const safeYieldRate = (Number.isFinite(yieldRate) && yieldRate > 0) ? yieldRate : 1;
+                const rounded = Math.round(((calculated / safeYieldRate) * 100)) / 100;
+                if (rounded !== item.cost) {
+                    newIngs[index].cost = rounded;
                 }
             }
+        }
 
         setFormData(prev => ({ ...prev, breadIngredients: newIngs }));
     };
@@ -751,10 +751,11 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                 </div>
 
                 <div className="recipe-scroll-wrapper">
-                    <div className="recipe-list-header">
+                    <div className="recipe-list-header recipe-list-header--bread">
                         <span></span> {/* Handle */}
                         <span>粉の種類</span>
-                        <span>重量 (g)</span>
+                        <span>数量</span>
+                        <span>単位</span>
                         <span className="text-center">%</span>
                         <span style={{ textAlign: 'center' }}>仕入れ</span>
                         <span style={{ textAlign: 'center' }}>原価</span>
@@ -780,19 +781,19 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                                     );
 
                                     return (
-                                    <FlourItem
-                                        key={item.id}
-                                        id={item.id}
-                                        index={i}
-                                        item={item}
-                                        yieldPercentApplied={yieldPercentApplied}
-                                        onChange={handleFlourChange}
-                                        onRemove={removeFlour}
-                                        onSelect={handleAutocompleteSelect}
-                                        calculatePercentage={calculatePercentage}
-                                        floursLength={(formData.flours || []).length}
-                                        onOpenConversion={() => setConversionModal({ isOpen: true, type: 'flour', index: i })}
-                                    />
+                                        <FlourItem
+                                            key={item.id}
+                                            id={item.id}
+                                            index={i}
+                                            item={item}
+                                            yieldPercentApplied={yieldPercentApplied}
+                                            onChange={handleFlourChange}
+                                            onRemove={removeFlour}
+                                            onSelect={handleAutocompleteSelect}
+                                            calculatePercentage={calculatePercentage}
+                                            floursLength={(formData.flours || []).length}
+                                            onOpenConversion={() => setConversionModal({ isOpen: true, type: 'flour', index: i })}
+                                        />
                                     );
                                 })}
                             </SortableContext>
@@ -809,10 +810,11 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                 </div>
 
                 <div className="recipe-scroll-wrapper">
-                    <div className="recipe-list-header">
+                    <div className="recipe-list-header recipe-list-header--bread">
                         <span></span> {/* Handle */}
                         <span>材料名</span>
-                        <span>重量 (g)</span>
+                        <span>数量</span>
+                        <span>単位</span>
                         <span className="text-center">%</span>
                         <span style={{ textAlign: 'center' }}>仕入れ</span>
                         <span style={{ textAlign: 'center' }}>原価</span>
@@ -838,18 +840,18 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                                     );
 
                                     return (
-                                    <BreadIngredientItem
-                                        key={item.id}
-                                        id={item.id}
-                                        index={i}
-                                        item={item}
-                                        yieldPercentApplied={yieldPercentApplied}
-                                        onChange={handleIngredientChange}
-                                        onRemove={removeIngredient}
-                                        onSelect={handleAutocompleteSelect}
-                                        calculatePercentage={calculatePercentage}
-                                        onOpenConversion={() => setConversionModal({ isOpen: true, type: 'ingredient', index: i })}
-                                    />
+                                        <BreadIngredientItem
+                                            key={item.id}
+                                            id={item.id}
+                                            index={i}
+                                            item={item}
+                                            yieldPercentApplied={yieldPercentApplied}
+                                            onChange={handleIngredientChange}
+                                            onRemove={removeIngredient}
+                                            onSelect={handleAutocompleteSelect}
+                                            calculatePercentage={calculatePercentage}
+                                            onOpenConversion={() => setConversionModal({ isOpen: true, type: 'ingredient', index: i })}
+                                        />
                                     );
                                 })}
                             </SortableContext>
@@ -903,7 +905,7 @@ const FlourItem = ({ id, index, item, yieldPercentApplied, onChange, onRemove, o
     };
 
     return (
-        <div ref={setNodeRef} style={style} className="form-ingredient-row form-ingredient-row--bread">
+        <div ref={setNodeRef} style={style} className="form-ingredient-row--bread">
             <div
                 {...attributes}
                 {...listeners}
@@ -939,7 +941,16 @@ const FlourItem = ({ id, index, item, yieldPercentApplied, onChange, onRemove, o
                     wrapperClassName="input-group--no-margin"
                 />
             </div>
-            <div className="ingredient-unit bread-percent">
+            <div className="ingredient-unit">
+                <Input
+                    value={item.unit}
+                    onChange={(e) => onChange(index, 'unit', e.target.value)}
+                    placeholder="単位"
+                    style={{ width: '100%', textAlign: 'center' }}
+                    wrapperClassName="input-group--no-margin"
+                />
+            </div>
+            <div className="bread-percent">
                 {calculatePercentage(item.quantity)}%
             </div>
             <div className="ingredient-cost" style={{ position: 'relative' }}>
@@ -1040,7 +1051,7 @@ const BreadIngredientItem = ({ id, index, item, yieldPercentApplied, onChange, o
     };
 
     return (
-        <div ref={setNodeRef} style={style} className="form-ingredient-row form-ingredient-row--bread">
+        <div ref={setNodeRef} style={style} className="form-ingredient-row--bread">
             <div
                 {...attributes}
                 {...listeners}
@@ -1076,7 +1087,16 @@ const BreadIngredientItem = ({ id, index, item, yieldPercentApplied, onChange, o
                     wrapperClassName="input-group--no-margin"
                 />
             </div>
-            <div className="ingredient-unit bread-percent">
+            <div className="ingredient-unit">
+                <Input
+                    value={item.unit}
+                    onChange={(e) => onChange(index, 'unit', e.target.value)}
+                    placeholder="単位"
+                    style={{ width: '100%', textAlign: 'center' }}
+                    wrapperClassName="input-group--no-margin"
+                />
+            </div>
+            <div className="bread-percent">
                 {calculatePercentage(item.quantity)}%
             </div>
             <div className="ingredient-cost" style={{ position: 'relative' }}>
