@@ -155,6 +155,7 @@ export const parseDeliveryLines = (lines) => {
 
   const slipMap = new Map(); // slipNo -> slip
   let currentSlip = null;
+  let pendingVendor = null; // Vendor found before slip detection
 
   for (let i = 0; i < cleaned.length; i += 1) {
     const line = cleaned[i];
@@ -170,7 +171,7 @@ export const parseDeliveryLines = (lines) => {
       } else {
         currentSlip = {
           slipNo,
-          vendor: null,
+          vendor: pendingVendor || null, // Inherit pending vendor
           slipDate: null,
           deliveryDate: null,
           total: null,
@@ -182,16 +183,7 @@ export const parseDeliveryLines = (lines) => {
       continue;
     }
 
-    if (!currentSlip) continue;
-
-    if (line === '伝票日付' || line.startsWith('伝票日付')) {
-      const inline = line.match(/^伝票日付\s*(\d{4}\/\d{2}\/\d{2})$/);
-      if (inline?.[1]) currentSlip.slipDate = inline[1];
-      else if (parseDateLike(next)) currentSlip.slipDate = parseDateLike(next);
-      continue;
-    }
-
-    // "取引先" or "仕入先" marker
+    // Check for Vendor (Order Source) - Works even if currentSlip is null
     if (/^(取引先|仕入先|発注先)/.test(line) && !line.includes('コード') && !line.includes('住所') && !line.includes('電話')) {
       let labelLen = 3;
       if (line.startsWith('取引先名') || line.startsWith('仕入先名') || line.startsWith('発注先名')) {
@@ -201,10 +193,12 @@ export const parseDeliveryLines = (lines) => {
       let rest = line.slice(labelLen).trim();
       if (rest.startsWith(':') || rest.startsWith('：')) rest = rest.slice(1).trim();
 
+      // Extract vendor name
+      let foundVendor = null;
       if (!rest) {
-        if (isNonEmpty(next) && !currentSlip.vendor) {
+        if (isNonEmpty(next)) {
           if (!/^\d+$/.test(next) && !next.includes('コード')) {
-            currentSlip.vendor = next.trim();
+            foundVendor = next.trim();
           }
         }
       } else {
@@ -212,10 +206,28 @@ export const parseDeliveryLines = (lines) => {
         if (matchCode) {
           rest = matchCode[2].trim();
         }
-        if (rest && !currentSlip.vendor) {
-          currentSlip.vendor = rest;
+        foundVendor = rest;
+      }
+
+      if (foundVendor) {
+        if (currentSlip) {
+          // If inside a slip, update it.
+          // (Only if not already set, or overwrite? Usually safe to overwrite if explicitly found inside)
+          if (!currentSlip.vendor) currentSlip.vendor = foundVendor;
+        } else {
+          // If outside, store as pending for NEXT slip
+          pendingVendor = foundVendor;
         }
       }
+      continue;
+    }
+
+    if (!currentSlip) continue;
+
+    if (line === '伝票日付' || line.startsWith('伝票日付')) {
+      const inline = line.match(/^伝票日付\s*(\d{4}\/\d{2}\/\d{2})$/);
+      if (inline?.[1]) currentSlip.slipDate = inline[1];
+      else if (parseDateLike(next)) currentSlip.slipDate = parseDateLike(next);
       continue;
     }
 
