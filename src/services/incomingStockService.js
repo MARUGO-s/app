@@ -203,24 +203,45 @@ export const incomingStockService = {
     if (!effectiveUserId) throw new Error('ログインが必要です');
 
     const path = this._stockPath(effectiveUserId);
-    const { data, error } = await supabase.storage.from(BUCKET_NAME).download(path);
-    if (error) {
-      if (await isMissingObjectDownloadError(error)) {
+
+    // Use createSignedUrl + fetch to bypass browser cache
+    // storage.download() sometimes caches aggressiveley for fixed filenames
+    const { data: signed, error: signError } = await supabase.storage
+      .from(BUCKET_NAME)
+      .createSignedUrl(path, 60); // 60 seconds is enough for immediate fetch
+
+    if (signError) {
+      if (isNotFoundError(signError)) {
         return { _meta: { version: 1, updatedAt: null }, items: [] };
       }
-      throw error;
+      throw signError;
     }
 
-    const text = await readBlobAsText(data);
-    const json = JSON.parse(text || '{}');
-    const items = Array.isArray(json?.items) ? json.items : [];
-    return {
-      _meta: {
-        version: 1,
-        updatedAt: json?._meta?.updatedAt || null,
-      },
-      items,
-    };
+    try {
+      const res = await fetch(signed.signedUrl, { cache: 'no-store' }); // Force network
+      if (!res.ok) {
+        if (res.status === 404) {
+          return { _meta: { version: 1, updatedAt: null }, items: [] };
+        }
+        throw new Error(`Failed to fetch stock: ${res.status} ${res.statusText}`);
+      }
+      const text = await res.text();
+      const json = JSON.parse(text || '{}');
+      const items = Array.isArray(json?.items) ? json.items : [];
+      return {
+        _meta: {
+          version: 1,
+          updatedAt: json?._meta?.updatedAt || null,
+        },
+        items,
+      };
+    } catch (e) {
+      console.warn('loadStock fetch failed', e);
+      // Fallback: treat as empty if really broken, or rethrow?
+      // If we got a signed URL but fetch failed, it might be 404 or network.
+      // Let's assume empty if it looks like a missing file issue, otherwise throw.
+      throw e;
+    }
   },
 
   async saveStock(stock, userId = null) {
@@ -343,6 +364,35 @@ export const incomingStockService = {
     return { status: 'updated', name: cleanName, unit: cleanUnit };
   },
 
+  async deleteStockItem({ name, unit, vendor }, userId = null) {
+    const effectiveUserId = userId || await this._getCurrentUserId();
+    if (!effectiveUserId) throw new Error('ログインが必要です');
+
+    // Normalize keys to find the item to remove
+    const cleanName = String(name || '').trim();
+    if (!cleanName) throw new Error('商品名が必要です');
+    const cleanUnit = normalizeUnit(unit);
+    const cleanVendor = String(vendor || '').trim();
+    const targetKey = buildKey(cleanName, cleanUnit, cleanVendor);
+
+    const stock = await this.loadStock(effectiveUserId);
+    const items = stock.items || [];
+
+    // Filter out the item
+    const newItems = items.filter(item => {
+      const itemKey = buildKey(item.name, item.unit, item.vendor);
+      return itemKey !== targetKey;
+    });
+
+    if (newItems.length === items.length) {
+      // Item not found, but operation is idempotent so maybe okay? 
+      // Or return specific status? Let's just proceed to save (no-op).
+    }
+
+    await this.saveStock({ items: newItems }, effectiveUserId);
+    return { status: 'deleted', name: cleanName };
+  },
+
   async clearStock(userId = null) {
     const effectiveUserId = userId || await this._getCurrentUserId();
     if (!effectiveUserId) throw new Error('ログインが必要です');
@@ -370,5 +420,19 @@ export const incomingStockService = {
     }
 
     return { status: 'cleared' };
+  },
+
+  async deleteAppliedMarker(baseName, userId = null) {
+    const effectiveUserId = userId || await this._getCurrentUserId();
+    if (!effectiveUserId) throw new Error('ログインが必要です');
+
+    const markerPath = this._appliedMarkerPath(effectiveUserId, baseName);
+    const { error } = await supabase.storage.from(BUCKET_NAME).remove([markerPath]);
+
+    if (error) {
+      if (isNotFoundError(error)) return { status: 'not_found' };
+      throw error;
+    }
+    return { status: 'deleted' };
   },
 };

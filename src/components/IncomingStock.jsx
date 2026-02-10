@@ -172,6 +172,104 @@ export const IncomingStock = ({ onBack }) => {
     }
   };
 
+  // Delete Item State
+  const [deleteItemOpen, setDeleteItemOpen] = React.useState(false);
+  const [itemToDelete, setItemToDelete] = React.useState(null); // { name, unit, vendor }
+  const [deleteItemLoading, setDeleteItemLoading] = React.useState(false);
+
+  // Clear All State
+  const [clearAllOpen, setClearAllOpen] = React.useState(false);
+  const [clearAllLoading, setClearAllLoading] = React.useState(false);
+
+  const handleDeleteItemClick = (item) => {
+    setItemToDelete(item);
+    setDeleteItemOpen(true);
+    setError('');
+  };
+
+  const handleExecuteDeleteItem = async () => {
+    if (!itemToDelete) return;
+    setDeleteItemLoading(true);
+    setError('');
+    try {
+      await incomingStockService.deleteStockItem({
+        name: itemToDelete.name,
+        unit: itemToDelete.unit,
+        vendor: itemToDelete.vendor
+      });
+
+      // Optimistic update
+      setStock(prev => ({
+        ...prev,
+        items: (prev.items || []).filter(item => {
+          const isMatch =
+            item.name === itemToDelete.name &&
+            (item.unit || '') === (itemToDelete.unit || '') &&
+            (item.vendor || '') === (itemToDelete.vendor || '');
+          return !isMatch;
+        })
+      }));
+
+      setDeleteItemOpen(false);
+      setItemToDelete(null);
+    } catch (e) {
+      console.error(e);
+      setError('削除に失敗しました: ' + (e.message || String(e)));
+    } finally {
+      setDeleteItemLoading(false);
+    }
+  };
+
+  // Delete PDF State
+  const [deletePdfOpen, setDeletePdfOpen] = React.useState(false);
+  const [pdfToDelete, setPdfToDelete] = React.useState(null); // { name, baseName }
+  const [deletePdfLoading, setDeletePdfLoading] = React.useState(false);
+
+  const handleDeletePdfClick = (file) => {
+    const baseName = toBaseName(file.name);
+    setPdfToDelete({ name: file.name, baseName });
+    setDeletePdfOpen(true);
+    setError('');
+  };
+
+  const handleExecuteDeletePdf = async () => {
+    if (!pdfToDelete) return;
+    setDeletePdfLoading(true);
+    setError('');
+    try {
+      // 1. Delete PDF/JSON files
+      await incomingDeliveryService.deleteDeliverySet(pdfToDelete.baseName);
+
+      // 2. Delete applied marker (if exists)
+      // We do this regardless of whether it was applied or not, just in case.
+      await incomingStockService.deleteAppliedMarker(pdfToDelete.baseName);
+
+      await reload();
+      setDeletePdfOpen(false);
+      setPdfToDelete(null);
+    } catch (e) {
+      console.error(e);
+      setError('PDF削除に失敗しました: ' + (e.message || String(e)));
+    } finally {
+      setDeletePdfLoading(false);
+    }
+  };
+
+  const handleExecuteClearAll = async () => {
+    setClearAllLoading(true);
+    setError('');
+    try {
+      await incomingStockService.clearStock();
+      await reload();
+      setClearAllOpen(false);
+    } catch (e) {
+      console.error(e);
+      setError('消去に失敗しました: ' + (e.message || String(e)));
+    } finally {
+      setClearAllLoading(false);
+    }
+  };
+
   return (
     <div className="incoming-stock">
       <div className="incoming-stock__header">
@@ -203,20 +301,7 @@ export const IncomingStock = ({ onBack }) => {
             <Button
               variant="secondary"
               style={{ marginLeft: 'auto', color: '#d32f2f', borderColor: '#d32f2f' }}
-              onClick={async () => {
-                if (!window.confirm('現在の「入荷在庫」をすべて消去しますか？\n（入荷PDFデータ自体は消えませんが、反映状態がリセットされます）')) return;
-                setApplyLoading('clearing');
-                setError('');
-                try {
-                  await incomingStockService.clearStock();
-                  await reload();
-                } catch (e) {
-                  console.error(e);
-                  setError('消去に失敗しました: ' + (e.message || String(e)));
-                } finally {
-                  setApplyLoading(null);
-                }
-              }}
+              onClick={() => setClearAllOpen(true)}
               disabled={loading || !!applyLoading || !stock?.items?.length}
             >
               ⚠ 在庫を全消去
@@ -254,6 +339,16 @@ export const IncomingStock = ({ onBack }) => {
                       disabled={!!applyLoading || isApplied}
                     >
                       {applyLoading === baseName ? '反映中…' : (isApplied ? '反映済み' : '在庫に反映')}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      style={{ color: '#d32f2f', marginLeft: '4px' }}
+                      onClick={() => handleDeletePdfClick(f)}
+                      disabled={!!applyLoading}
+                      title="PDFと解析データを削除"
+                    >
+                      🗑
                     </Button>
                   </div>
                 </div>
@@ -341,9 +436,14 @@ export const IncomingStock = ({ onBack }) => {
                       </td>
                       <td>{it.unit || '-'}</td>
                       <td style={{ textAlign: 'center' }}>
-                        <Button variant="secondary" size="sm" onClick={() => openConsumeModal(it)}>
-                          使用/入庫
-                        </Button>
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                          <Button variant="secondary" size="sm" onClick={() => openConsumeModal(it)}>
+                            使用/入庫
+                          </Button>
+                          <Button variant="ghost" size="sm" style={{ color: '#d32f2f' }} onClick={() => handleDeleteItemClick(it)}>
+                            🗑
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -403,6 +503,81 @@ export const IncomingStock = ({ onBack }) => {
             </Button>
             <Button variant="primary" onClick={handleConsume} disabled={consumeLoading || !consumeAmount}>
               {consumeLoading ? '処理中…' : '使用する'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Item Modal */}
+      <Modal
+        isOpen={deleteItemOpen}
+        onClose={() => setDeleteItemOpen(false)}
+        title="在庫の削除"
+        size="small"
+      >
+        <div style={{ lineHeight: 1.6 }}>
+          <p style={{ marginTop: 0 }}>
+            「{itemToDelete?.name}」を在庫リストから削除しますか？<br />
+            <span style={{ fontSize: '0.85rem', color: '#666' }}>※誤って追加された場合などに使用してください。</span>
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+            <Button variant="ghost" onClick={() => setDeleteItemOpen(false)} disabled={deleteItemLoading}>
+              キャンセル
+            </Button>
+            <Button variant="danger" onClick={handleExecuteDeleteItem} disabled={deleteItemLoading}>
+              {deleteItemLoading ? '削除中…' : '削除する'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete PDF Modal */}
+      <Modal
+        isOpen={deletePdfOpen}
+        onClose={() => setDeletePdfOpen(false)}
+        title="PDFファイルの削除"
+        size="small"
+      >
+        <div style={{ lineHeight: 1.6 }}>
+          <p style={{ marginTop: 0 }}>
+            「{pdfToDelete?.baseName}」を削除しますか？
+          </p>
+          <p style={{ fontSize: '0.9rem', color: '#333' }}>
+            ファイルは削除されますが、<strong>これまでに在庫に加算された数量は取り消されません</strong>。<br />
+            （必要であれば、在庫リストから個別に削除または数量調整してください）
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+            <Button variant="ghost" onClick={() => setDeletePdfOpen(false)} disabled={deletePdfLoading}>
+              キャンセル
+            </Button>
+            <Button variant="danger" onClick={handleExecuteDeletePdf} disabled={deletePdfLoading}>
+              {deletePdfLoading ? '削除中…' : '削除する'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Clear All Modal */}
+      <Modal
+        isOpen={clearAllOpen}
+        onClose={() => setClearAllOpen(false)}
+        title="在庫の全消去"
+        size="small"
+      >
+        <div style={{ lineHeight: 1.6 }}>
+          <p style={{ marginTop: 0, fontWeight: 'bold', color: '#d32f2f' }}>
+            現在の「入荷在庫」をすべて消去しますか？
+          </p>
+          <p style={{ fontSize: '0.9rem', color: '#333' }}>
+            入荷PDFデータ自体は消えませんが、すべての在庫数がリセットされ、反映状態もクリアされます。<br />
+            この操作は取り消せません。
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+            <Button variant="ghost" onClick={() => setClearAllOpen(false)} disabled={clearAllLoading}>
+              キャンセル
+            </Button>
+            <Button variant="danger" onClick={handleExecuteClearAll} disabled={clearAllLoading}>
+              {clearAllLoading ? '消去中…' : '全て消去する'}
             </Button>
           </div>
         </div>
