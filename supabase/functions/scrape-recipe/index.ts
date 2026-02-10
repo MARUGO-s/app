@@ -1,5 +1,4 @@
-// Setup type definitions for Deno environment
-import "jsr:@supabase/functions-js/edge-runtime.d.ts"
+// import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 // Import Cheerio for reliable HTML parsing
 import * as cheerio from "npm:cheerio@1.0.0-rc.12"
 
@@ -383,6 +382,102 @@ Deno.serve(async (req) => {
     // ---------------------------------------------------------
     // Site-Specific Logic: Ouchi Ristrante
     // ---------------------------------------------------------
+    // ---------------------------------------------------------
+    // Site-Specific Logic: Tomiz
+    // ---------------------------------------------------------
+    if (!recipeData && url.includes('tomiz.com')) {
+      console.log("Detecting Tomiz URL...");
+      const title = $('h1').text().trim();
+
+      let recipeYield = $('.recipeYield').text().trim();
+      if (!recipeYield) {
+        // Look for yield in h2/h3 near "材料"
+        $('h2, h3, div').each((_, el) => {
+          const text = $(el).text();
+          if (text.includes('材料') && text.includes('分')) {
+            recipeYield = text.replace('材料', '').trim();
+          }
+        });
+      }
+
+      const ingredients: any[] = [];
+      $('.materialInputBlock').each((_, el) => {
+        // Tomiz structure: .materialInputBlock includes .materialInputBlock__figure (name?) and .materialInputBlock__text (quantity?)
+        // Or sometimes name is directly in the block text if simple
+        const name = $(el).find('.materialInputBlock__figure').text().trim() || $(el).find('.top-name').text().trim();
+        const quantity = $(el).find('.materialInputBlock__text').text().trim() || $(el).find('.top-amount').text().trim();
+
+        if (name) {
+          ingredients.push({ name, quantity: quantity || '', unit: '' });
+        } else {
+          // Fallback: try to parse raw text if structure matches "Name Quantity"
+          // But Tomiz usually uses the blocks. 
+          // Let's also check for DL structure which appeared in logs (materialBlock1__dl)
+        }
+      });
+
+      // Fallback for ingredients if materialInputBlock was empty (older tomiz pages?)
+      if (ingredients.length === 0) {
+        $('.materialBlock1__dl').each((_, el) => {
+          const dt = $(el).find('dt').text().trim();
+          const dd = $(el).find('dd').text().trim();
+          if (dt) {
+            ingredients.push({ name: dt, quantity: dd, unit: '' });
+          }
+        });
+      }
+
+      // Fallback 3: Standard checks if specific classes fail
+      if (ingredients.length === 0) {
+        $('.recipe-material__item, .ingredients-list li').each((_, el) => {
+          const txt = $(el).text().trim();
+          if (txt) ingredients.push(parseIngredient(txt));
+        });
+      }
+
+      const steps: string[] = [];
+      // Steps: Look for header "作り方" and then following siblings
+      let stepContainer: any = null;
+      $('h1, h2, h3, h4').each((_, el) => {
+        if ($(el).text().includes('作り方')) {
+          stepContainer = $(el).parent(); // Usually in a parent container
+        }
+      });
+
+      if (stepContainer) {
+        // Look for .instructionBlock, .stepBlock inside
+        stepContainer.find('.instructionBlock, .stepBlock, .steps__item').each((_, el) => {
+          let txt = $(el).text().trim();
+          // Remove leading numbers
+          txt = txt.replace(/^\d+[\.\s]*/, '').trim();
+          if (txt) steps.push(txt);
+        });
+      }
+
+      // Fallback for steps
+      if (steps.length === 0) {
+        $('.recipe-step__item, .steps-list li').each((_, el) => {
+          let txt = $(el).text().trim();
+          txt = txt.replace(/^\d+[\.\s]*/, '').trim();
+          if (txt) steps.push(txt);
+        });
+      }
+
+      const description = $('meta[name="description"]').attr('content') || '';
+      const image = $('meta[property="og:image"]').attr('content') || $('.recipe-main-image img').attr('src') || '';
+
+      if (title && (ingredients.length > 0 || steps.length > 0)) {
+        recipeData = {
+          name: title,
+          description,
+          image,
+          recipeIngredient: ingredients,
+          recipeInstructions: steps,
+          recipeYield
+        };
+      }
+    }
+
     if (!recipeData && url.includes('ouchi-ristrante.com')) {
       console.log("Detecting Ouchi Ristrante URL...");
       const title = $('h1').text().trim();
