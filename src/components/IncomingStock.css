@@ -58,10 +58,16 @@
   border: 1px solid rgba(0, 0, 0, 0.12);
   border-radius: 12px;
   background: rgba(0, 0, 0, 0.02);
+  flex-wrap: wrap;
+  /* Allow wrapping */
 }
 
 .incoming-stock__file-info {
   min-width: 0;
+  flex: 1;
+  /* Take available space */
+  word-break: break-all;
+  /* Prevent overflow */
 }
 
 .incoming-stock__badge {
@@ -153,17 +159,19 @@
   border-color: rgba(239, 68, 68, 0.3);
   background: rgba(239, 68, 68, 0.05);
 }
+
 /* Tabs */
 .incoming-stock__tabs {
   display: flex !important;
   gap: 8px !important;
   overflow-x: auto !important;
   padding-bottom: 8px !important;
-  border-bottom: 1px solid rgba(0,0,0,0.1) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
   margin-bottom: 16px !important;
   /* Hide scrollbar but keep functionality */
-  scrollbar-width: none !important; 
+  scrollbar-width: none !important;
 }
+
 .incoming-stock__tabs::-webkit-scrollbar {
   display: none !important;
 }
@@ -175,20 +183,22 @@
   border-radius: 8px !important;
   font-size: 0.95rem !important;
   font-weight: 600 !important;
-  color: rgba(0,0,0,0.6) !important;
+  color: rgba(0, 0, 0, 0.6) !important;
   cursor: pointer !important;
   white-space: nowrap !important;
   transition: all 0.2s !important;
 }
 
 .incoming-stock__tab-button:hover {
-  background: rgba(0,0,0,0.05) !important;
-  color: rgba(0,0,0,0.9) !important;
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: rgba(0, 0, 0, 0.9) !important;
 }
 
 .incoming-stock__tab-button--active {
-  background: rgba(34, 197, 94, 0.12) !important; /* Green tint matching primary */
-  color: #15803d !important; /* Darker green */
+  background: rgba(34, 197, 94, 0.12) !important;
+  /* Green tint matching primary */
+  color: #15803d !important;
+  /* Darker green */
 }
 
 /* Badge count in tab */
@@ -197,7 +207,7 @@
   margin-left: 6px !important;
   font-size: 0.8em !important;
   opacity: 0.8 !important;
-  background: rgba(0,0,0,0.1) !important;
+  background: rgba(0, 0, 0, 0.1) !important;
   padding: 2px 6px !important;
   border-radius: 99px !important;
 }
