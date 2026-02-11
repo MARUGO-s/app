@@ -6,6 +6,7 @@ const LOCAL_FALLBACK_WARNING = 'クラウド保存に失敗したため、この
 const MAX_WARNING_QUEUE = 20;
 
 const warningQueue = [];
+const UUID_LIKE_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const getStorageKey = (userId) => `planner_data_${userId}`;
 
@@ -23,6 +24,13 @@ const toNumberOr = (value, fallback = null) => {
     if (value === null || value === undefined || value === '') return fallback;
     const num = Number(value);
     return Number.isFinite(num) ? num : fallback;
+};
+
+const isMissingColumnError = (error, columnName) => {
+    const msg = String(error?.message || '').toLowerCase();
+    const code = String(error?.code || '');
+    if (code === '42703') return msg.includes(`column "${String(columnName).toLowerCase()}"`);
+    return msg.includes(`column "${String(columnName).toLowerCase()}"`) && msg.includes('does not exist');
 };
 
 const readPlansFromLocal = (userId) => {
@@ -103,6 +111,77 @@ const flattenPlansForInsert = (userId, plans) => {
     return rows;
 };
 
+const withLegacyPlanFields = (row) => ({
+    ...row,
+    date_str: row.plan_date,
+    type: row.meal_type,
+});
+
+const stripLegacyPlanFields = (row) => {
+    const { date_str: _dateStr, type: _type, ...rest } = row;
+    return rest;
+};
+
+const insertPlanRows = async (rows) => {
+    if (!rows || rows.length === 0) return;
+
+    const primaryRows = rows.map(withLegacyPlanFields);
+    let { error } = await supabase.from(TABLE_NAME).insert(primaryRows);
+
+    if (error && (isMissingColumnError(error, 'date_str') || isMissingColumnError(error, 'type'))) {
+        const fallbackRows = primaryRows.map(stripLegacyPlanFields);
+        ({ error } = await supabase.from(TABLE_NAME).insert(fallbackRows));
+    }
+
+    if (error) throw error;
+};
+
+const isUuidLike = (value) => UUID_LIKE_RE.test(String(value || ''));
+
+const normalizeSigValue = (value) => {
+    if (value === null || value === undefined || value === '') return '';
+    if (typeof value === 'number') return String(value);
+    const asNum = Number(value);
+    if (Number.isFinite(asNum)) return String(asNum);
+    return String(value);
+};
+
+const mealSignature = (dateStr, meal) => {
+    const recipe = normalizeSigValue(meal?.recipeId);
+    const type = normalizeSigValue(meal?.type || 'dinner');
+    const note = normalizeSigValue(meal?.note || '');
+    const multiplier = normalizeSigValue(toNumberOr(meal?.multiplier, 1));
+    const totalWeight = normalizeSigValue(toNumberOr(meal?.totalWeight, null));
+    return `${dateStr}|${recipe}|${type}|${note}|${multiplier}|${totalWeight}`;
+};
+
+const mergeRemoteAndLocalPlans = (remotePlans, localPlans) => {
+    const merged = {};
+    Object.keys(remotePlans || {}).forEach((dateStr) => {
+        merged[dateStr] = [...(remotePlans[dateStr] || [])];
+    });
+
+    const remoteSignatures = new Set();
+    Object.keys(remotePlans || {}).forEach((dateStr) => {
+        (remotePlans[dateStr] || []).forEach((meal) => {
+            remoteSignatures.add(mealSignature(dateStr, meal));
+        });
+    });
+
+    Object.keys(localPlans || {}).forEach((dateStr) => {
+        const localMeals = localPlans[dateStr] || [];
+        localMeals.forEach((meal) => {
+            const sig = mealSignature(dateStr, meal);
+            if (remoteSignatures.has(sig)) return;
+            if (!merged[dateStr]) merged[dateStr] = [];
+            merged[dateStr].push(meal);
+            remoteSignatures.add(sig);
+        });
+    });
+
+    return merged;
+};
+
 const addMealToLocalPlans = (plans, dateStr, meal) => {
     const next = { ...(plans || {}) };
     if (!next[dateStr]) next[dateStr] = [];
@@ -178,9 +257,50 @@ const tryBackfillLocalPlansToSupabase = async (userId, localPlans) => {
     const rows = flattenPlansForInsert(userId, localPlans);
     if (rows.length === 0) return null;
 
-    const { error } = await supabase.from(TABLE_NAME).insert(rows);
-    if (error) throw error;
+    await insertPlanRows(rows);
     return fetchPlansFromSupabase(userId);
+};
+
+const trySyncUnsyncedLocalMeals = async (userId, remotePlans) => {
+    const localPlans = readPlansFromLocal(userId);
+    const hasUnsyncedLocal = Object.keys(localPlans).some((dateStr) =>
+        (localPlans[dateStr] || []).some((meal) => !isUuidLike(meal?.id))
+    );
+    if (!hasUnsyncedLocal) return remotePlans;
+
+    const remoteSignatures = new Set();
+    Object.keys(remotePlans || {}).forEach((dateStr) => {
+        (remotePlans[dateStr] || []).forEach((meal) => {
+            remoteSignatures.add(mealSignature(dateStr, meal));
+        });
+    });
+
+    const rowsToInsert = [];
+    Object.keys(localPlans || {}).forEach((dateStr) => {
+        (localPlans[dateStr] || []).forEach((meal) => {
+            if (isUuidLike(meal?.id)) return;
+            const sig = mealSignature(dateStr, meal);
+            if (remoteSignatures.has(sig)) return;
+            rowsToInsert.push({
+                user_id: userId,
+                plan_date: dateStr,
+                recipe_id: toRecipeId(meal.recipeId),
+                meal_type: meal.type || 'dinner',
+                note: meal.note || '',
+                multiplier: toNumberOr(meal.multiplier, 1),
+                total_weight: toNumberOr(meal.totalWeight, null),
+            });
+            remoteSignatures.add(sig);
+        });
+    });
+
+    if (rowsToInsert.length > 0) {
+        await insertPlanRows(rowsToInsert);
+    }
+
+    const synced = await fetchPlansFromSupabase(userId);
+    savePlansToLocal(userId, synced);
+    return synced;
 };
 
 export const plannerService = {
@@ -211,8 +331,19 @@ export const plannerService = {
                     }
                 }
             }
-            savePlansToLocal(userId, remotePlans);
-            return remotePlans;
+
+            try {
+                const syncedPlans = await trySyncUnsyncedLocalMeals(userId, remotePlans);
+                savePlansToLocal(userId, syncedPlans);
+                return syncedPlans;
+            } catch (syncError) {
+                console.warn('plannerService.getAll: failed to sync local fallback meals', syncError);
+                queueWarning(LOCAL_FALLBACK_WARNING);
+                const localPlans = readPlansFromLocal(userId);
+                const mergedPlans = mergeRemoteAndLocalPlans(remotePlans, localPlans);
+                savePlansToLocal(userId, mergedPlans);
+                return mergedPlans;
+            }
         } catch (error) {
             console.warn('plannerService.getAll: falling back to localStorage', error);
             queueWarning(LOCAL_FALLBACK_WARNING);
@@ -256,7 +387,7 @@ export const plannerService = {
     addMeal: async (userId, dateStr, recipeId, type, options = {}) => {
         if (!userId) return null;
 
-        const fallbackMeal = {
+        const localMeal = {
             id: makeLocalMealId(),
             recipeId: toRecipeId(recipeId),
             type: type || 'dinner',
@@ -264,6 +395,10 @@ export const plannerService = {
             multiplier: toNumberOr(options?.multiplier, 1),
             totalWeight: toNumberOr(options?.totalWeight, null),
         };
+
+        const localPlans = readPlansFromLocal(userId);
+        const nextPlans = addMealToLocalPlans(localPlans, dateStr, localMeal);
+        savePlansToLocal(userId, nextPlans);
 
         try {
             const payload = {
@@ -275,26 +410,12 @@ export const plannerService = {
                 multiplier: toNumberOr(options?.multiplier, 1),
                 total_weight: toNumberOr(options?.totalWeight, null),
             };
-            const { data, error } = await supabase
-                .from(TABLE_NAME)
-                .insert([payload])
-                .select('id, plan_date, recipe_id, meal_type, note, multiplier, total_weight')
-                .single();
-
-            if (error) throw error;
-
-            const meal = normalizeMeal(data);
-            const localPlans = readPlansFromLocal(userId);
-            const nextPlans = addMealToLocalPlans(localPlans, dateStr, meal);
-            savePlansToLocal(userId, nextPlans);
-            return meal;
+            await insertPlanRows([payload]);
+            return localMeal;
         } catch (error) {
             console.warn('plannerService.addMeal: insert fallback to localStorage', error);
             queueWarning(LOCAL_FALLBACK_WARNING);
-            const localPlans = readPlansFromLocal(userId);
-            const nextPlans = addMealToLocalPlans(localPlans, dateStr, fallbackMeal);
-            savePlansToLocal(userId, nextPlans);
-            return fallbackMeal;
+            return localMeal;
         }
     },
 
@@ -323,18 +444,31 @@ export const plannerService = {
 
         const patch = {};
         if (Object.prototype.hasOwnProperty.call(updates, 'recipeId')) patch.recipe_id = toRecipeId(updates.recipeId);
-        if (Object.prototype.hasOwnProperty.call(updates, 'type')) patch.meal_type = updates.type || 'dinner';
+        if (Object.prototype.hasOwnProperty.call(updates, 'type')) {
+            patch.meal_type = updates.type || 'dinner';
+            patch.type = patch.meal_type;
+        }
         if (Object.prototype.hasOwnProperty.call(updates, 'note')) patch.note = updates.note || '';
         if (Object.prototype.hasOwnProperty.call(updates, 'multiplier')) patch.multiplier = toNumberOr(updates.multiplier, 1);
         if (Object.prototype.hasOwnProperty.call(updates, 'totalWeight')) patch.total_weight = toNumberOr(updates.totalWeight, null);
 
         try {
             if (Object.keys(patch).length > 0) {
-                const { error } = await supabase
+                let { error } = await supabase
                     .from(TABLE_NAME)
                     .update(patch)
                     .eq('id', String(mealId))
                     .eq('user_id', userId);
+
+                if (error && isMissingColumnError(error, 'type')) {
+                    const { type: _legacyType, ...fallbackPatch } = patch;
+                    ({ error } = await supabase
+                        .from(TABLE_NAME)
+                        .update(fallbackPatch)
+                        .eq('id', String(mealId))
+                        .eq('user_id', userId));
+                }
+
                 if (error) throw error;
             }
         } catch (error) {
