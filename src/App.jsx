@@ -177,6 +177,18 @@ function AppContent() {
     if (currentView !== 'list') setPublicRecipeView('none');
   }, [currentView]);
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (!isMenuOpen) return;
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isMenuOpen]);
+
   // If auth init gets stuck for some reason, don't trap the UI on Loading forever.
   useEffect(() => {
     if (!authLoading) {
@@ -1009,135 +1021,137 @@ function AppContent() {
                       ✕
                     </button>
 
-                    {/* Logged-in user indicator */}
-                    <div
-                      className="slide-menu-user"
-                      style={{
-                        marginBottom: '1rem',
-                        padding: '10px 12px',
-                        borderRadius: '10px',
-                        border: '1px solid rgba(255,255,255,0.25)',
-                        background: 'rgba(0,0,0,0.15)',
-                        color: 'white',
-                        fontSize: '0.9rem',
-                        lineHeight: 1.4,
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-                        <div style={{ fontWeight: 'bold' }}>
-                          ログイン: {user?.displayId || user?.email || (user?.id ? `${String(user.id).slice(0, 8)}…` : '---')}
+                    <div className="secondary-actions-content">
+                      {/* Logged-in user indicator */}
+                      <div
+                        className="slide-menu-user"
+                        style={{
+                          marginBottom: '1rem',
+                          padding: '10px 12px',
+                          borderRadius: '10px',
+                          border: '1px solid rgba(255,255,255,0.25)',
+                          background: 'rgba(0,0,0,0.15)',
+                          color: 'white',
+                          fontSize: '0.9rem',
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                          <div style={{ fontWeight: 'bold' }}>
+                            ログイン: {user?.displayId || user?.email || (user?.id ? `${String(user.id).slice(0, 8)}…` : '---')}
+                          </div>
+                          {user?.role === 'admin' && (
+                            <span style={{
+                              fontSize: '0.75rem',
+                              padding: '2px 8px',
+                              borderRadius: '999px',
+                              background: 'rgba(255,255,255,0.2)',
+                              border: '1px solid rgba(255,255,255,0.25)',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              管理者
+                            </span>
+                          )}
                         </div>
-                        {user?.role === 'admin' && (
-                          <span style={{
-                            fontSize: '0.75rem',
-                            padding: '2px 8px',
-                            borderRadius: '999px',
-                            background: 'rgba(255,255,255,0.2)',
-                            border: '1px solid rgba(255,255,255,0.25)',
-                            whiteSpace: 'nowrap'
-                          }}>
-                            管理者
-                          </span>
+                        {user?.email && user?.displayId && (
+                          <div style={{ opacity: 0.85, fontSize: '0.8rem', marginTop: '4px', wordBreak: 'break-all' }}>
+                            {user.email}
+                          </div>
                         )}
                       </div>
-                      {user?.email && user?.displayId && (
-                        <div style={{ opacity: 0.85, fontSize: '0.8rem', marginTop: '4px', wordBreak: 'break-all' }}>
-                          {user.email}
-                        </div>
-                      )}
-                    </div>
 
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        window.open(`${import.meta.env.BASE_URL}recipe.html`, '_blank', 'noopener,noreferrer');
-                        setIsMenuOpen(false);
-                      }}
-                    >
-                      <span style={{ marginRight: '8px' }}>❓</span> Q&A
-                    </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          window.open(`${import.meta.env.BASE_URL}recipe.html`, '_blank', 'noopener,noreferrer');
+                          setIsMenuOpen(false);
+                        }}
+                      >
+                        <span style={{ marginRight: '8px' }}>❓</span> Q&A
+                      </Button>
 
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        window.open(`${import.meta.env.BASE_URL}recipe_management.pdf`, '_blank', 'noopener,noreferrer');
-                        setIsMenuOpen(false);
-                      }}
-                    >
-                      <span style={{ marginRight: '8px' }}>📘</span> アプリガイド
-                    </Button>
-                    <div className="menu-divider"></div>
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          window.open(`${import.meta.env.BASE_URL}recipe_management.pdf`, '_blank', 'noopener,noreferrer');
+                          setIsMenuOpen(false);
+                        }}
+                      >
+                        <span style={{ marginRight: '8px' }}>📘</span> アプリガイド
+                      </Button>
+                      <div className="menu-divider"></div>
 
-                    {currentView === 'list' && (
-                      <>
-                        <Button variant="secondary" onClick={() => { setImportMode('url'); setIsMenuOpen(false); }}>
-                          <span style={{ marginRight: '8px' }}>🌐</span> Webから追加
-                        </Button>
-                        <Button variant="secondary" onClick={() => { setImportMode('image'); setIsMenuOpen(false); }}>
-                          <span style={{ marginRight: '8px' }}>📷</span> 画像から追加
-                        </Button>
-                        <div className="menu-divider"></div>
-
-                        <div className="pc-recommend-note">
-                          <div className="pc-recommend-note__title">以下の操作はPCかタブレット推奨</div>
-                        </div>
-
-                        <Button variant="secondary" onClick={() => { setSearchParams({ view: 'inventory' }); setIsMenuOpen(false); }}>
-                          <span style={{ marginRight: '8px' }}>📦</span> 在庫管理
-                        </Button>
-                        <Button variant="secondary" onClick={() => { setSearchParams({ view: 'incoming-deliveries' }); setIsMenuOpen(false); }}>
-                          <span style={{ marginRight: '8px' }}>📄</span> 入荷PDF
-                        </Button>
-                        <Button variant="secondary" onClick={() => { setSearchParams({ view: 'incoming-stock' }); setIsMenuOpen(false); }}>
-                          <span style={{ marginRight: '8px' }}>📥</span> 入荷在庫
-                        </Button>
-                        <Button variant="secondary" onClick={() => { setSearchParams({ view: 'planner' }); setIsMenuOpen(false); }}>
-                          <span style={{ marginRight: '8px' }}>📅</span> 仕込みカレンダー
-                        </Button>
-                        <div className="menu-divider"></div>
-                        <Button variant="secondary" onClick={() => { setSearchParams({ view: 'data' }); setIsMenuOpen(false); }}>
-                          <span style={{ marginRight: '8px' }}>📊</span> データ管理
-                        </Button>
-
-                        {user?.role === 'admin' && (
-                          <Button variant="secondary" onClick={() => { setSearchParams({ view: 'users' }); setIsMenuOpen(false); }}>
-                            <span style={{ marginRight: '8px' }}>👥</span> ユーザー管理
+                      {currentView === 'list' && (
+                        <>
+                          <Button variant="secondary" onClick={() => { setImportMode('url'); setIsMenuOpen(false); }}>
+                            <span style={{ marginRight: '8px' }}>🌐</span> Webから追加
                           </Button>
-                        )}
-                        <div className="menu-divider"></div>
-                        <Button variant="secondary" onClick={() => { setSearchParams({ view: 'order-list' }); setIsMenuOpen(false); }}>
-                          <span style={{ marginRight: '8px' }}>🛒</span> 発注リスト
+                          <Button variant="secondary" onClick={() => { setImportMode('image'); setIsMenuOpen(false); }}>
+                            <span style={{ marginRight: '8px' }}>📷</span> 画像から追加
+                          </Button>
+                          <div className="menu-divider"></div>
+
+                          <div className="pc-recommend-note">
+                            <div className="pc-recommend-note__title">以下の操作はPCかタブレット推奨</div>
+                          </div>
+
+                          <Button variant="secondary" onClick={() => { setSearchParams({ view: 'inventory' }); setIsMenuOpen(false); }}>
+                            <span style={{ marginRight: '8px' }}>📦</span> 在庫管理
+                          </Button>
+                          <Button variant="secondary" onClick={() => { setSearchParams({ view: 'incoming-deliveries' }); setIsMenuOpen(false); }}>
+                            <span style={{ marginRight: '8px' }}>📄</span> 入荷PDF
+                          </Button>
+                          <Button variant="secondary" onClick={() => { setSearchParams({ view: 'incoming-stock' }); setIsMenuOpen(false); }}>
+                            <span style={{ marginRight: '8px' }}>📥</span> 入荷在庫
+                          </Button>
+                          <Button variant="secondary" onClick={() => { setSearchParams({ view: 'planner' }); setIsMenuOpen(false); }}>
+                            <span style={{ marginRight: '8px' }}>📅</span> 仕込みカレンダー
+                          </Button>
+                          <div className="menu-divider"></div>
+                          <Button variant="secondary" onClick={() => { setSearchParams({ view: 'data' }); setIsMenuOpen(false); }}>
+                            <span style={{ marginRight: '8px' }}>📊</span> データ管理
+                          </Button>
+
+                          {user?.role === 'admin' && (
+                            <Button variant="secondary" onClick={() => { setSearchParams({ view: 'users' }); setIsMenuOpen(false); }}>
+                              <span style={{ marginRight: '8px' }}>👥</span> ユーザー管理
+                            </Button>
+                          )}
+                          <div className="menu-divider"></div>
+                          <Button variant="secondary" onClick={() => { setSearchParams({ view: 'order-list' }); setIsMenuOpen(false); }}>
+                            <span style={{ marginRight: '8px' }}>🛒</span> 発注リスト
+                          </Button>
+
+                          <div className="menu-divider"></div>
+                        </>
+                      )}
+
+                      {!isSelectMode && (
+                        <Button variant="ghost" onClick={() => { toggleSelectMode(); setIsMenuOpen(false); }} className="danger-text">
+                          <span style={{ marginRight: '8px' }}>☑️</span> {currentView === 'trash' ? '一括操作' : '一括削除'}
                         </Button>
+                      )}
 
-                        <div className="menu-divider"></div>
-                      </>
-                    )}
+                      {currentView === 'list' && (
+                        <Button variant="ghost" onClick={() => { handleSwitchToTrash(); setIsMenuOpen(false); }} style={{ position: 'relative' }}>
+                          <span style={{ marginRight: '8px' }}>🗑️</span> ゴミ箱 {trashCount > 0 && <span className="trash-badge">{trashCount}</span>}
+                        </Button>
+                      )}
 
-                    {!isSelectMode && (
-                      <Button variant="ghost" onClick={() => { toggleSelectMode(); setIsMenuOpen(false); }} className="danger-text">
-                        <span style={{ marginRight: '8px' }}>☑️</span> {currentView === 'trash' ? '一括操作' : '一括削除'}
+                      <Button variant="ghost" onClick={() => { handleSwitchToMain(); setIsMenuOpen(false); }}>
+                        <span style={{ marginRight: '8px' }}>🏠</span> 一覧に戻る
                       </Button>
-                    )}
 
-                    {currentView === 'list' && (
-                      <Button variant="ghost" onClick={() => { handleSwitchToTrash(); setIsMenuOpen(false); }} style={{ position: 'relative' }}>
-                        <span style={{ marginRight: '8px' }}>🗑️</span> ゴミ箱 {trashCount > 0 && <span className="trash-badge">{trashCount}</span>}
+
+                      <div className="menu-divider"></div>
+
+                      <Button variant="ghost" onClick={() => {
+                        logout();
+                        setIsMenuOpen(false);
+                      }}>
+                        <span style={{ marginRight: '8px' }}>🚪</span> ログアウト
                       </Button>
-                    )}
-
-                    <Button variant="ghost" onClick={() => { handleSwitchToMain(); setIsMenuOpen(false); }}>
-                      <span style={{ marginRight: '8px' }}>🏠</span> 一覧に戻る
-                    </Button>
-
-
-                    <div className="menu-divider"></div>
-
-                    <Button variant="ghost" onClick={() => {
-                      logout();
-                      setIsMenuOpen(false);
-                    }}>
-                      <span style={{ marginRight: '8px' }}>🚪</span> ログアウト
-                    </Button>
+                    </div>
                   </div>
 
                   {/* Backdrop for closing menu */}
