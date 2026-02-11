@@ -5,6 +5,27 @@ import './RecipeList.css';
 import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+const isMobileViewport = () => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia?.('(max-width: 700px)')?.matches ?? false;
+};
+
+const toOptimizedImageSrc = (src, { mobile = false } = {}) => {
+    if (!src || typeof src !== 'string') return src;
+    if (src.startsWith('data:') || src.startsWith('blob:')) return src;
+
+    // Supabase Image Transform (if available)
+    // Keep quality moderate on mobile to reduce transfer size.
+    if (src.includes('/storage/v1/object/public/')) {
+        const width = mobile ? 360 : 640;
+        const quality = mobile ? 55 : 68;
+        const separator = src.includes('?') ? '&' : '?';
+        return `${src}${separator}width=${width}&quality=${quality}&resize=contain`;
+    }
+
+    return src;
+};
+
 const formatDate = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
@@ -27,7 +48,7 @@ const normalizeTags = (rawTags) => {
     return [];
 };
 
-const SortableRecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggleSelection, disableDrag, showOwner, ownerLabelFn }) => {
+const SortableRecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggleSelection, disableDrag, showOwner, ownerLabelFn, index = 0, mobileView = false }) => {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: recipe.id,
         disabled: disableDrag
@@ -42,6 +63,11 @@ const SortableRecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, 
         outline: 'none',
         cursor: disableDrag ? 'default' : 'grab'
     };
+
+    const eagerThreshold = mobileView ? 4 : 8;
+    const loadingMode = index < eagerThreshold ? 'eager' : 'lazy';
+    const fetchPriority = index < eagerThreshold ? 'high' : 'low';
+    const imageSrc = toOptimizedImageSrc(recipe.image, { mobile: mobileView });
 
     return (
         <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
@@ -60,11 +86,13 @@ const SortableRecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, 
                 <div className="recipe-card__image-wrapper">
                     {recipe.image ? (
                         <img
-                            src={recipe.image}
+                            src={imageSrc}
                             alt={recipe.title}
                             className="recipe-card__image"
-                            loading="lazy"
+                            loading={loadingMode}
                             decoding="async"
+                            fetchPriority={fetchPriority}
+                            sizes={mobileView ? '(max-width: 700px) 45vw, 320px' : '(max-width: 1024px) 33vw, 280px'}
                         />
                     ) : (
                         <div className="recipe-card__image placeholder" />
@@ -178,6 +206,20 @@ const splitRecipesBySection = (list) => {
 
 export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds, onToggleSelection, disableDrag, displayMode = 'normal', publicRecipeView = 'none', showOwner = false, ownerLabelFn, currentUser = null }) => {
     const [expandedSections, setExpandedSections] = useState({});
+    const [isMobileView, setIsMobileView] = useState(() => isMobileViewport());
+
+    React.useEffect(() => {
+        if (typeof window === 'undefined' || !window.matchMedia) return;
+        const mql = window.matchMedia('(max-width: 700px)');
+        const onChange = () => setIsMobileView(!!mql.matches);
+        onChange();
+        if (mql.addEventListener) mql.addEventListener('change', onChange);
+        else mql.addListener(onChange);
+        return () => {
+            if (mql.removeEventListener) mql.removeEventListener('change', onChange);
+            else mql.removeListener(onChange);
+        };
+    }, []);
 
     const toggleSection = (sectionKey) => {
         setExpandedSections(prev => ({
@@ -285,7 +327,7 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                 </h3>
                 <div className="recipe-grid">
                     <SortableContext items={displayItems.map(r => r.id)} strategy={rectSortingStrategy}>
-                        {displayItems.map((recipe) => {
+                        {displayItems.map((recipe, index) => {
                             const isSelected = selectedIds && selectedIds.has(recipe.id);
                             return (
                                 <SortableRecipeCard
@@ -298,6 +340,8 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                                     disableDrag={disableDrag}
                                     showOwner={showOwner}
                                     ownerLabelFn={ownerLabelFn}
+                                    index={index}
+                                    mobileView={isMobileView}
                                 />
                             );
                         })}
