@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { plannerService } from '../services/plannerService';
 import { recipeService } from '../services/recipeService'; // Need access to recipes
 import { Button } from './Button';
@@ -6,21 +6,32 @@ import { Input } from './Input';
 import { Card } from './Card';
 import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../contexts/useToast';
-import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
+import { DndContext, DragOverlay, useDraggable, useDroppable, useSensor, useSensors, MouseSensor, TouchSensor } from '@dnd-kit/core';
 import './Planner.css';
+
+const getMealQtyStr = (meal) => {
+    const { totalWeight, multiplier } = meal || {};
+    if (totalWeight) return `${totalWeight}g`;
+    if (multiplier && multiplier !== 1) return `x${multiplier}`;
+    return '';
+};
 
 // Draggable Recipe Item
 const DraggableRecipe = ({ recipe }) => {
-    const { attributes, listeners, setNodeRef, transform } = useDraggable({
+    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
         id: `recipe-${recipe.id}`,
         data: { recipe }
     });
 
-    const style = transform ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-        position: 'relative',
-        zIndex: 999
-    } : undefined;
+    const style = isDragging
+        ? { opacity: 0.35 }
+        : transform
+            ? {
+                transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+                position: 'relative',
+                zIndex: 999
+            }
+            : undefined;
 
     return (
         <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="draggable-recipe">
@@ -31,26 +42,22 @@ const DraggableRecipe = ({ recipe }) => {
 
 // Draggable Meal Item (for moving existing plans)
 const DraggableMeal = ({ meal, dateStr, children }) => {
-    const { attributes, listeners, setNodeRef, transform } = useDraggable({
+    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
         id: `meal-${meal.id}`,
         data: { meal, dateStr, type: 'meal' } // Pass dateStr to know source
     });
 
-    const style = transform ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-        position: 'relative',
-        zIndex: 999
-    } : undefined;
+    const style = isDragging
+        ? { opacity: 0.35 }
+        : transform
+            ? {
+                transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+                position: 'relative',
+                zIndex: 999
+            }
+            : undefined;
 
-    const { type, totalWeight, multiplier } = meal;
-
-    // Format quantity string
-    let qtyStr = '';
-    if (totalWeight) {
-        qtyStr = `${totalWeight}g`;
-    } else if (multiplier && multiplier !== 1) {
-        qtyStr = `x${multiplier}`;
-    }
+    const qtyStr = getMealQtyStr(meal);
 
     return (
         <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="draggable-meal-wrapper">
@@ -102,6 +109,7 @@ const formatDateStr = (date) => {
 export const Planner = ({ onBack, onSelectRecipe, onNavigateToOrderList }) => {
     const { user } = useAuth();
     const toast = useToast();
+    const toastRef = useRef(toast);
     const [recipes, setRecipes] = useState([]);
     const [plans, setPlans] = useState({});
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -113,6 +121,7 @@ export const Planner = ({ onBack, onSelectRecipe, onNavigateToOrderList }) => {
     const [pendingDrop, setPendingDrop] = useState(null); // { type: 'new'|'move', ...data }
     const [inputMultiplier, setInputMultiplier] = useState(1);
     const [inputTotalWeight, setInputTotalWeight] = useState('');
+    const [activeDrag, setActiveDrag] = useState(null);
 
     // Bulk Delete State
     const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
@@ -120,24 +129,64 @@ export const Planner = ({ onBack, onSelectRecipe, onNavigateToOrderList }) => {
     const [deleteEndDate, setDeleteEndDate] = useState(formatDateStr(new Date()));
 
     const sensors = useSensors(
-        useSensor(PointerSensor, {
+        useSensor(MouseSensor, {
             activationConstraint: {
-                distance: 8,
+                distance: 6,
             },
-        })
+        }),
+        useSensor(TouchSensor, {
+            activationConstraint: {
+                delay: 0,
+                tolerance: 8,
+            },
+        }),
     );
 
+    useEffect(() => {
+        toastRef.current = toast;
+    }, [toast]);
+
+    const flushPlannerWarnings = useCallback(() => {
+        const warnings = plannerService.consumeWarnings?.() || [];
+        if (warnings.length === 0) return;
+        [...new Set(warnings)].forEach((message) => {
+            toastRef.current.warning(message);
+        });
+    }, []);
+
     const loadData = useCallback(async () => {
-        const r = await recipeService.fetchRecipes(user);
-        setRecipes(r);
-        if (user?.id) {
-            // Cleanup plans that have invalid recipe IDs (Unknown items)
-            // This fixes the issue where data from other users (via legacy fallback) shows up as Unknown.
-            const validIds = r.map(x => x.id);
-            const cleanedPlans = await plannerService.cleanupInvalidPlans(user.id, validIds);
-            setPlans(cleanedPlans);
+        if (!user) {
+            setRecipes([]);
+            setPlans({});
+            return;
         }
-    }, [user]);
+
+        let fetchedRecipes = [];
+        try {
+            fetchedRecipes = await recipeService.fetchRecipes(user);
+        } catch (error) {
+            console.error('Planner: failed to fetch recipes', error);
+            toastRef.current.error('レシピの読み込みに失敗しました');
+            fetchedRecipes = [];
+        }
+
+        setRecipes(fetchedRecipes);
+        if (user?.id) {
+            try {
+                let nextPlans;
+                // Guard: avoid cleanup when recipe fetch fails (0 items), otherwise all plans can be removed.
+                if (Array.isArray(fetchedRecipes) && fetchedRecipes.length > 0) {
+                    const validIds = fetchedRecipes.map((x) => x.id);
+                    nextPlans = await plannerService.cleanupInvalidPlans(user.id, validIds);
+                } else {
+                    nextPlans = await plannerService.getAll(user.id);
+                }
+                setPlans(nextPlans);
+            } finally {
+                flushPlannerWarnings();
+            }
+        }
+    }, [flushPlannerWarnings, user]);
 
     useEffect(() => {
         // Avoid calling setState synchronously inside an effect body.
@@ -147,50 +196,83 @@ export const Planner = ({ onBack, onSelectRecipe, onNavigateToOrderList }) => {
         return () => clearTimeout(t);
     }, [loadData]);
 
+    const handleDragStart = useCallback((event) => {
+        const active = event?.active;
+        if (!active?.id) {
+            setActiveDrag(null);
+            return;
+        }
+
+        const activeId = String(active.id);
+        if (activeId.startsWith('recipe-')) {
+            const recipe = active.data.current?.recipe;
+            setActiveDrag({
+                kind: 'recipe',
+                title: recipe?.title || 'レシピ',
+                qtyStr: '',
+            });
+            return;
+        }
+
+        if (activeId.startsWith('meal-')) {
+            const meal = active.data.current?.meal;
+            const recipe = recipes.find((r) => r.id === meal?.recipeId);
+            setActiveDrag({
+                kind: 'meal',
+                title: recipe?.title || 'Unknown',
+                qtyStr: getMealQtyStr(meal),
+            });
+            return;
+        }
+
+        setActiveDrag(null);
+    }, [recipes]);
+
+    const handleDragCancel = useCallback(() => {
+        setActiveDrag(null);
+    }, []);
+
     const handleDragEnd = async (event) => {
         const { active, over } = event;
-        if (!over) return;
+        try {
+            if (!over) return;
 
-        if (over.id.startsWith('date-')) {
-            const targetDateStr = over.data.current.dateStr;
+            if (over.id.startsWith('date-')) {
+                const targetDateStr = over.data.current.dateStr;
 
-            // Case 1: Dragging a Recipe from Sidebar (New)
-            if (active.id.startsWith('recipe-')) {
-                const recipe = active.data.current.recipe;
-                // Open modal to ask for Details
-                setPendingDrop({
-                    type: 'new',
-                    recipe,
-                    targetDateStr
-                });
-                setInputMultiplier(1);
-                setInputTotalWeight('');
-                setShowQuantityModal(true);
+                // Case 1: Dragging a Recipe from Sidebar (New)
+                if (active.id.startsWith('recipe-')) {
+                    const recipe = active.data.current.recipe;
+                    // Open modal to ask for Details
+                    setPendingDrop({
+                        type: 'new',
+                        recipe,
+                        targetDateStr
+                    });
+                    setInputMultiplier(1);
+                    setInputTotalWeight('');
+                    setShowQuantityModal(true);
+                }
+                // Case 2: Dragging an existing Meal (Move)
+                else if (active.id.startsWith('meal-')) {
+                    const { meal, dateStr: sourceDateStr } = active.data.current;
+
+                    // If dropped on same day, do nothing
+                    if (sourceDateStr === targetDateStr) return;
+
+                    // Move logic: Add to target, Remove from source
+                    const options = {
+                        multiplier: meal.multiplier,
+                        totalWeight: meal.totalWeight
+                    };
+
+                    await plannerService.addMeal(user.id, targetDateStr, meal.recipeId, meal.type || 'dinner', options);
+                    await plannerService.removeMeal(user.id, sourceDateStr, meal.id);
+                    loadData();
+                }
             }
-            // Case 2: Dragging an existing Meal (Move)
-            else if (active.id.startsWith('meal-')) {
-                const { meal, dateStr: sourceDateStr } = active.data.current;
-
-                // If dropped on same day, do nothing
-                if (sourceDateStr === targetDateStr) return;
-
-                // Move logic: Add to target, Remove from source
-                // For move, we preserve existing quantites.
-                // If user wants to change quantity, they should delete and re-add or we add an edit feature later.
-                // Assuming move preserves the original "meal" object properties.
-                // But addMeal creates a new ID. We must copy over properties.
-
-                // Since plannerService.addMeal doesn't support "cloning" arbitrary props easily without changes,
-                // let's just pass the existing options.
-                const options = {
-                    multiplier: meal.multiplier,
-                    totalWeight: meal.totalWeight
-                };
-
-                await plannerService.addMeal(user.id, targetDateStr, meal.recipeId, meal.type || 'dinner', options);
-                await plannerService.removeMeal(user.id, sourceDateStr, meal.id);
-                loadData();
-            }
+        } finally {
+            setActiveDrag(null);
         }
     };
 
@@ -315,7 +397,7 @@ export const Planner = ({ onBack, onSelectRecipe, onNavigateToOrderList }) => {
     };
 
     return (
-        <div className="planner-container fade-in">
+        <div className={`planner-container fade-in ${activeDrag ? 'dragging' : ''}`}>
             {showDeleteConfirm && (
                 <div className="modal-overlay" style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -437,7 +519,13 @@ export const Planner = ({ onBack, onSelectRecipe, onNavigateToOrderList }) => {
                 </div>
             </div>
 
-            <DndContext onDragEnd={handleDragEnd} sensors={sensors}>
+            <DndContext
+                sensors={sensors}
+                onDragStart={handleDragStart}
+                onDragCancel={handleDragCancel}
+                onDragEnd={handleDragEnd}
+                autoScroll={true}
+            >
                 <div className="planner-layout">
                     {/* Sidebar */}
                     <div className="recipe-sidebar">
@@ -514,6 +602,16 @@ export const Planner = ({ onBack, onSelectRecipe, onNavigateToOrderList }) => {
                         </div>
                     </div>
                 </div>
+                <DragOverlay>
+                    {activeDrag ? (
+                        <div className={`drag-overlay-card ${activeDrag.kind === 'meal' ? 'meal' : ''}`}>
+                            <span className="drag-overlay-title">{activeDrag.title}</span>
+                            {activeDrag.qtyStr && (
+                                <span className="drag-overlay-qty">{activeDrag.qtyStr}</span>
+                            )}
+                        </div>
+                    ) : null}
+                </DragOverlay>
             </DndContext>
         </div>
     );

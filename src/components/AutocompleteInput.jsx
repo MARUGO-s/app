@@ -8,7 +8,7 @@ import './AutocompleteInput.css';
  * Automatically searches for ingredients and displays suggestions.
  * Uses Portal to render suggestions on top of all other layers.
  */
-export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSelect }) => {
+export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSelect, name, required = false }) => {
     const [suggestions, setSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -172,6 +172,7 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
             <input
                 type="text"
                 className="input-field autocomplete-input"
+                name={name}
                 value={value}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
@@ -191,6 +192,7 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
                 }}
                 placeholder={placeholder}
                 disabled={disabled}
+                required={required}
             />
             {showSuggestions && createPortal(
                 <ul

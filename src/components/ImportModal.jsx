@@ -200,39 +200,55 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
         return /[ぁ-んァ-ン一-龠]/.test(text || '');
     };
 
+    const getStepText = (step) => {
+        if (typeof step === 'string') return step.trim();
+        if (step && typeof step === 'object') {
+            return String(step.text || step.name || '').trim();
+        }
+        return '';
+    };
+
     const translateRecipe = async (recipe) => {
         try {
             // Prepare text array for batch translation
             const textsToTranslate = [];
 
             // 1. Title
-            textsToTranslate.push(recipe.name || '');
+            textsToTranslate.push((recipe.name || recipe.title || '').trim());
             // 2. Description
-            textsToTranslate.push(recipe.description || '');
+            textsToTranslate.push((recipe.description || '').trim());
 
             // 3. Ingredients names
             const ingredientIndices = [];
             if (Array.isArray(recipe.ingredients)) {
                 recipe.ingredients.forEach((ing, idx) => {
-                    if (ing.name) {
-                        textsToTranslate.push(ing.name);
+                    if (typeof ing === 'string') {
+                        const text = ing.trim();
+                        if (!text) return;
+                        textsToTranslate.push(text);
+                        ingredientIndices.push(idx);
+                        return;
+                    }
+                    const text = String(ing?.name || ing?.text || '').trim();
+                    if (text) {
+                        textsToTranslate.push(text);
                         ingredientIndices.push(idx);
                     }
                 });
             }
 
             // 4. Steps
-            // We need to handle the fact that steps might be strings or objects in some contexts, but scrape-recipe returns strings usually?
-            // scrape-recipe/index.ts line 516 promises array of strings.
             const stepIndices = [];
             if (Array.isArray(recipe.steps)) {
                 recipe.steps.forEach((step, idx) => {
-                    textsToTranslate.push(step);
+                    const stepText = getStepText(step);
+                    if (!stepText) return;
+                    textsToTranslate.push(stepText);
                     stepIndices.push(idx);
                 });
             }
 
-            if (textsToTranslate.length === 0) return recipe;
+            if (!textsToTranslate.some(text => String(text || '').trim())) return recipe;
 
             // Call Translation API
             const { data, error } = await supabase.functions.invoke('translate', {
@@ -243,6 +259,9 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
             });
 
             if (error) throw error;
+            if (!Array.isArray(data?.translations)) {
+                throw new Error('Invalid translation response payload');
+            }
 
             const translatedTexts = data.translations.map(t => t.text);
 
@@ -251,16 +270,26 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
             const newRecipe = { ...recipe };
 
             // 1. Title
-            newRecipe.name = translatedTexts[cursor++] || newRecipe.name;
+            const translatedTitle = translatedTexts[cursor++] || newRecipe.name || newRecipe.title || '';
+            newRecipe.name = translatedTitle;
+            newRecipe.title = translatedTitle;
             // 2. Description
             newRecipe.description = translatedTexts[cursor++] || newRecipe.description;
 
             // 3. Ingredients
             if (ingredientIndices.length > 0) {
+                const translatedIngredientMap = new Map();
+                ingredientIndices.forEach((index, offset) => {
+                    translatedIngredientMap.set(index, translatedTexts[cursor + offset]);
+                });
                 newRecipe.ingredients = newRecipe.ingredients.map((ing, idx) => {
-                    const foundIndex = ingredientIndices.indexOf(idx);
-                    if (foundIndex !== -1) {
-                        return { ...ing, name: translatedTexts[cursor + foundIndex] };
+                    const translated = translatedIngredientMap.get(idx);
+                    if (!translated) return ing;
+                    if (typeof ing === 'string') {
+                        return translated;
+                    }
+                    if (ing && typeof ing === 'object') {
+                        return { ...ing, name: translated };
                     }
                     return ing;
                 });
@@ -269,12 +298,17 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
 
             // 4. Steps
             if (stepIndices.length > 0) {
+                const translatedStepMap = new Map();
+                stepIndices.forEach((index, offset) => {
+                    translatedStepMap.set(index, translatedTexts[cursor + offset]);
+                });
                 newRecipe.steps = newRecipe.steps.map((step, idx) => {
-                    const foundIndex = stepIndices.indexOf(idx);
-                    if (foundIndex !== -1) {
-                        return translatedTexts[cursor + foundIndex];
+                    const translated = translatedStepMap.get(idx);
+                    if (!translated) return step;
+                    if (step && typeof step === 'object') {
+                        return { ...step, text: translated };
                     }
-                    return step;
+                    return translated;
                 });
             }
 
@@ -503,6 +537,7 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
             let finalRecipe = data.recipe;
 
             // Normalize fields to ensure compatibility (backend might return title/servings or name/recipeYield)
+            finalRecipe.title = finalRecipe.title || finalRecipe.name || '';
             finalRecipe.name = finalRecipe.name || finalRecipe.title || '';
             finalRecipe.recipeYield = finalRecipe.recipeYield || finalRecipe.servings || '';
             // Ensure consistency for other components
@@ -545,7 +580,10 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
 
             // Check for foreign language (lack of Japanese) in Name or Steps
             // We check name and first few steps
-            const sampleText = (finalRecipe.name || '') + (finalRecipe.steps ? finalRecipe.steps.slice(0, 3).join('') : '');
+            const previewSteps = Array.isArray(finalRecipe.steps)
+                ? finalRecipe.steps.slice(0, 3).map(step => getStepText(step)).join('')
+                : '';
+            const sampleText = `${finalRecipe.name || finalRecipe.title || ''}${previewSteps}`;
 
             if (sampleText && !hasJapanese(sampleText)) {
                 // Switch to confirmation mode instead of window.confirm

@@ -19,3 +19,5 @@ samples/*
 # One-off debug outputs
 curl_output*.txt
 verify_price_service.txt
+status.txt
+debug_serve.log

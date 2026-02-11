@@ -672,7 +672,8 @@ function AppContent() {
     // Smart detection for Bread recipes (Baker's %)
     // 1. Check for explicit keywords in title/description
     const breadKeywords = ['ベーカーズ', 'baker', '生地', 'パン', '発酵', 'dough', 'fermentation'];
-    const titleMatch = breadKeywords.some(k => (recipeData.title || "").toLowerCase().includes(k));
+    const recipeTitle = (recipeData.title || recipeData.name || "");
+    const titleMatch = breadKeywords.some(k => recipeTitle.toLowerCase().includes(k));
 
     // 2. Check for yeast or flour keywords in ingredients
     const flourKeywords = ['flour', '強力粉', '薄力粉', '準強力粉', '中力粉', '全粒粉', 'ライ麦粉', 'フランス粉', 'デュラムセモリナ', '粉'];
