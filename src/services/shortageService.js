@@ -53,8 +53,9 @@ const normalizeByMasterIfNeeded = (name, qtyRaw, unitRaw, conv) => {
 };
 
 export const shortageService = {
-    async calculateShortages(user, startDateStr, endDateStr) {
+    async calculateShortages(user, startDateStr, endDateStr, options = {}) {
         if (!user?.id) throw new Error('User required');
+        const includeRecipeBreakdown = options?.includeRecipeBreakdown === true;
 
         // 1. Get Plans
         const allPlans = await plannerService.getAll(user.id);
@@ -73,7 +74,12 @@ export const shortageService = {
             }
         });
 
-        if (mealsToCook.length === 0) return [];
+        if (mealsToCook.length === 0) {
+            if (includeRecipeBreakdown) {
+                return { items: [], recipeBreakdown: [] };
+            }
+            return [];
+        }
 
         // 2. Fetch Recipes Details / Master Data
         const [allRecipes, conversions, csvPriceMap, inventoryRaw, csvUnitOverrides] = await Promise.all([
@@ -117,10 +123,24 @@ export const shortageService = {
 
         // 3. Aggregate Ingredients (normalized)
         const totals = {}; // name -> { quantity, unit }
+        const recipeBreakdownMap = new Map();
 
         mealsToCook.forEach(meal => {
             const recipe = recipesMap.get(meal.recipeId);
             if (!recipe) return;
+
+            let breakdownEntry = null;
+            if (includeRecipeBreakdown) {
+                const recipeKey = String(recipe.id);
+                if (!recipeBreakdownMap.has(recipeKey)) {
+                    recipeBreakdownMap.set(recipeKey, {
+                        recipeId: recipe.id,
+                        recipeTitle: recipe.title || `Recipe ${recipe.id}`,
+                        itemMap: new Map(),
+                    });
+                }
+                breakdownEntry = recipeBreakdownMap.get(recipeKey);
+            }
 
             let scale = 1;
 
@@ -167,6 +187,22 @@ export const shortageService = {
                 }
 
                 totals[name].quantity += qty;
+
+                if (includeRecipeBreakdown && breakdownEntry) {
+                    const breakdownKey = key || name;
+                    const existing = breakdownEntry.itemMap.get(breakdownKey);
+                    if (existing) {
+                        existing.required += qty;
+                        if (!existing.unit && unit) existing.unit = unit;
+                    } else {
+                        breakdownEntry.itemMap.set(breakdownKey, {
+                            ingredientKey: breakdownKey,
+                            name,
+                            required: qty,
+                            unit,
+                        });
+                    }
+                }
             });
         });
 
@@ -233,6 +269,20 @@ export const shortageService = {
             };
         }).filter(i => i.shouldShow);
 
-        return results;
+        if (!includeRecipeBreakdown) {
+            return results;
+        }
+
+        const recipeBreakdown = Array.from(recipeBreakdownMap.values()).map((section) => ({
+            recipeId: section.recipeId,
+            recipeTitle: section.recipeTitle,
+            items: Array.from(section.itemMap.values())
+                .filter((item) => Number(item.required || 0) > 0.0001),
+        }));
+
+        return {
+            items: results,
+            recipeBreakdown,
+        };
     }
 };
