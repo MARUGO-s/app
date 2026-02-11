@@ -12,6 +12,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { Input } from './Input';
 import { InventoryList } from './InventoryList';
+import { AutocompleteInput } from './AutocompleteInput';
 import './Inventory.css';
 import { Modal } from './Modal';
 import { useAuth } from '../contexts/useAuth';
@@ -33,6 +34,7 @@ export const Inventory = ({ onBack }) => {
     // Edit State
     const [isEditing, setIsEditing] = useState(false);
     const [editingItem, setEditingItem] = useState(null); // null = create
+    const [ingredientName, setIngredientName] = useState(''); // For autocomplete in registration form
 
     // Unit Sync Modal State
     const [unitSyncModalOpen, setUnitSyncModalOpen] = useState(false);
@@ -85,6 +87,15 @@ export const Inventory = ({ onBack }) => {
     const [summaryMonth, setSummaryMonth] = useState(''); // YYYY-MM
     const [historyMonth, setHistoryMonth] = useState(''); // YYYY-MM
     const [summaryOrderByMonth, setSummaryOrderByMonth] = useState({});
+
+    // Sync ingredientName with editingItem when it changes
+    useEffect(() => {
+        if (editingItem) {
+            setIngredientName(editingItem.name || '');
+        } else {
+            setIngredientName('');
+        }
+    }, [editingItem]);
     const [selectedSummaryVendor, setSelectedSummaryVendor] = useState('');
 
     const SummarySortableRow = ({ row, onVendorClick, isSelected }) => {
@@ -1276,6 +1287,7 @@ export const Inventory = ({ onBack }) => {
                     isNewFromCsv: true
                 });
                 setIsEditing(true);
+                setIngredientName(item.name || '');
             }
         }
     };
@@ -1685,6 +1697,57 @@ export const Inventory = ({ onBack }) => {
         return item.vendor === activeTab;
     });
 
+    // Handler for autocomplete selection - auto-fill master data
+    const handleIngredientSelect = (selectedItem) => {
+        if (!selectedItem) return;
+
+        // Search for matching master data
+        const nameKey = normalizeIngredientKey(selectedItem.name);
+        let masterData = null;
+
+        if (ingredientMasterMap && ingredientMasterMap.size > 0 && nameKey) {
+            // Try exact match first
+            masterData = ingredientMasterMap.get(selectedItem.name) || null;
+
+            // If not found, try normalized key match
+            if (!masterData) {
+                for (const [rawName, row] of ingredientMasterMap.entries()) {
+                    if (normalizeIngredientKey(rawName) === nameKey) {
+                        masterData = row;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Update editingItem with master data if available
+        if (masterData) {
+            const preferredUnit = masterData.packetUnit || editingItem?.unit || '';
+            const masterPricePerUnit = masterData.packetUnit ? masterUnitPriceFor(masterData, preferredUnit) : null;
+            const preferredPrice = masterPricePerUnit !== null
+                ? masterPricePerUnit
+                : (masterData.lastPrice || editingItem?.price || 0);
+
+            setEditingItem(prev => ({
+                ...prev,
+                name: selectedItem.name,
+                price: preferredPrice,
+                unit: preferredUnit,
+                vendor: masterData.vendor || prev?.vendor || '',
+                _master: {
+                    packetSize: masterData.packetSize,
+                    packetUnit: masterData.packetUnit,
+                    lastPrice: masterData.lastPrice,
+                    itemCategory: masterData.itemCategory,
+                    updatedAt: masterData.updatedAt
+                }
+            }));
+        } else {
+            // No master data, just update name
+            setEditingItem(prev => ({ ...prev, name: selectedItem.name }));
+        }
+    };
+
     if (isEditing) {
         // Pre-fill packet info if available in _master
         const currentPacketSize = editingItem?._master?.packetSize || '';
@@ -1699,7 +1762,14 @@ export const Inventory = ({ onBack }) => {
                     <form onSubmit={handleSave}>
                         <div className="form-group">
                             <label>材料名 <span className="badge-required">必須</span></label>
-                            <Input name="name" defaultValue={editingItem?.name} required placeholder="例: リロンデル" />
+                            <AutocompleteInput
+                                name="name"
+                                required
+                                value={ingredientName}
+                                onChange={(e) => setIngredientName(e.target.value)}
+                                onSelect={handleIngredientSelect}
+                                placeholder="例: リロンデル"
+                            />
                         </div>
 
                         <div className="form-row">
@@ -1828,7 +1898,7 @@ export const Inventory = ({ onBack }) => {
                         <Button
                             variant="primary"
                             className="inventory-header-actions__btn"
-                            onClick={() => { setEditingItem(null); setIsEditing(true); }}
+                            onClick={() => { setEditingItem(null); setIngredientName(''); setIsEditing(true); }}
                         >
                             + アイテム追加
                         </Button>
@@ -2116,7 +2186,7 @@ export const Inventory = ({ onBack }) => {
                                 loading={loading}
                                 onSearch={setSearchQuery}
                                 searchQuery={searchQuery}
-                                onEdit={(item) => { setEditingItem(item); setIsEditing(true); }}
+                                onEdit={(item) => { setEditingItem(item); setIngredientName(item?.name || ''); setIsEditing(true); }}
                                 onDelete={handleDelete}
                                 onUpdateQuantity={handleUpdateQuantity}
                                 onToggleTax={handleRequestToggleTax}

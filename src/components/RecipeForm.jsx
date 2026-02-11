@@ -210,11 +210,11 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
 
         setFormData(prev => ({
             ...prev,
-            title: importedData.name || prev.title,
+            title: importedData.name || importedData.title || prev.title,
             description: importedData.description || prev.description,
             category: sourceUrl ? 'URL取り込み' : (importedData.category || prev.category),
             image: importedData.image || prev.image,
-            servings: importedData.recipeYield || prev.servings,
+            servings: importedData.recipeYield || importedData.servings || prev.servings,
             ingredients: mappedIngredients,
             ingredientGroups: newGroups, // Set the groups
             steps: mappedSteps,

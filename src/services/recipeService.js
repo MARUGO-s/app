@@ -1082,14 +1082,15 @@ const fromDbFormat = (recipe) => {
     const normalizedTags = normalizeRecipeTags(recipe.tags);
 
     // UNPACKING STRATEGY:
-    // OPTIMIZATION: Check for lightweight metadata first (from List View)
-    if (recipe.ingredients_meta) {
-        type = recipe.ingredients_meta.type || 'normal';
-        // Ensure cleanIngredients is empty array to avoid UI issues
-        cleanIngredients = [];
-    }
-    // STANDARD: Check for _meta item in full ingredients list (from Detail View)
-    else if (Array.isArray(rawIngs) && rawIngs.length > 0 && rawIngs[0]._meta) {
+    // Prefer packed full ingredients data when available (detail fetch).
+    const hasPackedMetaInIngredients =
+        Array.isArray(rawIngs) &&
+        rawIngs.length > 0 &&
+        rawIngs[0] &&
+        typeof rawIngs[0] === 'object' &&
+        rawIngs[0]._meta;
+
+    if (hasPackedMetaInIngredients) {
         const meta = rawIngs[0];
         type = meta.type || 'normal';
 
@@ -1122,6 +1123,17 @@ const fromDbFormat = (recipe) => {
         } else {
             cleanIngredients = dataItems;
         }
+    } else if (recipe.ingredients_meta) {
+        // Lightweight metadata fallback (some list queries may provide only ingredients_meta).
+        // Do not wipe real ingredients if they are present.
+        type = recipe.ingredients_meta.type || 'normal';
+        if (Array.isArray(recipe.ingredients_meta.groups)) {
+            ingredientGroups = recipe.ingredients_meta.groups;
+        }
+        if (Array.isArray(recipe.ingredients_meta.stepGroups)) {
+            stepGroups = recipe.ingredients_meta.stepGroups;
+        }
+        cleanIngredients = Array.isArray(rawIngs) ? rawIngs : [];
     }
 
     // Reconstruct Steps with Group IDs if stepGroups have counts
