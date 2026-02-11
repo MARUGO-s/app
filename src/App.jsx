@@ -580,6 +580,16 @@ function AppContent() {
     setSearchParams({ view: 'list' });
   };
 
+  const handleLogout = async () => {
+    setIsMenuOpen(false);
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Logout failed:', error);
+      toast.warning('ログアウトに失敗しました。再度お試しください。');
+    }
+  };
+
   const handleSaveRecipe = async (recipe, isEdit) => {
     try {
       let savedRecipe;
@@ -1146,10 +1156,7 @@ function AppContent() {
 
                       <div className="menu-divider"></div>
 
-                      <Button variant="ghost" onClick={() => {
-                        logout();
-                        setIsMenuOpen(false);
-                      }}>
+                      <Button variant="ghost" onClick={handleLogout}>
                         <span style={{ marginRight: '8px' }}>🚪</span> ログアウト
                       </Button>
                     </div>

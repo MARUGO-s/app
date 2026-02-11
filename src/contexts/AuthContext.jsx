@@ -34,6 +34,7 @@ export const AuthProvider = ({ children }) => {
 
         const uid = sessionUser.id;
         const email = sessionUser.email || '';
+        let cachedUser = null;
 
         // 1. Optimistic Cache Load
         try {
@@ -43,6 +44,7 @@ export const AuthProvider = ({ children }) => {
                 // Verify it belongs to current user
                 if (parsed && parsed.id === uid) {
                     // console.log('[Auth] Loaded from cache:', parsed.displayId);
+                    cachedUser = parsed;
                     setUser(parsed);
                 }
             }
@@ -179,10 +181,22 @@ export const AuthProvider = ({ children }) => {
             }
         }
 
-        const displayId = profile?.display_id || getEmailLocalPart(email) || uid.slice(0, 8);
-        const rawRole = profile?.role || 'user';
+        const metaDisplayId = (sessionUser?.user_metadata?.display_id || '').toString().trim();
+        const displayId =
+            profile?.display_id ||
+            (metaDisplayId || '') ||
+            (cachedUser?.displayId || '') ||
+            getEmailLocalPart(email) ||
+            uid.slice(0, 8);
+
+        const rawRole =
+            profile?.role ||
+            sessionUser?.app_metadata?.role ||
+            cachedUser?.role ||
+            'user';
         const role = String(rawRole).trim().toLowerCase();
-        const showMasterRecipes = profile?.show_master_recipes === true;
+        const showMasterRecipes = (profile?.show_master_recipes === true)
+            || (profile?.show_master_recipes == null && cachedUser?.showMasterRecipes === true);
 
         const newUser = {
             id: uid,
@@ -311,9 +325,23 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const logout = useCallback(async () => {
-        await supabase.auth.signOut();
+        // Immediate local UI/session cache cleanup for reliable mobile logout UX.
         setUser(null);
         setIsPasswordRecovery(false);
+        try { localStorage.removeItem('auth_user_cache'); } catch { /* ignore */ }
+
+        try {
+            const { error } = await withTimeout(
+                supabase.auth.signOut({ scope: 'local' }),
+                3000,
+                'auth.signOut(local)'
+            );
+            if (error) {
+                console.warn('Logout (local scope) returned error:', error);
+            }
+        } catch (e) {
+            console.warn('Logout (local scope) failed/timed out:', e);
+        }
     }, []);
 
     const patchCurrentUserProfile = useCallback((patch) => {
