@@ -136,7 +136,7 @@ export const Planner = ({ onBack, onSelectRecipe, onNavigateToOrderList }) => {
         }),
         useSensor(TouchSensor, {
             activationConstraint: {
-                delay: 0,
+                delay: 70,
                 tolerance: 8,
             },
         }),
