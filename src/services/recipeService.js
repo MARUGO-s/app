@@ -156,6 +156,10 @@ export const recipeService = {
         return loadRecipeListCache(userId);
     },
 
+    saveCachedRecipes(recipes, userId) {
+        saveRecipeListCache(recipes, userId);
+    },
+
     async _resolveShowMasterPreference(currentUser, timeoutMs = 15000) {
         const fallback = currentUser?.showMasterRecipes === true;
         const userId = currentUser?.id;
@@ -218,7 +222,15 @@ export const recipeService = {
         }
     },
 
-    async fetchRecipes(currentUser, { timeoutMs = 15000, includeIngredients = true, includeSources = true } = {}) {
+    async fetchRecipes(currentUser, {
+        timeoutMs = 15000,
+        includeIngredients = true,
+        includeSources = true,
+        offset = 0,
+        limit = null,
+        skipCacheSave = false,
+        returnMeta = false,
+    } = {}) {
         if (!currentUser) {
             console.warn("fetchRecipes: No currentUser, returning empty list.");
             return [];
@@ -229,6 +241,10 @@ export const recipeService = {
         const showMasterPromise = isAdmin
             ? Promise.resolve(false)
             : this._resolveShowMasterPreference(currentUser, timeoutMs);
+
+        const safeOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
+        const safeLimit = Number.isInteger(limit) && limit > 0 ? limit : null;
+        let rawFetchedCount = 0;
 
         let allRecipes = [];
 
@@ -245,8 +261,13 @@ export const recipeService = {
                 q = q.order('created_at', { ascending: false });
             }
 
+            if (safeLimit != null) {
+                q = q.range(safeOffset, safeOffset + safeLimit - 1);
+            }
+
             const { data, error } = await withTimeout(q, queryTimeoutMs, 'recipes.select(list)');
             if (error) throw error;
+            rawFetchedCount = Array.isArray(data) ? data.length : 0;
             return (data || []).map(fromDbFormat);
         };
 
@@ -327,7 +348,11 @@ export const recipeService = {
             try {
                 const localData = localStorage.getItem('local_recipes');
                 if (localData) {
-                    allRecipes = JSON.parse(localData).map(r => typeof fromDbFormat === 'function' ? fromDbFormat(r) : r);
+                    const localRecipes = JSON.parse(localData).map(r => typeof fromDbFormat === 'function' ? fromDbFormat(r) : r);
+                    allRecipes = safeLimit != null
+                        ? localRecipes.slice(safeOffset, safeOffset + safeLimit)
+                        : localRecipes;
+                    rawFetchedCount = allRecipes.length;
                 } else {
                     throw lastError;
                 }
@@ -339,7 +364,15 @@ export const recipeService = {
 
         // 3. Apply Filtering Logic (App-side RLS)
         if (isAdmin) {
-            saveRecipeListCache(allRecipes, currentUser.id);
+            if (!skipCacheSave) {
+                saveRecipeListCache(allRecipes, currentUser.id);
+            }
+            if (returnMeta) {
+                return {
+                    recipes: allRecipes,
+                    hasMoreRaw: safeLimit != null ? rawFetchedCount === safeLimit : false,
+                };
+            }
             return allRecipes;
         }
 
@@ -382,7 +415,15 @@ export const recipeService = {
             return false;
         });
 
-        saveRecipeListCache(filtered, currentUser.id);
+        if (!skipCacheSave) {
+            saveRecipeListCache(filtered, currentUser.id);
+        }
+        if (returnMeta) {
+            return {
+                recipes: filtered,
+                hasMoreRaw: safeLimit != null ? rawFetchedCount === safeLimit : false,
+            };
+        }
         return filtered;
     },
 

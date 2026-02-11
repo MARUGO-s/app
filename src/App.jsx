@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom'; // Import useSearchParams
 import { Layout } from './components/Layout';
 import { RecipeList } from './components/RecipeList';
@@ -69,6 +69,29 @@ const LoadingScreen = ({
   </div>
 );
 
+const MOBILE_INITIAL_RECIPE_LIMIT = 24;
+const DESKTOP_INITIAL_RECIPE_LIMIT = 120;
+const MOBILE_RECIPE_PAGE_LIMIT = 64;
+const DESKTOP_RECIPE_PAGE_LIMIT = 180;
+const NO_STORE_VALUE = '__NO_STORE__';
+const OTHER_STORE_VALUE = '__OTHER_STORE__';
+
+const mergeRecipesById = (existing, incoming) => {
+  const seen = new Set((existing || []).map(r => String(r.id)));
+  const merged = [...(existing || [])];
+  for (const recipe of (incoming || [])) {
+    const key = String(recipe.id);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(recipe);
+  }
+  return merged;
+};
+
+const normalizeValue = (value) => (value || '').toString().replace(/\s+/g, ' ').trim();
+const normalizeKey = (value) => normalizeValue(value).toLowerCase();
+const KNOWN_STORE_KEYS = new Set(STORE_LIST.map(store => normalizeKey(store)).filter(Boolean));
+
 function AppContent() {
   const { user, logout, loading: authLoading, isPasswordRecovery } = useAuth();
   const toast = useToast();
@@ -81,6 +104,7 @@ function AppContent() {
   const [profilesById, setProfilesById] = useState({});
   const [profilesByDisplayId, setProfilesByDisplayId] = useState({});
   const [isFromCache, setIsFromCache] = useState(false); // true when showing cached data
+  const recipeLoadRequestRef = useRef(0);
 
   // Derived State from URL
   const rawView = searchParams.get('view');
@@ -188,26 +212,13 @@ function AppContent() {
     }
   }, [user?.id]); // Run once when user becomes available (or from cache)
 
-  // Initial data load should run only after auth is resolved and user exists.
+  // Load lightweight side data once auth is ready.
   useEffect(() => {
     if (authLoading) return;
     if (!user) return;
 
-    // Load all data in parallel for faster initial load
-    (async () => {
-      try {
-        const mainRecipePromise = currentView === 'trash' ? loadDeletedRecipes() : loadRecipes();
-
-        // Execute all three data loads in parallel
-        await Promise.all([
-          mainRecipePromise,
-          loadTrashCount(),
-          loadRecentHistory()
-        ]);
-      } catch (error) {
-        console.error('Error during initial data load:', error);
-      }
-    })();
+    loadTrashCount();
+    loadRecentHistory();
   }, [authLoading, user?.id]);
 
   // Admin helper: load all profiles so we can show "which user's recipe" in UI.
@@ -316,93 +327,167 @@ function AppContent() {
   };
 
   const loadRecipes = async () => {
+    if (!user) return;
+
+    const requestId = recipeLoadRequestRef.current + 1;
+    recipeLoadRequestRef.current = requestId;
+    const isStaleRequest = () => recipeLoadRequestRef.current !== requestId;
+
+    const initialLimit = isMobileScreen ? MOBILE_INITIAL_RECIPE_LIMIT : DESKTOP_INITIAL_RECIPE_LIMIT;
+    const pageLimit = isMobileScreen ? MOBILE_RECIPE_PAGE_LIMIT : DESKTOP_RECIPE_PAGE_LIMIT;
+
     try {
-      // If we already have cached data showing, don't show the full loading spinner.
-      // Instead, update silently in the background.
       if (!isFromCache) {
         setLoading(true);
       }
-      // Initial list view only needs lightweight recipe data (no full ingredients JSON),
-      // otherwise the first load can become very slow on large datasets.
-      const data = await recipeService.fetchRecipes(user, {
-        timeoutMs: 15000,
+
+      const firstChunk = await recipeService.fetchRecipes(user, {
+        timeoutMs: 12000,
         includeIngredients: false,
         includeSources: false,
+        offset: 0,
+        limit: initialLimit,
+        skipCacheSave: true,
+        returnMeta: true,
       });
-      setRecipes(data || []);
+      if (isStaleRequest()) return;
+
+      let mergedRecipes = firstChunk?.recipes || [];
+      let hasMoreRaw = firstChunk?.hasMoreRaw === true;
+      let offset = initialLimit;
+
+      setRecipes(mergedRecipes);
+
+      let hasShownInitialList = false;
+      if (!isFromCache && (mergedRecipes.length > 0 || !hasMoreRaw)) {
+        setLoading(false);
+        hasShownInitialList = true;
+      }
+
+      while (hasMoreRaw) {
+        const nextChunk = await recipeService.fetchRecipes(user, {
+          timeoutMs: 12000,
+          includeIngredients: false,
+          includeSources: false,
+          offset,
+          limit: pageLimit,
+          skipCacheSave: true,
+          returnMeta: true,
+        });
+        if (isStaleRequest()) return;
+
+        const chunkRecipes = nextChunk?.recipes || [];
+        if (chunkRecipes.length > 0) {
+          mergedRecipes = mergeRecipesById(mergedRecipes, chunkRecipes);
+          setRecipes(mergedRecipes);
+
+          if (!isFromCache && !hasShownInitialList) {
+            setLoading(false);
+            hasShownInitialList = true;
+          }
+        }
+
+        offset += pageLimit;
+        hasMoreRaw = nextChunk?.hasMoreRaw === true;
+
+        if (chunkRecipes.length === 0 && !hasMoreRaw) {
+          break;
+        }
+      }
+
+      if (isStaleRequest()) return;
+      recipeService.saveCachedRecipes(mergedRecipes, user.id);
     } catch (error) {
+      if (isStaleRequest()) return;
       console.error("Failed to fetch recipes:", error);
       toast.error(`レシピの読み込みに時間がかかっています。\nネットワークをご確認の上、再読み込みしてください。\n(${error?.message || 'unknown error'})`);
     } finally {
-      setLoading(false);
-      setIsFromCache(false);
+      if (!isStaleRequest()) {
+        setLoading(false);
+        setIsFromCache(false);
+      }
     }
   };
 
-  const normalizeValue = (value) => (value || '').toString().replace(/\s+/g, ' ').trim();
-  const normalizeKey = (value) => normalizeValue(value).toLowerCase();
-  const NO_STORE_VALUE = '__NO_STORE__';
-  const OTHER_STORE_VALUE = '__OTHER_STORE__';
+  const {
+    allCourses,
+    allCategories,
+    storeCounts,
+    noStoreCount,
+    otherStoreCount,
+    courseCounts,
+    categoryCounts,
+  } = useMemo(() => {
+    const nextAllCourses = [...new Set(recipes.map(r => normalizeValue(r.course)).filter(Boolean))];
+    const nextAllCategories = [...new Set(recipes.map(r => normalizeValue(r.category)).filter(Boolean))];
 
-  // Get unique courses and categories
-  const allCourses = [...new Set(recipes.map(r => normalizeValue(r.course)).filter(Boolean))];
-  const allCategories = [...new Set(recipes.map(r => normalizeValue(r.category)).filter(Boolean))];
+    const nextStoreCounts = recipes.reduce((acc, r) => {
+      const key = normalizeKey(r.storeName);
+      if (key) acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
 
-  // Calculate counts
-  const storeCounts = recipes.reduce((acc, r) => {
-    const key = normalizeKey(r.storeName);
-    if (key) acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
-  const knownStoreKeys = new Set(STORE_LIST.map(store => normalizeKey(store)).filter(Boolean));
-  const noStoreCount = recipes.reduce((acc, r) => {
-    const key = normalizeKey(r.storeName);
-    if (!key) return acc + 1;
-    return acc;
-  }, 0);
-  const otherStoreCount = recipes.reduce((acc, r) => {
-    const key = normalizeKey(r.storeName);
-    if (!key) return acc;
-    if (!knownStoreKeys.has(key)) return acc + 1;
-    return acc;
-  }, 0);
+    const nextNoStoreCount = recipes.reduce((acc, r) => {
+      const key = normalizeKey(r.storeName);
+      return key ? acc : acc + 1;
+    }, 0);
 
-  const courseCounts = recipes.reduce((acc, r) => {
-    const key = normalizeKey(r.course);
-    if (key) acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
+    const nextOtherStoreCount = recipes.reduce((acc, r) => {
+      const key = normalizeKey(r.storeName);
+      if (!key) return acc;
+      return KNOWN_STORE_KEYS.has(key) ? acc : acc + 1;
+    }, 0);
 
-  const categoryCounts = recipes.reduce((acc, r) => {
-    const key = normalizeKey(r.category);
-    if (key) acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
+    const nextCourseCounts = recipes.reduce((acc, r) => {
+      const key = normalizeKey(r.course);
+      if (key) acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    const nextCategoryCounts = recipes.reduce((acc, r) => {
+      const key = normalizeKey(r.category);
+      if (key) acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    return {
+      allCourses: nextAllCourses,
+      allCategories: nextAllCategories,
+      storeCounts: nextStoreCounts,
+      noStoreCount: nextNoStoreCount,
+      otherStoreCount: nextOtherStoreCount,
+      courseCounts: nextCourseCounts,
+      categoryCounts: nextCategoryCounts,
+    };
+  }, [recipes]);
 
   // Filter recipes based on Tag/Category/Store AND Search Query
-  const filteredRecipes = recipes.filter(recipe => {
-    // 1. Tag/Category/Store Filter
+  const filteredRecipes = useMemo(() => {
     const normalizedSelectedTag = normalizeKey(selectedTag);
-    const matchesTag =
-      selectedTag === 'すべて' ||
-      (selectedTag === 'recent' && recentIds.includes(recipe.id)) ||
-      (recipe.tags && recipe.tags.includes(selectedTag)) ||
-      (selectedTag === NO_STORE_VALUE && !normalizeKey(recipe.storeName)) ||
-      (selectedTag === OTHER_STORE_VALUE && normalizeKey(recipe.storeName) && !knownStoreKeys.has(normalizeKey(recipe.storeName))) ||
-      (recipe.category && normalizeKey(recipe.category) === normalizedSelectedTag) ||
-      (recipe.course && normalizeKey(recipe.course) === normalizedSelectedTag) ||
-      (recipe.storeName && normalizeKey(recipe.storeName) === normalizedSelectedTag);
-
-    // 2. Search Query Filter
     const query = searchQuery.toLowerCase().trim();
-    const matchesSearch =
-      !query ||
-      recipe.title.toLowerCase().includes(query) ||
-      (recipe.description && recipe.description.toLowerCase().includes(query)) ||
-      (recipe.ingredients && recipe.ingredients.some(ing => ing.name.toLowerCase().includes(query)));
 
-    return matchesTag && matchesSearch;
-  });
+    return recipes.filter(recipe => {
+      const storeKey = normalizeKey(recipe.storeName);
+      const matchesTag =
+        selectedTag === 'すべて' ||
+        (selectedTag === 'recent' && recentIds.includes(recipe.id)) ||
+        (recipe.tags && recipe.tags.includes(selectedTag)) ||
+        (selectedTag === NO_STORE_VALUE && !storeKey) ||
+        (selectedTag === OTHER_STORE_VALUE && storeKey && !KNOWN_STORE_KEYS.has(storeKey)) ||
+        (recipe.category && normalizeKey(recipe.category) === normalizedSelectedTag) ||
+        (recipe.course && normalizeKey(recipe.course) === normalizedSelectedTag) ||
+        (recipe.storeName && storeKey === normalizedSelectedTag);
+
+      if (!matchesTag) return false;
+      if (!query) return true;
+
+      return (
+        (recipe.title || '').toLowerCase().includes(query) ||
+        (recipe.description && recipe.description.toLowerCase().includes(query)) ||
+        (Array.isArray(recipe.ingredients) && recipe.ingredients.some(ing => (ing?.name || '').toLowerCase().includes(query)))
+      );
+    });
+  }, [recipes, selectedTag, recentIds, searchQuery]);
 
   const isDragEnabled = selectedTag === 'すべて' && !searchQuery.trim() && currentView === 'list';
 
@@ -463,6 +548,7 @@ function AppContent() {
 
   const loadDeletedRecipes = async () => {
     try {
+      recipeLoadRequestRef.current += 1; // Cancel any in-flight incremental list loading.
       setLoading(true);
       const data = await recipeService.fetchDeletedRecipes();
       setRecipes(data || []);
@@ -476,12 +562,10 @@ function AppContent() {
 
   const handleSwitchToTrash = () => {
     setSearchParams({ view: 'trash' });
-    loadDeletedRecipes();
   };
 
   const handleSwitchToMain = () => {
     setSearchParams({ view: 'list' });
-    loadRecipes();
   };
 
   const handleSaveRecipe = async (recipe, isEdit) => {
