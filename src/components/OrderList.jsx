@@ -1,10 +1,6 @@
 import React, { useState } from 'react';
 import { plannerService } from '../services/plannerService';
 import { recipeService } from '../services/recipeService';
-import { inventoryService } from '../services/inventoryService';
-import { purchasePriceService } from '../services/purchasePriceService';
-import { unitConversionService } from '../services/unitConversionService';
-import { csvUnitOverrideService } from '../services/csvUnitOverrideService';
 import { shortageService } from '../services/shortageService';
 import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
 import { Button } from './Button';
@@ -20,6 +16,7 @@ export const OrderList = ({ onBack, onNavigateToPlanner }) => {
     const [endDate, setEndDate] = useState(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)); // +7 days
 
     const [orderItems, setOrderItems] = useState([]);
+    const [recipeBreakdownSections, setRecipeBreakdownSections] = useState([]);
     const [loading, setLoading] = useState(false);
     const [generated, setGenerated] = useState(false);
 
@@ -34,6 +31,25 @@ export const OrderList = ({ onBack, onNavigateToPlanner }) => {
         window.recipeService = recipeService;
     }, []);
 
+    const shortageKeySet = React.useMemo(() => {
+        const keys = new Set();
+        (orderItems || []).forEach((item) => {
+            const k = normalizeIngredientKey(item?.name);
+            keys.add(k || item?.name || '');
+        });
+        return keys;
+    }, [orderItems]);
+
+    const shortageItemByKey = React.useMemo(() => {
+        const map = new Map();
+        (orderItems || []).forEach((item) => {
+            const k = normalizeIngredientKey(item?.name) || item?.name || '';
+            if (!k) return;
+            if (!map.has(k)) map.set(k, item);
+        });
+        return map;
+    }, [orderItems]);
+
     const generateList = async () => {
         setLoading(true);
         try {
@@ -44,7 +60,11 @@ export const OrderList = ({ onBack, onNavigateToPlanner }) => {
             }
 
             // Using the new shared service
-            const results = await shortageService.calculateShortages(user, startDate, endDate);
+            const payload = await shortageService.calculateShortages(user, startDate, endDate, {
+                includeRecipeBreakdown: true,
+            });
+            const results = Array.isArray(payload) ? payload : (payload?.items || []);
+            const breakdown = Array.isArray(payload) ? [] : (payload?.recipeBreakdown || []);
 
             if (results.length === 0) {
                 // Check if it's because of no plans or just no shortages?
@@ -61,6 +81,7 @@ export const OrderList = ({ onBack, onNavigateToPlanner }) => {
             }
 
             setOrderItems(results);
+            setRecipeBreakdownSections(breakdown);
             setGenerated(true);
 
         } catch (e) {
@@ -229,32 +250,80 @@ export const OrderList = ({ onBack, onNavigateToPlanner }) => {
                             期間: {startDate} 〜 {endDate}
                         </p>
                     </div>
-                    <table className="print-preview-table">
-                        <thead>
-                            <tr>
-                                <th>材料名</th>
-                                <th style={{ textAlign: 'right' }}>必要量</th>
-                                <th style={{ textAlign: 'right' }}>残在庫</th>
-                                <th style={{ textAlign: 'right' }}>発注量</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {orderItems.map((item, idx) => (
-                                <tr key={idx}>
-                                    <td>{item.name}</td>
-                                    <td style={{ textAlign: 'right' }}>{item.required.toFixed(1)} {item.unit}</td>
-                                    <td style={{ textAlign: 'right' }}>
-                                        {Math.max(0, (item.remaining ?? 0)).toFixed(1)} {item.unit}
-                                    </td>
-                                    <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                                        {Number.isFinite(item.orderPacks) && item.orderPacks !== null
-                                            ? `${item.orderPacks}${item.orderUnit}`
-                                            : `${item.toOrder.toFixed(1)} ${item.unit}`}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                    {recipeBreakdownSections.length > 0 && (
+                        <div className="recipe-breakdown-print">
+                            <h4>レシピ別 発注目安</h4>
+                            {recipeBreakdownSections.map((section, idx) => {
+                                const rows = (section.items || []).filter((row) => {
+                                    const k = row.ingredientKey || normalizeIngredientKey(row.name) || row.name;
+                                    return shortageKeySet.has(k);
+                                });
+                                if (rows.length === 0) return null;
+
+                                return (
+                                    <section
+                                        key={`${section.recipeId || section.recipeTitle || idx}`}
+                                        className="recipe-breakdown-section"
+                                    >
+                                        <div className="recipe-breakdown-section-title">{section.recipeTitle}</div>
+                                        <table className="recipe-breakdown-table">
+                                            <colgroup>
+                                                <col className="rb-col-name" />
+                                                <col className="rb-col-required" />
+                                                <col className="rb-col-stock" />
+                                                <col className="rb-col-spec" />
+                                            </colgroup>
+                                            <thead>
+                                                <tr>
+                                                    <th>材料名</th>
+                                                    <th style={{ textAlign: 'right' }}>必要量</th>
+                                                    <th style={{ textAlign: 'right' }}>残在庫</th>
+                                                    <th style={{ textAlign: 'right' }}>規格</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {rows.map((row, rowIdx) => {
+                                                    const k = row.ingredientKey || normalizeIngredientKey(row.name) || row.name;
+                                                    const shortage = shortageItemByKey.get(k);
+                                                    const unit = shortage?.unit || row.unit || '';
+                                                    const remaining = Math.max(0, Number(shortage?.remaining ?? 0));
+                                                    const vendor = (shortage?.vendor || '').trim();
+                                                    const specText = (shortage?.packSize && shortage?.packUnit)
+                                                        ? `1${shortage.orderUnit || ''} = ${Number(shortage.packSize).toLocaleString()}${shortage.packUnit}${shortage.packPrice ? ` / ¥${Math.round(shortage.packPrice).toLocaleString()}` : ''}`
+                                                        : '-';
+
+                                                    return (
+                                                        <tr key={`${row.ingredientKey || row.name || rowIdx}-${rowIdx}`}>
+                                                            <td>
+                                                                {row.name}
+                                                                {vendor && (
+                                                                    <span className="recipe-material-vendor">：{vendor}</span>
+                                                                )}
+                                                            </td>
+                                                            <td style={{ textAlign: 'right' }}>
+                                                                {Number(row.required || 0).toFixed(1)} {row.unit || ''}
+                                                            </td>
+                                                            <td style={{ textAlign: 'right' }}>
+                                                                {remaining.toFixed(1)} {unit}
+                                                            </td>
+                                                            <td style={{ textAlign: 'right', color: '#666', fontWeight: 'normal' }}>
+                                                                {specText}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </section>
+                                );
+                            })}
+                        </div>
+                    )}
+                    {recipeBreakdownSections.length === 0 && (
+                        <p style={{ margin: 0, fontSize: '0.95rem', color: '#374151' }}>
+                            発注が必要な材料はありません（在庫で足ります）。
+                        </p>
+                    )}
                     <div className="modal-actions">
                         <Button variant="primary" onClick={() => window.print()}>
                             🖨️ 印刷する
