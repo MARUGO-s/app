@@ -16,6 +16,7 @@ import { IncomingDeliveries } from './components/IncomingDeliveries';
 import { IncomingStock } from './components/IncomingStock';
 import { Planner } from './components/Planner';
 import { OrderList } from './components/OrderList';
+import ApiUsageLogs from './components/ApiUsageLogs';
 import { recipeService } from './services/recipeService';
 import { userService } from './services/userService';
 import { STORE_LIST } from './constants';
@@ -679,6 +680,16 @@ function AppContent() {
   }, [currentView, selectedRecipeId]);
 
   const handleImportRecipe = (recipeData, sourceUrl = '') => {
+    // Force RecipeForm remount even when importing multiple times in the same "create" view.
+    // (RecipeForm initializes local state from initialData only on mount.)
+    try {
+      recipeData.__importId = (globalThis.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    } catch {
+      recipeData.__importId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    }
+
     // Smart detection for Bread recipes (Baker's %)
     // 1. Check for explicit keywords in title/description
     const breadKeywords = ['ベーカーズ', 'baker', '生地', 'パン', '発酵', 'dough', 'fermentation'];
@@ -1118,20 +1129,26 @@ function AppContent() {
                           <Button variant="secondary" onClick={() => { setSearchParams({ view: 'planner' }); setIsMenuOpen(false); }}>
                             <span style={{ marginRight: '8px' }}>📅</span> 仕込みカレンダー
                           </Button>
+                          <Button variant="secondary" onClick={() => { setSearchParams({ view: 'order-list' }); setIsMenuOpen(false); }}>
+                            <span style={{ marginRight: '8px' }}>🛒</span> 発注リスト
+                          </Button>
                           <div className="menu-divider"></div>
+
                           <Button variant="secondary" onClick={() => { setSearchParams({ view: 'data' }); setIsMenuOpen(false); }}>
                             <span style={{ marginRight: '8px' }}>📊</span> データ管理
                           </Button>
 
                           {user?.role === 'admin' && (
-                            <Button variant="secondary" onClick={() => { setSearchParams({ view: 'users' }); setIsMenuOpen(false); }}>
-                              <span style={{ marginRight: '8px' }}>👥</span> ユーザー管理
-                            </Button>
+                            <>
+                              <Button variant="secondary" onClick={() => { setSearchParams({ view: 'users' }); setIsMenuOpen(false); }}>
+                                <span style={{ marginRight: '8px' }}>👥</span> ユーザー管理
+                              </Button>
+                              <Button variant="secondary" onClick={() => { setSearchParams({ view: 'api-logs' }); setIsMenuOpen(false); }}>
+                                <span style={{ marginRight: '8px' }}>📊</span> API使用ログ
+                              </Button>
+                            </>
                           )}
-                          <div className="menu-divider"></div>
-                          <Button variant="secondary" onClick={() => { setSearchParams({ view: 'order-list' }); setIsMenuOpen(false); }}>
-                            <span style={{ marginRight: '8px' }}>🛒</span> 発注リスト
-                          </Button>
+
 
                           <div className="menu-divider"></div>
                         </>
@@ -1390,7 +1407,7 @@ function AppContent() {
 
       {currentView === 'create' && (
         <RecipeForm
-          key={importedData ? 'create-form-imported' : 'create-form'}
+          key={importedData?.__importId ? `create-form-imported-${importedData.__importId}` : 'create-form'}
           initialData={importedData}
           onCancel={() => {
             setSearchParams({ view: 'list' });
@@ -1446,6 +1463,22 @@ function AppContent() {
           onBack={() => setSearchParams({ view: 'list' })}
           onNavigateToPlanner={() => setSearchParams({ view: 'planner' })}
         />
+      )}
+
+      {currentView === 'api-logs' && user?.role === 'admin' && (
+        <>
+          <div style={{ padding: '20px 20px 0', textAlign: 'left' }}>
+            <Button onClick={() => setSearchParams({ view: 'list' })}>
+              ← レシピリストに戻る
+            </Button>
+          </div>
+          <ApiUsageLogs />
+          <div style={{ padding: '20px', textAlign: 'center' }}>
+            <Button onClick={() => setSearchParams({ view: 'list' })}>
+              ← レシピリストに戻る
+            </Button>
+          </div>
+        </>
       )}
     </Layout>
   );

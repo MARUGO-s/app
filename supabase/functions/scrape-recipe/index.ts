@@ -1,21 +1,38 @@
 // import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 // Import Cheerio for reliable HTML parsing
 import * as cheerio from "npm:cheerio@1.0.0-rc.12"
+import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts"
+
+const corsHeaders: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-user-jwt, x-client-info, apikey, content-type',
+}
 
 console.log("Scrape Recipe Function Initialized v6 (Universal)")
 
 Deno.serve(async (req) => {
-  // CORS Preflight
   if (req.method === 'OPTIONS') {
-    return new Response('ok', {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-      }
-    })
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    // JWT検証（--no-verify-jwt でデプロイし、ここで検証する）
+    const token = getAuthToken(req)
+    if (!token) {
+      return new Response(JSON.stringify({ error: '認証が必要です。再ログインしてください。' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    try {
+      await verifySupabaseJWT(token)
+    } catch (_e) {
+      return new Response(JSON.stringify({ error: 'トークンが無効または期限切れです。再ログインしてください。' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     const { url } = await req.json()
 
     if (!url) {

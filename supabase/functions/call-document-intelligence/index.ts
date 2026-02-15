@@ -43,11 +43,11 @@ serve(async (req) => {
     });
 
     // Azure Document Intelligence API キー（環境変数から取得）
-    const apiKey = Deno.env.get('AZURE_DOCUMENT_INTELLIGENCE_KEY');
-    const endpoint = Deno.env.get('AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT');
+    const apiKey = Deno.env.get('AZURE_DOCUMENT_INTELLIGENCE_KEY') || Deno.env.get('AZURE_DI_KEY');
+    const endpoint = Deno.env.get('AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT') || Deno.env.get('AZURE_DI_ENDPOINT');
     
     if (!apiKey || !endpoint) {
-      throw new Error('Azure Document Intelligence API キーまたはエンドポイントが設定されていません');
+      throw new Error('Azure Document Intelligence の APIキー/エンドポイントが設定されていません（AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT / AZURE_DOCUMENT_INTELLIGENCE_KEY もしくは AZURE_DI_ENDPOINT / AZURE_DI_KEY）');
     }
 
     console.log('🔑 Using Azure Document Intelligence API');

@@ -74,6 +74,7 @@ const UnitConversionModal = ({
 
                                 if (u === 'kg') { size *= 1000; u = 'g'; }
                                 else if (u === 'l') { size *= 1000; u = 'ml'; }
+                                else if (u === 'cl') { size *= 10; u = 'ml'; }
                                 else if (u === 'pk' || u === 'pack') u = 'パック';
                                 else if (u === 'bag') u = '袋';
                                 else if (u === 'pc' || u === 'pcs') u = '個';
@@ -124,6 +125,12 @@ const UnitConversionModal = ({
         if (['g', 'ml', 'cc'].includes(packetUnit)) {
             return (price / size) * 1000;
         }
+        if (packetUnit === 'cl') {
+            return (price / size) * 100;
+        }
+        if (['kg', 'l'].includes(packetUnit)) {
+            return price / size;
+        }
         return price / size;
     };
 
@@ -147,7 +154,12 @@ const UnitConversionModal = ({
 
     const normalizedCost = calculateNormalizedCost();
     // Preview usage cost
-    const usageCost = currentQuantity ? (normalizedCost * (currentQuantity / (['g', 'ml'].includes(unit) ? 1000 : 1))) : 0;
+    const u = String(unit || '').trim().toLowerCase();
+    const usageCost = currentQuantity ? (() => {
+        if (u === 'cl' || u === 'ｃｌ') return normalizedCost * (currentQuantity * 10 / 1000);
+        if (['g', 'ml', 'cc'].includes(u)) return normalizedCost * (currentQuantity / 1000);
+        return normalizedCost * currentQuantity;
+    })() : 0;
 
     const modal = (
         <div
@@ -201,7 +213,8 @@ const UnitConversionModal = ({
                                     <option value="枚">枚</option>
                                     <option value="パック">p</option>
                                     <option value="cc">cc</option>
-                                    {!['g', 'ml', '個', '袋', '本', '枚', 'パック', 'cc'].includes(packetUnit) && (
+                                    <option value="cl">cl</option>
+                                    {!['g', 'ml', '個', '袋', '本', '枚', 'パック', 'cc', 'cl'].includes(packetUnit) && (
                                         <option value={packetUnit}>{packetUnit}</option>
                                     )}
                                 </select>

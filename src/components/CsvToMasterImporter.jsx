@@ -742,7 +742,7 @@ const CsvToMasterImporter = () => {
                                             style={{ width: '100%', padding: '8px', cursor: 'pointer' }}
                                         >
                                             {/* If current unit is not in list, show it as an option to preserve data */}
-                                            {!['g', 'kg', 'ml', 'L', 'cc', '個', '本', '枚', '袋', 'PC', '箱', '缶', '包'].includes(item.inputUnit) && item.inputUnit && (
+                                            {!['g', 'kg', 'ml', 'L', 'cc', 'cl', '個', '本', '枚', '袋', 'PC', '箱', '缶', '包'].includes(item.inputUnit) && item.inputUnit && (
                                                 <option value={item.inputUnit}>{item.inputUnit} (CSVの値)</option>
                                             )}
                                             <option value="">単位を選択</option>
@@ -751,6 +751,7 @@ const CsvToMasterImporter = () => {
                                             <option value="ml">ml</option>
                                             <option value="L">L</option>
                                             <option value="cc">cc</option>
+                                            <option value="cl">cl</option>
                                             <option value="個">個</option>
                                             <option value="本">本</option>
                                             <option value="枚">枚</option>

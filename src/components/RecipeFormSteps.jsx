@@ -22,6 +22,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Button } from './Button';
 import { Input } from './Input';
 import { Card } from './Card';
+import { VoiceInputButton } from './VoiceInputButton';
 
 // --- Sortable Item Component ---
 const SortableStepItem = ({
@@ -29,8 +30,10 @@ const SortableStepItem = ({
     index,
     item,
     groupId,
+    voiceInputEnabled,
     onChange,
-    onRemove
+    onRemove,
+    onVoiceAppend,
 }) => {
     const {
         attributes,
@@ -81,6 +84,15 @@ const SortableStepItem = ({
                     placeholder={`手順 ${index + 1}...`}
                     style={{ minHeight: '60px', width: '100%' }}
                 />
+                {voiceInputEnabled && (
+                    <div className="step-row__voice-action">
+                        <VoiceInputButton
+                            label="手順を音声入力"
+                            getCurrentValue={() => item.text}
+                            onTranscript={(nextValue) => onVoiceAppend(groupId, index, nextValue)}
+                        />
+                    </div>
+                )}
             </div>
 
             <div className="remove-button-cell">
@@ -127,7 +139,7 @@ const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, 
 };
 
 
-export const RecipeFormSteps = ({ formData, setFormData }) => {
+export const RecipeFormSteps = ({ formData, setFormData, voiceInputEnabled = false }) => {
     // Initialize sections from formData
     useEffect(() => {
         if (!formData.stepSections) {
@@ -308,6 +320,18 @@ export const RecipeFormSteps = ({ formData, setFormData }) => {
         }));
     };
 
+    const handleVoiceAppend = (groupId, index, nextValue) => {
+        setFormData(prev => ({
+            ...prev,
+            stepSections: prev.stepSections.map(s => {
+                if (s.id !== groupId) return s;
+                const newItems = [...s.items];
+                newItems[index] = { ...newItems[index], text: nextValue };
+                return { ...s, items: newItems };
+            }),
+        }));
+    };
+
     const handleAddItem = (groupId) => {
         const newItem = { id: crypto.randomUUID(), text: '' };
         setFormData(prev => ({
@@ -365,8 +389,10 @@ export const RecipeFormSteps = ({ formData, setFormData }) => {
                                     index={index}
                                     item={item}
                                     groupId={section.id}
+                                    voiceInputEnabled={voiceInputEnabled}
                                     onChange={handleItemChange}
                                     onRemove={handleRemoveItem}
+                                    onVoiceAppend={handleVoiceAppend}
                                 />
                             ))}
                             <Button

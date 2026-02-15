@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { userService } from '../services/userService';
+import { featureFlagService } from '../services/featureFlagService';
 import { useAuth } from '../contexts/useAuth';
 import { IngredientMaster } from './IngredientMaster';
 import { Button } from './Button';
@@ -45,6 +46,10 @@ export const DataManagement = ({ onBack }) => {
     const [copyProgress, setCopyProgress] = useState({ total: 0, done: 0, current: '' });
     const [copyResult, setCopyResult] = useState(null); // { type, message, failed?: [] }
     const [copyConfirming, setCopyConfirming] = useState(false);
+    const [voiceFlagLoading, setVoiceFlagLoading] = useState(false);
+    const [voiceFlagSaving, setVoiceFlagSaving] = useState(false);
+    const [voiceFlagEnabled, setVoiceFlagEnabled] = useState(false);
+    const [voiceFlagStatus, setVoiceFlagStatus] = useState({ type: '', message: '' });
 
     // Duplicate/History tab state
     const [dupLoading, setDupLoading] = useState(false);
@@ -131,6 +136,60 @@ export const DataManagement = ({ onBack }) => {
     useEffect(() => {
         loadData();
     }, []);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const loadVoiceFlag = async () => {
+            if (activeTab !== 'price') return;
+            if (user?.role !== 'admin') {
+                if (isMounted) {
+                    setVoiceFlagLoading(false);
+                    setVoiceFlagEnabled(false);
+                }
+                return;
+            }
+
+            setVoiceFlagLoading(true);
+            try {
+                const enabled = await featureFlagService.getVoiceInputEnabled({ force: true });
+                if (!isMounted) return;
+                setVoiceFlagEnabled(enabled);
+                setVoiceFlagStatus({ type: '', message: '' });
+            } catch (error) {
+                console.error('Failed to load voice feature flag:', error);
+                if (!isMounted) return;
+                setVoiceFlagStatus({ type: 'error', message: '音声入力設定の取得に失敗しました。' });
+            } finally {
+                if (isMounted) setVoiceFlagLoading(false);
+            }
+        };
+
+        loadVoiceFlag();
+        return () => {
+            isMounted = false;
+        };
+    }, [activeTab, user?.id, user?.role]);
+
+    const handleToggleVoiceInput = async (nextEnabled) => {
+        if (user?.role !== 'admin' || voiceFlagSaving) return;
+
+        setVoiceFlagSaving(true);
+        setVoiceFlagStatus({ type: 'info', message: '保存中...' });
+        try {
+            const saved = await featureFlagService.setVoiceInputEnabled(nextEnabled);
+            setVoiceFlagEnabled(saved);
+            setVoiceFlagStatus({
+                type: 'success',
+                message: `音声入力を${saved ? '有効化' : '無効化'}しました。`,
+            });
+        } catch (error) {
+            console.error('Failed to save voice feature flag:', error);
+            setVoiceFlagStatus({ type: 'error', message: '音声入力設定の保存に失敗しました。' });
+        } finally {
+            setVoiceFlagSaving(false);
+        }
+    };
 
     const loadDuplicates = async () => {
         setDupLoading(true);
@@ -461,6 +520,40 @@ export const DataManagement = ({ onBack }) => {
                     </button>
                 </div>
             </div>
+
+            {user?.role === 'admin' && activeTab === 'price' && (
+                <div className="voice-feature-card">
+                    <div className="voice-feature-card__left">
+                        <div className="voice-feature-card__title">🎤 音声入力（Avalon API）</div>
+                        <div className="voice-feature-card__desc">
+                            全アカウントの音声入力機能を一括でON/OFFします。
+                        </div>
+                    </div>
+                    <div className="voice-feature-card__right">
+                        <label className={`voice-feature-switch ${voiceFlagEnabled ? 'is-on' : ''}`}>
+                            <input
+                                type="checkbox"
+                                checked={voiceFlagEnabled}
+                                onChange={(e) => handleToggleVoiceInput(e.target.checked)}
+                                disabled={voiceFlagLoading || voiceFlagSaving}
+                            />
+                            <span className="voice-feature-switch__slider" />
+                        </label>
+                        <div className="voice-feature-card__state">
+                            {voiceFlagLoading
+                                ? '読み込み中...'
+                                : voiceFlagEnabled
+                                    ? '現在: 有効'
+                                    : '現在: 無効'}
+                        </div>
+                    </div>
+                    {voiceFlagStatus.message && (
+                        <div className={`status-msg ${voiceFlagStatus.type || 'info'}`} style={{ marginTop: '10px', width: '100%' }}>
+                            {voiceFlagStatus.message}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {activeTab === 'ingredients' ? (
                 <IngredientMaster />

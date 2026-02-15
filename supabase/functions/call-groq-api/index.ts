@@ -173,8 +173,7 @@ serve(async (req) => {
     
     console.log("🔑 APIキー確認:", { 
       hasApiKey: !!apiKey,
-      keyLength: apiKey?.length || 0,
-      keyPrefix: apiKey?.substring(0, 10) || "N/A"
+      keyLength: apiKey?.length || 0
     });
 
     let messages = buildMessagesFromPayload(body);

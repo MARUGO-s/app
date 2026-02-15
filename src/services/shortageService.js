@@ -5,6 +5,7 @@ import { purchasePriceService } from './purchasePriceService';
 import { unitConversionService } from './unitConversionService';
 import { csvUnitOverrideService } from './csvUnitOverrideService';
 import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
+import { MEASURABLE_UNITS } from '../utils/unitUtils.js';
 
 const normalize = (s) => (s ?? '').toString().trim();
 const normalizeUnit = (u) => {
@@ -16,6 +17,7 @@ const normalizeUnit = (u) => {
     if (lower === 'ｃｃ') return 'cc';
     if (lower === 'ｋｇ') return 'kg';
     if (lower === 'ｌ') return 'l';
+    if (lower === 'ｃｌ') return 'cl';
     return lower;
 };
 
@@ -33,6 +35,7 @@ const toBaseUnit = (qtyRaw, unitRaw) => {
     if (u === 'l') return { qty: qty * 1000, unit: 'ml' };
     if (u === 'cc') return { qty, unit: 'ml' };
     if (u === 'ml') return { qty, unit: 'ml' };
+    if (u === 'cl') return { qty: qty * 10, unit: 'ml' }; // 1 cl = 10 ml（海外表記）
     return { qty, unit: normalize(unitRaw) || '' };
 };
 
@@ -44,7 +47,7 @@ const normalizeByMasterIfNeeded = (name, qtyRaw, unitRaw, conv) => {
     const packetUnit = normalizeUnit(conv.packetUnit);
     if (!Number.isFinite(packetSize) || packetSize <= 0 || !packetUnit) return toBaseUnit(qty, unit);
 
-    const masterIsMeasurable = ['g', 'kg', 'ml', 'cc', 'l'].includes(packetUnit);
+    const masterIsMeasurable = MEASURABLE_UNITS.includes(packetUnit);
     if (masterIsMeasurable && isCountUnit(unit)) {
         const content = qty * packetSize;
         return toBaseUnit(content, packetUnit);

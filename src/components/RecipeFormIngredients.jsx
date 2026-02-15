@@ -22,6 +22,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Button } from './Button';
 import { Input } from './Input';
 import { Card } from './Card';
+import { VoiceInputButton } from './VoiceInputButton';
 import UnitConversionModal from './UnitConversionModal';
 import { unitConversionService } from '../services/unitConversionService';
 import { ingredientSearchService } from '../services/ingredientSearchService';
@@ -115,6 +116,9 @@ const normalizePurchaseCostByConversion = (basePrice, packetSize, packetUnit) =>
     if (['kg', 'ｋｇ', 'l', 'ｌ'].includes(pu)) {
         return safeBase / safePacketSize;
     }
+    if (['cl', 'ｃｌ'].includes(pu)) {
+        return (safeBase / safePacketSize) * 100;
+    }
     return safeBase / safePacketSize;
 };
 
@@ -127,6 +131,8 @@ const calculateCostByUnit = (quantity, purchaseCost, unit, yieldRate = 1) => {
     let base = 0;
     if (['g', 'ｇ', 'ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(normalizedUnit)) {
         base = (qty / 1000) * pCost;
+    } else if (['cl', 'ｃｌ'].includes(normalizedUnit)) {
+        base = (qty * 10 / 1000) * pCost;
     } else {
         base = qty * pCost;
     }
@@ -192,13 +198,22 @@ const SortableIngredientItem = React.memo(({
                 ⋮⋮
             </div>
 
-            <div className="ingredient-name">
+            <div className="ingredient-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <AutocompleteInput
                     value={item.name}
                     onChange={(e) => onChange(groupId, index, 'name', e.target.value)}
                     onSelect={(selectedItem) => handleSuggestionSelect(groupId, index, selectedItem)}
                     placeholder="材料名"
                 />
+                <div style={{ flexShrink: 0 }}>
+                    <VoiceInputButton
+                        size="xs"
+                        label=""
+                        getCurrentValue={() => item.name}
+                        onTranscript={(nextValue) => onChange(groupId, index, 'name', nextValue)}
+                        className="ingredient-voice-btn"
+                    />
+                </div>
             </div>
 
             <div className="ingredient-qty">
@@ -614,6 +629,8 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                         let baseCost = 0;
                         if (u === 'g' || u === 'ｇ' || u === 'ml' || u === 'ｍｌ' || u === 'cc' || u === 'ｃｃ') {
                             baseCost = (qty / 1000) * pCost;
+                        } else if (u === 'cl' || u === 'ｃｌ') {
+                            baseCost = (qty * 10 / 1000) * pCost;
                         } else {
                             baseCost = qty * pCost;
                         }
@@ -659,14 +676,11 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                     if (!isNaN(qty) && !isNaN(pCost)) {
                         let cost = 0;
                         const u = newItem.unit ? newItem.unit.trim().toLowerCase() : '';
-                        // For weight/volume, purchaseCost is treated as per kg/L and qty is g/ml/cc.
+                        // For weight/volume, purchaseCost is treated as per kg/L and qty is g/ml/cc. cl = 10ml.
                         if (u === 'g' || u === 'ｇ' || u === 'ml' || u === 'ｍｌ' || u === 'cc' || u === 'ｃｃ') {
-                            // Keep decimals, round to 2 places for storage if preferred, or keep raw
-                            // User asked for 2 decimal places input. Calculation should arguably follow suit or standard yen rounding?
-                            // Usually yen is integer, but for internal calc... let's keep precision then round?
-                            // Plan said: "Change cost display from Integer to 2 decimal places"
-                            // Let's store as float.
                             cost = ((qty / 1000) * pCost);
+                        } else if (u === 'cl' || u === 'ｃｌ') {
+                            cost = ((qty * 10 / 1000) * pCost);
                         } else {
                             cost = (qty * pCost);
                         }
@@ -727,6 +741,9 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                             } else if (['l', 'ｌ'].includes(pu)) {
                                 normalized = basePrice / conv.packetSize; // per L
                                 newItem.unit = 'ml';
+                            } else if (['cl', 'ｃｌ'].includes(pu)) {
+                                normalized = (basePrice / conv.packetSize) * 100;
+                                newItem.unit = 'ml';
                             } else {
                                 // For '個', '本' etc. -> per unit
                                 normalized = basePrice / conv.packetSize;
@@ -749,6 +766,9 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                                     calculatedUnit = 'g';
                                 } else if (['ml', 'ｍｌ', 'cc', 'ｃｃ'].includes((unit || '').toLowerCase())) {
                                     calculatedPrice = (price / size) * 1000;
+                                    calculatedUnit = 'ml';
+                                } else if (['cl', 'ｃｌ'].includes((unit || '').toLowerCase())) {
+                                    calculatedPrice = (price / size) * 100;
                                     calculatedUnit = 'ml';
                                 } else if (['kg', 'ｋｇ'].includes(unit ? unit.toLowerCase() : '')) {
                                     calculatedPrice = price / size;
@@ -777,6 +797,8 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                             let cost = 0;
                             if (u === 'g' || u === 'ｇ' || u === 'ml' || u === 'ｍｌ' || u === 'cc' || u === 'ｃｃ') {
                                 cost = (qty / 1000) * pCost;
+                            } else if (u === 'cl' || u === 'ｃｌ') {
+                                cost = (qty * 10 / 1000) * pCost;
                             } else {
                                 cost = qty * pCost;
                             }
@@ -834,6 +856,10 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                                 const normalized = item.price / item.size; // per L
                                 newItem.purchaseCost = Math.round(normalized * 100) / 100;
                                 newItem.unit = 'ml';
+                            } else if (['cl', 'ｃｌ'].includes(u)) {
+                                const normalized = (item.price / item.size) * 100; // per 1000ml
+                                newItem.purchaseCost = Math.round(normalized * 100) / 100;
+                                newItem.unit = 'ml';
                             } else {
                                 // For '個', '枚' etc. -> Calculate Unit Price
                                 const unitPrice = item.price / item.size;
@@ -871,6 +897,9 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                             } else if (['l', 'ｌ'].includes(pu)) {
                                 normalized = basePrice / conv.packetSize; // per L
                                 newItem.unit = 'ml';
+                            } else if (['cl', 'ｃｌ'].includes(pu)) {
+                                normalized = (basePrice / conv.packetSize) * 100; // per 1000ml
+                                newItem.unit = 'ml';
                             } else {
                                 normalized = basePrice / conv.packetSize;
                                 newItem.unit = conv.packetUnit;
@@ -903,6 +932,8 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                     let cost = 0;
                     if (u === 'g' || u === 'ｇ' || u === 'ml' || u === 'ｍｌ' || u === 'cc' || u === 'ｃｃ') {
                         cost = (qty / 1000) * pCost;
+                    } else if (u === 'cl' || u === 'ｃｌ') {
+                        cost = (qty * 10 / 1000) * pCost;
                     } else {
                         cost = qty * pCost;
                     }
@@ -986,18 +1017,18 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                                     );
 
                                     return (
-                                <SortableIngredientItem
-                                    key={item.id}
-                                    id={item.id}
-                                    index={index}
-                                    item={item}
-                                    groupId={section.id}
-                                    yieldPercentApplied={yieldPercentApplied}
-                                    onChange={handleItemChange}
-                                    onRemove={handleRemoveItem}
-                                    handleSuggestionSelect={handleSuggestionSelect}
-                                    onOpenConversion={() => setConversionModal({ isOpen: true, groupId: section.id, index: index })}
-                                />
+                                        <SortableIngredientItem
+                                            key={item.id}
+                                            id={item.id}
+                                            index={index}
+                                            item={item}
+                                            groupId={section.id}
+                                            yieldPercentApplied={yieldPercentApplied}
+                                            onChange={handleItemChange}
+                                            onRemove={handleRemoveItem}
+                                            handleSuggestionSelect={handleSuggestionSelect}
+                                            onOpenConversion={() => setConversionModal({ isOpen: true, groupId: section.id, index: index })}
+                                        />
                                     );
                                 })()
                             ))}
