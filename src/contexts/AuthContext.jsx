@@ -52,134 +52,106 @@ export const AuthProvider = ({ children }) => {
             console.warn('[Auth] Failed to load cache', e);
         }
 
-        // Load profile (app metadata) with Retry
+        // Load profile (app metadata). If we have cache, show UI immediately and fetch profile in background.
         let profile = null;
-        let retryCount = 0;
-        const maxRetries = 3;
+        const profileSelectTimeoutMs = 4000;
+        const maxRetries = 2;
 
-        while (retryCount < maxRetries) {
-            try {
-                // Optimize: Try both with and without email column in parallel
-                // Use Promise.all with robust error handling (catch each)
-                const [res1, res2] = await Promise.all([
-                    withTimeout(
-                        supabase
-                            .from('profiles')
-                            .select('id, display_id, role, show_master_recipes, email')
-                            .eq('id', uid)
-                            .single()
-                            .then(data => ({ data, error: null }))
-                            .catch(error => ({ data: null, error })),
-                        2500,
-                        'profiles.select(with_email)'
-                    ).catch(error => ({ data: null, error })),
-                    withTimeout(
-                        supabase
-                            .from('profiles')
-                            .select('id, display_id, role, show_master_recipes')
-                            .eq('id', uid)
-                            .single()
-                            .then(data => ({ data, error: null }))
-                            .catch(error => ({ data: null, error })),
-                        2500,
-                        'profiles.select'
-                    ).catch(error => ({ data: null, error }))
-                ]);
+        const tryLoadProfile = async () => {
+            let retryCount = 0;
+            while (retryCount < maxRetries) {
+                try {
+                    const [res1, res2] = await Promise.all([
+                        withTimeout(
+                            supabase.from('profiles').select('id, display_id, role, show_master_recipes, email').eq('id', uid).single().then(data => ({ data, error: null })).catch(error => ({ data: null, error })),
+                            profileSelectTimeoutMs,
+                            'profiles.select(with_email)'
+                        ).catch(error => ({ data: null, error })),
+                        withTimeout(
+                            supabase.from('profiles').select('id, display_id, role, show_master_recipes').eq('id', uid).single().then(data => ({ data, error: null })).catch(error => ({ data: null, error })),
+                            profileSelectTimeoutMs,
+                            'profiles.select'
+                        ).catch(error => ({ data: null, error }))
+                    ]);
 
-                // Use whichever query succeeded (prioritize res1 with email)
-                let data = null;
-                let error = null;
-
-                if (res1?.data?.data) {
-                    data = res1.data.data;
-                    error = null;
-                } else if (res2?.data?.data) {
-                    data = res2.data.data;
-                    error = null;
-                } else {
-                    // Both failed
-                    error = res1?.error ?? res2?.error ?? new Error('Profile fetch failed');
-                }
-
-                if (error) {
-                    // If profile is missing (first login after signUp confirm), try to create a minimal one
-                    if (error.code === 'PGRST116') {
-                        const fallbackDisplayId = (sessionUser.user_metadata && sessionUser.user_metadata.display_id)
-                            ? String(sessionUser.user_metadata.display_id)
-                            : getEmailLocalPart(email) || uid.slice(0, 8);
-
-                        // Try insert with email, then fallback insert without email for older schema
-                        let created = null;
-                        let createError = null;
-                        const ins1 = await withTimeout(
-                            supabase
-                                .from('profiles')
-                                .insert([{
-                                    id: uid,
-                                    display_id: fallbackDisplayId,
-                                    email: email || null,
-                                    role: 'user',
-                                    show_master_recipes: false
-                                }])
-                                .select('id, display_id, role, show_master_recipes, email')
-                                .single(),
-                            8000,
-                            'profiles.insert(with_email)'
-                        );
-                        created = ins1?.data ?? null;
-                        createError = ins1?.error ?? null;
-
-                        if (createError && String(createError.message || '').toLowerCase().includes('email')) {
-                            const ins2 = await withTimeout(
-                                supabase
-                                    .from('profiles')
-                                    .insert([{
-                                        id: uid,
-                                        display_id: fallbackDisplayId,
-                                        role: 'user',
-                                        show_master_recipes: false
-                                    }])
-                                    .select('id, display_id, role, show_master_recipes')
-                                    .single(),
-                                8000,
-                                'profiles.insert'
-                            );
-                            created = ins2?.data ?? null;
-                            createError = ins2?.error ?? null;
-                        }
-
-                        if (createError) throw createError;
-                        profile = created;
+                    let data = null;
+                    let error = null;
+                    if (res1?.data?.data) {
+                        data = res1.data.data;
+                    } else if (res2?.data?.data) {
+                        data = res2.data.data;
                     } else {
-                        throw error;
+                        error = res1?.error ?? res2?.error ?? new Error('Profile fetch failed');
                     }
-                } else {
-                    profile = data;
-                }
 
-                // If schema supports email and it's missing, try to fill it from session
-                if (profile && Object.prototype.hasOwnProperty.call(profile, 'email') && email && !profile.email) {
-                    try {
-                        await supabase
-                            .from('profiles')
-                            .update({ email })
-                            .eq('id', uid);
-                    } catch (e2) {
-                        // ignore (not critical)
-                        console.warn('Failed to backfill profile email', e2);
+                    if (error) {
+                        if (error.code === 'PGRST116') {
+                            const fallbackDisplayId = (sessionUser.user_metadata?.display_id)
+                                ? String(sessionUser.user_metadata.display_id)
+                                : getEmailLocalPart(email) || uid.slice(0, 8);
+                            let created = null;
+                            let createError = null;
+                            const ins1 = await withTimeout(
+                                supabase.from('profiles').insert([{ id: uid, display_id: fallbackDisplayId, email: email || null, role: 'user', show_master_recipes: false }]).select('id, display_id, role, show_master_recipes, email').single(),
+                                6000, 'profiles.insert(with_email)'
+                            );
+                            created = ins1?.data ?? null;
+                            createError = ins1?.error ?? null;
+                            if (createError && String(createError.message || '').toLowerCase().includes('email')) {
+                                const ins2 = await withTimeout(
+                                    supabase.from('profiles').insert([{ id: uid, display_id: fallbackDisplayId, role: 'user', show_master_recipes: false }]).select('id, display_id, role, show_master_recipes').single(),
+                                    6000, 'profiles.insert'
+                                );
+                                created = ins2?.data ?? null;
+                                createError = ins2?.error ?? null;
+                            }
+                            if (createError) throw createError;
+                            profile = created;
+                        } else {
+                            throw error;
+                        }
+                    } else {
+                        profile = data;
                     }
-                }
-                // Success - break loop
-                break;
-            } catch (e) {
-                console.error(`Failed to load/create profile (Attempt ${retryCount + 1}/${maxRetries}):`, e);
-                retryCount++;
-                if (retryCount < maxRetries) {
-                    // Wait before retry (500ms, 1000ms...)
-                    await new Promise(r => setTimeout(r, 500 * retryCount));
+
+                    if (profile && Object.prototype.hasOwnProperty.call(profile, 'email') && email && !profile.email) {
+                        try {
+                            await supabase.from('profiles').update({ email }).eq('id', uid);
+                        } catch (e2) {
+                            console.warn('Failed to backfill profile email', e2);
+                        }
+                    }
+                    break;
+                } catch (e) {
+                    console.error(`Failed to load/create profile (Attempt ${retryCount + 1}/${maxRetries}):`, e);
+                    retryCount++;
+                    if (retryCount < maxRetries) {
+                        await new Promise(r => setTimeout(r, 300 * retryCount));
+                    }
                 }
             }
+            return profile;
+        };
+
+        if (cachedUser) {
+            tryLoadProfile().then((p) => {
+                if (p) {
+                    const metaDisplayId = (sessionUser?.user_metadata?.display_id || '').toString().trim();
+                    const displayId = p.display_id || metaDisplayId || cachedUser.displayId || getEmailLocalPart(email) || uid.slice(0, 8);
+                    const role = String((p.role || 'user')).trim().toLowerCase();
+                    const showMasterRecipes = p.show_master_recipes === true;
+                    setUser({ id: uid, email, displayId, role, showMasterRecipes });
+                    try {
+                        localStorage.setItem('auth_user_cache', JSON.stringify({ id: uid, email, displayId, role, showMasterRecipes }));
+                    } catch (e) {
+                        console.warn('[Auth] Failed to save cache', e);
+                    }
+                }
+            }).catch(() => {});
+            return;
         }
+
+        profile = await tryLoadProfile();
 
         const metaDisplayId = (sessionUser?.user_metadata?.display_id || '').toString().trim();
         const displayId =

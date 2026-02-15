@@ -361,8 +361,12 @@ entrypoint = "./functions/scrape-recipe/index.ts"
 
 [functions.analyze-image]
 enabled = true
-verify_jwt = false
+verify_jwt = true
 import_map = "./functions/analyze-image/deno.json"
 entrypoint = "./functions/analyze-image/index.ts"
 
+[functions.translate]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/translate/index.ts"
 

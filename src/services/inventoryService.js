@@ -39,16 +39,25 @@ export const inventoryService = {
         const { id: _id, isPhantom: _isPhantom, _master, _csv, ...itemData } = item;
 
         const tax10OverrideRaw = item?.tax10_override ?? item?.tax10Override;
+        const hasTax10 = Object.prototype.hasOwnProperty.call(item || {}, 'tax10');
+        const hasTax10Override =
+            Object.prototype.hasOwnProperty.call(item || {}, 'tax10_override') ||
+            Object.prototype.hasOwnProperty.call(item || {}, 'tax10Override');
+        const normalizedName = String(itemData?.name ?? '').trim();
+        const normalizedVendor = String(itemData?.vendor ?? '').trim();
+
         const payload = {
             ...itemData,
+            name: normalizedName,
+            vendor: normalizedVendor || null,
             user_id: userId,
-            tax10: !!item.tax10,
-            tax10_override: !!tax10OverrideRaw,
             // Ensure numeric fields are numbers
             quantity: parseFloat(item.quantity) || 0,
             threshold: parseFloat(item.threshold) || 0,
             price: parseFloat(item.price) || 0
         };
+        if (hasTax10) payload.tax10 = !!item.tax10;
+        if (hasTax10Override) payload.tax10_override = !!tax10OverrideRaw;
 
         const executeInsert = async (body) => supabase
             .from(TABLE_NAME)
@@ -69,6 +78,31 @@ export const inventoryService = {
             }
         }
 
+        if (error && String(error?.code || '') === '23505') {
+            // Unique-key collision (same user/name/vendor) -> update the latest existing row instead.
+            let query = supabase
+                .from(TABLE_NAME)
+                .select('*')
+                .eq('user_id', userId)
+                .eq('name', normalizedName)
+                .order('updated_at', { ascending: false })
+                .order('id', { ascending: false })
+                .limit(1);
+
+            if (normalizedVendor) query = query.eq('vendor', normalizedVendor);
+            else query = query.is('vendor', null);
+
+            const { data: existingRows, error: fetchExistingError } = await query;
+            if (!fetchExistingError && Array.isArray(existingRows) && existingRows.length > 0) {
+                const existing = existingRows[0];
+                return await inventoryService.update(userId, {
+                    ...existing,
+                    ...payload,
+                    id: existing.id,
+                });
+            }
+        }
+
         if (error) {
             console.error('Error adding item:', error);
             throw error;
@@ -85,15 +119,25 @@ export const inventoryService = {
         const { id: _id, isPhantom: _isPhantom, created_at: _createdAt, _master, _csv, ...itemData } = item;
 
         const tax10OverrideRaw = item?.tax10_override ?? item?.tax10Override;
+        const hasTax10 = Object.prototype.hasOwnProperty.call(item || {}, 'tax10');
+        const hasTax10Override =
+            Object.prototype.hasOwnProperty.call(item || {}, 'tax10_override') ||
+            Object.prototype.hasOwnProperty.call(item || {}, 'tax10Override');
         const payload = {
             ...itemData,
-            tax10: !!item.tax10,
-            tax10_override: !!tax10OverrideRaw,
+            name: Object.prototype.hasOwnProperty.call(itemData || {}, 'name')
+                ? String(itemData.name ?? '').trim()
+                : itemData.name,
+            vendor: Object.prototype.hasOwnProperty.call(itemData || {}, 'vendor')
+                ? (String(itemData.vendor ?? '').trim() || null)
+                : itemData.vendor,
             quantity: parseFloat(item.quantity) || 0,
             threshold: parseFloat(item.threshold) || 0,
             price: parseFloat(item.price) || 0,
             updated_at: new Date().toISOString()
         };
+        if (hasTax10) payload.tax10 = !!item.tax10;
+        if (hasTax10Override) payload.tax10_override = !!tax10OverrideRaw;
 
         const executeUpdate = async (body) => supabase
             .from(TABLE_NAME)

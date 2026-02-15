@@ -2,7 +2,7 @@ import React from 'react';
 import './Input.css';
 import { normalizeNumericInput } from '../utils/normalizeNumericInput.js';
 
-export const Input = ({ label, id, error, textarea, ...props }) => {
+export const Input = ({ label, id, error, textarea, wrapperClassName, ...props }) => {
     const Component = textarea ? 'textarea' : 'input';
     const isNumericLike = props.type === 'number' || props.inputMode === 'decimal' || props.inputMode === 'numeric';
 
@@ -33,7 +33,7 @@ export const Input = ({ label, id, error, textarea, ...props }) => {
     };
 
     return (
-        <div className={`input-group ${error ? 'input-group--error' : ''} ${props.wrapperClassName || ''}`}>
+        <div className={`input-group ${error ? 'input-group--error' : ''} ${wrapperClassName || ''}`}>
             {label && <label htmlFor={id} className="input-label">{label}</label>}
             <Component
                 id={id}

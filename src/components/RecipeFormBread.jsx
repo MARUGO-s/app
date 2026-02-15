@@ -91,6 +91,9 @@ const normalizePurchaseCostByConversion = (basePrice, packetSize, packetUnit) =>
     if (['kg', 'ｋｇ', 'l', 'ｌ'].includes(pu)) {
         return safeBase / safePacketSize;
     }
+    if (['cl', 'ｃｌ'].includes(pu)) {
+        return (safeBase / safePacketSize) * 100;
+    }
     return safeBase / safePacketSize;
 };
 
@@ -107,6 +110,9 @@ const calculateCostByUnit = (quantity, purchaseCost, unit, forceWeightBased = fa
     const normalizedUnit = String(unit || '').trim().toLowerCase();
     if (['g', 'ｇ', 'ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(normalizedUnit) || !normalizedUnit) {
         return ((qty / 1000) * pCost) / safeYieldRate;
+    }
+    if (['cl', 'ｃｌ'].includes(normalizedUnit)) {
+        return ((qty * 10 / 1000) * pCost) / safeYieldRate;
     }
     return (qty * pCost) / safeYieldRate;
 };
@@ -321,6 +327,8 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                         normalized = (basePrice / conv.packetSize) * 1000;
                     } else if (['l', 'ｌ'].includes(pu)) {
                         normalized = basePrice / conv.packetSize;
+                    } else if (['cl', 'ｃｌ'].includes(pu)) {
+                        normalized = (basePrice / conv.packetSize) * 100;
                     } else {
                         normalized = basePrice / conv.packetSize;
                     }
@@ -362,6 +370,8 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                 const unit = (item.unit || '').trim().toLowerCase();
                 if (unit === 'g' || unit === 'ｇ' || unit === 'ml' || unit === 'ｍｌ' || unit === 'cc' || unit === 'ｃｃ' || !unit) {
                     calculated = (qty / 1000) * pCost;
+                } else if (unit === 'cl' || unit === 'ｃｌ') {
+                    calculated = (qty * 10 / 1000) * pCost;
                 } else {
                     calculated = qty * pCost;
                 }
@@ -662,6 +672,9 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                         } else if (['l', 'ｌ'].includes(u)) {
                             normalized = selectedItem.price / selectedItem.size;
                             normalizedUnit = 'ml';
+                        } else if (['cl', 'ｃｌ'].includes(u)) {
+                            normalized = (selectedItem.price / selectedItem.size) * 100;
+                            normalizedUnit = 'ml';
                         } else {
                             normalized = selectedItem.price / selectedItem.size;
                             normalizedUnit = selectedItem.unit;
@@ -688,6 +701,9 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                             normalizedUnit = 'ml';
                         } else if (['l', 'ｌ'].includes(pu)) {
                             normalized = basePrice / conv.packetSize;
+                            normalizedUnit = 'ml';
+                        } else if (['cl', 'ｃｌ'].includes(pu)) {
+                            normalized = (basePrice / conv.packetSize) * 100;
                             normalizedUnit = 'ml';
                         } else {
                             normalized = basePrice / conv.packetSize;
@@ -725,6 +741,8 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                 let cost = 0;
                 if (u === 'g' || u === 'ｇ' || u === 'ml' || u === 'ｍｌ' || u === 'cc' || u === 'ｃｃ') {
                     cost = (qty / 1000) * pCost;
+                } else if (u === 'cl' || u === 'ｃｌ') {
+                    cost = (qty * 10 / 1000) * pCost;
                 } else {
                     cost = qty * pCost;
                 }

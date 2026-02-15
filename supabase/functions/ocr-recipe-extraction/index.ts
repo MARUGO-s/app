@@ -13,7 +13,7 @@ serve(async (req) => {
 
   try {
     console.log('🔧 OCR function called')
-    
+
     // 環境変数の確認
     const googleApiKey = Deno.env.get('GOOGLE_API_KEY');
 
@@ -37,7 +37,7 @@ serve(async (req) => {
 
     // Google Gemini API でレシピ構造化
     console.log('🔧 Starting Google Gemini API analysis...')
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${googleApiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${googleApiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -68,7 +68,7 @@ serve(async (req) => {
     console.error('❌ Error:', error)
     console.error('❌ Error stack:', error.stack)
     console.error('❌ Error message:', error.message)
-    
+
     return new Response(
       JSON.stringify({
         ok: false,

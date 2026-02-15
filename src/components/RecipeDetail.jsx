@@ -105,6 +105,9 @@ const normalizePurchaseCostByConversion = (basePrice, packetSize, packetUnit) =>
     if (['kg', 'ｋｇ', 'l', 'ｌ'].includes(pu)) {
         return safeBase / safePacketSize;
     }
+    if (['cl', 'ｃｌ'].includes(pu)) {
+        return (safeBase / safePacketSize) * 100;
+    }
     return safeBase / safePacketSize;
 };
 
@@ -124,6 +127,9 @@ const calculateCostByUnit = (quantity, purchaseCost, unit, { defaultWeightWhenUn
     }
     if (['g', 'ｇ', 'ml', 'ｍｌ', 'cc', 'ｃｃ'].includes(normalizedUnit)) {
         return ((qty / 1000) * pCost) / safeYieldRate;
+    }
+    if (['cl', 'ｃｌ'].includes(normalizedUnit)) {
+        return ((qty * 10 / 1000) * pCost) / safeYieldRate;
     }
     return (qty * pCost) / safeYieldRate;
 };

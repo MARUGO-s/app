@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { supabase } from '../supabase';
+import { SUPABASE_ANON_KEY, SUPABASE_URL, supabase } from '../supabase';
 import { Card } from './Card';
 import { Button } from './Button';
 import { useToast } from '../contexts/useToast';
@@ -13,6 +13,19 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
     const [url, setUrl] = useState('');
     const [imageFile, setImageFile] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
+    // Image analysis engine preference. This is only a hint; the server may still fall back.
+    // - groq: Groq (Vision) first. If it fails and Azure OCR is configured, do OCR -> Groq (Text).
+    // - auto: best-effort. Groq -> (Azure OCR -> Groq) -> Gemini last.
+    // - gemini: Gemini only (better for handwriting, higher cost).
+    // - groq_vision: Groq (Vision) only (no OCR). Fast/cheap, but handwriting may be weaker.
+    const DEFAULT_IMAGE_ENGINE = 'auto';
+    const [imageEngine, setImageEngine] = useState(() => {
+        try {
+            return localStorage.getItem('preferredImageEngine') || DEFAULT_IMAGE_ENGINE;
+        } catch {
+            return DEFAULT_IMAGE_ENGINE;
+        }
+    });
     const [isImagePreparing, setIsImagePreparing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -70,6 +83,14 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
         setImagePreview(url);
         return () => URL.revokeObjectURL(url);
     }, [imageFile]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('preferredImageEngine', imageEngine);
+        } catch {
+            // ignore (private mode, etc.)
+        }
+    }, [imageEngine]);
 
     const optimizeImageFile = (file) => new Promise((resolve) => {
         if (!file || typeof file !== 'object') return resolve(file);
@@ -209,196 +230,155 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
     };
 
     const translateRecipe = async (recipe) => {
-        try {
-            // Prepare text array for batch translation
-            const textsToTranslate = [];
+        // Prepare text array for batch translation
+        const textsToTranslate = [];
 
-            // 1. Title
-            textsToTranslate.push((recipe.name || recipe.title || '').trim());
-            // 2. Description
-            textsToTranslate.push((recipe.description || '').trim());
+        // 1. Title
+        textsToTranslate.push((recipe.name || recipe.title || '').trim());
+        // 2. Description
+        textsToTranslate.push((recipe.description || '').trim());
 
-            // 3. Ingredients names
-            const ingredientIndices = [];
-            if (Array.isArray(recipe.ingredients)) {
-                recipe.ingredients.forEach((ing, idx) => {
-                    if (typeof ing === 'string') {
-                        const text = ing.trim();
-                        if (!text) return;
-                        textsToTranslate.push(text);
-                        ingredientIndices.push(idx);
-                        return;
-                    }
-                    const text = String(ing?.name || ing?.text || '').trim();
-                    if (text) {
-                        textsToTranslate.push(text);
-                        ingredientIndices.push(idx);
-                    }
-                });
-            }
-
-            // 4. Steps
-            const stepIndices = [];
-            if (Array.isArray(recipe.steps)) {
-                recipe.steps.forEach((step, idx) => {
-                    const stepText = getStepText(step);
-                    if (!stepText) return;
-                    textsToTranslate.push(stepText);
-                    stepIndices.push(idx);
-                });
-            }
-
-            if (!textsToTranslate.some(text => String(text || '').trim())) return recipe;
-
-            // Call Translation API
-            const { data, error } = await supabase.functions.invoke('translate', {
-                body: {
-                    text: textsToTranslate,
-                    target_lang: 'JA'
+        // 3. Ingredients names
+        const ingredientIndices = [];
+        if (Array.isArray(recipe.ingredients)) {
+            recipe.ingredients.forEach((ing, idx) => {
+                if (typeof ing === 'string') {
+                    const text = ing.trim();
+                    if (!text) return;
+                    textsToTranslate.push(text);
+                    ingredientIndices.push(idx);
+                    return;
+                }
+                const text = String(ing?.name || ing?.text || '').trim();
+                if (text) {
+                    textsToTranslate.push(text);
+                    ingredientIndices.push(idx);
                 }
             });
-
-            if (error) throw error;
-            if (!Array.isArray(data?.translations)) {
-                throw new Error('Invalid translation response payload');
-            }
-
-            const translatedTexts = data.translations.map(t => t.text);
-
-            // Reconstruct recipe
-            let cursor = 0;
-            const newRecipe = { ...recipe };
-
-            // 1. Title
-            const translatedTitle = translatedTexts[cursor++] || newRecipe.name || newRecipe.title || '';
-            newRecipe.name = translatedTitle;
-            newRecipe.title = translatedTitle;
-            // 2. Description
-            newRecipe.description = translatedTexts[cursor++] || newRecipe.description;
-
-            // 3. Ingredients
-            if (ingredientIndices.length > 0) {
-                const translatedIngredientMap = new Map();
-                ingredientIndices.forEach((index, offset) => {
-                    translatedIngredientMap.set(index, translatedTexts[cursor + offset]);
-                });
-                newRecipe.ingredients = newRecipe.ingredients.map((ing, idx) => {
-                    const translated = translatedIngredientMap.get(idx);
-                    if (!translated) return ing;
-                    if (typeof ing === 'string') {
-                        return translated;
-                    }
-                    if (ing && typeof ing === 'object') {
-                        return { ...ing, name: translated };
-                    }
-                    return ing;
-                });
-                cursor += ingredientIndices.length;
-            }
-
-            // 4. Steps
-            if (stepIndices.length > 0) {
-                const translatedStepMap = new Map();
-                stepIndices.forEach((index, offset) => {
-                    translatedStepMap.set(index, translatedTexts[cursor + offset]);
-                });
-                newRecipe.steps = newRecipe.steps.map((step, idx) => {
-                    const translated = translatedStepMap.get(idx);
-                    if (!translated) return step;
-                    if (step && typeof step === 'object') {
-                        return { ...step, text: translated };
-                    }
-                    return translated;
-                });
-            }
-
-            return newRecipe;
-
-        } catch (err) {
-            console.error("Translation failed:", err);
-            toast.warning("翻訳に失敗しました。元の言語のまま取り込みます。");
-            return recipe;
         }
+
+        // 4. Steps
+        const stepIndices = [];
+        if (Array.isArray(recipe.steps)) {
+            recipe.steps.forEach((step, idx) => {
+                const stepText = getStepText(step);
+                if (!stepText) return;
+                textsToTranslate.push(stepText);
+                stepIndices.push(idx);
+            });
+        }
+
+        if (!textsToTranslate.some(text => String(text || '').trim())) return recipe;
+
+        // Always refresh to ensure a valid JWT (DeepL proxy requires verify_jwt=true).
+        const { data: refreshData, error: refreshErr } = await supabase.auth.refreshSession();
+        const session = refreshData?.session;
+        if (refreshErr || !session?.access_token) {
+            const msg = refreshErr?.message || '';
+            const needReLogin = /refresh_token|session|expired|invalid|not found/i.test(msg);
+            throw new Error(needReLogin
+                ? 'セッションの有効期限が切れています。一度ログアウトしてから再ログインしてください。'
+                : (msg || 'ログイン情報が取得できませんでした。再ログインしてください。'));
+        }
+
+        const functionUrl = `${SUPABASE_URL}/functions/v1/translate`;
+        const res = await fetch(functionUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+                text: textsToTranslate,
+                target_lang: 'JA',
+            }),
+        });
+
+        if (!res.ok) {
+            const status = res.status;
+            if (status === 401) {
+                throw new Error('認証の有効期限が切れています。一度ログアウトしてから再ログインしてください。');
+            }
+            let detail = '';
+            try {
+                const text = await res.text();
+                if (text) {
+                    try {
+                        const parsed = JSON.parse(text);
+                        detail = parsed?.error || parsed?.message || text;
+                    } catch {
+                        detail = text;
+                    }
+                }
+            } catch {
+                // ignore
+            }
+            throw new Error(detail || `翻訳に失敗しました（エラー: ${status}）。`);
+        }
+
+        const data = await res.json();
+        if (data && data.error) {
+            throw new Error(String(data.error));
+        }
+        if (!Array.isArray(data?.translations)) {
+            throw new Error('翻訳の応答が不正です。');
+        }
+
+        const translatedTexts = data.translations.map(t => t.text);
+
+        // Reconstruct recipe
+        let cursor = 0;
+        const newRecipe = { ...recipe };
+
+        // 1. Title
+        const translatedTitle = translatedTexts[cursor++] || newRecipe.name || newRecipe.title || '';
+        newRecipe.name = translatedTitle;
+        newRecipe.title = translatedTitle;
+        // 2. Description
+        newRecipe.description = translatedTexts[cursor++] || newRecipe.description;
+
+        // 3. Ingredients
+        if (ingredientIndices.length > 0) {
+            const translatedIngredientMap = new Map();
+            ingredientIndices.forEach((index, offset) => {
+                translatedIngredientMap.set(index, translatedTexts[cursor + offset]);
+            });
+            newRecipe.ingredients = newRecipe.ingredients.map((ing, idx) => {
+                const translated = translatedIngredientMap.get(idx);
+                if (!translated) return ing;
+                if (typeof ing === 'string') {
+                    return translated;
+                }
+                if (ing && typeof ing === 'object') {
+                    return { ...ing, name: translated };
+                }
+                return ing;
+            });
+            cursor += ingredientIndices.length;
+        }
+
+        // 4. Steps
+        if (stepIndices.length > 0) {
+            const translatedStepMap = new Map();
+            stepIndices.forEach((index, offset) => {
+                translatedStepMap.set(index, translatedTexts[cursor + offset]);
+            });
+            newRecipe.steps = newRecipe.steps.map((step, idx) => {
+                const translated = translatedStepMap.get(idx);
+                if (!translated) return step;
+                if (step && typeof step === 'object') {
+                    return { ...step, text: translated };
+                }
+                return translated;
+            });
+        }
+
+        return newRecipe;
     };
 
     // State for streaming logs
     const [progressLog, setProgressLog] = useState([]);
-
-    // Direct Gemini API call from browser (bypasses Edge Function / Docker networking issues)
-    const analyzeImageWithGeminiDirect = async (file, signal) => {
-        const apiKey = import.meta.env.VITE_GOOGLE_API_KEY || 'REDACTED_GOOGLE_API_KEY';
-        if (!apiKey) return null;
-
-        const MAX_SIZE = 4_000_000;
-        if (file.size > MAX_SIZE) return null;
-
-        const arrayBuffer = await file.arrayBuffer();
-        const base64Image = btoa(
-            new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-        );
-
-        const mimeType = file.type || 'image/jpeg';
-
-        const prompt = `あなたは世界最高峰のパティシエかつ料理研究家です。
-渡された画像（手書きのメモやスクリーンショット）から料理のレシピ情報を正確に読み取ってください。
-
-【最重要: 手書き文字の認識】
-- 手書きの文字、特に数字や単位を文脈から推測して正確に読み取ってください。
-- 読み取れない箇所がある場合は、前後の文脈から推測するか、空欄にしてください。
-
-以下のJSONフォーマットで出力してください。JSON以外の文章は不要です。
-\`\`\`json
-{
-  "title": "料理名",
-  "description": "料理の説明",
-  "ingredients": [
-    { "name": "材料名", "quantity": "分量数値", "unit": "単位", "group": null }
-  ],
-  "steps": ["手順1...", "手順2..."]
-}
-\`\`\`
-
-【ルール】
-- 大さじ1→15ml, 小さじ1→5ml, 1カップ→200ml に換算してください。
-- 手順の番号プレフィックスは削除してください。
-- 画像から読み取れる情報のみ使用してください。`;
-
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [
-                            { text: prompt },
-                            { inline_data: { mime_type: mimeType, data: base64Image } }
-                        ]
-                    }]
-                }),
-                signal,
-            }
-        );
-
-        if (!response.ok) {
-            const errText = await response.text();
-            console.error("Gemini API Error:", response.status, errText);
-            throw new Error(`Gemini API Error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!rawText) throw new Error("Geminiからの応答が空です");
-
-        let jsonStr = rawText;
-        if (jsonStr.includes('```json')) {
-            jsonStr = jsonStr.split('```json')[1].split('```')[0];
-        } else if (jsonStr.includes('```')) {
-            jsonStr = jsonStr.split('```')[1].split('```')[0];
-        }
-
-        return { recipe: JSON.parse(jsonStr.trim()), rawText };
-    };
 
     const handleImport = async () => {
         setIsLoading(true);
@@ -412,10 +392,58 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
             if (mode === 'url') {
                 if (!url) return;
                 currentUrl = url;
-                const { data: resData, error: resError } = await supabase.functions.invoke('scrape-recipe', {
-                    body: { url }
+
+                // 有効なトークンを取得し、fetch で明示的にヘッダに付けて呼ぶ（invoke ではトークンが届かない場合があるため）
+                const { data: refreshData, error: refreshErr } = await supabase.auth.refreshSession();
+                const session = refreshData?.session;
+                if (refreshErr || !session?.access_token) {
+                    const msg = refreshErr?.message || '';
+                    const needReLogin = /refresh_token|session|expired|invalid|not found/i.test(msg);
+                    throw new Error(needReLogin
+                        ? 'セッションの有効期限が切れています。一度ログアウトしてから再ログインしてください。'
+                        : (msg || 'ログイン情報が取得できませんでした。再ログインしてください。'));
+                }
+
+                const functionUrl = `${SUPABASE_URL}/functions/v1/scrape-recipe`;
+                const res = await fetch(functionUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${session.access_token}`,
+                    },
+                    body: JSON.stringify({ url }),
                 });
-                if (resError) throw resError;
+
+                if (!res.ok) {
+                    const status = res.status;
+                    if (status === 401) {
+                        throw new Error('認証の有効期限が切れています。一度ログアウトしてから再ログインしてください。');
+                    }
+                    if (status === 403) {
+                        throw new Error('このURLへのアクセスが拒否されました。サイトの利用規約をご確認ください。');
+                    }
+                    if (status >= 500) {
+                        throw new Error('サーバーで一時的なエラーが発生しました。しばらく経ってからお試しください。');
+                    }
+                    let detail = '';
+                    try {
+                        const text = await res.text();
+                        if (text) {
+                            try {
+                                const parsed = JSON.parse(text);
+                                detail = parsed?.error || parsed?.message || text;
+                            } catch {
+                                detail = text;
+                            }
+                        }
+                    } catch {
+                        // ignore
+                    }
+                    throw new Error(detail || `URLの取得に失敗しました（エラー: ${status}）。`);
+                }
+
+                const resData = await res.json();
                 data = resData;
             } else {
                 if (!imageFile) return;
@@ -428,106 +456,150 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                     cancelAnalyze('解析がタイムアウトしました。画像をトリミングして文字を大きくして再試行してください。');
                 }, ANALYZE_TIMEOUT_MS);
 
-                // Strategy 1: Try direct Gemini API call from browser (faster, no Docker issues)
-                const geminiApiKey = import.meta.env.VITE_GOOGLE_API_KEY || 'REDACTED_GOOGLE_API_KEY';
-                let geminiSuccess = false;
+                // Edge Function 経由のみで画像解析（Gemini/Azureなどの外部APIキーはサーバー側で管理）
+                setProgressLog(prev => [...prev, '🔄 サーバー経由で解析中...']);
 
-                if (geminiApiKey) {
-                    setProgressLog(prev => [...prev, '🤖 Gemini APIで画像を解析中...']);
+                const formData = new FormData();
+                formData.append('image', imageFile);
+                formData.append('engine', imageEngine);
+
+                // 必ずログイン先と同じプロジェクトのURL・キーを使う（プロジェクト不一致で Invalid JWT にならないように）
+                const supabaseUrl = SUPABASE_URL;
+                const anonKey = SUPABASE_ANON_KEY;
+                const functionUrl = `${supabaseUrl}/functions/v1/analyze-image`;
+
+                // 有効なJWTを送るため、先にセッションを更新。失敗したら古いトークンは送らず再ログインを促す
+                const { data: refreshData, error: refreshErr } = await supabase.auth.refreshSession();
+                const session = refreshData?.session;
+                if (refreshErr || !session?.access_token) {
+                    const msg = refreshErr?.message || '';
+                    const needReLogin = /refresh_token|session|expired|invalid/i.test(msg);
+                    throw new Error(needReLogin
+                        ? 'セッションの有効期限が切れています。一度ログアウトしてから再ログインしてください。'
+                        : (msg || 'ログイン情報が取得できませんでした。再ログインしてください。'));
+                }
+
+                const bearerToken = session.access_token;
+                const headers = {
+                    'apikey': anonKey,
+                    'Authorization': `Bearer ${bearerToken}`,
+                    // ゲートウェイ経由で Authorization が落ちる環境向けのフォールバック（関数側で検証）
+                    'X-User-JWT': bearerToken,
+                };
+
+                let response;
+                try {
+                    response = await fetch(functionUrl, {
+                        method: 'POST',
+                        headers: headers,
+                        body: formData,
+                        signal: controller.signal
+                    });
+                } catch (netErr) {
+                    console.error("Network Error:", netErr);
+                    throw new Error("サーバーに接続できませんでした。");
+                }
+
+                // If the token expired/was invalid, refresh session and retry once.
+                if (response.status === 401) {
+                    let detail = '';
                     try {
-                        const result = await analyzeImageWithGeminiDirect(imageFile, controller.signal);
-                        if (result && result.recipe && result.recipe.title) {
-                            setProgressLog(prev => [...prev, '✅ 画像解析に成功しました！']);
-                            data = { recipe: result.recipe, rawText: result.rawText };
-                            geminiSuccess = true;
+                        detail = await response.text();
+                    } catch {
+                        // ignore
+                    }
+
+                    const shouldRetry = /invalid\s+jwt|jwt\s+expired|token\s+expired/i.test(String(detail || ''));
+                    if (shouldRetry) {
+                        try {
+                            const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+                            const nextSession = refreshed?.session;
+                            if (refreshError || !nextSession?.access_token) {
+                                throw refreshError || new Error('No session after refresh');
+                            }
+
+                            const nextToken = nextSession.access_token;
+                            headers.Authorization = `Bearer ${nextToken}`;
+                            headers['X-User-JWT'] = nextToken;
+                            response = await fetch(functionUrl, {
+                                method: 'POST',
+                                headers: headers,
+                                body: formData,
+                                signal: controller.signal
+                            });
+                        } catch (e) {
+                            console.warn('Session refresh failed:', e);
+                            throw new Error('セッションの有効期限が切れました。再ログインしてください。');
                         }
-                    } catch (geminiErr) {
-                        if (geminiErr.name === 'AbortError') throw geminiErr;
-                        console.warn("Direct Gemini failed, falling back to Edge Function:", geminiErr.message);
-                        setProgressLog(prev => [...prev, `⚠️ 直接API呼出し失敗: ${geminiErr.message}`]);
                     }
                 }
 
-                // Strategy 2: Fallback to Edge Function (for production / Azure)
-                if (!geminiSuccess) {
-                    setProgressLog(prev => [...prev, '🔄 サーバー経由で解析中...']);
-
-                    const formData = new FormData();
-                    formData.append('image', imageFile);
-
-                    const { data: { session } } = await supabase.auth.getSession();
-                    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || supabase.supabaseUrl || 'https://hocbnifuactbvmyjraxy.supabase.co';
-                    const functionUrl = `${supabaseUrl}/functions/v1/analyze-image`;
-
-                    const headers = {
-                        'Authorization': `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY || supabase.supabaseKey}`
-                    };
-
-                    let response;
+                if (!response.ok) {
+                    const status = response.status;
+                    let detail = '';
                     try {
-                        response = await fetch(functionUrl, {
-                            method: 'POST',
-                            headers: headers,
-                            body: formData,
-                            signal: controller.signal
-                        });
-                    } catch (netErr) {
-                        console.error("Network Error:", netErr);
-                        throw new Error("サーバーに接続できませんでした。");
+                        const text = await response.text();
+                        if (text) {
+                            try {
+                                const parsed = JSON.parse(text);
+                                detail = parsed?.message || parsed?.error || text;
+                            } catch {
+                                detail = text;
+                            }
+                        }
+                    } catch {
+                        // ignore
                     }
+                    const suffix = detail ? `: ${detail}` : '';
+                    throw new Error(`Server Error (${status})${suffix}`);
+                }
 
-                    if (!response.ok) {
-                        const status = response.status;
-                        throw new Error(`Server Error: ${response.statusText} (${status})`);
-                    }
+                if (!response.body) {
+                    data = await response.json();
+                } else {
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let recipeResult = null;
+                    let buffer = '';
+                    let gotResult = false;
 
-                    if (!response.body) {
-                        data = await response.json();
-                    } else {
-                        const reader = response.body.getReader();
-                        const decoder = new TextDecoder();
-                        let recipeResult = null;
-                        let buffer = '';
-                        let gotResult = false;
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
 
-                        while (true) {
-                            const { done, value } = await reader.read();
-                            if (done) break;
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n\n');
+                        buffer = lines.pop() || '';
 
-                            buffer += decoder.decode(value, { stream: true });
-                            const lines = buffer.split('\n\n');
-                            buffer = lines.pop() || '';
-
-                            for (const line of lines) {
-                                const trimmedLine = line.trim();
-                                if (trimmedLine.startsWith('data: ')) {
-                                    try {
-                                        const eventData = JSON.parse(trimmedLine.slice(6));
-                                        if (eventData.type === 'log') {
-                                            setProgressLog(prev => [...prev, eventData.message]);
-                                        } else if (eventData.type === 'result') {
-                                            recipeResult = eventData;
-                                            gotResult = true;
-                                        } else if (eventData.type === 'error') {
-                                            throw new Error(eventData.message);
-                                        }
-                                    } catch (e) {
-                                        if (e.message && !e.message.includes('Failed to parse')) throw e;
-                                        console.warn("Failed to parse SSE event", e);
+                        for (const line of lines) {
+                            const trimmedLine = line.trim();
+                            if (trimmedLine.startsWith('data: ')) {
+                                try {
+                                    const eventData = JSON.parse(trimmedLine.slice(6));
+                                    if (eventData.type === 'log') {
+                                        setProgressLog(prev => [...prev, eventData.message]);
+                                    } else if (eventData.type === 'result') {
+                                        recipeResult = eventData;
+                                        gotResult = true;
+                                    } else if (eventData.type === 'error') {
+                                        throw new Error(eventData.message);
                                     }
+                                } catch (e) {
+                                    if (e.message && !e.message.includes('Failed to parse')) throw e;
+                                    console.warn("Failed to parse SSE event", e);
                                 }
                             }
-
-                            if (gotResult) break;
                         }
 
-                        try { await reader.cancel(); } catch { /* ignore */ }
-
-                        if (!recipeResult) {
-                            throw new Error("サーバーからの結果を受信できませんでした。");
-                        }
-                        data = recipeResult;
+                        if (gotResult) break;
                     }
+
+                    try { await reader.cancel(); } catch { /* ignore */ }
+
+                    if (!recipeResult) {
+                        throw new Error("サーバーからの結果を受信できませんでした。");
+                    }
+                    data = recipeResult;
                 }
             }
 
@@ -616,6 +688,7 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
 
     const handleConfirmTranslation = async (shouldTranslate) => {
         setIsLoading(true);
+        setError(null);
         try {
             let finalRecipe = pendingRecipe;
             if (shouldTranslate) {
@@ -625,9 +698,10 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
             onClose();
         } catch (err) {
             console.error("Translation flow error:", err);
-            setError("Translation failed. Importing original.");
-            onImport(pendingRecipe, scrapedUrl);
-            onClose();
+            const msg = err?.message || '翻訳に失敗しました。';
+            setError(msg);
+            toast.warning(msg);
+            // Keep the modal open so the user can retry or choose "原文のまま取り込む".
         } finally {
             setIsLoading(false);
         }
@@ -643,25 +717,27 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
     return (
         <div className="modal-overlay fade-in">
             {isLoading && (
-                <div className="loading-overlay">
-                    <div className="spinner"></div>
-                    <p>解析中...</p>
-                    {progressLog.length > 0 && (
-                        <div className="progress-log-container">
-                            <div className="progress-log">
-                                {progressLog.map((log, index) => (
-                                    <div key={index} className="log-entry">
-                                        <span className="log-message">{log}</span>
-                                    </div>
-                                ))}
-                                <div ref={(el) => el?.scrollIntoView({ behavior: "smooth" })} />
+                <div className="analyze-status-popup" role="status" aria-live="polite">
+                    <div className="analyze-status-popup-inner">
+                        <div className="spinner"></div>
+                        <p className="analyze-status-title">解析中...</p>
+                        {progressLog.length > 0 && (
+                            <div className="progress-log-container">
+                                <div className="progress-log">
+                                    {progressLog.map((log, index) => (
+                                        <div key={index} className="log-entry">
+                                            <span className="log-message">{log}</span>
+                                        </div>
+                                    ))}
+                                    <div ref={(el) => el?.scrollIntoView({ behavior: "smooth" })} />
+                                </div>
                             </div>
+                        )}
+                        <div className="analyze-status-actions">
+                            <Button type="button" variant="secondary" onClick={() => cancelAnalyze()}>
+                                中断
+                            </Button>
                         </div>
-                    )}
-                    <div style={{ marginTop: '0.9rem', display: 'flex', justifyContent: 'center' }}>
-                        <Button type="button" variant="secondary" onClick={() => cancelAnalyze()}>
-                            中断
-                        </Button>
                     </div>
                 </div>
             )}
@@ -681,6 +757,21 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                                 <span style={{ fontSize: '0.8rem' }}>(DeepL翻訳を使用)</span>
                             </p>
                         </div>
+                        {error && (
+                            <div className="error-text" style={{
+                                color: '#d32f2f',
+                                background: '#ffebee',
+                                padding: '10px',
+                                borderRadius: '4px',
+                                fontSize: '0.85rem',
+                                wordBreak: 'break-word',
+                                maxHeight: '200px',
+                                overflowY: 'auto',
+                                marginBottom: '12px',
+                            }}>
+                                {error}
+                            </div>
+                        )}
                         <div className="modal-actions" style={{ flexDirection: 'column', gap: '8px' }}>
                             <Button
                                 type="button"
@@ -736,6 +827,25 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                         ) : (
                             <>
                                 <p>レシピの画像（スクリーンショットや写真）をアップロードしてください。スマホはカメラで撮影して取り込めます。</p>
+                                <div className="image-engine-panel">
+                                    <label className="image-engine-label">
+                                        解析エンジン
+                                        <select
+                                            className="image-engine-select"
+                                            value={imageEngine}
+                                            onChange={(e) => setImageEngine(e.target.value)}
+                                            disabled={isLoading || isImagePreparing}
+                                        >
+                                            <option value="groq">Groq優先（おすすめ）</option>
+                                            <option value="auto">Best Effort（Groq→Azure OCR→Groq→Gemini）</option>
+                                            <option value="gemini">手書き（Gemini）</option>
+                                            <option value="groq_vision">Groqのみ（画像）</option>
+                                        </select>
+                                    </label>
+                                    <div className="image-engine-help">
+                                        基本はここで使うAIを選んでください。おすすめは「Groq優先」です。うまくいかない場合は「Best Effort」か「手書き（Gemini）」を試してください（Geminiは高コストになりやすいので必要な時だけ）。
+                                    </div>
+                                </div>
                                 <div className="image-upload-wrapper">
                                     <input
                                         ref={cameraInputRef}
@@ -803,7 +913,20 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                             </>
                         )}
 
-                        {error && <p className="error-text">{error}</p>}
+                        {error && (
+                            <div className="error-text" style={{
+                                color: '#d32f2f',
+                                background: '#ffebee',
+                                padding: '10px',
+                                borderRadius: '4px',
+                                fontSize: '0.85rem',
+                                wordBreak: 'break-word',
+                                maxHeight: '200px',
+                                overflowY: 'auto'
+                            }}>
+                                {error}
+                            </div>
+                        )}
 
                         <div className="modal-actions">
                             <Button type="button" variant="ghost" onClick={onClose} disabled={isLoading}>キャンセル</Button>

@@ -277,6 +277,7 @@ export const Inventory = ({ onBack }) => {
         if (lower === 'ｃｃ') return 'cc';
         if (lower === 'ｋｇ') return 'kg';
         if (lower === 'ｌ') return 'l';
+        if (lower === 'ｃｌ') return 'cl';
         return lower;
     };
 
@@ -306,6 +307,11 @@ export const Inventory = ({ onBack }) => {
         if (pu === 'ml' && tu === 'l') return perPacketUnit * 1000;
         if (pu === 'l' && tu === 'ml') return perPacketUnit / 1000;
 
+        // cl (centiliter, 1 cl = 10 ml) <-> ml
+        if (pu === 'cl' && tu === 'ml') return (lastPrice / packetSize) / 10;
+        if (pu === 'ml' && tu === 'cl') return perPacketUnit * 10;
+        if (pu === 'cl' && tu === 'cl') return perPacketUnit;
+
         // Not convertible
         return null;
     };
@@ -325,6 +331,9 @@ export const Inventory = ({ onBack }) => {
         const t = to === 'cc' ? 'ml' : to;
         if (f === 'l' && t === 'ml') return 1000;
         if (f === 'ml' && t === 'l') return 1 / 1000;
+        // cl (1 cl = 10 ml)
+        if (f === 'cl' && t === 'ml') return 10;
+        if (f === 'ml' && t === 'cl') return 1 / 10;
 
         return null;
     };
@@ -984,6 +993,7 @@ export const Inventory = ({ onBack }) => {
             if (lower === 'ｃｃ') return 'cc';
             if (lower === 'ｋｇ') return 'kg';
             if (lower === 'ｌ') return 'l';
+            if (lower === 'ｃｌ') return 'cl';
             return lower;
         };
 
@@ -1012,6 +1022,11 @@ export const Inventory = ({ onBack }) => {
             const tu = targetUnit === 'cc' ? 'ml' : targetUnit;
             if (pu === 'ml' && tu === 'l') return perPacketUnit * 1000;
             if (pu === 'l' && tu === 'ml') return perPacketUnit / 1000;
+
+            // cl (1 cl = 10 ml) <-> ml
+            if (pu === 'cl' && tu === 'ml') return (lastPrice / packetSize) / 10;
+            if (pu === 'ml' && tu === 'cl') return perPacketUnit * 10;
+            if (pu === 'cl' && tu === 'cl') return perPacketUnit;
 
             // Not convertible
             return null;
@@ -1523,8 +1538,14 @@ export const Inventory = ({ onBack }) => {
                 await inventoryService.add(userId, newItem);
                 await loadData(true);
             } else {
-                setItems(prev => prev.map(i => (i.id === item.id ? { ...i, tax10, tax10_override: true } : i)));
+                const nowIso = new Date().toISOString();
+                setItems(prev => prev.map(i => (
+                    i.id === item.id
+                        ? { ...i, tax10, tax10_override: true, updated_at: nowIso, updatedAt: nowIso }
+                        : i
+                )));
                 await inventoryService.update(userId, { ...item, tax10, tax10_override: true });
+                await loadData(true);
             }
         } catch (e) {
             console.error(e);

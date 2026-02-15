@@ -422,6 +422,26 @@ h3 {
     /* Allow buttons to wrap on small screens */
 }
 
+.recipe-form__voice-action {
+    margin-top: -0.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.step-row__voice-action {
+    margin-top: 0.35rem;
+}
+
+.voice-input-btn {
+    font-size: 0.78rem;
+    line-height: 1.2;
+}
+
+.voice-input-btn.is-recording {
+    border-color: #b42318 !important;
+    color: #b42318 !important;
+    background: #fff5f5 !important;
+}
+
 .btn-import-web {
     background-color: #e3f2fd !important;
     color: #1976d2 !important;

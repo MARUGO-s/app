@@ -11,6 +11,7 @@ const normalizeUnit = (u) => {
     if (lower === 'ｃｃ') return 'cc';
     if (lower === 'ｋｇ') return 'kg';
     if (lower === 'ｌ') return 'l';
+    if (lower === 'ｃｌ') return 'cl';
     return lower;
 };
 
@@ -29,6 +30,9 @@ const unitConversionFactor = (fromUnitRaw, toUnitRaw) => {
     const t = to === 'cc' ? 'ml' : to;
     if (f === 'l' && t === 'ml') return 1000;
     if (f === 'ml' && t === 'l') return 1 / 1000;
+    // cl (1 cl = 10 ml)
+    if (f === 'cl' && t === 'ml') return 10;
+    if (f === 'ml' && t === 'cl') return 1 / 10;
 
     return null;
 };
@@ -46,7 +50,7 @@ const formatNumber = (value) => {
     return rounded.toLocaleString('ja-JP', { maximumFractionDigits: 2 });
 };
 
-const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onToggleTax, onEdit, onRequestUnitSync }) => {
+const InventoryItemRow = ({ index, item, isLowStock, onUpdateQuantity, onDelete, onToggleTax, onEdit, onRequestUnitSync }) => {
     const [localQuantity, setLocalQuantity] = React.useState(item.quantity === '' ? '' : (parseFloat(item.quantity) || 0));
 
     const normalizeItemCategory = (value) => {
@@ -190,6 +194,14 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
                 e.currentTarget.blur();
             }
         }
+
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            const moved = focusAdjacentQtyInput(e.currentTarget, e.key === 'ArrowUp' ? -1 : 1);
+            if (moved) {
+                e.preventDefault();
+                e.currentTarget.blur();
+            }
+        }
     };
 
     const masterUnit = item?._master?.packetUnit || '';
@@ -197,6 +209,9 @@ const InventoryItemRow = ({ item, isLowStock, onUpdateQuantity, onDelete, onTogg
 
     return (
         <tr className={isLowStock(item) ? 'low-stock' : ''}>
+            <td style={{ textAlign: 'center', color: '#6b7280', fontVariantNumeric: 'tabular-nums' }}>
+                {Number.isFinite(index) ? index + 1 : ''}
+            </td>
             <td style={{ textAlign: 'center' }}>
                 <input
                     type="checkbox"
@@ -361,6 +376,7 @@ export const InventoryList = ({ items, loading, onDelete, onUpdateQuantity, onTo
                     <table className="inventory-table">
                         <thead>
                             <tr>
+                                <th style={{ textAlign: 'center', width: '44px' }}>No</th>
                                 <th style={{ textAlign: 'center', width: '50px' }}>10%</th>
                                 <th>品名</th>
                                 <th style={{ textAlign: 'right' }}>仕入れ値</th>
@@ -379,9 +395,10 @@ export const InventoryList = ({ items, loading, onDelete, onUpdateQuantity, onTo
                             </tr>
                         </thead>
                         <tbody>
-                            {sortedItems.map(item => (
+                            {sortedItems.map((item, idx) => (
                                 <InventoryItemRow
                                     key={item.id}
+                                    index={idx}
                                     item={item}
                                     isLowStock={isLowStock}
                                     onUpdateQuantity={onUpdateQuantity}
@@ -392,7 +409,7 @@ export const InventoryList = ({ items, loading, onDelete, onUpdateQuantity, onTo
                                 />
                             ))}
                             {sortedItems.length === 0 && (
-                                <tr><td colSpan="9" style={{ textAlign: 'center', color: '#888', padding: '2rem' }}>
+                                <tr><td colSpan="10" style={{ textAlign: 'center', color: '#888', padding: '2rem' }}>
                                     {isOver ? 'ここにドロップして新規登録' : 'データがありません'}
                                 </td></tr>
                             )}
@@ -410,7 +427,7 @@ export const InventoryList = ({ items, loading, onDelete, onUpdateQuantity, onTo
                                 }, { net: 0, taxed: 0 });
                                 return (
                                     <tr style={{ fontWeight: 'bold', backgroundColor: '#f9f9f9' }}>
-                                        <td colSpan="6" style={{ textAlign: 'right', paddingRight: '10px' }}>
+                                        <td colSpan="7" style={{ textAlign: 'right', paddingRight: '10px' }}>
                                             合計（税抜 / 税込）:
                                         </td>
                                         <td style={{ textAlign: 'right' }}>

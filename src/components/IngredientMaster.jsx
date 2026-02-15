@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { unitConversionService } from '../services/unitConversionService';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { csvUnitOverrideService } from '../services/csvUnitOverrideService';
+import { vendorOrderService } from '../services/vendorOrderService';
 import { userService } from '../services/userService';
 import { useToast } from '../contexts/useToast';
 import { useAuth } from '../contexts/useAuth';
@@ -11,12 +15,71 @@ import { Input } from './Input';
 import { Modal } from './Modal';
 import './IngredientMaster.css';
 
+const CATEGORY_MANUAL_KEY = 'manual';
+const VENDOR_FILTER_ALL = '__all__';
+const VENDOR_FILTER_UNASSIGNED = '__unassigned__';
+
+const SortableVendorOrderItem = ({ vendorKey, label, count, active, disabled, onSelect }) => {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+        id: vendorKey,
+        data: { type: 'vendor-order-item' },
+        disabled: !!disabled,
+    });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.7 : 1,
+    };
+
+    return (
+        <li
+            ref={setNodeRef}
+            style={style}
+            className={`vendor-order-item ${active ? 'active' : ''} ${disabled ? 'disabled' : ''}`}
+            onClick={() => {
+                if (disabled) return;
+                onSelect(vendorKey);
+            }}
+            role="button"
+            tabIndex={disabled ? -1 : 0}
+            onKeyDown={(e) => {
+                if (disabled) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelect(vendorKey);
+                }
+            }}
+            aria-label={`${label} を選択`}
+        >
+            <span className="vendor-order-item__label" title={label}>
+                {label}
+                <span className="vendor-order-item__count">({Number(count || 0).toLocaleString()})</span>
+            </span>
+            <span
+                className="vendor-order-item__handle"
+                {...(disabled ? {} : attributes)}
+                {...(disabled ? {} : listeners)}
+                title="ドラッグして並び替え"
+                aria-label={`${label} の並び順を変更`}
+            >
+                ⋮⋮
+            </span>
+        </li>
+    );
+};
+
 export const IngredientMaster = () => {
     const toast = useToast();
     const { user } = useAuth();
+    const userId = user?.id || null;
     const [ingredients, setIngredients] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all'); // all | manual | food | alcohol | soft_drink | supplies
+    const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
+    const [vendorFilter, setVendorFilter] = useState(VENDOR_FILTER_ALL);
+    const [vendorSortOrder, setVendorSortOrder] = useState([]);
+    const [showVendorOrderEditor, setShowVendorOrderEditor] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [loading, setLoading] = useState(false);
     const [csvPriceMap, setCsvPriceMap] = useState(new Map()); // name -> { price, vendor, unit, dateStr }
@@ -34,14 +97,21 @@ export const IngredientMaster = () => {
     const [copyResult, setCopyResult] = useState(null); // { type, message, details? }
     const [copyConfirming, setCopyConfirming] = useState(false);
 
-    const CATEGORY_MANUAL_KEY = 'manual';
-
     const normalizeItemCategory = (value) => {
         const normalized = String(value || '').trim();
         if (!normalized) return 'food';
         if (normalized === 'food_alcohol') return 'food';
         if (['food', 'alcohol', 'soft_drink', 'supplies'].includes(normalized)) return normalized;
         return 'food';
+    };
+
+    const getItemCategoryLabel = (value) => {
+        const normalized = normalizeItemCategory(value);
+        if (normalized === 'food') return '食材（8%）';
+        if (normalized === 'soft_drink') return 'ソフトドリンク（8%）';
+        if (normalized === 'alcohol') return 'アルコール（10%）';
+        if (normalized === 'supplies') return '備品（10%）';
+        return '食材（8%）';
     };
 
     const categoryTabs = ([
@@ -81,11 +151,16 @@ export const IngredientMaster = () => {
     const loadIngredients = useCallback(async () => {
         setLoading(true);
         try {
-            const [conversionsMap, prices, overrides] = await Promise.all([
-                unitConversionService.getAllConversions(),
-                purchasePriceService.fetchPriceList(),
-                csvUnitOverrideService.getAll(),
-            ]);
+            // Always prioritize material master rows so the table can render even if
+            // CSV-related auxiliary data is slow/unavailable.
+            let conversionsMap = await unitConversionService.getAllConversions();
+            if ((conversionsMap?.size || 0) === 0) {
+                // Auth/session can be restored slightly after first paint on some devices.
+                // Retry once to avoid false empty states.
+                await new Promise((resolve) => setTimeout(resolve, 350));
+                const retryMap = await unitConversionService.getAllConversions();
+                if ((retryMap?.size || 0) > 0) conversionsMap = retryMap;
+            }
             const list = Array.from(conversionsMap.values()).map(item => ({
                 ...item,
                 // Stable key for filtered views (ingredientName is unique for persisted rows).
@@ -93,14 +168,36 @@ export const IngredientMaster = () => {
                 isNew: false,
                 isEditing: false
             }));
-            setCsvPriceMap(prices || new Map());
-            setCsvUnitOverrideMap(overrides || new Map());
-            setIngredients(list.sort((a, b) => a.ingredientName.localeCompare(b.ingredientName, 'ja')));
+            setIngredients(list.sort((a, b) => String(a?.ingredientName || '').localeCompare(String(b?.ingredientName || ''), 'ja')));
+            setLoading(false);
+
+            Promise.allSettled([
+                purchasePriceService.fetchPriceList(),
+                csvUnitOverrideService.getAll(),
+            ]).then(([pricesResult, overridesResult]) => {
+                if (pricesResult.status === 'fulfilled') {
+                    setCsvPriceMap(pricesResult.value || new Map());
+                } else {
+                    setCsvPriceMap(new Map());
+                    console.warn('Failed to load CSV prices (ingredient master still available):', pricesResult.reason);
+                }
+
+                if (overridesResult.status === 'fulfilled') {
+                    setCsvUnitOverrideMap(overridesResult.value || new Map());
+                } else {
+                    setCsvUnitOverrideMap(new Map());
+                    console.warn('Failed to load CSV unit overrides (ingredient master still available):', overridesResult.reason);
+                }
+            }).catch((auxError) => {
+                console.warn('Failed to load auxiliary ingredient master data:', auxError);
+                setCsvPriceMap(new Map());
+                setCsvUnitOverrideMap(new Map());
+            });
         } catch (error) {
             toast.error('データの読み込みに失敗しました');
             console.error('Failed to load ingredients:', error);
+            setLoading(false);
         }
-        setLoading(false);
     }, [toast]);
 
     useEffect(() => {
@@ -110,6 +207,25 @@ export const IngredientMaster = () => {
         }, 0);
         return () => clearTimeout(t);
     }, [loadIngredients]);
+
+    useEffect(() => {
+        let alive = true;
+        const loadVendorOrder = async () => {
+            if (!userId) {
+                if (alive) setVendorSortOrder([]);
+                return;
+            }
+            try {
+                const saved = await vendorOrderService.getAll(userId);
+                if (alive) setVendorSortOrder(saved);
+            } catch (error) {
+                console.error('Failed to load vendor order:', error);
+                if (alive) setVendorSortOrder([]);
+            }
+        };
+        void loadVendorOrder();
+        return () => { alive = false; };
+    }, [userId]);
 
     const handleAddNew = () => {
         const clientId = `new-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -234,6 +350,9 @@ export const IngredientMaster = () => {
         if (unit === 'ml' || unit === 'cc' || unit === 'ｍｌ' || unit === 'ｃｃ') {
             return `¥${Math.round((price / size) * 1000).toLocaleString()}/L`;
         }
+        if (unit === 'cl' || unit === 'ｃｌ') {
+            return `¥${Math.round((price / size) * 100).toLocaleString()}/L`;
+        }
         // For other units (pieces, etc.), display per unit
         return `¥${Math.round(price / size).toLocaleString()}/${item.packetUnit}`;
     };
@@ -249,6 +368,55 @@ export const IngredientMaster = () => {
         return normalizeItemCategory(item?.itemCategory) === categoryFilter;
     });
 
+    const duplicateMeta = React.useMemo(() => {
+        const byNormalizedKey = new Map(); // normalizedKey -> [{ clientId, name }]
+        ingredients.forEach((row) => {
+            const name = String(row?.ingredientName || '').trim();
+            if (!name) return;
+            const key = normalizeIngredientKey(name);
+            if (!key) return;
+            const arr = byNormalizedKey.get(key) || [];
+            arr.push({ clientId: row?.clientId, name });
+            byNormalizedKey.set(key, arr);
+        });
+
+        const duplicateKeys = new Set();
+        const duplicateClientIds = new Set();
+        const keyToNames = new Map();
+        const groups = [];
+
+        for (const [key, arr] of byNormalizedKey.entries()) {
+            if (!Array.isArray(arr) || arr.length < 2) continue;
+            duplicateKeys.add(key);
+            arr.forEach((it) => {
+                if (it?.clientId) duplicateClientIds.add(it.clientId);
+            });
+            const names = Array.from(new Set(arr.map((it) => it?.name).filter(Boolean)));
+            keyToNames.set(key, names);
+            groups.push({ key, names, rows: arr.length });
+        }
+
+        groups.sort((a, b) => {
+            const an = String(a?.names?.[0] || '');
+            const bn = String(b?.names?.[0] || '');
+            return an.localeCompare(bn, 'ja');
+        });
+
+        return {
+            duplicateKeys,
+            duplicateClientIds,
+            keyToNames,
+            groups,
+        };
+    }, [ingredients]);
+
+    useEffect(() => {
+        // Auto-exit "duplicates only" when the duplicates disappear (after deletes/edits).
+        if (showDuplicatesOnly && (duplicateMeta?.groups?.length || 0) === 0) {
+            setShowDuplicatesOnly(false);
+        }
+    }, [showDuplicatesOnly, duplicateMeta]);
+
     const isFilteredView = categoryFilter !== 'all' || String(searchQuery || '').trim() !== '';
 
     const getCsvUnit = (ingredientName) => {
@@ -259,19 +427,129 @@ export const IngredientMaster = () => {
         return unit ? String(unit) : '-';
     };
 
-    const getCsvVendor = (ingredientName) => {
+    const getCsvVendor = useCallback((ingredientName) => {
         const key = normalizeIngredientKey(ingredientName);
         if (!key) return '';
         const entry = csvPriceMap?.get(key) || null;
         const vendor = entry?.vendor;
         return vendor ? String(vendor) : '';
-    };
+    }, [csvPriceMap]);
 
-    const getDisplayVendor = (item) => {
-        const masterVendor = String(item?.vendor || '').trim();
+    const getEffectiveVendorKey = React.useCallback((row) => {
+        const masterVendor = String(row?.vendor || '').trim();
         if (masterVendor) return masterVendor;
-        return getCsvVendor(item?.ingredientName);
-    };
+        const csvVendor = getCsvVendor(row?.ingredientName);
+        if (csvVendor) return csvVendor;
+        return VENDOR_FILTER_UNASSIGNED;
+    }, [getCsvVendor]);
+
+    const vendorMeta = React.useMemo(() => {
+        const counts = new Map(); // vendorKey -> count
+        filteredIngredients.forEach((row) => {
+            const key = getEffectiveVendorKey(row);
+            counts.set(key, (counts.get(key) || 0) + 1);
+        });
+
+        const vendorKeys = new Set(counts.keys());
+        const entries = Array.from(counts.entries()).map(([key, count]) => ({ key, count }));
+        const orderIndex = new Map((vendorSortOrder || []).map((key, index) => [key, index]));
+        entries.sort((a, b) => {
+            const ai = orderIndex.has(a.key) ? orderIndex.get(a.key) : Number.MAX_SAFE_INTEGER;
+            const bi = orderIndex.has(b.key) ? orderIndex.get(b.key) : Number.MAX_SAFE_INTEGER;
+            if (ai !== bi) return ai - bi;
+            if (a.key === VENDOR_FILTER_UNASSIGNED && b.key !== VENDOR_FILTER_UNASSIGNED) return 1;
+            if (b.key === VENDOR_FILTER_UNASSIGNED && a.key !== VENDOR_FILTER_UNASSIGNED) return -1;
+            return String(a.key).localeCompare(String(b.key), 'ja');
+        });
+
+        return {
+            total: filteredIngredients.length,
+            vendorKeys,
+            entries,
+        };
+    }, [filteredIngredients, getEffectiveVendorKey, vendorSortOrder]);
+
+    useEffect(() => {
+        const keys = (vendorMeta?.entries || []).map((entry) => entry.key);
+        setVendorSortOrder((prev) => {
+            const current = Array.isArray(prev) ? prev : [];
+            const kept = current.filter((key) => keys.includes(key));
+            const appended = keys.filter((key) => !kept.includes(key));
+            const next = [...kept, ...appended];
+            if (next.length === current.length && next.every((k, idx) => k === current[idx])) {
+                return current;
+            }
+            return next;
+        });
+    }, [vendorMeta]);
+
+    const vendorSensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: { distance: 6 },
+        }),
+    );
+
+    const handleVendorOrderDragEnd = useCallback(async (event) => {
+        if (editingId !== null) return;
+        const { active, over } = event;
+        if (!active?.id || !over?.id || active.id === over.id) return;
+
+        const currentKeys = (vendorMeta?.entries || []).map((entry) => entry.key);
+        const oldIndex = currentKeys.indexOf(active.id);
+        const newIndex = currentKeys.indexOf(over.id);
+        if (oldIndex < 0 || newIndex < 0) return;
+
+        const nextCurrent = arrayMove(currentKeys, oldIndex, newIndex);
+        const currentState = Array.isArray(vendorSortOrder) ? vendorSortOrder : [];
+        const rest = currentState.filter((key) => !currentKeys.includes(key));
+        const nextOrderAll = [...nextCurrent, ...rest];
+        setVendorSortOrder(nextOrderAll);
+
+        if (!userId) return;
+        try {
+            await vendorOrderService.saveOrder(userId, nextOrderAll);
+        } catch (error) {
+            console.error('Failed to save vendor order:', error);
+            toast.error(error?.message || '業者の並び順保存に失敗しました');
+        }
+    }, [editingId, userId, vendorMeta, toast, vendorSortOrder]);
+
+    useEffect(() => {
+        if (vendorFilter === VENDOR_FILTER_ALL) return;
+        if (!vendorMeta?.vendorKeys?.has?.(vendorFilter)) {
+            setVendorFilter(VENDOR_FILTER_ALL);
+        }
+    }, [vendorFilter, vendorMeta]);
+
+    const visibleIngredients = React.useMemo(() => {
+        let list = filteredIngredients.filter((row) => {
+            const id = row?.clientId;
+            const isEditingRow = !!editingId && id === editingId;
+
+            if (showDuplicatesOnly) {
+                const set = duplicateMeta?.duplicateClientIds || new Set();
+                const ok = set.has(id);
+                if (!ok && !isEditingRow) return false;
+            }
+
+            if (vendorFilter !== VENDOR_FILTER_ALL) {
+                const ok = getEffectiveVendorKey(row) === vendorFilter;
+                if (!ok && !isEditingRow) return false;
+            }
+
+            return true;
+        });
+
+        // If filters/search/category exclude the editing row, keep it visible at the top while editing.
+        if (editingId && !list.some((row) => row?.clientId === editingId)) {
+            const editingRow = ingredients.find((row) => row?.clientId === editingId);
+            if (editingRow) {
+                list = [editingRow, ...list];
+            }
+        }
+
+        return list;
+    }, [filteredIngredients, showDuplicatesOnly, duplicateMeta, vendorFilter, getEffectiveVendorKey, editingId, ingredients]);
 
     const getEditableCsvUnit = (ingredientName) => {
         const name = (ingredientName ?? '').toString().trim();
@@ -413,6 +691,21 @@ export const IngredientMaster = () => {
                         表示: <strong>{(filteredIngredients.length || 0).toLocaleString()}</strong> 件
                     </span>
                 )}
+                <button
+                    type="button"
+                    className={`ingredient-dup-toggle ${showDuplicatesOnly ? 'active' : ''}`}
+                    onClick={() => setShowDuplicatesOnly((prev) => !prev)}
+                    disabled={editingId !== null || (duplicateMeta?.groups?.length || 0) === 0}
+                    title={
+                        editingId !== null
+                            ? '編集中は切り替えできません'
+                            : ((duplicateMeta?.groups?.length || 0) === 0
+                                ? '重複候補は見つかりませんでした'
+                                : '表記ゆれ等の重複候補だけ表示します')
+                    }
+                >
+                    重複候補: <strong>{(duplicateMeta?.groups?.length || 0).toLocaleString()}</strong> グループ
+                </button>
             </div>
 
             <div className="ingredient-category-tabs">
@@ -430,6 +723,78 @@ export const IngredientMaster = () => {
                 ))}
             </div>
 
+            <div className="ingredient-vendor-filter-row">
+                <label htmlFor="ingredient-vendor-filter" className="ingredient-vendor-filter-label">
+                    業者フィルタ
+                </label>
+                <select
+                    id="ingredient-vendor-filter"
+                    value={vendorFilter}
+                    onChange={(e) => setVendorFilter(e.target.value)}
+                    disabled={editingId !== null}
+                    className="ingredient-vendor-select"
+                    title={editingId !== null ? '編集中は切り替えできません' : 'クリックで業者を選択'}
+                >
+                    <option value={VENDOR_FILTER_ALL}>
+                        全業者 ({(vendorMeta?.total || 0).toLocaleString()})
+                    </option>
+                    {(vendorMeta?.entries || []).map(({ key, count }) => {
+                        const label = key === VENDOR_FILTER_UNASSIGNED ? '未設定' : key;
+                        return (
+                            <option key={key} value={key}>
+                                {label} ({Number(count || 0).toLocaleString()})
+                            </option>
+                        );
+                    })}
+                </select>
+                <button
+                    type="button"
+                    className={`ingredient-vendor-order-toggle ${showVendorOrderEditor ? 'active' : ''}`}
+                    onClick={() => setShowVendorOrderEditor((prev) => !prev)}
+                    disabled={editingId !== null}
+                    title={editingId !== null ? '編集中は切り替えできません' : '必要な時だけ並び替えリストを表示'}
+                >
+                    {showVendorOrderEditor ? '並び替えを閉じる' : '並び替えを表示'}
+                </button>
+            </div>
+
+            {showVendorOrderEditor && (
+                <div className="ingredient-vendor-order-panel">
+                    <div className="ingredient-vendor-order-title">業者の並び順（ドラッグ＆ドロップ）</div>
+                    {(vendorMeta?.entries || []).length === 0 ? (
+                        <div className="ingredient-vendor-order-empty">業者データがありません</div>
+                    ) : (
+                        <DndContext
+                            sensors={vendorSensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={handleVendorOrderDragEnd}
+                        >
+                            <SortableContext
+                                items={(vendorMeta?.entries || []).map((entry) => entry.key)}
+                                strategy={verticalListSortingStrategy}
+                            >
+                                <ul className="vendor-order-list">
+                                    {(vendorMeta?.entries || []).map(({ key, count }) => {
+                                        const label = key === VENDOR_FILTER_UNASSIGNED ? '未設定' : key;
+                                        return (
+                                            <SortableVendorOrderItem
+                                                key={key}
+                                                vendorKey={key}
+                                                label={label}
+                                                count={count}
+                                                active={vendorFilter === key}
+                                                disabled={editingId !== null}
+                                                onSelect={setVendorFilter}
+                                            />
+                                        );
+                                    })}
+                                </ul>
+                            </SortableContext>
+                        </DndContext>
+                    )}
+                </div>
+            )}
+
             {loading ? (
                 <div className="master-loading">読み込み中...</div>
             ) : (
@@ -437,7 +802,9 @@ export const IngredientMaster = () => {
                     <table className="master-table">
                         <thead>
                             <tr>
+                                <th className="master-col-no">No</th>
                                 <th>材料名</th>
+                                <th className="master-col-category">区分（税率）</th>
                                 <th>仕入れ値（円）</th>
                                 <th>内容量</th>
                                 <th>単位</th>
@@ -448,24 +815,49 @@ export const IngredientMaster = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredIngredients.length === 0 ? (
+                            {visibleIngredients.length === 0 ? (
                                 <tr>
-                                    <td colSpan="8" style={{ textAlign: 'center', color: '#999' }}>
-                                        {isFilteredView ? '該当する材料がありません' : '材料データがありません'}
+                                    <td colSpan="10" style={{ textAlign: 'center', color: '#999' }}>
+                                        {showDuplicatesOnly ? '重複候補がありません' : (isFilteredView ? '該当する材料がありません' : '材料データがありません')}
                                     </td>
                                 </tr>
                             ) : (
-                                filteredIngredients.map((item, _filteredIndex) => {
+                                visibleIngredients.map((item, _filteredIndex) => {
                                     const clientId = item?.clientId ?? item?.ingredientName ?? String(_filteredIndex);
                                     const csvVendor = getCsvVendor(item?.ingredientName);
                                     const masterVendor = String(item?.vendor || '').trim();
                                     const showCsvVendorHint = item?.isEditing && !!csvVendor && csvVendor !== masterVendor;
-                                    const displayVendor = getDisplayVendor(item);
+                                    const effectiveVendor = masterVendor || csvVendor || '';
+                                    const vendorSourceClass = masterVendor
+                                        ? 'vendor-tag--master'
+                                        : (csvVendor ? 'vendor-tag--csv' : 'vendor-tag--empty');
+                                    const vendorTitle = (() => {
+                                        if (!effectiveVendor) return '業者名が未設定です';
+                                        if (masterVendor && csvVendor && csvVendor !== masterVendor) {
+                                            return `業者（材料マスター）: ${masterVendor} / CSV: ${csvVendor}`;
+                                        }
+                                        return masterVendor ? '業者（材料マスター）' : '業者（CSV）';
+                                    })();
                                     const normalizedCategory = normalizeItemCategory(item?.itemCategory);
                                     const isFoodCategory = normalizedCategory === 'food';
+                                    const dupKey = normalizeIngredientKey(item?.ingredientName);
+                                    const isDuplicate = !!dupKey && duplicateMeta?.duplicateKeys?.has?.(dupKey);
+                                    const dupNames = (dupKey && duplicateMeta?.keyToNames?.get?.(dupKey)) || null;
+                                    const dupTitle = isDuplicate && Array.isArray(dupNames) && dupNames.length > 0
+                                        ? `重複候補: ${dupNames.join(' / ')}`
+                                        : '重複候補';
 
                                     return (
-                                    <tr key={clientId} className={item.isEditing ? 'editing' : ''}>
+                                    <tr
+                                        key={clientId}
+                                        className={[
+                                            item.isEditing ? 'editing' : '',
+                                            isDuplicate ? 'duplicate' : '',
+                                        ].filter(Boolean).join(' ')}
+                                    >
+                                        <td className="master-col-no">
+                                            <span className="master-col-no__text">{_filteredIndex + 1}</span>
+                                        </td>
                                         <td>
                                             {item.isEditing ? (
                                                 <div className="ingredient-name-cell">
@@ -483,16 +875,48 @@ export const IngredientMaster = () => {
                                                         wrapperClassName="input-group--no-margin"
                                                     />
                                                     {showCsvVendorHint && (
-                                                        <div className="ingredient-subtext">CSV: {csvVendor}</div>
+                                                        <div className="ingredient-vendor-tags">
+                                                            <span className="vendor-tag vendor-tag--csv" title="業者名（CSV）">
+                                                                参考: {csvVendor}
+                                                            </span>
+                                                        </div>
                                                     )}
                                                 </div>
                                             ) : (
                                                 <div className="ingredient-name-cell">
-                                                    <div>{item.ingredientName}</div>
-                                                    {displayVendor && (
-                                                        <div className="ingredient-subtext">{displayVendor}</div>
-                                                    )}
+                                                    <div className="ingredient-name-row">
+                                                        <span>{item.ingredientName}</span>
+                                                        {isDuplicate && (
+                                                            <span className="ingredient-dup-badge" title={dupTitle}>
+                                                                重複
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="ingredient-vendor-tags">
+                                                        <span
+                                                            className={`vendor-tag ${vendorSourceClass}`}
+                                                            title={vendorTitle}
+                                                        >
+                                                            業者: {effectiveVendor || '-'}
+                                                        </span>
+                                                    </div>
                                                 </div>
+                                            )}
+                                        </td>
+                                        <td className="master-col-category">
+                                            {item.isEditing ? (
+                                                <select
+                                                    value={normalizedCategory}
+                                                    onChange={e => handleChange(clientId, 'itemCategory', e.target.value)}
+                                                    className="category-select"
+                                                >
+                                                    <option value="food">食材（8%）</option>
+                                                    <option value="soft_drink">ソフトドリンク（8%）</option>
+                                                    <option value="alcohol">アルコール（10%）</option>
+                                                    <option value="supplies">備品（10%）</option>
+                                                </select>
+                                            ) : (
+                                                <span title="税率判定に使われます">{getItemCategoryLabel(item?.itemCategory)}</span>
                                             )}
                                         </td>
                                         <td>
@@ -533,12 +957,13 @@ export const IngredientMaster = () => {
                                                 >
                                                     <option value="g">g</option>
                                                     <option value="ml">ml</option>
+                                                    <option value="cc">cc</option>
+                                                    <option value="cl">cl</option>
                                                     <option value="個">個</option>
                                                     <option value="袋">袋</option>
                                                     <option value="本">本</option>
                                                     <option value="枚">枚</option>
                                                     <option value="パック">パック</option>
-                                                    <option value="cc">cc</option>
                                                 </select>
                                             ) : (
                                                 item.packetUnit

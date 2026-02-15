@@ -16,5 +16,7 @@ const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY') || 'sb_publishable_CmEv
 
 // Export URL for diagnostics in UI (safe to expose).
 export const SUPABASE_URL = supabaseUrl;
+// Publishable anon key (safe to expose in the client).
+export const SUPABASE_ANON_KEY = supabaseAnonKey;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

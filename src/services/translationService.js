@@ -1,4 +1,4 @@
-import { supabase } from '../supabase';
+import { SUPABASE_ANON_KEY, SUPABASE_URL, supabase } from '../supabase';
 
 // API Key is now managed in Supabase Secrets (Edge Function)
 // const DEEPL_API_URL is handled in the Edge Function
@@ -216,19 +216,66 @@ export const translationService = {
             return normalizedTextArray;
         }
 
-        // Use Supabase Edge Function to proxy the request securely
-        const { data, error } = await supabase.functions.invoke('translate', {
-            body: {
-                text: normalizedTextArray,
-                target_lang: targetLang
-            }
-        });
+        const functionUrl = `${SUPABASE_URL}/functions/v1/translate`;
 
-        if (error) {
-            console.error("Supabase Function Invocation Error:", error);
-            throw new Error(`Translation Error: ${error.message}`);
+        const doFetch = async (accessToken) => {
+            return await fetch(functionUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({
+                    text: normalizedTextArray,
+                    target_lang: targetLang,
+                }),
+            });
+        };
+
+        const getAccessToken = async () => {
+            const { data: sessionData } = await supabase.auth.getSession();
+            if (sessionData?.session?.access_token) return sessionData.session.access_token;
+            const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession();
+            if (refreshErr || !refreshed?.session?.access_token) {
+                const msg = refreshErr?.message || '';
+                const needReLogin = /refresh_token|session|expired|invalid|not found/i.test(msg);
+                throw new Error(needReLogin
+                    ? 'セッションの有効期限が切れています。一度ログアウトしてから再ログインしてください。'
+                    : (msg || 'ログイン情報が取得できませんでした。再ログインしてください。'));
+            }
+            return refreshed.session.access_token;
+        };
+
+        let accessToken = await getAccessToken();
+        let res = await doFetch(accessToken);
+
+        // If token was stale, refresh and retry once.
+        if (res.status === 401) {
+            accessToken = await getAccessToken();
+            res = await doFetch(accessToken);
         }
 
+        if (!res.ok) {
+            const status = res.status;
+            let detail = '';
+            try {
+                const text = await res.text();
+                if (text) {
+                    try {
+                        const parsed = JSON.parse(text);
+                        detail = parsed?.error || parsed?.message || text;
+                    } catch {
+                        detail = text;
+                    }
+                }
+            } catch {
+                // ignore
+            }
+            throw new Error(detail || `Translation Error (${status})`);
+        }
+
+        const data = await res.json();
         if (data && data.error) {
             console.error("Edge Function returned error:", data.error);
             throw new Error(`Translation Error: ${data.error}`);

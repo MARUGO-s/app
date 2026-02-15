@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from './Button';
 import { Input } from './Input';
 import { Card } from './Card';
@@ -7,6 +7,8 @@ import { RecipeFormBread } from './RecipeFormBread';
 import { RecipeFormIngredients } from './RecipeFormIngredients';
 import { RecipeFormSteps } from './RecipeFormSteps';
 import { purchasePriceService } from '../services/purchasePriceService';
+import { featureFlagService } from '../services/featureFlagService';
+import { VoiceInputButton } from './VoiceInputButton';
 import './RecipeForm.css';
 import './RecipeFormMock.css';
 import { ImportModal } from './ImportModal';
@@ -135,6 +137,27 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
     });
 
     const [isDragActive, setIsDragActive] = useState(false);
+    const [voiceInputEnabled, setVoiceInputEnabled] = useState(false);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const loadVoiceFeatureFlag = async () => {
+            try {
+                const enabled = await featureFlagService.getVoiceInputEnabled();
+                if (isMounted) setVoiceInputEnabled(enabled);
+            } catch (error) {
+                console.warn('[RecipeForm] failed to load voice input feature flag:', error);
+                if (isMounted) setVoiceInputEnabled(false);
+            }
+        };
+
+        loadVoiceFeatureFlag();
+
+        return () => {
+            isMounted = false;
+        };
+    }, []);
 
     const handleImportedRecipe = (importedData, sourceUrl = '') => {
         // Map imported ingredients to form structure
@@ -494,6 +517,15 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                     onChange={handleChange}
                                     placeholder="料理のポイント、仕込み、注意点など..."
                                 />
+                                {voiceInputEnabled && (
+                                    <div className="recipe-form__voice-action">
+                                        <VoiceInputButton
+                                            label="説明を音声入力"
+                                            getCurrentValue={() => formData.description}
+                                            onTranscript={(nextValue) => setFormData(prev => ({ ...prev, description: nextValue }))}
+                                        />
+                                    </div>
+                                )}
                                 <Input
                                     label="引用元URL"
                                     id="sourceUrl"
@@ -627,7 +659,11 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                         </div>
                                     ) : (
                                         <div className="recipe-form-mock__editor-surface">
-                                            <RecipeFormSteps formData={formData} setFormData={setFormData} />
+                                            <RecipeFormSteps
+                                                formData={formData}
+                                                setFormData={setFormData}
+                                                voiceInputEnabled={voiceInputEnabled}
+                                            />
                                         </div>
                                     )}
                                 </div>

@@ -26,7 +26,17 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const DEFAULT_MODEL = "gemini-2.0-flash-exp";
+const DEFAULT_MODEL = "gemini-1.5-flash";
+const PRO_MODEL_SEGMENT_RE = /(^|[-_])pro($|[-_])/i;
+
+function assertGeminiModelAllowed(modelId: string) {
+  const m = String(modelId || "").trim();
+  if (!m) return;
+  // Cost safety: never allow Pro-family models from this endpoint.
+  if (PRO_MODEL_SEGMENT_RE.test(m)) {
+    throw new Error(`高額課金になりやすいProモデルは使用できません: ${m}`);
+  }
+}
 
 function buildMessagesFromPayload(payload: RequestPayload): ChatMessage[] {
   if (payload.messages && payload.messages.length > 0) {
@@ -116,7 +126,8 @@ serve(async (req) => {
       });
     }
 
-    const modelId = body.model || DEFAULT_MODEL;
+    const modelId = String(body.model || DEFAULT_MODEL).trim() || DEFAULT_MODEL;
+    assertGeminiModelAllowed(modelId);
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
 
     // Gemini API用のリクエスト形式に変換
@@ -173,7 +184,7 @@ serve(async (req) => {
     try {
       // ```jsonマークダウンを除去してJSONを抽出
       let jsonContent = content;
-      
+
       // ```json...```の形式を除去
       const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/i);
       if (jsonMatch) {
@@ -186,12 +197,12 @@ serve(async (req) => {
           jsonContent = content.slice(firstBrace, lastBrace + 1).trim();
         }
       }
-      
+
       recipeData = JSON.parse(jsonContent);
     } catch (parseError) {
       console.log("⚠️ JSON解析失敗、生のコンテンツを返します:", parseError.message);
       console.log("⚠️ 元のコンテンツ:", content.substring(0, 200) + "...");
-      
+
       // より詳細なエラー情報を提供
       const errorDetails = {
         parseError: parseError.message,
@@ -200,9 +211,9 @@ serve(async (req) => {
         hasJsonMarkdown: content.includes('```json'),
         hasJsonBraces: content.includes('{') && content.includes('}')
       };
-      
+
       console.log("⚠️ エラー詳細:", errorDetails);
-      
+
       recipeData = {
         title: "解析エラー",
         description: `Gemini APIからの応答を解析できませんでした: ${parseError.message}`,
