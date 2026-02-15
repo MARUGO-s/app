@@ -14,17 +14,31 @@
 
 .recipe-detail__actions {
     display: flex;
-    gap: var(--space-sm);
+    flex-wrap: wrap;
+    /* Allow wrapping on mobile */
+    gap: 8px;
+    /* Slightly tighter gap for wrapping */
     width: 100%;
-    overflow-x: auto;
-    padding-bottom: 4px;
-    /* for scrollbar spacing */
-    -webkit-overflow-scrolling: touch;
+    /* Remove horizontal scroll */
+    overflow-x: visible;
+    padding-bottom: 0;
+    align-items: center;
+    /* Center items vertically */
 }
 
 .recipe-detail__actions button,
 .recipe-detail__actions select {
-    flex-shrink: 0;
+    flex-shrink: 1;
+    /* Allow shrinking if needed, though wrap handles it mostly */
+    min-width: 0;
+    /* Allow shrinking below content size if necessary in flex container */
+    white-space: nowrap;
+    /* Prevent text wrapping inside buttons unless very tight */
+}
+
+/* Ensure select box doesn't take awkward width */
+.recipe-detail__actions select {
+    max-width: 100%;
 }
 
 @media (min-width: 750px) {
@@ -37,11 +51,8 @@
 
     .recipe-detail__actions {
         width: auto;
-        overflow-x: visible;
-        padding-bottom: 0;
-        flex-wrap: wrap;
-        /* Allow wrapping */
         justify-content: flex-end;
+        /* Inherits wrap from mobile base styles */
     }
 }
 
@@ -301,7 +312,8 @@
     }
 
     input[type="checkbox"],
-    select {
+    select,
+    .modal-overlay {
         display: none !important;
     }
 
@@ -919,6 +931,7 @@
 .preview-table--normal td:nth-child(3) {
     text-align: left;
 }
+
 .preview-table tbody tr {
     cursor: pointer;
 }

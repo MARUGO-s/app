@@ -201,44 +201,100 @@ h3 {
 
 .form-ingredient-row {
     display: grid;
-    /* Row 1: handle | name (2/3)     | qty (広) | unit (広) | delete */
-    /* Row 2:        | purchase cost  | cost     | 10%       |        */
-    grid-template-columns: 20px 1.2fr 72px 58px 24px;
-    grid-template-rows: auto auto;
-    gap: 4px 4px;
+    /* Mobile Grid Layout: Optimized for iPhone width */
+    /* Col 1: Handle (24px) */
+    /* Col 2: Main Input Left (1fr) */
+    /* Col 3: Main Input Right (1fr) */
+    /* Col 4: Delete/Action (30px) */
+    grid-template-columns: 24px 1fr 1fr 30px;
+    grid-template-rows: auto auto auto;
+    gap: 8px 8px;
     align-items: center;
     min-width: 0;
     width: 100%;
-    padding: 8px 4px;
+    padding: 12px 4px;
     border-bottom: 1px solid rgba(128, 128, 128, 0.15);
 }
 
-/* Row 1: children 1-4 + last */
-.form-ingredient-row > :nth-child(1) { grid-row: 1; grid-column: 1; } /* drag handle */
-.form-ingredient-row > :nth-child(2) { grid-row: 1; grid-column: 2; } /* name */
-.form-ingredient-row > :nth-child(3) { grid-row: 1; grid-column: 3; } /* qty */
-.form-ingredient-row > :nth-child(4) { grid-row: 1; grid-column: 4; } /* unit */
-.form-ingredient-row > :nth-child(8) { grid-row: 1; grid-column: 5; } /* delete */
+/* --- Row 1: Name & Controls --- */
+.form-ingredient-row> :nth-child(1) {
+    grid-row: 1;
+    grid-column: 1;
+    align-self: center;
+}
 
-/* Row 2: cost fields */
-.form-ingredient-row > :nth-child(5) { grid-row: 2; grid-column: 2; } /* purchase cost */
-.form-ingredient-row > :nth-child(6) { grid-row: 2; grid-column: 3; } /* cost */
-.form-ingredient-row > :nth-child(7) { grid-row: 2; grid-column: 4; } /* 10% checkbox */
+/* drag handle */
+
+.form-ingredient-row> :nth-child(2) {
+    grid-row: 1;
+    grid-column: 2 / 4;
+    width: 100%;
+}
+
+/* name (takes full available width) */
+
+.form-ingredient-row> :nth-child(8) {
+    grid-row: 1;
+    grid-column: 4;
+    justify-self: end;
+}
+
+/* delete */
+
+/* --- Row 2: Quantity & Unit --- */
+.form-ingredient-row> :nth-child(3) {
+    grid-row: 2;
+    grid-column: 2;
+}
+
+/* qty */
+
+.form-ingredient-row> :nth-child(4) {
+    grid-row: 2;
+    grid-column: 3;
+}
+
+/* unit */
+
+/* --- Row 3: Cost Info --- */
+.form-ingredient-row> :nth-child(5) {
+    grid-row: 3;
+    grid-column: 2;
+}
+
+/* purchase cost */
+
+.form-ingredient-row> :nth-child(6) {
+    grid-row: 3;
+    grid-column: 3;
+}
+
+/* cost */
+
+.form-ingredient-row> :nth-child(7) {
+    grid-row: 3;
+    grid-column: 4;
+}
+
+/* 10% checkbox */
 
 /* Reduced font for ALL inputs on mobile */
-.form-ingredient-row input {
-    font-size: 0.82rem !important;
-    padding: 4px 4px !important;
+.form-ingredient-row input,
+.form-ingredient-row select {
+    font-size: 0.9rem !important;
+    padding: 6px 4px !important;
+    height: 38px;
+    /* Touch friendly height */
 }
 
 /* Mobile: label cost fields inline */
 .form-ingredient-row .ingredient-cost::before {
     content: attr(data-label);
-    font-size: 0.65rem;
-    color: #999;
+    font-size: 0.7rem;
+    color: #888;
     display: block;
-    line-height: 1;
-    margin-bottom: 1px;
+    line-height: 1.2;
+    margin-bottom: 2px;
 }
 
 /* --- Tablet (600px+): single-row grid, show header --- */
@@ -265,14 +321,14 @@ h3 {
     }
 
     /* Reset explicit grid placements for single-row mode */
-    .form-ingredient-row > :nth-child(1),
-    .form-ingredient-row > :nth-child(2),
-    .form-ingredient-row > :nth-child(3),
-    .form-ingredient-row > :nth-child(4),
-    .form-ingredient-row > :nth-child(5),
-    .form-ingredient-row > :nth-child(6),
-    .form-ingredient-row > :nth-child(7),
-    .form-ingredient-row > :nth-child(8) {
+    .form-ingredient-row> :nth-child(1),
+    .form-ingredient-row> :nth-child(2),
+    .form-ingredient-row> :nth-child(3),
+    .form-ingredient-row> :nth-child(4),
+    .form-ingredient-row> :nth-child(5),
+    .form-ingredient-row> :nth-child(6),
+    .form-ingredient-row> :nth-child(7),
+    .form-ingredient-row> :nth-child(8) {
         grid-row: auto;
         grid-column: auto;
     }
