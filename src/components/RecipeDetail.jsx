@@ -231,6 +231,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
     // State for full recipe data (fetched if steps are missing)
     const [fullRecipe, setFullRecipe] = React.useState(recipe);
     const [_loadingDetail, setLoadingDetail] = React.useState(false);
+    const [showQrCodeModal, setShowQrCodeModal] = React.useState(false);
 
     // Source recipe for original-language references (prefer full detail once loaded)
     const sourceRecipe = fullRecipe || recipe;
@@ -927,7 +928,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                 onTouchMove={onTouchMove}
                 onTouchEnd={onTouchEnd}
             >
-            {/* ... (modals kept same) */}
+                {/* ... (modals kept same) */}
                 {showDuplicateConfirm && (
                     <div className="modal-overlay fade-in" style={{
                         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -1052,16 +1053,16 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                     原文表示
                                 </label>
                             )}
-                        <Button variant="secondary" size="sm" onClick={() => setShowPrintModal(true)}>🖨️ プレビュー</Button>
-                        <Button variant="secondary" size="sm" onClick={() => window.print()}>🖨️ 印刷</Button>
-                        <Button variant="secondary" size="sm" onClick={handleDuplicateClick}>複製</Button>
+                            <Button variant="secondary" size="sm" onClick={() => setShowPrintModal(true)}>🖨️ プレビュー</Button>
+                            <Button variant="secondary" size="sm" onClick={() => window.print()}>🖨️ 印刷</Button>
+                            <Button variant="secondary" size="sm" onClick={handleDuplicateClick}>複製</Button>
 
                             {canEdit && (
                                 <>
                                     <Button variant="secondary" size="sm" onClick={onEdit}>編集</Button>
-                                <Button variant="danger" size="sm" onClick={handleDeleteClick} style={{ marginLeft: '0.5rem' }}>削除</Button>
-                            </>
-                        )}
+                                    <Button variant="danger" size="sm" onClick={handleDeleteClick} style={{ marginLeft: '0.5rem' }}>削除</Button>
+                                </>
+                            )}
 
                         </div>
                     )}
@@ -1118,15 +1119,30 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
 
                     {displayRecipe.sourceUrl && (
                         <div className="print-qr-container" style={{ marginTop: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            <div style={{ fontSize: '0.85rem' }}>
+                            <div style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <a href={displayRecipe.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'underline', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     🔗 <span className="screen-only">{tUi('sourceRecipe')}</span>
                                     <span className="print-only">{tUi('sourceRecipe')}</span>
                                 </a>
-                            </div>
-                            {/* QR Code */}
-                            <div style={{ background: 'white', padding: '4px', width: 'fit-content' }}>
-                                <QRCode value={displayRecipe.sourceUrl} size={128} style={{ display: 'block' }} />
+
+                                <button
+                                    onClick={() => setShowQrCodeModal(true)}
+                                    className="screen-only"
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        padding: 0,
+                                        color: 'var(--color-text-muted)',
+                                        cursor: 'pointer',
+                                        fontSize: '0.85rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        textDecoration: 'underline'
+                                    }}
+                                >
+                                    📱 QRコード
+                                </button>
                             </div>
                         </div>
                     )}
@@ -2022,6 +2038,25 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                     </div>
                 </Modal>
             </div >
+
+            <Modal
+                isOpen={showQrCodeModal}
+                onClose={() => setShowQrCodeModal(false)}
+                title="📱 QRコード"
+                size="small"
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', padding: '20px' }}>
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: '#666', textAlign: 'center' }}>
+                        スマートフォンで読み取ると、<br />元のレシピページにアクセスできます。
+                    </p>
+                    <div style={{ background: 'white', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}>
+                        <QRCode value={displayRecipe.sourceUrl || ''} size={200} />
+                    </div>
+                    <Button variant="secondary" onClick={() => setShowQrCodeModal(false)}>
+                        閉じる
+                    </Button>
+                </div>
+            </Modal>
 
             <div className="print-layout">
                 <div className="recipe-detail__hero">
