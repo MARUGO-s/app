@@ -12,7 +12,11 @@ const blobToBase64 = (blob) => new Promise((resolve, reject) => {
 });
 
 export const voiceTranscriptionService = {
-    async transcribe(blob, { mimeType, fileName, language = 'ja' } = {}) {
+    /**
+     * @param {Blob} blob - 音声データ
+     * @param {Object} options
+     */
+    async transcribe(blob, { mimeType, fileName, language = 'ja', promptContext } = {}) {
         if (!(blob instanceof Blob)) {
             throw new Error('音声データが不正です');
         }
@@ -22,14 +26,25 @@ export const voiceTranscriptionService = {
             throw new Error('音声データが空です');
         }
 
-        const { data, error } = await supabase.functions.invoke('transcribe', {
-            body: {
-                audioBase64,
-                mimeType: mimeType || blob.type || 'audio/webm',
-                fileName: fileName || 'voice-input.webm',
-                language,
-            },
+        const body = {
+            audioBase64,
+            mimeType: mimeType || blob.type || 'audio/webm',
+            fileName: fileName || 'voice-input.webm',
+            language,
+            promptContext: promptContext || null,
+        };
+
+        const INVOKE_TIMEOUT_MS = 25000;
+
+        const invokePromise = supabase.functions.invoke('transcribe', { body });
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(
+                () => reject(new Error('音声認識がタイムアウトしました。ネットワークを確認して再試行してください。')),
+                INVOKE_TIMEOUT_MS
+            );
         });
+
+        const { data, error } = await Promise.race([invokePromise, timeoutPromise]);
 
         if (error) {
             throw new Error(error.message || '音声認識リクエストに失敗しました');

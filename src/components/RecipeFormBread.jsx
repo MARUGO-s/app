@@ -5,6 +5,8 @@ import { Card } from './Card';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { unitConversionService } from '../services/unitConversionService';
 import { AutocompleteInput } from './AutocompleteInput';
+import { VoiceInputButton } from './VoiceInputButton';
+import { useToast } from '../contexts/useToast';
 import { ingredientSearchService } from '../services/ingredientSearchService';
 import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
 import './RecipeForm.css'; // Reuse basic styles
@@ -28,6 +30,14 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import UnitConversionModal from './UnitConversionModal';
+
+/** レシピ材料の単位候補（リスト表示用） */
+const UNIT_OPTIONS = [
+    '', 'g', 'kg', 'ml', 'cc', 'cl', 'L',
+    '個', '本', '枚', '袋', 'PC', '箱', '缶', '包', 'パック',
+    '大さじ', '小さじ', 'カップ',
+    '適量', '少々',
+];
 
 const ALLOWED_ITEM_CATEGORIES = new Set(['food', 'alcohol', 'soft_drink', 'supplies']);
 const TAX10_ITEM_CATEGORIES = new Set(['alcohol', 'supplies']);
@@ -64,6 +74,26 @@ const applyCategoryTax = (item, categoryValue) => {
 const toFiniteNumber = (value) => {
     const n = parseFloat(value);
     return Number.isFinite(n) ? n : NaN;
+};
+
+/** 音声認識結果から分量の数値文字列を取り出す（分量欄のみ数値必須のため使用） */
+const parseQuantityFromTranscript = (text) => {
+    const s = String(text || '').trim().replace(/[。○〇]+$/u, '');
+    const numMatch = s.match(/(\d+(?:\.\d+)?)/);
+    if (numMatch) return numMatch[1];
+    const jpMap = [
+        ['じゅうきゅう', '19'], ['じゅうはち', '18'], ['じゅうなな', '17'], ['じゅうろく', '16'], ['じゅうご', '15'],
+        ['じゅうよん', '14'], ['じゅうさん', '13'], ['じゅうに', '12'], ['じゅういち', '11'],
+        ['きゅうじゅう', '90'], ['はちじゅう', '80'], ['ななじゅう', '70'], ['ろくじゅう', '60'], ['ごじゅう', '50'],
+        ['よんじゅう', '40'], ['さんじゅう', '30'], ['にじゅう', '20'], ['じゅう', '10'],
+        ['きゅう', '9'], ['はち', '8'], ['なな', '7'], ['ろく', '6'], ['ご', '5'],
+        ['よん', '4'], ['さん', '3'], ['に', '2'], ['いち', '1'], ['れい', '0'], ['ゼロ', '0'],
+    ];
+    const lower = s.replace(/\s+/g, '');
+    for (const [k, v] of jpMap) {
+        if (lower === k || lower.startsWith(k)) return v;
+    }
+    return s;
 };
 
 const normalizeYieldPercent = (value) => {
@@ -154,6 +184,7 @@ const findConversionByName = (conversionMap, ingredientName) => {
 };
 
 export const RecipeFormBread = ({ formData, setFormData }) => {
+    const toast = useToast();
     // Local state for calculation convenience, synced with parent formData
     // We expect formData to have 'flours' and 'breadIngredients' arrays
     // If not, we initialize them or map from existing ingredients
@@ -167,6 +198,9 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
         type: null, // 'flour' | 'ingredient'
         index: null
     });
+
+    // 音声入力で材料名をセットしたとき、候補リストを表示するためのトリガー
+    const [voiceSearchTrigger, setVoiceSearchTrigger] = useState({ key: 0, type: null, index: null });
 
     // Unit Conversion Cache
     const [conversionMap, setConversionMap] = useState(new Map());
@@ -482,6 +516,17 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
         }
 
         setFormData(prev => ({ ...prev, breadIngredients: newIngs }));
+    };
+
+    /** 分量の音声入力: 数値のみ受け付け（粉・その他材料共通） */
+    const handleQuantityVoiceTranscript = (onChange, index, transcript) => {
+        const q = parseQuantityFromTranscript(transcript);
+        const n = toFiniteNumber(q);
+        if (!Number.isFinite(n) || n < 0) {
+            toast.warning('数値が認識できませんでした。「10」「15」など数字で話してください。');
+            return;
+        }
+        onChange(index, 'quantity', String(q));
     };
 
     const addFlour = () => {
@@ -811,6 +856,9 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                                             calculatePercentage={calculatePercentage}
                                             floursLength={(formData.flours || []).length}
                                             onOpenConversion={() => setConversionModal({ isOpen: true, type: 'flour', index: i })}
+                                            onQuantityVoiceTranscript={(idx, transcript) => handleQuantityVoiceTranscript(handleFlourChange, idx, transcript)}
+                                            onNameVoiceComplete={(type, idx) => setVoiceSearchTrigger(prev => ({ key: prev.key + 1, type, index: idx }))}
+                                            voiceSearchTrigger={voiceSearchTrigger}
                                         />
                                     );
                                 })}
@@ -869,6 +917,9 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
                                             onSelect={handleAutocompleteSelect}
                                             calculatePercentage={calculatePercentage}
                                             onOpenConversion={() => setConversionModal({ isOpen: true, type: 'ingredient', index: i })}
+                                            onQuantityVoiceTranscript={(idx, transcript) => handleQuantityVoiceTranscript(handleIngredientChange, idx, transcript)}
+                                            onNameVoiceComplete={(type, idx) => setVoiceSearchTrigger(prev => ({ key: prev.key + 1, type, index: idx }))}
+                                            voiceSearchTrigger={voiceSearchTrigger}
                                         />
                                     );
                                 })}
@@ -899,7 +950,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
 };
 
 // Wrapper for Sortable Hook (Flour Items)
-const FlourItem = ({ id, index, item, yieldPercentApplied, onChange, onRemove, onSelect, calculatePercentage, floursLength, onOpenConversion }) => {
+const FlourItem = ({ id, index, item, yieldPercentApplied, onChange, onRemove, onSelect, calculatePercentage, floursLength, onOpenConversion, onQuantityVoiceTranscript, onNameVoiceComplete, voiceSearchTrigger }) => {
     const itemCategory = normalizeItemCategory(item.itemCategory ?? item.item_category);
     const hasCategoryTaxRule = Boolean(itemCategory);
     const categoryLabel = ITEM_CATEGORY_LABELS[itemCategory] || 'カテゴリ';
@@ -941,15 +992,29 @@ const FlourItem = ({ id, index, item, yieldPercentApplied, onChange, onRemove, o
             >
                 ⋮⋮
             </div>
-            <div className="ingredient-name">
+            <div className="ingredient-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <AutocompleteInput
                     value={item.name}
                     onChange={(e) => onChange(index, 'name', e.target.value)}
                     onSelect={(selectedItem) => onSelect('flour', index, selectedItem)}
                     placeholder="例: 強力粉"
+                    triggerSearchKey={voiceSearchTrigger?.type === 'flour' && voiceSearchTrigger?.index === index ? voiceSearchTrigger.key : undefined}
                 />
+                <div style={{ flexShrink: 0 }}>
+                    <VoiceInputButton
+                        size="xs"
+                        label=""
+                        getCurrentValue={() => item.name}
+                        onTranscript={(nextValue) => {
+                            onChange(index, 'name', nextValue);
+                            if (onNameVoiceComplete) onNameVoiceComplete('flour', index);
+                        }}
+                        promptContext="ingredient"
+                        className="ingredient-voice-btn"
+                    />
+                </div>
             </div>
-            <div className="ingredient-qty">
+            <div className="ingredient-qty" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Input
                     type="number"
                     step="any"
@@ -957,16 +1022,34 @@ const FlourItem = ({ id, index, item, yieldPercentApplied, onChange, onRemove, o
                     onChange={(e) => onChange(index, 'quantity', e.target.value)}
                     placeholder="0"
                     wrapperClassName="input-group--no-margin"
+                    style={{ width: '100%', minWidth: 0 }}
                 />
+                <div style={{ flexShrink: 0 }}>
+                    <VoiceInputButton
+                        size="xs"
+                        label=""
+                        getCurrentValue={() => item.quantity}
+                        onTranscript={(_, transcript) => onQuantityVoiceTranscript && onQuantityVoiceTranscript(index, transcript)}
+                        className="ingredient-voice-btn"
+                    />
+                </div>
             </div>
             <div className="ingredient-unit">
-                <Input
-                    value={item.unit}
+                <select
+                    value={item.unit ?? ''}
                     onChange={(e) => onChange(index, 'unit', e.target.value)}
-                    placeholder="単位"
-                    style={{ width: '100%', textAlign: 'center' }}
-                    wrapperClassName="input-group--no-margin"
-                />
+                    className="input-field"
+                    style={{ width: '100%', textAlign: 'center', padding: '0.4rem 0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                    title="単位を選択"
+                >
+                    <option value="">単位</option>
+                    {UNIT_OPTIONS.filter(u => u).map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                    ))}
+                    {item.unit && !UNIT_OPTIONS.includes(item.unit) && (
+                        <option value={item.unit}>{item.unit}</option>
+                    )}
+                </select>
             </div>
             <div className="bread-percent">
                 {calculatePercentage(item.quantity)}%
@@ -1045,7 +1128,7 @@ const FlourItem = ({ id, index, item, yieldPercentApplied, onChange, onRemove, o
 };
 
 // Wrapper for Sortable Hook (Bread Ingredients)
-const BreadIngredientItem = ({ id, index, item, yieldPercentApplied, onChange, onRemove, onSelect, calculatePercentage, onOpenConversion }) => {
+const BreadIngredientItem = ({ id, index, item, yieldPercentApplied, onChange, onRemove, onSelect, calculatePercentage, onOpenConversion, onQuantityVoiceTranscript, onNameVoiceComplete, voiceSearchTrigger }) => {
     const itemCategory = normalizeItemCategory(item.itemCategory ?? item.item_category);
     const hasCategoryTaxRule = Boolean(itemCategory);
     const categoryLabel = ITEM_CATEGORY_LABELS[itemCategory] || 'カテゴリ';
@@ -1087,15 +1170,29 @@ const BreadIngredientItem = ({ id, index, item, yieldPercentApplied, onChange, o
             >
                 ⋮⋮
             </div>
-            <div className="ingredient-name">
+            <div className="ingredient-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <AutocompleteInput
                     value={item.name}
                     onChange={(e) => onChange(index, 'name', e.target.value)}
                     onSelect={(selectedItem) => onSelect('ingredient', index, selectedItem)}
                     placeholder="例: 塩"
+                    triggerSearchKey={voiceSearchTrigger?.type === 'ingredient' && voiceSearchTrigger?.index === index ? voiceSearchTrigger.key : undefined}
                 />
+                <div style={{ flexShrink: 0 }}>
+                    <VoiceInputButton
+                        size="xs"
+                        label=""
+                        getCurrentValue={() => item.name}
+                        onTranscript={(nextValue) => {
+                            onChange(index, 'name', nextValue);
+                            if (onNameVoiceComplete) onNameVoiceComplete('ingredient', index);
+                        }}
+                        promptContext="ingredient"
+                        className="ingredient-voice-btn"
+                    />
+                </div>
             </div>
-            <div className="ingredient-qty">
+            <div className="ingredient-qty" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Input
                     type="number"
                     step="any"
@@ -1103,16 +1200,34 @@ const BreadIngredientItem = ({ id, index, item, yieldPercentApplied, onChange, o
                     onChange={(e) => onChange(index, 'quantity', e.target.value)}
                     placeholder="0"
                     wrapperClassName="input-group--no-margin"
+                    style={{ width: '100%', minWidth: 0 }}
                 />
+                <div style={{ flexShrink: 0 }}>
+                    <VoiceInputButton
+                        size="xs"
+                        label=""
+                        getCurrentValue={() => item.quantity}
+                        onTranscript={(_, transcript) => onQuantityVoiceTranscript && onQuantityVoiceTranscript(index, transcript)}
+                        className="ingredient-voice-btn"
+                    />
+                </div>
             </div>
             <div className="ingredient-unit">
-                <Input
-                    value={item.unit}
+                <select
+                    value={item.unit ?? ''}
                     onChange={(e) => onChange(index, 'unit', e.target.value)}
-                    placeholder="単位"
-                    style={{ width: '100%', textAlign: 'center' }}
-                    wrapperClassName="input-group--no-margin"
-                />
+                    className="input-field"
+                    style={{ width: '100%', textAlign: 'center', padding: '0.4rem 0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                    title="単位を選択"
+                >
+                    <option value="">単位</option>
+                    {UNIT_OPTIONS.filter(u => u).map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                    ))}
+                    {item.unit && !UNIT_OPTIONS.includes(item.unit) && (
+                        <option value={item.unit}>{item.unit}</option>
+                    )}
+                </select>
             </div>
             <div className="bread-percent">
                 {calculatePercentage(item.quantity)}%

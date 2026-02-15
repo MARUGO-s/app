@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS api_usage_logs (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   
   -- API情報
-  api_name TEXT NOT NULL,  -- 'gemini', 'openai', 'deepl', 'azure', 'groq', 'avalon'
+  api_name TEXT NOT NULL,  -- 'gemini', 'openai', 'deepl', 'azure', 'groq'
   endpoint TEXT NOT NULL,  -- Edge Function名 (例: 'analyze-image', 'parse-delivery-pdf')
   model_name TEXT,  -- 使用したモデル名 (例: 'gemini-1.5-flash', 'gpt-4o-mini')
   

@@ -57,6 +57,8 @@ export const VoiceInputButton = ({
     className = '',
     label = '音声入力',
     language = 'ja',
+    /** 'ingredient' = 材料名入力時用のプロンプトで解析精度を向上 */
+    promptContext,
 }) => {
     const toast = useToast();
     const [recording, setRecording] = useState(false);
@@ -188,6 +190,7 @@ export const VoiceInputButton = ({
                         mimeType: usedMimeType,
                         fileName: `voice-input.${usedMimeType.includes('mp4') ? 'm4a' : 'webm'}`,
                         language,
+                        promptContext: promptContext || undefined,
                     });
 
                     if (!transcript) {

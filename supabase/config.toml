@@ -370,3 +370,8 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/translate/index.ts"
 
+[functions.transcribe]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/transcribe/index.ts"
+

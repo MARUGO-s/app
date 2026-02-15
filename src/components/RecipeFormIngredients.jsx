@@ -24,11 +24,20 @@ import { Input } from './Input';
 import { Card } from './Card';
 import { VoiceInputButton } from './VoiceInputButton';
 import UnitConversionModal from './UnitConversionModal';
+import { useToast } from '../contexts/useToast';
 import { unitConversionService } from '../services/unitConversionService';
 import { ingredientSearchService } from '../services/ingredientSearchService';
 import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
 
 import { AutocompleteInput } from './AutocompleteInput';
+
+/** レシピ材料の単位候補（リスト表示用） */
+const UNIT_OPTIONS = [
+    '', 'g', 'kg', 'ml', 'cc', 'cl', 'L',
+    '個', '本', '枚', '袋', 'PC', '箱', '缶', '包', 'パック',
+    '大さじ', '小さじ', 'カップ',
+    '適量', '少々',
+];
 
 const ALLOWED_ITEM_CATEGORIES = new Set(['food', 'alcohol', 'soft_drink', 'supplies']);
 const TAX10_ITEM_CATEGORIES = new Set(['alcohol', 'supplies']);
@@ -89,6 +98,26 @@ const findConversionByName = (conversionMap, ingredientName) => {
 const toFiniteNumber = (value) => {
     const n = parseFloat(value);
     return Number.isFinite(n) ? n : NaN;
+};
+
+/** 音声認識結果から分量の数値文字列を取り出す（「10」「15」「0.5」や「10グラム」、日本語数詞に対応） */
+const parseQuantityFromTranscript = (text) => {
+    const s = String(text || '').trim().replace(/[。○〇]+$/u, '');
+    const numMatch = s.match(/(\d+(?:\.\d+)?)/);
+    if (numMatch) return numMatch[1];
+    const jpMap = [
+        ['じゅうきゅう', '19'], ['じゅうはち', '18'], ['じゅうなな', '17'], ['じゅうろく', '16'], ['じゅうご', '15'],
+        ['じゅうよん', '14'], ['じゅうさん', '13'], ['じゅうに', '12'], ['じゅういち', '11'],
+        ['きゅうじゅう', '90'], ['はちじゅう', '80'], ['ななじゅう', '70'], ['ろくじゅう', '60'], ['ごじゅう', '50'],
+        ['よんじゅう', '40'], ['さんじゅう', '30'], ['にじゅう', '20'], ['じゅう', '10'],
+        ['きゅう', '9'], ['はち', '8'], ['なな', '7'], ['ろく', '6'], ['ご', '5'],
+        ['よん', '4'], ['さん', '3'], ['に', '2'], ['いち', '1'], ['れい', '0'], ['ゼロ', '0'],
+    ];
+    const lower = s.replace(/\s+/g, '');
+    for (const [k, v] of jpMap) {
+        if (lower === k || lower.startsWith(k)) return v;
+    }
+    return s;
 };
 
 const normalizeYieldPercent = (value) => {
@@ -163,6 +192,9 @@ const SortableIngredientItem = React.memo(({
     onRemove,
     handleSuggestionSelect,
     onOpenConversion,
+    onQuantityVoiceTranscript,
+    onNameVoiceComplete,
+    voiceSearchTrigger,
 }) => {
     const itemCategory = normalizeItemCategory(item.itemCategory ?? item.item_category);
     const hasCategoryTaxRule = Boolean(itemCategory);
@@ -204,35 +236,57 @@ const SortableIngredientItem = React.memo(({
                     onChange={(e) => onChange(groupId, index, 'name', e.target.value)}
                     onSelect={(selectedItem) => handleSuggestionSelect(groupId, index, selectedItem)}
                     placeholder="材料名"
+                    triggerSearchKey={voiceSearchTrigger?.groupId === groupId && voiceSearchTrigger?.index === index ? voiceSearchTrigger.key : undefined}
                 />
                 <div style={{ flexShrink: 0 }}>
                     <VoiceInputButton
                         size="xs"
                         label=""
                         getCurrentValue={() => item.name}
-                        onTranscript={(nextValue) => onChange(groupId, index, 'name', nextValue)}
+                        onTranscript={(nextValue) => {
+                            onChange(groupId, index, 'name', nextValue);
+                            if (onNameVoiceComplete) onNameVoiceComplete(groupId, index);
+                        }}
+                        promptContext="ingredient"
                         className="ingredient-voice-btn"
                     />
                 </div>
             </div>
 
-            <div className="ingredient-qty">
+            <div className="ingredient-qty" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Input
                     value={item.quantity}
                     onChange={(e) => onChange(groupId, index, 'quantity', e.target.value)}
                     placeholder="0"
-                    style={{ width: '100%' }}
+                    style={{ width: '100%', minWidth: 0 }}
                     wrapperClassName="input-group--no-margin"
                 />
+                <div style={{ flexShrink: 0 }}>
+                    <VoiceInputButton
+                        size="xs"
+                        label=""
+                        getCurrentValue={() => item.quantity}
+                        onTranscript={(_, transcript) => onQuantityVoiceTranscript(groupId, index, transcript)}
+                        className="ingredient-voice-btn"
+                    />
+                </div>
             </div>
             <div className="ingredient-unit">
-                <Input
-                    value={item.unit}
+                <select
+                    value={item.unit ?? ''}
                     onChange={(e) => onChange(groupId, index, 'unit', e.target.value)}
-                    placeholder="単位"
-                    style={{ width: '100%' }}
-                    wrapperClassName="input-group--no-margin"
-                />
+                    className="input-field"
+                    style={{ width: '100%', padding: '0.4rem 0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                    title="単位を選択"
+                >
+                    <option value="">単位</option>
+                    {UNIT_OPTIONS.filter(u => u).map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                    ))}
+                    {item.unit && !UNIT_OPTIONS.includes(item.unit) && (
+                        <option value={item.unit}>{item.unit}</option>
+                    )}
+                </select>
             </div>
             <div className="ingredient-cost" style={{ position: 'relative' }} data-label="仕入れ">
                 <Input
@@ -304,8 +358,8 @@ const SortableIngredientItem = React.memo(({
     );
 }, (prevProps, nextProps) => {
     // Custom comparison function for performance
-    // Only re-render if item props changed deeply or index/groupId changed
-    // Simple deep comparison for 'item' object is expensive, so check keys
+    const triggerTargetsThis = (t) => t && t.groupId === nextProps.groupId && t.index === nextProps.index;
+    if (triggerTargetsThis(nextProps.voiceSearchTrigger) && prevProps.voiceSearchTrigger?.key !== nextProps.voiceSearchTrigger?.key) return false;
     return (
         prevProps.id === nextProps.id &&
         prevProps.index === nextProps.index &&
@@ -364,6 +418,7 @@ const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, 
 
 
 export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
+    const toast = useToast();
     // Unit Conversion Cache
     const [conversionMap, setConversionMap] = useState(new Map());
 
@@ -377,6 +432,9 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
         groupId: null,
         index: null
     });
+
+    // 音声入力で材料名をセットしたとき、候補リストを表示するためのトリガー
+    const [voiceSearchTrigger, setVoiceSearchTrigger] = useState({ key: 0, groupId: null, index: null });
 
     // Initialize sections from formData
     // We expect formData to have ingredientSections OR we build it from ingredients/ingredientGroups
@@ -817,6 +875,17 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
         });
     }, [conversionMap, priceList, setFormData]);
 
+    /** 分量の音声入力: 数値のみ受け付け、無効な場合はトースト表示 */
+    const handleQuantityVoiceTranscript = React.useCallback((groupId, index, transcript) => {
+        const q = parseQuantityFromTranscript(transcript);
+        const n = toFiniteNumber(q);
+        if (!Number.isFinite(n) || n < 0) {
+            toast.warning('数値が認識できませんでした。「10」「15」など数字で話してください。');
+            return;
+        }
+        handleItemChange(groupId, index, 'quantity', String(q));
+    }, [toast, handleItemChange]);
+
     const handleSuggestionSelect = React.useCallback((groupId, index, item) => {
         // Apply selected item details
         setFormData(prev => {
@@ -1028,6 +1097,9 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                                             onRemove={handleRemoveItem}
                                             handleSuggestionSelect={handleSuggestionSelect}
                                             onOpenConversion={() => setConversionModal({ isOpen: true, groupId: section.id, index: index })}
+                                            onQuantityVoiceTranscript={handleQuantityVoiceTranscript}
+                                            onNameVoiceComplete={(gid, idx) => setVoiceSearchTrigger(prev => ({ key: prev.key + 1, groupId: gid, index: idx }))}
+                                            voiceSearchTrigger={voiceSearchTrigger}
                                         />
                                     );
                                 })()

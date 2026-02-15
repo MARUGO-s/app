@@ -7,8 +7,9 @@ import './AutocompleteInput.css';
  * Autocomplete Input Component
  * Automatically searches for ingredients and displays suggestions.
  * Uses Portal to render suggestions on top of all other layers.
+ * When triggerSearchKey is set (e.g. after voice input), searches and shows suggestions for current value.
  */
-export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSelect, name, required = false }) => {
+export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSelect, name, required = false, triggerSearchKey }) => {
     const [suggestions, setSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -93,6 +94,27 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
             calculatePosition();
         }
     }, [showSuggestions, suggestions, calculatePosition]); // Recalc if suggestions change (though height changes, top/left shouldn't, but good practice)
+
+    // 音声入力後など、外部から値がセットされたとき検索して候補を表示
+    useEffect(() => {
+        if (triggerSearchKey != null && String(value || '').trim().length > 0) {
+            const searchValue = String(value).trim();
+            let cancelled = false;
+            const run = async () => {
+                const currentRequestId = ++requestRef.current;
+                const results = await ingredientSearchService.search(searchValue);
+                if (!cancelled && currentRequestId === requestRef.current) {
+                    setSuggestions(results);
+                    setShowSuggestions(results.length > 0);
+                    setSelectedIndex(-1);
+                    calculatePosition();
+                }
+            };
+            run();
+            return () => { cancelled = true; };
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- value は triggerSearchKey が変わる瞬間に同時更新されている
+    }, [triggerSearchKey]); // 音声入力で値セット後、triggerSearchKey が渡されたときのみ検索（タイピング時は実行しない）
 
     const requestRef = useRef(0); // Track latest request ID
     const timeoutRef = useRef(null); // Debounce timeout
