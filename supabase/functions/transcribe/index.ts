@@ -32,7 +32,7 @@ serve(async (req) => {
             // );
         }
 
-        const { audioBase64, mimeType, fileName, language } = await req.json();
+        const { audioBase64, mimeType, fileName, language, promptContext } = await req.json();
 
         if (!audioBase64) {
             return new Response(
@@ -67,8 +67,11 @@ serve(async (req) => {
         // Force Japanese output but allow override
         formData.append('language', language || 'ja');
 
-        // Strong prompt to avoid English/Romaji
-        formData.append('prompt', '必ず日本語で出力してください。英語やローマ字は使わず、すべてカタカナか漢字で表記します。トマト、玉ねぎ、醤油、塩、コショウ、グラム。');
+        // 材料入力時は食材に特化したプロンプトで認識精度を向上
+        const ingredientPrompt = 'レシピの材料名。玉ねぎ、にんじん、トマト、鶏肉、豚肉、醤油、塩、こしょう、砂糖、小麦粉、牛乳、バター、卵、大根、白菜、キャベツ、じゃがいも、オリーブオイル。';
+        const defaultPrompt = '必ず日本語で出力してください。英語やローマ字は使わず、すべてカタカナか漢字で表記します。トマト、玉ねぎ、醤油、塩、コショウ、グラム。';
+        const prompt = promptContext === 'ingredient' ? ingredientPrompt : defaultPrompt;
+        formData.append('prompt', prompt);
         formData.append('response_format', 'verbose_json');
 
         const groqApiKey = Deno.env.get('GROQ_API_KEY');

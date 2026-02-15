@@ -201,9 +201,9 @@ h3 {
 
 .form-ingredient-row {
     display: grid;
-    /* Row 1: handle | name          | qty  | unit | delete */
-    /* Row 2:        | purchase cost | cost | 10%  |        */
-    grid-template-columns: 20px 1fr 60px 50px 24px;
+    /* Row 1: handle | name (2/3)     | qty (広) | unit (広) | delete */
+    /* Row 2:        | purchase cost  | cost     | 10%       |        */
+    grid-template-columns: 20px 1.2fr 72px 58px 24px;
     grid-template-rows: auto auto;
     gap: 4px 4px;
     align-items: center;
@@ -245,7 +245,7 @@ h3 {
 @media (min-width: 600px) {
     .recipe-list-header {
         display: grid;
-        grid-template-columns: 24px minmax(70px, 3fr) minmax(50px, 1fr) minmax(40px, 0.8fr) 65px 65px 26px 28px;
+        grid-template-columns: 24px minmax(70px, 2fr) minmax(55px, 1.5fr) minmax(48px, 1fr) 65px 65px 26px 28px;
         gap: 2px;
         margin-bottom: 8px;
         font-size: 0.8rem;
@@ -257,7 +257,7 @@ h3 {
     }
 
     .form-ingredient-row {
-        grid-template-columns: 24px minmax(70px, 3fr) minmax(50px, 1fr) minmax(40px, 0.8fr) 65px 65px 26px 28px;
+        grid-template-columns: 24px minmax(70px, 2fr) minmax(55px, 1.5fr) minmax(48px, 1fr) 65px 65px 26px 28px;
         grid-template-rows: auto;
         gap: 2px;
         padding: 0;
@@ -290,14 +290,14 @@ h3 {
 /* --- Desktop (1200px+) --- */
 @media (min-width: 1200px) {
     .recipe-list-header {
-        grid-template-columns: 30px 1fr 80px 70px 90px 90px 30px 40px;
+        grid-template-columns: 30px 2fr 95px 75px 90px 90px 30px 40px;
         gap: 8px;
         font-size: 0.85rem;
         min-width: 700px;
     }
 
     .form-ingredient-row {
-        grid-template-columns: 30px 1fr 80px 70px 90px 90px 30px 40px;
+        grid-template-columns: 30px 2fr 95px 75px 90px 90px 30px 40px;
         gap: 8px;
         min-width: 700px;
     }

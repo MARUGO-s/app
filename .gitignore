@@ -4,6 +4,7 @@ dist-ssr/
 .DS_Store
 .env
 .env.local
+supabase/functions/.env
 .vscode/
 .idea/
 supabase/.temp/
