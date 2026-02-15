@@ -1,1626 +1,2190 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>レシピ管理アプリ Q&A</title>
-<style>
-  :root {
-    --primary: #1E3A5F;
-    --accent: #3A7ABF;
-    --light: #E8F0FE;
-    --text: #333;
-    --sub: #666;
-    --border: #D0D8E4;
-    --q-bg: #F0F5FF;
-    --hover: #E3ECFA;
-    --tip-bg: #FFF8E1;
-    --tip-bd: #FFC107;
-    --note-bg: #E8F0FE;
-    --note-bd: #3A7ABF;
-    --warn-bg: #FFF3E0;
-    --warn-bd: #FF9800;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html { scroll-behavior: smooth; scroll-padding-top: 80px; }
-  body {
-    font-family: "Yu Gothic UI", "Hiragino Sans", "Meiryo", sans-serif;
-    background: #F5F7FA;
-    color: var(--text);
-    line-height: 1.8;
-    font-size: 15px;
-  }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>レシピ管理アプリ Q&A</title>
+  <style>
+    :root {
+      --primary: #1E3A5F;
+      --accent: #3A7ABF;
+      --light: #E8F0FE;
+      --text: #333;
+      --sub: #666;
+      --border: #D0D8E4;
+      --q-bg: #F0F5FF;
+      --hover: #E3ECFA;
+      --tip-bg: #FFF8E1;
+      --tip-bd: #FFC107;
+      --note-bg: #E8F0FE;
+      --note-bd: #3A7ABF;
+      --warn-bg: #FFF3E0;
+      --warn-bd: #FF9800;
+    }
 
-  /* ===== Header ===== */
-  .header {
-    background: linear-gradient(135deg, #1E3A5F, #2B579A, #3A7ABF);
-    color: #fff;
-    text-align: center;
-    padding: 48px 24px 40px;
-    position: relative;
-  }
-  .header-back {
-    position: absolute;
-    top: 16px;
-    left: 16px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    border-radius: 999px;
-    border: 1px solid rgba(255,255,255,0.35);
-    background: rgba(255,255,255,0.14);
-    color: #fff;
-    text-decoration: none;
-    font-size: 13px;
-    font-weight: 700;
-    line-height: 1;
-    -webkit-backdrop-filter: blur(6px);
-    backdrop-filter: blur(6px);
-    box-shadow: 0 6px 18px rgba(0,0,0,0.18);
-    transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
-  }
-  .header-back:hover {
-    background: rgba(255,255,255,0.22);
-    transform: translateY(-1px);
-    box-shadow: 0 10px 24px rgba(0,0,0,0.22);
-  }
-  .header-back:active {
-    transform: translateY(0);
-    box-shadow: 0 6px 18px rgba(0,0,0,0.18);
-  }
-  .header-icon { font-size: 48px; margin-bottom: 10px; }
-  .header h1 { font-size: 28px; font-weight: 800; margin-bottom: 6px; }
-  .header p { font-size: 15px; opacity: 0.8; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-  /* ===== Search ===== */
-  .search-bar {
-    max-width: 600px;
-    margin: -24px auto 0;
-    position: relative;
-    z-index: 10;
-    padding: 0 20px;
-  }
-  .search-bar input {
-    width: 100%;
-    padding: 14px 20px 14px 48px;
-    border: 2px solid var(--border);
-    border-radius: 12px;
-    font-size: 16px;
-    background: #fff;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
-    outline: none;
-    transition: border-color 0.2s;
-    font-family: inherit;
-  }
-  .search-bar input:focus { border-color: var(--accent); }
-  .search-icon {
-    position: absolute;
-    left: 36px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 18px;
-    color: #999;
-    pointer-events: none;
-  }
-  .search-count {
-    text-align: center;
-    font-size: 13px;
-    color: var(--sub);
-    margin-top: 8px;
-  }
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 80px;
+    }
 
-  /* ===== Category Nav ===== */
-  .cat-nav {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    justify-content: center;
-    max-width: 860px;
-    margin: 24px auto 8px;
-    padding: 0 20px;
-  }
-  .cat-btn {
-    padding: 7px 16px;
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    background: #fff;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: inherit;
-    color: var(--text);
-    white-space: nowrap;
-  }
-  .cat-btn:hover { background: var(--hover); border-color: var(--accent); }
-  .cat-btn.active {
-    background: var(--primary);
-    color: #fff;
-    border-color: var(--primary);
-  }
+    body {
+      font-family: "Yu Gothic UI", "Hiragino Sans", "Meiryo", sans-serif;
+      background: #F5F7FA;
+      color: var(--text);
+      line-height: 1.8;
+      font-size: 15px;
+    }
 
-  /* ===== Main ===== */
-  .container {
-    max-width: 860px;
-    margin: 24px auto;
-    padding: 0 20px 80px;
-  }
+    /* ===== Header ===== */
+    .header {
+      background: linear-gradient(135deg, #1E3A5F, #2B579A, #3A7ABF);
+      color: #fff;
+      text-align: center;
+      padding: 48px 24px 40px;
+      position: relative;
+    }
 
-  /* ===== Category Group ===== */
-  .cat-group { margin-bottom: 36px; }
-  .cat-title {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--primary);
-    margin-bottom: 14px;
-    padding-bottom: 8px;
-    border-bottom: 2px solid var(--primary);
-  }
-  .cat-title .cat-icon {
-    width: 32px; height: 32px;
-    background: var(--primary);
-    color: #fff;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    flex-shrink: 0;
-  }
+    .header-back {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      background: rgba(255, 255, 255, 0.14);
+      color: #fff;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1;
+      -webkit-backdrop-filter: blur(6px);
+      backdrop-filter: blur(6px);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+      transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+    }
 
-  /* ===== Q&A Item ===== */
-  .qa-item {
-    background: #fff;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    margin-bottom: 10px;
-    overflow: hidden;
-    transition: box-shadow 0.2s;
-  }
-  .qa-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-  .qa-item.hidden { display: none; }
+    .header-back:hover {
+      background: rgba(255, 255, 255, 0.22);
+      transform: translateY(-1px);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+    }
 
-  .qa-q {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 16px 20px;
-    cursor: pointer;
-    user-select: none;
-    background: var(--q-bg);
-    transition: background 0.15s;
-  }
-  .qa-q:hover { background: var(--hover); }
-  .qa-q .q-badge {
-    background: var(--accent);
-    color: #fff;
-    font-size: 13px;
-    font-weight: 800;
-    width: 28px; height: 28px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    margin-top: 1px;
-  }
-  .qa-q .q-text {
-    flex: 1;
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text);
-    line-height: 1.6;
-  }
-  .qa-q .q-arrow {
-    font-size: 14px;
-    color: #999;
-    transition: transform 0.25s;
-    flex-shrink: 0;
-    margin-top: 5px;
-  }
-  .qa-item.open .qa-q .q-arrow { transform: rotate(180deg); }
+    .header-back:active {
+      transform: translateY(0);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    }
 
-  .qa-a {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.35s ease;
-  }
-  .qa-a-inner {
-    padding: 18px 24px 20px 60px;
-    font-size: 14.5px;
-    line-height: 1.85;
-    color: #444;
-  }
-  .qa-a-inner p { margin: 6px 0; }
-  .qa-a-inner ul, .qa-a-inner ol { margin: 8px 0 8px 20px; }
-  .qa-a-inner li { margin: 3px 0; }
-  .qa-a-inner li::marker { color: var(--accent); }
-  .qa-a-inner strong { color: var(--text); }
-  .qa-a-inner code {
-    background: #F0F2F5;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 13px;
-    font-family: monospace;
-  }
-  .qa-a-inner table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 10px 0;
-    font-size: 13.5px;
-  }
-  .qa-a-inner th {
-    background: var(--primary);
-    color: #fff;
-    padding: 8px 12px;
-    text-align: left;
-    font-size: 12.5px;
-  }
-  .qa-a-inner td {
-    padding: 8px 12px;
-    border-bottom: 1px solid #E5E8ED;
-  }
-  .qa-a-inner tr:nth-child(even) td { background: #F8FAFC; }
-  .qa-a-inner td:first-child { font-weight: 600; white-space: nowrap; }
+    .header-icon {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
 
-  /* callout boxes */
-  .tip, .note, .warn {
-    padding: 12px 16px;
-    border-radius: 8px;
-    margin: 12px 0;
-    font-size: 13.5px;
-  }
-  .tip { background: var(--tip-bg); border-left: 4px solid var(--tip-bd); }
-  .tip::before { content: "💡 コツ: "; font-weight: 700; color: #996600; }
-  .note { background: var(--note-bg); border-left: 4px solid var(--note-bd); }
-  .note::before { content: "ℹ️ 補足: "; font-weight: 700; color: var(--primary); }
-  .warn { background: var(--warn-bg); border-left: 4px solid var(--warn-bd); }
-  .warn::before { content: "⚠️ 注意: "; font-weight: 700; color: #E65100; }
+    .header h1 {
+      font-size: 28px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
 
-  kbd {
-    display: inline-block;
-    background: #F4F4F4;
-    border: 1px solid #CCC;
-    border-radius: 4px;
-    padding: 1px 5px;
-    font-size: 12px;
-    font-family: monospace;
-    box-shadow: 0 1px 0 rgba(0,0,0,0.15);
-  }
+    .header p {
+      font-size: 15px;
+      opacity: 0.8;
+    }
 
-  /* numbered steps */
-  .steps { counter-reset: st; list-style: none; margin: 10px 0; padding: 0; }
-  .steps li {
-    counter-increment: st;
-    padding: 6px 0 6px 38px;
-    position: relative;
-  }
-  .steps li::before {
-    content: counter(st);
-    position: absolute; left: 0; top: 5px;
-    width: 24px; height: 24px;
-    background: var(--accent);
-    color: #fff;
-    border-radius: 50%;
-    font-size: 12px;
-    font-weight: 700;
-    display: flex; align-items: center; justify-content: center;
-  }
+    /* ===== Search ===== */
+    .search-bar {
+      max-width: 600px;
+      margin: -24px auto 0;
+      position: relative;
+      z-index: 10;
+      padding: 0 20px;
+    }
 
-  /* expand / collapse all */
-  .controls {
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-    margin-bottom: 16px;
-  }
-  .ctrl-btn {
-    padding: 6px 14px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: #fff;
-    font-size: 13px;
-    cursor: pointer;
-    font-family: inherit;
-    color: var(--sub);
-    transition: all 0.2s;
-  }
-  .ctrl-btn:hover { background: var(--hover); color: var(--text); }
+    .search-bar input {
+      width: 100%;
+      padding: 14px 20px 14px 48px;
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      font-size: 16px;
+      background: #fff;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+      outline: none;
+      transition: border-color 0.2s;
+      font-family: inherit;
+    }
 
-  /* no results */
-  .no-results {
-    text-align: center;
-    padding: 48px 20px;
-    color: #999;
-    font-size: 15px;
-    display: none;
-  }
-  .no-results.show { display: block; }
+    .search-bar input:focus {
+      border-color: var(--accent);
+    }
 
-  /* back to top */
-  .back-top {
-    position: fixed; bottom: 24px; right: 24px;
-    width: 42px; height: 42px;
-    background: var(--primary);
-    color: #fff;
-    border: none;
-    border-radius: 50%;
-    font-size: 18px;
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-    z-index: 99;
-    opacity: 0;
-    transition: opacity 0.3s;
-  }
-  .back-top.show { opacity: 1; }
+    .search-icon {
+      position: absolute;
+      left: 36px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 18px;
+      color: #999;
+      pointer-events: none;
+    }
 
-  /* ===== Feature Banner ===== */
-  .feature-banner {
-    max-width: 860px;
-    margin: 28px auto 8px;
-    padding: 0 20px;
-  }
-  .feature-banner-inner {
-    background: linear-gradient(135deg, #1a365d 0%, #2B579A 40%, #3A7ABF 100%);
-    border-radius: 16px;
-    padding: 32px 28px;
-    color: #fff;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 4px 20px rgba(30,58,95,0.25);
-  }
-  .feature-banner-inner::before {
-    content: "";
-    position: absolute;
-    top: -40px; right: -40px;
-    width: 200px; height: 200px;
-    background: rgba(255,255,255,0.06);
-    border-radius: 50%;
-  }
-  .feature-banner-inner::after {
-    content: "";
-    position: absolute;
-    bottom: -60px; left: -30px;
-    width: 160px; height: 160px;
-    background: rgba(255,255,255,0.04);
-    border-radius: 50%;
-  }
-  .feature-label {
-    display: inline-block;
-    background: rgba(255,255,255,0.2);
-    border: 1px solid rgba(255,255,255,0.3);
-    border-radius: 20px;
-    padding: 3px 14px;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    margin-bottom: 14px;
-  }
-  .feature-title {
-    font-size: 20px;
-    font-weight: 800;
-    margin-bottom: 12px;
-    line-height: 1.5;
-  }
-  .feature-desc {
-    font-size: 14px;
-    line-height: 1.8;
-    opacity: 0.92;
-    margin-bottom: 18px;
-  }
-  .feature-points {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    position: relative;
-    z-index: 1;
-  }
-  .feature-point {
-    background: rgba(255,255,255,0.13);
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 10px;
-    padding: 12px 16px;
-    flex: 1;
-    min-width: 200px;
-  }
-  .feature-point-icon {
-    font-size: 24px;
-    margin-bottom: 6px;
-  }
-  .feature-point-title {
-    font-size: 14px;
-    font-weight: 700;
-    margin-bottom: 4px;
-  }
-  .feature-point-text {
-    font-size: 12.5px;
-    opacity: 0.85;
-    line-height: 1.6;
-  }
+    .search-count {
+      text-align: center;
+      font-size: 13px;
+      color: var(--sub);
+      margin-top: 8px;
+    }
 
-  /* ===== Highlighted Q&A ===== */
-  .qa-item.highlight {
-    border: 2px solid #3A7ABF;
-    background: #F0F5FF;
-    box-shadow: 0 2px 12px rgba(58,122,191,0.12);
-  }
-  .qa-item.highlight .qa-q {
-    background: linear-gradient(135deg, #E8F0FE 0%, #F0F5FF 100%);
-  }
-  .qa-item.highlight .q-badge {
-    background: #1E3A5F;
-  }
-  .qa-item.highlight .q-text {
-    color: #1E3A5F;
-  }
-  .new-badge {
-    display: inline-block;
-    background: #E53E3E;
-    color: #fff;
-    font-size: 10px;
-    font-weight: 800;
-    padding: 1px 7px;
-    border-radius: 4px;
-    margin-left: 8px;
-    vertical-align: middle;
-    letter-spacing: 0.5px;
-  }
+    /* ===== Category Nav ===== */
+    .cat-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      max-width: 860px;
+      margin: 24px auto 8px;
+      padding: 0 20px;
+    }
 
-  /* print */
-  @media print {
-    .search-bar, .cat-nav, .controls, .back-top { display: none !important; }
-    .qa-a { max-height: none !important; }
-    .qa-item { break-inside: avoid; }
-    .header { padding: 24px; }
-  }
+    .cat-btn {
+      padding: 7px 16px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: #fff;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+      color: var(--text);
+      white-space: nowrap;
+    }
 
-  @media (max-width: 600px) {
-    .header { padding: 36px 16px 32px; }
-    .header-back { top: 12px; left: 12px; padding: 7px 10px; font-size: 12px; }
-    .header h1 { font-size: 22px; }
-    .qa-q { padding: 14px 14px; gap: 10px; }
-    .qa-a-inner { padding: 14px 16px 16px 48px; }
-    .feature-banner-inner { padding: 24px 18px; }
-    .feature-title { font-size: 17px; }
-    .feature-points { flex-direction: column; }
-  }
-</style>
+    .cat-btn:hover {
+      background: var(--hover);
+      border-color: var(--accent);
+    }
+
+    .cat-btn.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    /* ===== Main ===== */
+    .container {
+      max-width: 860px;
+      margin: 24px auto;
+      padding: 0 20px 80px;
+    }
+
+    /* ===== Category Group ===== */
+    .cat-group {
+      margin-bottom: 36px;
+    }
+
+    .cat-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--primary);
+    }
+
+    .cat-title .cat-icon {
+      width: 32px;
+      height: 32px;
+      background: var(--primary);
+      color: #fff;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    /* ===== Q&A Item ===== */
+    .qa-item {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 10px;
+      overflow: hidden;
+      transition: box-shadow 0.2s;
+    }
+
+    .qa-item:hover {
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .qa-item.hidden {
+      display: none;
+    }
+
+    .qa-q {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 16px 20px;
+      cursor: pointer;
+      user-select: none;
+      background: var(--q-bg);
+      transition: background 0.15s;
+    }
+
+    .qa-q:hover {
+      background: var(--hover);
+    }
+
+    .qa-q .q-badge {
+      background: var(--accent);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .qa-q .q-text {
+      flex: 1;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .qa-q .q-arrow {
+      font-size: 14px;
+      color: #999;
+      transition: transform 0.25s;
+      flex-shrink: 0;
+      margin-top: 5px;
+    }
+
+    .qa-item.open .qa-q .q-arrow {
+      transform: rotate(180deg);
+    }
+
+    .qa-a {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s ease;
+    }
+
+    .qa-a-inner {
+      padding: 18px 24px 20px 60px;
+      font-size: 14.5px;
+      line-height: 1.85;
+      color: #444;
+    }
+
+    .qa-a-inner p {
+      margin: 6px 0;
+    }
+
+    .qa-a-inner ul,
+    .qa-a-inner ol {
+      margin: 8px 0 8px 20px;
+    }
+
+    .qa-a-inner li {
+      margin: 3px 0;
+    }
+
+    .qa-a-inner li::marker {
+      color: var(--accent);
+    }
+
+    .qa-a-inner strong {
+      color: var(--text);
+    }
+
+    .qa-a-inner code {
+      background: #F0F2F5;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: monospace;
+    }
+
+    .qa-a-inner table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 13.5px;
+    }
+
+    .qa-a-inner th {
+      background: var(--primary);
+      color: #fff;
+      padding: 8px 12px;
+      text-align: left;
+      font-size: 12.5px;
+    }
+
+    .qa-a-inner td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #E5E8ED;
+    }
+
+    .qa-a-inner tr:nth-child(even) td {
+      background: #F8FAFC;
+    }
+
+    .qa-a-inner td:first-child {
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    /* callout boxes */
+    .tip,
+    .note,
+    .warn {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin: 12px 0;
+      font-size: 13.5px;
+    }
+
+    .tip {
+      background: var(--tip-bg);
+      border-left: 4px solid var(--tip-bd);
+    }
+
+    .tip::before {
+      content: "💡 コツ: ";
+      font-weight: 700;
+      color: #996600;
+    }
+
+    .note {
+      background: var(--note-bg);
+      border-left: 4px solid var(--note-bd);
+    }
+
+    .note::before {
+      content: "ℹ️ 補足: ";
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .warn {
+      background: var(--warn-bg);
+      border-left: 4px solid var(--warn-bd);
+    }
+
+    .warn::before {
+      content: "⚠️ 注意: ";
+      font-weight: 700;
+      color: #E65100;
+    }
+
+    kbd {
+      display: inline-block;
+      background: #F4F4F4;
+      border: 1px solid #CCC;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 12px;
+      font-family: monospace;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+    }
+
+    /* numbered steps */
+    .steps {
+      counter-reset: st;
+      list-style: none;
+      margin: 10px 0;
+      padding: 0;
+    }
+
+    .steps li {
+      counter-increment: st;
+      padding: 6px 0 6px 38px;
+      position: relative;
+    }
+
+    .steps li::before {
+      content: counter(st);
+      position: absolute;
+      left: 0;
+      top: 5px;
+      width: 24px;
+      height: 24px;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* expand / collapse all */
+    .controls {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-bottom: 16px;
+    }
+
+    .ctrl-btn {
+      padding: 6px 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+      color: var(--sub);
+      transition: all 0.2s;
+    }
+
+    .ctrl-btn:hover {
+      background: var(--hover);
+      color: var(--text);
+    }
+
+    /* no results */
+    .no-results {
+      text-align: center;
+      padding: 48px 20px;
+      color: #999;
+      font-size: 15px;
+      display: none;
+    }
+
+    .no-results.show {
+      display: block;
+    }
+
+    /* back to top */
+    .back-top {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 42px;
+      height: 42px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 50%;
+      font-size: 18px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+      z-index: 99;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .back-top.show {
+      opacity: 1;
+    }
+
+    /* ===== Feature Banner ===== */
+    .feature-banner {
+      max-width: 860px;
+      margin: 28px auto 8px;
+      padding: 0 20px;
+    }
+
+    .feature-banner-inner {
+      background: linear-gradient(135deg, #1a365d 0%, #2B579A 40%, #3A7ABF 100%);
+      border-radius: 16px;
+      padding: 32px 28px;
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(30, 58, 95, 0.25);
+    }
+
+    .feature-banner-inner::before {
+      content: "";
+      position: absolute;
+      top: -40px;
+      right: -40px;
+      width: 200px;
+      height: 200px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 50%;
+    }
+
+    .feature-banner-inner::after {
+      content: "";
+      position: absolute;
+      bottom: -60px;
+      left: -30px;
+      width: 160px;
+      height: 160px;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 50%;
+    }
+
+    .feature-label {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 20px;
+      padding: 3px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-bottom: 14px;
+    }
+
+    .feature-title {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    .feature-desc {
+      font-size: 14px;
+      line-height: 1.8;
+      opacity: 0.92;
+      margin-bottom: 18px;
+    }
+
+    .feature-points {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .feature-point {
+      background: rgba(255, 255, 255, 0.13);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+      padding: 12px 16px;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .feature-point-icon {
+      font-size: 24px;
+      margin-bottom: 6px;
+    }
+
+    .feature-point-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .feature-point-text {
+      font-size: 12.5px;
+      opacity: 0.85;
+      line-height: 1.6;
+    }
+
+    /* ===== Highlighted Q&A ===== */
+    .qa-item.highlight {
+      border: 2px solid #3A7ABF;
+      background: #F0F5FF;
+      box-shadow: 0 2px 12px rgba(58, 122, 191, 0.12);
+    }
+
+    .qa-item.highlight .qa-q {
+      background: linear-gradient(135deg, #E8F0FE 0%, #F0F5FF 100%);
+    }
+
+    .qa-item.highlight .q-badge {
+      background: #1E3A5F;
+    }
+
+    .qa-item.highlight .q-text {
+      color: #1E3A5F;
+    }
+
+    .new-badge {
+      display: inline-block;
+      background: #E53E3E;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 1px 7px;
+      border-radius: 4px;
+      margin-left: 8px;
+      vertical-align: middle;
+      letter-spacing: 0.5px;
+    }
+
+    /* print */
+    @media print {
+
+      .search-bar,
+      .cat-nav,
+      .controls,
+      .back-top {
+        display: none !important;
+      }
+
+      .qa-a {
+        max-height: none !important;
+      }
+
+      .qa-item {
+        break-inside: avoid;
+      }
+
+      .header {
+        padding: 24px;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .header {
+        padding: 36px 16px 32px;
+      }
+
+      .header-back {
+        top: 12px;
+        left: 12px;
+        padding: 7px 10px;
+        font-size: 12px;
+      }
+
+      .header h1 {
+        font-size: 22px;
+      }
+
+      .qa-q {
+        padding: 14px 14px;
+        gap: 10px;
+      }
+
+      .qa-a-inner {
+        padding: 14px 16px 16px 48px;
+      }
+
+      .feature-banner-inner {
+        padding: 24px 18px;
+      }
+
+      .feature-title {
+        font-size: 17px;
+      }
+
+      .feature-points {
+        flex-direction: column;
+      }
+    }
+  </style>
 </head>
+
 <body>
 
-<header class="header">
-  <a class="header-back" href="./">← トップへ戻る</a>
-  <div class="header-icon">🍳</div>
-  <h1>レシピ管理アプリ Q&A</h1>
-  <p>操作説明書（よくある質問形式）</p>
-</header>
+  <header class="header">
+    <a class="header-back" href="./">← トップへ戻る</a>
+    <div class="header-icon">🍳</div>
+    <h1>レシピ管理アプリ Q&A</h1>
+    <p>操作説明書（よくある質問形式）</p>
+  </header>
 
-<div class="search-bar">
-  <span class="search-icon">🔍</span>
-  <input type="text" id="searchInput" placeholder="キーワードで質問を検索…（例: 原価、CSV、棚卸し）">
-  <div class="search-count" id="searchCount"></div>
-</div>
+  <div class="search-bar">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="キーワードで質問を検索…（例: 原価、CSV、棚卸し）">
+    <div class="search-count" id="searchCount"></div>
+  </div>
 
-<nav class="cat-nav" id="catNav">
-  <button class="cat-btn active" data-cat="all">すべて</button>
-  <button class="cat-btn" data-cat="basic">基本操作</button>
-  <button class="cat-btn" data-cat="translate">翻訳・海外レシピ</button>
-  <button class="cat-btn" data-cat="recipe">レシピ</button>
-  <button class="cat-btn" data-cat="ingredient">材料入力</button>
-  <button class="cat-btn" data-cat="cost">原価計算</button>
-  <button class="cat-btn" data-cat="data">データ管理</button>
-  <button class="cat-btn" data-cat="inventory">在庫管理</button>
-  <button class="cat-btn" data-cat="planner">仕込み・発注</button>
-  <button class="cat-btn" data-cat="admin">管理者向け</button>
-  <button class="cat-btn" data-cat="trouble">トラブル</button>
-</nav>
+  <nav class="cat-nav" id="catNav">
+    <button class="cat-btn active" data-cat="all">すべて</button>
+    <button class="cat-btn" data-cat="basic">基本操作</button>
+    <button class="cat-btn" data-cat="translate">翻訳・海外レシピ</button>
+    <button class="cat-btn" data-cat="ai">AI機能</button>
+    <button class="cat-btn" data-cat="recipe">レシピ</button>
+    <button class="cat-btn" data-cat="ingredient">材料入力</button>
+    <button class="cat-btn" data-cat="cost">原価計算</button>
+    <button class="cat-btn" data-cat="data">データ管理</button>
+    <button class="cat-btn" data-cat="inventory">在庫管理</button>
+    <button class="cat-btn" data-cat="planner">仕込み・発注</button>
+    <button class="cat-btn" data-cat="admin">管理者向け</button>
+    <button class="cat-btn" data-cat="trouble">トラブル</button>
+  </nav>
 
-<!-- Feature Banner -->
-<div class="feature-banner">
-  <div class="feature-banner-inner">
-    <div class="feature-label">PICK UP FEATURE</div>
-    <div class="feature-title">🌍 海外レシピを取り込んで、翻訳しながら学べる</div>
-    <div class="feature-desc">海外のレシピサイトのURLを貼るだけで、材料・手順を自動解析。日本語に翻訳してレシピとして保存できます。<br>もちろん、自分で入力したレシピも任意の言語に翻訳可能。原文と翻訳の併記表示もでき、語学の勉強にも役立ちます。</div>
-    <div class="feature-points">
-      <div class="feature-point">
-        <div class="feature-point-icon">🌐</div>
-        <div class="feature-point-title">海外サイトから直接取り込み</div>
-        <div class="feature-point-text">フランス語・英語・イタリア語…世界中のレシピサイトURLを貼るだけ。材料名・分量・手順を自動解析し、日本語に翻訳して取り込みます。</div>
+  <!-- Feature Banner -->
+  <div class="feature-banner">
+    <div class="feature-banner-inner">
+      <div class="feature-label">PICK UP FEATURE</div>
+      <div class="feature-title">🌍 海外レシピを取り込んで、翻訳しながら学べる</div>
+      <div class="feature-desc">
+        海外のレシピサイトのURLを貼るだけで、材料・手順を自動解析。日本語に翻訳してレシピとして保存できます。<br>もちろん、自分で入力したレシピも任意の言語に翻訳可能。原文と翻訳の併記表示もでき、語学の勉強にも役立ちます。
       </div>
-      <div class="feature-point">
-        <div class="feature-point-icon">📚</div>
-        <div class="feature-point-title">原文併記で語学の勉強に</div>
-        <div class="feature-point-text">翻訳表示では原文も併記可能。海外レシピを読みながら、専門用語や食材名を自然に学べます。自分のレシピも多言語に変換できます。</div>
-      </div>
-      <div class="feature-point">
-        <div class="feature-point-icon">🔄</div>
-        <div class="feature-point-title">双方向の翻訳</div>
-        <div class="feature-point-text">海外レシピ → 日本語はもちろん、自分のレシピ → フランス語・英語など任意の言語にも変換。海外スタッフへの共有にも活用できます。</div>
+      <div class="feature-points">
+        <div class="feature-point">
+          <div class="feature-point-icon">🌐</div>
+          <div class="feature-point-title">海外サイトから直接取り込み</div>
+          <div class="feature-point-text">フランス語・英語・イタリア語…世界中のレシピサイトURLを貼るだけ。材料名・分量・手順を自動解析し、日本語に翻訳して取り込みます。</div>
+        </div>
+        <div class="feature-point">
+          <div class="feature-point-icon">📚</div>
+          <div class="feature-point-title">原文併記で語学の勉強に</div>
+          <div class="feature-point-text">翻訳表示では原文も併記可能。海外レシピを読みながら、専門用語や食材名を自然に学べます。自分のレシピも多言語に変換できます。</div>
+        </div>
+        <div class="feature-point">
+          <div class="feature-point-icon">🔄</div>
+          <div class="feature-point-title">双方向の翻訳</div>
+          <div class="feature-point-text">海外レシピ → 日本語はもちろん、自分のレシピ → フランス語・英語など任意の言語にも変換。海外スタッフへの共有にも活用できます。</div>
+        </div>
       </div>
     </div>
   </div>
-</div>
 
-<div class="container">
-  <div class="controls">
-    <button class="ctrl-btn" onclick="toggleAll(true)">▼ すべて開く</button>
-    <button class="ctrl-btn" onclick="toggleAll(false)">▲ すべて閉じる</button>
+  <div class="container">
+    <div class="controls">
+      <button class="ctrl-btn" onclick="toggleAll(true)">▼ すべて開く</button>
+      <button class="ctrl-btn" onclick="toggleAll(false)">▲ すべて閉じる</button>
+    </div>
+
+    <!-- ==================== 基本操作 ==================== -->
+    <div class="cat-group" data-category="basic" id="basic">
+      <div class="cat-title"><span class="cat-icon">📱</span>基本操作・画面</div>
+
+      <div class="qa-item" data-cat="basic">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">このアプリでは何ができますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>レシピの管理から原価計算、在庫・発注までを一元管理できるツールです。主な機能は以下のとおりです。</p>
+            <table>
+              <tr>
+                <th>機能</th>
+                <th>できること</th>
+              </tr>
+              <tr>
+                <td>レシピ管理</td>
+                <td>登録・編集・閲覧・削除（ゴミ箱あり）</td>
+              </tr>
+              <tr>
+                <td>仕込み計算</td>
+                <td>通常レシピの倍率計算、パンのBaker's %計算</td>
+              </tr>
+              <tr>
+                <td>原価計算</td>
+                <td>仕入れCSVを取り込み、自動で原価を算出</td>
+              </tr>
+              <tr>
+                <td>材料マスター</td>
+                <td>内容量・袋単価・歩留まり・区分・業者の一元管理</td>
+              </tr>
+              <tr>
+                <td>在庫管理</td>
+                <td>棚卸し入力、履歴保存、月次統合、CSV出力</td>
+              </tr>
+              <tr>
+                <td>仕込みカレンダー</td>
+                <td>いつ何を仕込むかをカレンダーで管理</td>
+              </tr>
+              <tr>
+                <td>発注リスト</td>
+                <td>必要量と在庫から発注量を自動算出</td>
+              </tr>
+              <tr>
+                <td style="color:#1E3A5F"><strong>翻訳・海外レシピ</strong></td>
+                <td><strong>海外サイトURLからレシピを翻訳取り込み、自作レシピの多言語翻訳、原文併記で語学学習にも</strong></td>
+              </tr>
+              <tr>
+                <td>共有・管理</td>
+                <td>公開レシピ、ユーザー管理、データコピー</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="basic">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">ログインはどうやりますか？パスワードを忘れた場合は？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>メールアドレスとパスワードでログインします（Supabase Auth）。</p>
+            <p>パスワードを忘れた場合は、ログイン画面の<strong>「パスワード再設定」</strong>から再設定メールを送信できます。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="basic">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「一般ユーザー」と「管理者」で使える機能は違いますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <table>
+              <tr>
+                <th>ロール</th>
+                <th>使える機能</th>
+              </tr>
+              <tr>
+                <td>一般ユーザー</td>
+                <td>レシピ、在庫、発注、仕込みカレンダー、データ閲覧</td>
+              </tr>
+              <tr>
+                <td>管理者（Admin）</td>
+                <td>上記すべて ＋ ユーザー管理、「他アカウントへコピー」等の共有機能</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="basic">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">メニューはどこから開きますか？どんな画面に移動できますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>レシピ一覧の右上にある<strong>「☰」ボタン</strong>でメニューを開きます。移動できる画面は以下のとおりです。</p>
+            <ul>
+              <li>在庫管理</li>
+              <li>仕込みカレンダー</li>
+              <li>データ管理</li>
+              <li>発注リスト</li>
+              <li>ゴミ箱</li>
+              <li>ユーザー管理（管理者のみ）</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="basic">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">スマホでも使えますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>基本的な閲覧はスマホでも可能ですが、以下の画面は操作量が多いため<strong>PCかタブレット</strong>をおすすめします。</p>
+            <ul>
+              <li>在庫管理</li>
+              <li>仕込みカレンダー</li>
+              <li>データ管理</li>
+              <li>ユーザー管理</li>
+              <li>発注リスト</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="basic">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「タブ」と「フィルタ」の違いは何ですか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <table>
+              <tr>
+                <th>種類</th>
+                <th>役割と例</th>
+              </tr>
+              <tr>
+                <td>タブ</td>
+                <td>表示の切替（分類）。例: 材料マスターの「食材 / アルコール / …」</td>
+              </tr>
+              <tr>
+                <td>フィルタ</td>
+                <td>絞り込み。例: 業者選択、検索、未登録/登録済み</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="basic">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">削除やコピーで「確認ダイアログ」が出るのはなぜ？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>削除・コピー・税率変更などの重要な操作は、<strong>誤操作を防ぐために確認ダイアログ</strong>が表示されます。内容を確認してから実行してください。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 翻訳・海外レシピ ==================== -->
+    <div class="cat-group" data-category="translate">
+      <div class="cat-title"><span class="cat-icon">🌍</span>翻訳・海外レシピ取り込み</div>
+
+      <div class="qa-item highlight" data-cat="translate">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">海外のレシピサイトからレシピを取り込めますか？<span class="new-badge">注目</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>
+              <strong>はい、できます。</strong>フランス語・英語・イタリア語など、世界中のレシピサイトのURLを貼り付けるだけで、材料名・分量・手順を自動解析し、<strong>日本語に翻訳してレシピとして取り込む</strong>ことができます。
+            </p>
+            <ol class="steps">
+              <li>メニューの「🌐 Webから追加」を押す</li>
+              <li>海外レシピサイトのURLを貼り付けて、解析を実行</li>
+              <li>材料・手順が日本語に翻訳されて自動入力される</li>
+              <li>材料名や単位を確認・修正して保存</li>
+            </ol>
+            <div class="tip">
+              フランス料理の本場レシピ、イタリアンの伝統レシピ、最新のモダンガストロノミーなど、世界中の情報を直接自分のレシピ帳に取り込めます。書籍やSNSで見つけたレシピのURLを貼るだけなので、言語の壁を気にする必要がありません。
+            </div>
+            <p><strong>活用例:</strong></p>
+            <ul>
+              <li>フランスの有名シェフが公開しているレシピを取り込んで、仕込みの参考にする</li>
+              <li>海外の製パンサイトからパンのレシピを取り込み、Baker's % で再計算する</li>
+              <li>イタリアのレシピサイトから地方料理のレシピを取り込んで研究する</li>
+              <li>英語圏のパティスリーサイトからデザートレシピを収集する</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item highlight" data-cat="translate">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">取り込んだ海外レシピで、原文（元の言語）も見られますか？<span class="new-badge">注目</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p><strong>はい、原文と翻訳を併記表示できます。</strong>言語切り替え機能で翻訳表示にすると、原文も一緒に表示するモードがあります。</p>
+            <p>これにより、以下のような<strong>学習効果</strong>が得られます。</p>
+            <ul>
+              <li><strong>専門用語の習得:</strong> フランス語の調理用語（sauter, braiser, réduire…）や食材名を、実際のレシピの文脈で自然に覚えられる</li>
+              <li><strong>計量単位の理解:</strong> 海外のレシピで使われる単位（oz, cup, tbsp…）と日本の単位の対応が直感的にわかる</li>
+              <li><strong>調理工程の理解:</strong> 翻訳だけでは伝わりにくいニュアンスを、原文を参照しながら正確に理解できる</li>
+            </ul>
+            <div class="tip">語学の教材として活用するシェフも増えています。料理と語学を同時に学べる、現場に即した学習方法です。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item highlight" data-cat="translate">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">自分で入力したレシピも他の言語に翻訳できますか？<span class="new-badge">注目</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p><strong>はい、自分で作成・入力したレシピも任意の言語に翻訳できます。</strong>レシピ詳細画面の言語切り替えで、日本語で書いたレシピをフランス語・英語・イタリア語などに変換して表示できます。
+            </p>
+            <p>こちらも<strong>原文（日本語）と翻訳を併記</strong>できるため、以下のような活用ができます。</p>
+            <ul>
+              <li><strong>語学の勉強:</strong> 自分がよく知っているレシピで翻訳を確認できるので、料理の専門用語を効率よく学べる。自分のレシピだからこそ文脈がわかりやすく、語彙が定着しやすい</li>
+              <li><strong>海外スタッフへの共有:</strong> 外国人スタッフに日本語レシピを翻訳して見せられる。原文併記なら、日本語を勉強中のスタッフの学習教材にもなる</li>
+              <li><strong>海外研修・留学の準備:</strong> 自分のレシピをフランス語に翻訳しておけば、渡航先での会話やプレゼンに役立つ</li>
+            </ul>
+            <div class="note">翻訳は材料名・手順のどちらにも対応しています。専門的な調理用語も含めて翻訳されるため、一般的な翻訳ツールよりも料理に特化した結果が得られます。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="translate">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">どの言語のサイトから取り込めますか？対応言語に制限はありますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>主要な言語のレシピサイトに対応しています。フランス語・英語・イタリア語・スペイン語・ドイツ語など、料理で使われる主な言語のサイトから取り込めます。</p>
+            <div class="note">取り込み後は必ず材料名や分量を確認してください。サイトの構造や言語によっては、解析精度が異なる場合があります。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="translate">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">翻訳機能を使った効果的な勉強法はありますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>料理と語学を同時に伸ばすためのおすすめの使い方をご紹介します。</p>
+            <table>
+              <tr>
+                <th>方法</th>
+                <th>やり方</th>
+              </tr>
+              <tr>
+                <td>海外レシピ読解</td>
+                <td>海外サイトのURLを取り込み → 原文併記モードで読む → 知らない単語をメモに記録</td>
+              </tr>
+              <tr>
+                <td>自作レシピ翻訳</td>
+                <td>自分のレシピをフランス語等に翻訳 → 原文と見比べて表現を学ぶ → 現場で使ってみる</td>
+              </tr>
+              <tr>
+                <td>比較学習</td>
+                <td>同じ料理の日本版と海外版を取り込み → 材料や工程の違いを比較 → 技術と語彙を同時に吸収</td>
+              </tr>
+              <tr>
+                <td>スタッフ教育</td>
+                <td>日本語レシピを翻訳して海外スタッフに共有 → 原文併記で日本語学習のサポートにも</td>
+              </tr>
+            </table>
+            <div class="tip">日常的に触れるレシピで学ぶことで、教科書的な勉強よりも実践的な語彙力が身につきます。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== AI機能 ==================== -->
+    <div class="cat-group" data-category="ai">
+      <div class="cat-title"><span class="cat-icon">🤖</span>AI機能（音声・画像）</div>
+
+      <div class="qa-item highlight" data-cat="ai">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">音声入力でレシピを登録・編集できますか？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p><strong>はい、可能です。</strong>材料入力や工程の編集画面にあるマイクボタンを押して、話しかけるだけで文字起こしを行えます。</p>
+            <div class="tip">手が濡れていてキーボードを打ちにくいキッチン内でも、声だけでメモを残したり、分量を入力したりできるので非常に便利です。</div>
+            <p><strong>使用AI:</strong> OpenAI Whisper (Groq) を採用しており、非常に高速かつ正確に日本語を聞き取ります。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item highlight" data-cat="ai">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">手書きメモや写真からレシピを取り込めますか？（画像解析）<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>
+              <strong>はい、「画像から追加」機能を使えば可能です。</strong>手書きのレシピノートや、雑誌の切り抜き、ホワイトボードの献立などの写真をアップロードすると、AIが内容を読み取って自動的に材料や手順のデータとして登録します。
+            </p>
+            <p><strong>AIモデルの選択:</strong> 解析には複数のAIモデルを選択・使い分けられます。</p>
+            <ul>
+              <li><strong>Gemini 2.0 Flash:</strong> バランスの取れた高速モデル。手書き文字の認識にも強く、多くの写真に最適です。</li>
+              <li><strong>Gemini 1.5 Pro:</strong> より複雑なレイアウトや、文字の多い文書の解析に強い高精度モデルです。</li>
+              <li><strong>GPT-4o:</strong> OpenAIの最新モデル。高度な推論能力を持ち、文脈を補完して正確なデータ化を行います。</li>
+            </ul>
+            <div class="note">画像がぼやけている場合などは正しく認識できないことがあります。鮮明な写真をアップロードすることをおすすめします。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== レシピ ==================== -->
+    <div class="cat-group" data-category="recipe">
+      <div class="cat-title"><span class="cat-icon">📖</span>レシピ一覧・詳細</div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">レシピを検索するにはどうしますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>レシピ一覧の上部検索欄で、<strong>レシピ名・材料・メモ</strong>などから検索できます。さらに「店舗」「コース」「カテゴリー」のフィルタで絞り込みも可能です。プルダウンには件数が表示されます（例:
+              <code>店舗名 (12)</code>）。
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「通常」と「全表示」モードの違いは？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <table>
+              <tr>
+                <th>モード</th>
+                <th>説明</th>
+              </tr>
+              <tr>
+                <td>通常</td>
+                <td>セクションごとに折りたたみ表示。作業しやすいレイアウト</td>
+              </tr>
+              <tr>
+                <td>全表示</td>
+                <td>すべてのレシピを展開表示（折りたたみなし）</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">レシピを他のユーザーに公開するにはどうしますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>レシピの公開設定を <strong>public</strong> にすると、他ユーザーが閲覧できるようになります。一覧では以下のボタンで表示を切り替えられます。</p>
+            <table>
+              <tr>
+                <th>ボタン</th>
+                <th>動作</th>
+              </tr>
+              <tr>
+                <td>🟢 自分公開中</td>
+                <td>自分が public にしたレシピを表示</td>
+              </tr>
+              <tr>
+                <td>🌐 他ユーザー公開</td>
+                <td>他ユーザーが public にしたレシピを表示</td>
+              </tr>
+              <tr>
+                <td>✕ 公開非表示</td>
+                <td>公開枠を閉じる</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">レシピの並び替えはどうやりますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <ul>
+              <li><strong>PC:</strong> ドラッグ＆ドロップで並び替え</li>
+              <li><strong>スマホ / タブレット:</strong> 誤操作防止のため、<strong>長押し</strong>でドラッグ開始</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">複数のレシピをまとめて削除・復元するには？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>メニューの<strong>「一括削除」</strong>または<strong>「一括操作」</strong>を押すと複数選択モードに切り替わります。</p>
+            <ul>
+              <li><strong>一覧:</strong> 一括削除（ゴミ箱へ）</li>
+              <li><strong>ゴミ箱:</strong> 一括復元 / 一括完全削除</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「最近見たレシピ」とは何ですか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>一覧上部に最近閲覧したレシピが表示されます。頻繁に使うレシピに素早くアクセスするための機能です。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">倍率を変えて材料を計算するにはどうしますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>レシピ詳細画面で<strong>倍率</strong>（例: ×2）を入力すると、材料が自動計算されます。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">Baker's %（ベーカーズパーセント）で計算するには？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>パン系レシピでは <strong>Baker's %</strong> で再計算できます。狙いの総重量を入力すると、各材料が自動で再計算されます。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">レシピを複製したいのですが？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>レシピ詳細画面の<strong>「複製」ボタン</strong>で、同じレシピをコピーして新規レシピとして作成できます。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">レシピの翻訳やQRコードの機能はありますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <ul>
+              <li><strong>翻訳:</strong>
+                言語切り替えで翻訳表示が可能。原文も併記できるので、<strong>海外レシピの学習や、自分のレシピを外国語で確認する勉強ツール</strong>としても活用できます。詳しくは「翻訳・海外レシピ」カテゴリをご覧ください。
+              </li>
+              <li><strong>QRコード:</strong> 詳細画面にQRコードが表示され、共有や印刷物での参照に便利です。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「削除」と「完全削除」の違いは何ですか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <table>
+              <tr>
+                <th>操作</th>
+                <th>説明</th>
+              </tr>
+              <tr>
+                <td>削除</td>
+                <td>ゴミ箱へ移動（復元可能）</td>
+              </tr>
+              <tr>
+                <td>完全削除</td>
+                <td>ゴミ箱からさらに削除（<strong>元に戻せません</strong>）</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== レシピ作成 ==================== -->
+    <div class="cat-group" data-category="recipe">
+      <div class="cat-title"><span class="cat-icon">✏️</span>レシピ作成・編集</div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">新しいレシピを作成するにはどうしますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>レシピ一覧で<strong>「+ レシピ追加」</strong>を押します。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">WebサイトのURLからレシピを取り込めますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>はい。<strong>国内サイトはもちろん、海外のレシピサイトにも対応</strong>しています。以下の手順で取り込めます。</p>
+            <ol class="steps">
+              <li>メニューの「🌐 Webから追加」を押す</li>
+              <li>URLを貼り付け、解析を実行</li>
+              <li>材料・手順が自動入力される（海外サイトの場合は日本語に翻訳）</li>
+            </ol>
+            <div class="note">取り込み後は、材料名や単位にズレがないか必ず確認してください。海外レシピの翻訳・学習活用については「翻訳・海外レシピ」カテゴリもご覧ください。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">写真・画像からレシピを取り込めますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>はい。以下の手順で取り込めます。</p>
+            <ol class="steps">
+              <li>メニューの「📷 画像から追加」を押す</li>
+              <li>画像からテキストを抽出し、材料・手順に反映</li>
+            </ol>
+            <div class="note">画像の解像度や写りで精度が変わります。取り込み後に必ず修正してください。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">作り方の入力はどうしますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>作り方もグループ化できます（セクションを分けたい場合）。手順はチェックして進捗管理できます（現場での使用を想定）。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 材料入力 ==================== -->
+    <div class="cat-group" data-category="ingredient">
+      <div class="cat-title"><span class="cat-icon">🥕</span>材料入力</div>
+
+      <div class="qa-item" data-cat="ingredient">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">材料名を入力すると候補が出るのはなぜ？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>オートコンプリート機能です。以下のデータから候補が表示されます。</p>
+            <ul>
+              <li>材料マスター（登録済み材料）</li>
+              <li>価格データ（仕入れCSV）</li>
+              <li>手入力で追加された材料</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="ingredient">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「仕入れ」と「原価」の違いは？🧮ボタンは何ですか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <table>
+              <tr>
+                <th>項目</th>
+                <th>説明</th>
+              </tr>
+              <tr>
+                <td>仕入れ</td>
+                <td>仕入れ単価（または単位換算した単価）</td>
+              </tr>
+              <tr>
+                <td>原価</td>
+                <td>分量を掛けた材料費（必要に応じて歩留まりを適用）</td>
+              </tr>
+              <tr>
+                <td>🧮 ボタン</td>
+                <td>原価計算アシスト（換算・単位計算を補助）</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="ingredient">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">材料の「10%」チェックは何ですか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>税率 <strong>10%</strong> 対象の場合にチェックします。区分（アルコール/備品など）が設定済みの材料は、税率が自動判定されチェックが固定されます。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="ingredient">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「歩留まり」とは何ですか？原価にどう影響しますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>歩留まりは<strong>可食率</strong>のことです。材料マスターで「歩留まり（%）」が 100% 未満の材料は、原価計算時に歩留まりが適用されます。</p>
+            <p>例えば歩留まり 50% の場合、実質的に倍の材料費がかかる計算になります。原価欄の下に小さく <code>歩留まり: 50%</code> と表示されます。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="ingredient">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">材料をグループ分けするにはどうしますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>材料はグループ（例: ソース、仕上げ、盛り付け）で分けられます。<strong>「+ 新しいグループを追加」</strong>でグループを増やせます。行はドラッグで並び替え可能です。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 原価計算・データ管理 ==================== -->
+    <div class="cat-group" data-category="cost">
+      <div class="cat-title"><span class="cat-icon">💰</span>原価計算</div>
+
+      <div class="qa-item" data-cat="cost">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">レシピの原価はどうやって計算されますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p><strong>価格データ（CSV）</strong>と<strong>材料マスター</strong>をもとに、材料行の原価およびレシピ全体の原価が自動計算されます。</p>
+            <div class="tip">CSVアップロード後はレシピの原価が自動で再計算されます。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="cost">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">仕入れCSVをアップロードする手順は？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <ol class="steps">
+              <li>データ管理 → 「価格データ」を開く</li>
+              <li>CSVファイルを選択</li>
+              <li>「アップロード実行」をクリック</li>
+            </ol>
+            <p>複数のCSVがある場合、データはマージされます（基本は最新が優先）。</p>
+            <div class="note">CSVはインフォマートの「FIM標準 取引明細」のみ解析ができます。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== データ管理 ==================== -->
+    <div class="cat-group" data-category="data">
+      <div class="cat-title"><span class="cat-icon">🗄️</span>データ管理</div>
+
+      <div class="qa-item" data-cat="data">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「データ管理」にはどんなタブがありますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <table>
+              <tr>
+                <th>タブ</th>
+                <th>内容</th>
+              </tr>
+              <tr>
+                <td>価格データ</td>
+                <td>仕入れCSVのアップロード・検索・管理</td>
+              </tr>
+              <tr>
+                <td>材料マスター</td>
+                <td>材料の基準データ（内容量・単価・歩留まり等）</td>
+              </tr>
+              <tr>
+                <td>CSV取込</td>
+                <td>価格 CSV から材料マスターへ一括登録</td>
+              </tr>
+              <tr>
+                <td>重複アイテム</td>
+                <td>同名材料の価格履歴確認</td>
+              </tr>
+            </table>
+            <p>さらに、レシピのバックアップ（JSON）の入出力もこの画面から行えます。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="data">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">価格データの検索・並び替えはどうしますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <ul>
+              <li><strong>検索:</strong> 日付、材料名、業者名で検索可能</li>
+              <li><strong>並び替え:</strong> テーブルヘッダ（納品日 / 業者名 / 材料名）をクリック</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="data">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">保存済みCSVファイルを削除するとどうなりますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>保存済みファイル一覧から削除できます。</p>
+            <div class="warn">ファイルを削除するとマージ結果も変わります。削除前に影響をご確認ください。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="data">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「材料マスター」とは何ですか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>在庫・発注・原価計算の<strong>「基準データ」</strong>です。以下のタブで区分ごとに管理します。</p>
+            <ul>
+              <li>全て、食材、アルコール、ソフトドリンク、備品、手入力</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="data">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">材料マスターに新しい材料を登録するには？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>「+ 新規材料」を押して、以下の項目を入力します。</p>
+            <table>
+              <tr>
+                <th>項目</th>
+                <th>説明</th>
+              </tr>
+              <tr>
+                <td>材料名</td>
+                <td>材料の名前</td>
+              </tr>
+              <tr>
+                <td>業者名</td>
+                <td>任意</td>
+              </tr>
+              <tr>
+                <td>内容量</td>
+                <td>例: 1000</td>
+              </tr>
+              <tr>
+                <td>単位</td>
+                <td>例: g / ml / 本 など</td>
+              </tr>
+              <tr>
+                <td>仕入れ値</td>
+                <td>1袋 / 1本の価格</td>
+              </tr>
+              <tr>
+                <td>歩留まり（%）</td>
+                <td>食材のみ。可食率を反映したい場合</td>
+              </tr>
+              <tr>
+                <td>区分</td>
+                <td>食材 / アルコール / ソフトドリンク / 備品</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="data">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「換算単価」「元の単位（CSV）」とは何ですか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <ul>
+              <li><strong>換算単価:</strong> 内容量と仕入れ値から参考として <code>¥xxx/kg</code> や <code>¥xxx/L</code> のように表示されます。</li>
+              <li><strong>元の単位（CSV）:</strong> CSV側の「発注単位（袋/本/箱…）」を表します。編集モードのときだけ編集可能で、CSVに単位が無いまたは誤っている場合の補正に使います。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="data">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「CSV取込」とは何ですか？どう使いますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>価格データ（CSV）にある材料を材料マスターへ登録するための画面です。</p>
+            <ol class="steps">
+              <li>データ管理 → 「CSV取込」</li>
+              <li>検索・絞り込み（未登録/登録済み、業者、区分、検索語）</li>
+              <li>内容量・単位・区分などを入力</li>
+              <li>1件ずつ登録、または一括登録</li>
+            </ol>
+            <div class="tip">未登録だけを抽出できるので、整備していない材料を効率よく登録できます。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="data">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「重複アイテム」は何を確認する画面ですか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>同じ材料名で複数の価格が存在する場合に、入荷日ごとの<strong>価格変化</strong>や<strong>表記揺れ</strong>を確認します。</p>
+            <ol class="steps">
+              <li>データ管理 → 「重複アイテム」</li>
+              <li>材料を選択</li>
+              <li>必要なら月で絞り込み</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="data">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">レシピのバックアップはどうやって取りますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <h4 style="margin-top:0">ダウンロード（バックアップ作成）</h4>
+            <ol class="steps">
+              <li>データ管理 → 価格データ</li>
+              <li>サイドバー「🔄 レシピバックアップ」→「📥 JSON形式でダウンロード」</li>
+            </ol>
+            <h4>復元（取り込み）</h4>
+            <ol class="steps">
+              <li>データ管理 → 価格データ</li>
+              <li>サイドバー「🔄 レシピバックアップ」→「📤 バックアップから復元」</li>
+              <li>JSONファイルを選択</li>
+              <li>内容確認モーダルで「この内容で復元」を押す</li>
+              <li>処理が完了するまで待つ</li>
+            </ol>
+            <div class="warn">取り込みは上書きではなく追加です。既存レシピは維持され、バックアップ内のレシピが新規追加されます。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 在庫管理 ==================== -->
+    <div class="cat-group" data-category="inventory">
+      <div class="cat-title"><span class="cat-icon">📦</span>在庫管理（棚卸し）</div>
+
+      <div class="qa-item" data-cat="inventory">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">在庫管理画面の構成を教えてください。</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <table>
+              <tr>
+                <th>要素</th>
+                <th>説明</th>
+              </tr>
+              <tr>
+                <td>業者選択</td>
+                <td>業者で絞り込み（「すべて」「その他」あり）</td>
+              </tr>
+              <tr>
+                <td>在庫検索</td>
+                <td>品名で検索</td>
+              </tr>
+              <tr>
+                <td>✅ 棚卸し一覧</td>
+                <td>入力対象の一覧（在庫数入力が中心）</td>
+              </tr>
+              <tr>
+                <td>📊 統合</td>
+                <td>月次統合（棚卸し履歴から集計）</td>
+              </tr>
+              <tr>
+                <td>📥 CSV出力</td>
+                <td>一覧をCSVで保存</td>
+              </tr>
+              <tr>
+                <td>🖨️ 印刷</td>
+                <td>棚卸し一覧を印刷 / PDF保存</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="inventory">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">棚卸しの各行で何ができますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <ul>
+              <li><strong>✎ 編集:</strong> アイテムの基本情報（発注点など）を編集</li>
+              <li><strong>🗑️ 除外:</strong> 棚卸し一覧から一時的に非表示（マスターやCSVは消えません）</li>
+              <li><strong>↺ 単位同期:</strong> 在庫の単位が材料マスターとズレている場合にマスター単位へ合わせる</li>
+              <li><strong>業者名ソート:</strong> 「業者名」見出しをクリックで並び替え</li>
+            </ul>
+            <p>CSVにない材料は<strong>「+ アイテム追加」</strong>から手入力で追加できます。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="inventory">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">在庫数の入力を速くするコツはありますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>以下のキーボード操作が使えます。</p>
+            <table>
+              <tr>
+                <th>キー</th>
+                <th>動作</th>
+              </tr>
+              <tr>
+                <td><kbd>Enter</kbd></td>
+                <td>次の入力欄へ移動</td>
+              </tr>
+              <tr>
+                <td><kbd>Shift</kbd> + <kbd>Enter</kbd></td>
+                <td>ひとつ上の入力欄へ移動</td>
+              </tr>
+              <tr>
+                <td><kbd>Tab</kbd></td>
+                <td>次の入力欄へ移動</td>
+              </tr>
+              <tr>
+                <td><kbd>Shift</kbd> + <kbd>Tab</kbd></td>
+                <td>ひとつ上へ移動</td>
+              </tr>
+            </table>
+            <div class="tip">入力欄をクリックすると数値が全選択されるので、そのまま打ち替えできます。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="inventory">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「発注推奨」バッジとは何ですか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>在庫が<strong>「発注点以下」</strong>になると、品名横に「発注推奨」バッジが表示されます。ホバーするとツールチップで「発注点以下」と表示されます。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="inventory">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">棚卸しを完了して履歴に保存するにはどうしますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <ol class="steps">
+              <li>「棚卸し完了」を押す</li>
+              <li>保存名（タイトル）を確認・変更</li>
+              <li>棚卸し後の在庫数: 「0にリセット」または「そのまま保持」を選択</li>
+              <li>保存を実行</li>
+            </ol>
+            <p>保存済み棚卸しは「📜 履歴」から詳細表示・CSV出力・復元・削除ができます。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="inventory">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「月次統合」とは何ですか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>
+              月内に複数回棚卸しした場合でも、<strong>月次の集計</strong>を作れる機能です。同名品目は月内の最新データを採用して集計します。業者別の合計、内訳（食材/ドリンク/備品）を確認でき、CSV出力も可能です。
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 仕込み・発注 ==================== -->
+    <div class="cat-group" data-category="planner">
+      <div class="cat-title"><span class="cat-icon">📅</span>仕込み・発注</div>
+
+      <div class="qa-item" data-cat="planner">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">仕込みカレンダーはどう使いますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>いつ、どのレシピを仕込むかを登録する画面です。発注リストの入力元にもなります。</p>
+            <ul>
+              <li>左のレシピ一覧から、日付へ<strong>ドラッグ</strong>して予定を追加</li>
+              <li>既存予定をドラッグして<strong>別日に移動</strong></li>
+              <li>予定の<strong>削除</strong>（確認あり）</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="planner">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">発注リストはどうやって作成しますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <ol class="steps">
+              <li>期間（開始日 / 終了日）を指定</li>
+              <li>「生成」して発注リストを作成</li>
+              <li>必要に応じてコピー・印刷</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="planner">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">発注量はどのように算出されますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <ul>
+              <li>期間内の仕込み予定の材料を<strong>合算</strong></li>
+              <li>在庫を<strong>差し引き</strong></li>
+              <li>材料マスターの「内容量」がある材料は、残在庫が「1単位の2割」を切ると<strong>発注対象</strong></li>
+              <li>発注単位ラベルは「元の単位（CSV）」を優先</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 管理者向け ==================== -->
+    <div class="cat-group" data-category="admin">
+      <div class="cat-title"><span class="cat-icon">👤</span>管理者向け</div>
+
+      <div class="qa-item" data-cat="admin">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">ユーザーの管理はどこからできますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>メニューから<strong>「ユーザー管理」</strong>を開きます（管理者のみ表示）。管理者と一般ユーザーが一覧表示されます。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="admin">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「マスターレシピ表示」のON/OFFとは？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>各ユーザーに対して、共有レシピ（マスター）を見せるかどうかの<strong>運用スイッチ</strong>です。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="admin">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">ユーザーのパスワードを再設定するには？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>方法は<strong>2種類</strong>あります。</p>
+            <ul>
+              <li>再設定メールを送信</li>
+              <li>管理者が新しいパスワードを直接設定</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="admin">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">価格データや材料マスターを他のアカウントへコピーするには？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <h4 style="margin-top:0">価格データのコピー</h4>
+            <ol class="steps">
+              <li>データ管理 → 「価格データ」</li>
+              <li>サイドバー「共有（コピー）」→「他アカウントへコピー」</li>
+              <li>コピー先アカウントを選択</li>
+              <li>確認画面で「コピー開始」</li>
+            </ol>
+            <h4>材料マスターのコピー</h4>
+            <ol class="steps">
+              <li>データ管理 → 「材料マスター」</li>
+              <li>「他アカウントへコピー」をクリック</li>
+              <li>コピー先を選択、上書き有無を選択</li>
+              <li>確認画面で実行</li>
+            </ol>
+            <div class="note">どちらも同期はされません（1回コピー）。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== ルヴァンガイド ==================== -->
+    <div class="cat-group" data-category="basic">
+      <div class="cat-title"><span class="cat-icon">🍞</span>ルヴァンガイド</div>
+
+      <div class="qa-item" data-cat="basic">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">ルヴァンガイドとは何ですか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>メニューから「LEVAIN GUIDE」を開くと、ルヴァン種の解説ページを閲覧できます。</p>
+            <ul>
+              <li>ルヴァン種の基礎</li>
+              <li>作成方法</li>
+              <li>日常管理</li>
+              <li>トラブルシュート</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== トラブル ==================== -->
+    <div class="cat-group" data-category="trouble">
+      <div class="cat-title"><span class="cat-icon">🔧</span>よくあるトラブルと対処</div>
+
+      <div class="qa-item" data-cat="trouble">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">価格がレシピに反映されません。どうすればいいですか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <ul>
+              <li>価格データ（CSV）をアップロード後、少し待ってから<strong>再読み込み</strong>してください。</li>
+              <li>材料名の<strong>表記ゆれ</strong>（全角/半角、末尾スペース）で一致しない場合があります。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="trouble">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">在庫に同じ商品がダブって見えるのですが？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <ul>
+              <li>業者名と品名が同じものは重複が出ないよう調整されています。</li>
+              <li>それでもダブる場合は、<strong>品名表記（空白違い等）</strong>を確認してください。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="trouble">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">単位や桁が合わない（原価/在庫/発注）のですが？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>材料マスターの「内容量」「単位」「仕入れ値」が<strong>未整備</strong>の可能性があります。</p>
+            <div class="tip">「CSV取込」で未登録を整備するのが最短です。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="trouble">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">手入力した材料がどこにあるか分かりません。</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>材料マスターの<strong>「手入力」タブ</strong>にまとまって表示されます。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="no-results" id="noResults">
+      🔍 該当する質問が見つかりませんでした。別のキーワードで検索してみてください。
+    </div>
+
   </div>
 
-  <!-- ==================== 基本操作 ==================== -->
-  <div class="cat-group" data-category="basic">
-    <div class="cat-title"><span class="cat-icon">📱</span>基本操作・画面</div>
-
-    <div class="qa-item" data-cat="basic">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">このアプリでは何ができますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>レシピの管理から原価計算、在庫・発注までを一元管理できるツールです。主な機能は以下のとおりです。</p>
-        <table>
-          <tr><th>機能</th><th>できること</th></tr>
-          <tr><td>レシピ管理</td><td>登録・編集・閲覧・削除（ゴミ箱あり）</td></tr>
-          <tr><td>仕込み計算</td><td>通常レシピの倍率計算、パンのBaker's %計算</td></tr>
-          <tr><td>原価計算</td><td>仕入れCSVを取り込み、自動で原価を算出</td></tr>
-          <tr><td>材料マスター</td><td>内容量・袋単価・歩留まり・区分・業者の一元管理</td></tr>
-          <tr><td>在庫管理</td><td>棚卸し入力、履歴保存、月次統合、CSV出力</td></tr>
-          <tr><td>仕込みカレンダー</td><td>いつ何を仕込むかをカレンダーで管理</td></tr>
-          <tr><td>発注リスト</td><td>必要量と在庫から発注量を自動算出</td></tr>
-          <tr><td style="color:#1E3A5F"><strong>翻訳・海外レシピ</strong></td><td><strong>海外サイトURLからレシピを翻訳取り込み、自作レシピの多言語翻訳、原文併記で語学学習にも</strong></td></tr>
-          <tr><td>共有・管理</td><td>公開レシピ、ユーザー管理、データコピー</td></tr>
-        </table>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="basic">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">ログインはどうやりますか？パスワードを忘れた場合は？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>メールアドレスとパスワードでログインします（Supabase Auth）。</p>
-        <p>パスワードを忘れた場合は、ログイン画面の<strong>「パスワード再設定」</strong>から再設定メールを送信できます。</p>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="basic">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">「一般ユーザー」と「管理者」で使える機能は違いますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <table>
-          <tr><th>ロール</th><th>使える機能</th></tr>
-          <tr><td>一般ユーザー</td><td>レシピ、在庫、発注、仕込みカレンダー、データ閲覧</td></tr>
-          <tr><td>管理者（Admin）</td><td>上記すべて ＋ ユーザー管理、「他アカウントへコピー」等の共有機能</td></tr>
-        </table>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="basic">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">メニューはどこから開きますか？どんな画面に移動できますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>レシピ一覧の右上にある<strong>「☰」ボタン</strong>でメニューを開きます。移動できる画面は以下のとおりです。</p>
-        <ul>
-          <li>在庫管理</li>
-          <li>仕込みカレンダー</li>
-          <li>データ管理</li>
-          <li>発注リスト</li>
-          <li>ゴミ箱</li>
-          <li>ユーザー管理（管理者のみ）</li>
-        </ul>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="basic">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">スマホでも使えますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>基本的な閲覧はスマホでも可能ですが、以下の画面は操作量が多いため<strong>PCかタブレット</strong>をおすすめします。</p>
-        <ul>
-          <li>在庫管理</li>
-          <li>仕込みカレンダー</li>
-          <li>データ管理</li>
-          <li>ユーザー管理</li>
-          <li>発注リスト</li>
-        </ul>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="basic">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">「タブ」と「フィルタ」の違いは何ですか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <table>
-          <tr><th>種類</th><th>役割と例</th></tr>
-          <tr><td>タブ</td><td>表示の切替（分類）。例: 材料マスターの「食材 / アルコール / …」</td></tr>
-          <tr><td>フィルタ</td><td>絞り込み。例: 業者選択、検索、未登録/登録済み</td></tr>
-        </table>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="basic">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">削除やコピーで「確認ダイアログ」が出るのはなぜ？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>削除・コピー・税率変更などの重要な操作は、<strong>誤操作を防ぐために確認ダイアログ</strong>が表示されます。内容を確認してから実行してください。</p>
-      </div></div>
-    </div>
-  </div>
-
-  <!-- ==================== 翻訳・海外レシピ ==================== -->
-  <div class="cat-group" data-category="translate">
-    <div class="cat-title"><span class="cat-icon">🌍</span>翻訳・海外レシピ取り込み</div>
-
-    <div class="qa-item highlight" data-cat="translate">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">海外のレシピサイトからレシピを取り込めますか？<span class="new-badge">注目</span></span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p><strong>はい、できます。</strong>フランス語・英語・イタリア語など、世界中のレシピサイトのURLを貼り付けるだけで、材料名・分量・手順を自動解析し、<strong>日本語に翻訳してレシピとして取り込む</strong>ことができます。</p>
-        <ol class="steps">
-          <li>メニューの「🌐 Webから追加」を押す</li>
-          <li>海外レシピサイトのURLを貼り付けて、解析を実行</li>
-          <li>材料・手順が日本語に翻訳されて自動入力される</li>
-          <li>材料名や単位を確認・修正して保存</li>
-        </ol>
-        <div class="tip">フランス料理の本場レシピ、イタリアンの伝統レシピ、最新のモダンガストロノミーなど、世界中の情報を直接自分のレシピ帳に取り込めます。書籍やSNSで見つけたレシピのURLを貼るだけなので、言語の壁を気にする必要がありません。</div>
-        <p><strong>活用例:</strong></p>
-        <ul>
-          <li>フランスの有名シェフが公開しているレシピを取り込んで、仕込みの参考にする</li>
-          <li>海外の製パンサイトからパンのレシピを取り込み、Baker's % で再計算する</li>
-          <li>イタリアのレシピサイトから地方料理のレシピを取り込んで研究する</li>
-          <li>英語圏のパティスリーサイトからデザートレシピを収集する</li>
-        </ul>
-      </div></div>
-    </div>
-
-    <div class="qa-item highlight" data-cat="translate">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">取り込んだ海外レシピで、原文（元の言語）も見られますか？<span class="new-badge">注目</span></span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p><strong>はい、原文と翻訳を併記表示できます。</strong>言語切り替え機能で翻訳表示にすると、原文も一緒に表示するモードがあります。</p>
-        <p>これにより、以下のような<strong>学習効果</strong>が得られます。</p>
-        <ul>
-          <li><strong>専門用語の習得:</strong> フランス語の調理用語（sauter, braiser, réduire…）や食材名を、実際のレシピの文脈で自然に覚えられる</li>
-          <li><strong>計量単位の理解:</strong> 海外のレシピで使われる単位（oz, cup, tbsp…）と日本の単位の対応が直感的にわかる</li>
-          <li><strong>調理工程の理解:</strong> 翻訳だけでは伝わりにくいニュアンスを、原文を参照しながら正確に理解できる</li>
-        </ul>
-        <div class="tip">語学の教材として活用するシェフも増えています。料理と語学を同時に学べる、現場に即した学習方法です。</div>
-      </div></div>
-    </div>
-
-    <div class="qa-item highlight" data-cat="translate">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">自分で入力したレシピも他の言語に翻訳できますか？<span class="new-badge">注目</span></span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p><strong>はい、自分で作成・入力したレシピも任意の言語に翻訳できます。</strong>レシピ詳細画面の言語切り替えで、日本語で書いたレシピをフランス語・英語・イタリア語などに変換して表示できます。</p>
-        <p>こちらも<strong>原文（日本語）と翻訳を併記</strong>できるため、以下のような活用ができます。</p>
-        <ul>
-          <li><strong>語学の勉強:</strong> 自分がよく知っているレシピで翻訳を確認できるので、料理の専門用語を効率よく学べる。自分のレシピだからこそ文脈がわかりやすく、語彙が定着しやすい</li>
-          <li><strong>海外スタッフへの共有:</strong> 外国人スタッフに日本語レシピを翻訳して見せられる。原文併記なら、日本語を勉強中のスタッフの学習教材にもなる</li>
-          <li><strong>海外研修・留学の準備:</strong> 自分のレシピをフランス語に翻訳しておけば、渡航先での会話やプレゼンに役立つ</li>
-        </ul>
-        <div class="note">翻訳は材料名・手順のどちらにも対応しています。専門的な調理用語も含めて翻訳されるため、一般的な翻訳ツールよりも料理に特化した結果が得られます。</div>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="translate">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">どの言語のサイトから取り込めますか？対応言語に制限はありますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>主要な言語のレシピサイトに対応しています。フランス語・英語・イタリア語・スペイン語・ドイツ語など、料理で使われる主な言語のサイトから取り込めます。</p>
-        <div class="note">取り込み後は必ず材料名や分量を確認してください。サイトの構造や言語によっては、解析精度が異なる場合があります。</div>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="translate">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">翻訳機能を使った効果的な勉強法はありますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>料理と語学を同時に伸ばすためのおすすめの使い方をご紹介します。</p>
-        <table>
-          <tr><th>方法</th><th>やり方</th></tr>
-          <tr><td>海外レシピ読解</td><td>海外サイトのURLを取り込み → 原文併記モードで読む → 知らない単語をメモに記録</td></tr>
-          <tr><td>自作レシピ翻訳</td><td>自分のレシピをフランス語等に翻訳 → 原文と見比べて表現を学ぶ → 現場で使ってみる</td></tr>
-          <tr><td>比較学習</td><td>同じ料理の日本版と海外版を取り込み → 材料や工程の違いを比較 → 技術と語彙を同時に吸収</td></tr>
-          <tr><td>スタッフ教育</td><td>日本語レシピを翻訳して海外スタッフに共有 → 原文併記で日本語学習のサポートにも</td></tr>
-        </table>
-        <div class="tip">日常的に触れるレシピで学ぶことで、教科書的な勉強よりも実践的な語彙力が身につきます。</div>
-      </div></div>
-    </div>
-  </div>
-
-  <!-- ==================== レシピ ==================== -->
-  <div class="cat-group" data-category="recipe">
-    <div class="cat-title"><span class="cat-icon">📖</span>レシピ一覧・詳細</div>
-
-    <div class="qa-item" data-cat="recipe">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">レシピを検索するにはどうしますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>レシピ一覧の上部検索欄で、<strong>レシピ名・材料・メモ</strong>などから検索できます。さらに「店舗」「コース」「カテゴリー」のフィルタで絞り込みも可能です。プルダウンには件数が表示されます（例: <code>店舗名 (12)</code>）。</p>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="recipe">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">「通常」と「全表示」モードの違いは？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <table>
-          <tr><th>モード</th><th>説明</th></tr>
-          <tr><td>通常</td><td>セクションごとに折りたたみ表示。作業しやすいレイアウト</td></tr>
-          <tr><td>全表示</td><td>すべてのレシピを展開表示（折りたたみなし）</td></tr>
-        </table>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="recipe">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">レシピを他のユーザーに公開するにはどうしますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>レシピの公開設定を <strong>public</strong> にすると、他ユーザーが閲覧できるようになります。一覧では以下のボタンで表示を切り替えられます。</p>
-        <table>
-          <tr><th>ボタン</th><th>動作</th></tr>
-          <tr><td>🟢 自分公開中</td><td>自分が public にしたレシピを表示</td></tr>
-          <tr><td>🌐 他ユーザー公開</td><td>他ユーザーが public にしたレシピを表示</td></tr>
-          <tr><td>✕ 公開非表示</td><td>公開枠を閉じる</td></tr>
-        </table>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="recipe">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">レシピの並び替えはどうやりますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <ul>
-          <li><strong>PC:</strong> ドラッグ＆ドロップで並び替え</li>
-          <li><strong>スマホ / タブレット:</strong> 誤操作防止のため、<strong>長押し</strong>でドラッグ開始</li>
-        </ul>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="recipe">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">複数のレシピをまとめて削除・復元するには？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>メニューの<strong>「一括削除」</strong>または<strong>「一括操作」</strong>を押すと複数選択モードに切り替わります。</p>
-        <ul>
-          <li><strong>一覧:</strong> 一括削除（ゴミ箱へ）</li>
-          <li><strong>ゴミ箱:</strong> 一括復元 / 一括完全削除</li>
-        </ul>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="recipe">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">「最近見たレシピ」とは何ですか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>一覧上部に最近閲覧したレシピが表示されます。頻繁に使うレシピに素早くアクセスするための機能です。</p>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="recipe">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">倍率を変えて材料を計算するにはどうしますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>レシピ詳細画面で<strong>倍率</strong>（例: ×2）を入力すると、材料が自動計算されます。</p>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="recipe">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">Baker's %（ベーカーズパーセント）で計算するには？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>パン系レシピでは <strong>Baker's %</strong> で再計算できます。狙いの総重量を入力すると、各材料が自動で再計算されます。</p>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="recipe">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">レシピを複製したいのですが？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>レシピ詳細画面の<strong>「複製」ボタン</strong>で、同じレシピをコピーして新規レシピとして作成できます。</p>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="recipe">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">レシピの翻訳やQRコードの機能はありますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <ul>
-          <li><strong>翻訳:</strong> 言語切り替えで翻訳表示が可能。原文も併記できるので、<strong>海外レシピの学習や、自分のレシピを外国語で確認する勉強ツール</strong>としても活用できます。詳しくは「翻訳・海外レシピ」カテゴリをご覧ください。</li>
-          <li><strong>QRコード:</strong> 詳細画面にQRコードが表示され、共有や印刷物での参照に便利です。</li>
-        </ul>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="recipe">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">「削除」と「完全削除」の違いは何ですか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <table>
-          <tr><th>操作</th><th>説明</th></tr>
-          <tr><td>削除</td><td>ゴミ箱へ移動（復元可能）</td></tr>
-          <tr><td>完全削除</td><td>ゴミ箱からさらに削除（<strong>元に戻せません</strong>）</td></tr>
-        </table>
-      </div></div>
-    </div>
-  </div>
-
-  <!-- ==================== レシピ作成 ==================== -->
-  <div class="cat-group" data-category="recipe">
-    <div class="cat-title"><span class="cat-icon">✏️</span>レシピ作成・編集</div>
-
-    <div class="qa-item" data-cat="recipe">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">新しいレシピを作成するにはどうしますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>レシピ一覧で<strong>「+ レシピ追加」</strong>を押します。</p>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="recipe">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">WebサイトのURLからレシピを取り込めますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>はい。<strong>国内サイトはもちろん、海外のレシピサイトにも対応</strong>しています。以下の手順で取り込めます。</p>
-        <ol class="steps">
-          <li>メニューの「🌐 Webから追加」を押す</li>
-          <li>URLを貼り付け、解析を実行</li>
-          <li>材料・手順が自動入力される（海外サイトの場合は日本語に翻訳）</li>
-        </ol>
-        <div class="note">取り込み後は、材料名や単位にズレがないか必ず確認してください。海外レシピの翻訳・学習活用については「翻訳・海外レシピ」カテゴリもご覧ください。</div>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="recipe">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">写真・画像からレシピを取り込めますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>はい。以下の手順で取り込めます。</p>
-        <ol class="steps">
-          <li>メニューの「📷 画像から追加」を押す</li>
-          <li>画像からテキストを抽出し、材料・手順に反映</li>
-        </ol>
-        <div class="note">画像の解像度や写りで精度が変わります。取り込み後に必ず修正してください。</div>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="recipe">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">作り方の入力はどうしますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>作り方もグループ化できます（セクションを分けたい場合）。手順はチェックして進捗管理できます（現場での使用を想定）。</p>
-      </div></div>
-    </div>
-  </div>
-
-  <!-- ==================== 材料入力 ==================== -->
-  <div class="cat-group" data-category="ingredient">
-    <div class="cat-title"><span class="cat-icon">🥕</span>材料入力</div>
-
-    <div class="qa-item" data-cat="ingredient">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">材料名を入力すると候補が出るのはなぜ？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>オートコンプリート機能です。以下のデータから候補が表示されます。</p>
-        <ul>
-          <li>材料マスター（登録済み材料）</li>
-          <li>価格データ（仕入れCSV）</li>
-          <li>手入力で追加された材料</li>
-        </ul>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="ingredient">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">「仕入れ」と「原価」の違いは？🧮ボタンは何ですか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <table>
-          <tr><th>項目</th><th>説明</th></tr>
-          <tr><td>仕入れ</td><td>仕入れ単価（または単位換算した単価）</td></tr>
-          <tr><td>原価</td><td>分量を掛けた材料費（必要に応じて歩留まりを適用）</td></tr>
-          <tr><td>🧮 ボタン</td><td>原価計算アシスト（換算・単位計算を補助）</td></tr>
-        </table>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="ingredient">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">材料の「10%」チェックは何ですか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>税率 <strong>10%</strong> 対象の場合にチェックします。区分（アルコール/備品など）が設定済みの材料は、税率が自動判定されチェックが固定されます。</p>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="ingredient">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">「歩留まり」とは何ですか？原価にどう影響しますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>歩留まりは<strong>可食率</strong>のことです。材料マスターで「歩留まり（%）」が 100% 未満の材料は、原価計算時に歩留まりが適用されます。</p>
-        <p>例えば歩留まり 50% の場合、実質的に倍の材料費がかかる計算になります。原価欄の下に小さく <code>歩留まり: 50%</code> と表示されます。</p>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="ingredient">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">材料をグループ分けするにはどうしますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>材料はグループ（例: ソース、仕上げ、盛り付け）で分けられます。<strong>「+ 新しいグループを追加」</strong>でグループを増やせます。行はドラッグで並び替え可能です。</p>
-      </div></div>
-    </div>
-  </div>
-
-  <!-- ==================== 原価計算・データ管理 ==================== -->
-  <div class="cat-group" data-category="cost">
-    <div class="cat-title"><span class="cat-icon">💰</span>原価計算</div>
-
-    <div class="qa-item" data-cat="cost">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">レシピの原価はどうやって計算されますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p><strong>価格データ（CSV）</strong>と<strong>材料マスター</strong>をもとに、材料行の原価およびレシピ全体の原価が自動計算されます。</p>
-        <div class="tip">CSVアップロード後はレシピの原価が自動で再計算されます。</div>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="cost">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">仕入れCSVをアップロードする手順は？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <ol class="steps">
-          <li>データ管理 → 「価格データ」を開く</li>
-          <li>CSVファイルを選択</li>
-          <li>「アップロード実行」をクリック</li>
-        </ol>
-        <p>複数のCSVがある場合、データはマージされます（基本は最新が優先）。</p>
-        <div class="note">CSVはインフォマートの「FIM標準 取引明細」のみ解析ができます。</div>
-      </div></div>
-    </div>
-  </div>
-
-  <!-- ==================== データ管理 ==================== -->
-  <div class="cat-group" data-category="data">
-    <div class="cat-title"><span class="cat-icon">🗄️</span>データ管理</div>
-
-    <div class="qa-item" data-cat="data">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">「データ管理」にはどんなタブがありますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <table>
-          <tr><th>タブ</th><th>内容</th></tr>
-          <tr><td>価格データ</td><td>仕入れCSVのアップロード・検索・管理</td></tr>
-          <tr><td>材料マスター</td><td>材料の基準データ（内容量・単価・歩留まり等）</td></tr>
-          <tr><td>CSV取込</td><td>価格 CSV から材料マスターへ一括登録</td></tr>
-          <tr><td>重複アイテム</td><td>同名材料の価格履歴確認</td></tr>
-        </table>
-        <p>さらに、レシピのバックアップ（JSON）の入出力もこの画面から行えます。</p>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="data">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">価格データの検索・並び替えはどうしますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <ul>
-          <li><strong>検索:</strong> 日付、材料名、業者名で検索可能</li>
-          <li><strong>並び替え:</strong> テーブルヘッダ（納品日 / 業者名 / 材料名）をクリック</li>
-        </ul>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="data">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">保存済みCSVファイルを削除するとどうなりますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>保存済みファイル一覧から削除できます。</p>
-        <div class="warn">ファイルを削除するとマージ結果も変わります。削除前に影響をご確認ください。</div>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="data">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">「材料マスター」とは何ですか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>在庫・発注・原価計算の<strong>「基準データ」</strong>です。以下のタブで区分ごとに管理します。</p>
-        <ul>
-          <li>全て、食材、アルコール、ソフトドリンク、備品、手入力</li>
-        </ul>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="data">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">材料マスターに新しい材料を登録するには？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>「+ 新規材料」を押して、以下の項目を入力します。</p>
-        <table>
-          <tr><th>項目</th><th>説明</th></tr>
-          <tr><td>材料名</td><td>材料の名前</td></tr>
-          <tr><td>業者名</td><td>任意</td></tr>
-          <tr><td>内容量</td><td>例: 1000</td></tr>
-          <tr><td>単位</td><td>例: g / ml / 本 など</td></tr>
-          <tr><td>仕入れ値</td><td>1袋 / 1本の価格</td></tr>
-          <tr><td>歩留まり（%）</td><td>食材のみ。可食率を反映したい場合</td></tr>
-          <tr><td>区分</td><td>食材 / アルコール / ソフトドリンク / 備品</td></tr>
-        </table>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="data">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">「換算単価」「元の単位（CSV）」とは何ですか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <ul>
-          <li><strong>換算単価:</strong> 内容量と仕入れ値から参考として <code>¥xxx/kg</code> や <code>¥xxx/L</code> のように表示されます。</li>
-          <li><strong>元の単位（CSV）:</strong> CSV側の「発注単位（袋/本/箱…）」を表します。編集モードのときだけ編集可能で、CSVに単位が無いまたは誤っている場合の補正に使います。</li>
-        </ul>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="data">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">「CSV取込」とは何ですか？どう使いますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>価格データ（CSV）にある材料を材料マスターへ登録するための画面です。</p>
-        <ol class="steps">
-          <li>データ管理 → 「CSV取込」</li>
-          <li>検索・絞り込み（未登録/登録済み、業者、区分、検索語）</li>
-          <li>内容量・単位・区分などを入力</li>
-          <li>1件ずつ登録、または一括登録</li>
-        </ol>
-        <div class="tip">未登録だけを抽出できるので、整備していない材料を効率よく登録できます。</div>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="data">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">「重複アイテム」は何を確認する画面ですか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>同じ材料名で複数の価格が存在する場合に、入荷日ごとの<strong>価格変化</strong>や<strong>表記揺れ</strong>を確認します。</p>
-        <ol class="steps">
-          <li>データ管理 → 「重複アイテム」</li>
-          <li>材料を選択</li>
-          <li>必要なら月で絞り込み</li>
-        </ol>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="data">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">レシピのバックアップはどうやって取りますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <h4 style="margin-top:0">ダウンロード（バックアップ作成）</h4>
-        <ol class="steps">
-          <li>データ管理 → 価格データ</li>
-          <li>サイドバー「🔄 レシピバックアップ」→「📥 JSON形式でダウンロード」</li>
-        </ol>
-        <h4>復元（取り込み）</h4>
-        <ol class="steps">
-          <li>データ管理 → 価格データ</li>
-          <li>サイドバー「🔄 レシピバックアップ」→「📤 バックアップから復元」</li>
-          <li>JSONファイルを選択</li>
-          <li>内容確認モーダルで「この内容で復元」を押す</li>
-          <li>処理が完了するまで待つ</li>
-        </ol>
-        <div class="warn">取り込みは上書きではなく追加です。既存レシピは維持され、バックアップ内のレシピが新規追加されます。</div>
-      </div></div>
-    </div>
-  </div>
-
-  <!-- ==================== 在庫管理 ==================== -->
-  <div class="cat-group" data-category="inventory">
-    <div class="cat-title"><span class="cat-icon">📦</span>在庫管理（棚卸し）</div>
-
-    <div class="qa-item" data-cat="inventory">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">在庫管理画面の構成を教えてください。</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <table>
-          <tr><th>要素</th><th>説明</th></tr>
-          <tr><td>業者選択</td><td>業者で絞り込み（「すべて」「その他」あり）</td></tr>
-          <tr><td>在庫検索</td><td>品名で検索</td></tr>
-          <tr><td>✅ 棚卸し一覧</td><td>入力対象の一覧（在庫数入力が中心）</td></tr>
-          <tr><td>📊 統合</td><td>月次統合（棚卸し履歴から集計）</td></tr>
-          <tr><td>📥 CSV出力</td><td>一覧をCSVで保存</td></tr>
-          <tr><td>🖨️ 印刷</td><td>棚卸し一覧を印刷 / PDF保存</td></tr>
-        </table>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="inventory">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">棚卸しの各行で何ができますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <ul>
-          <li><strong>✎ 編集:</strong> アイテムの基本情報（発注点など）を編集</li>
-          <li><strong>🗑️ 除外:</strong> 棚卸し一覧から一時的に非表示（マスターやCSVは消えません）</li>
-          <li><strong>↺ 単位同期:</strong> 在庫の単位が材料マスターとズレている場合にマスター単位へ合わせる</li>
-          <li><strong>業者名ソート:</strong> 「業者名」見出しをクリックで並び替え</li>
-        </ul>
-        <p>CSVにない材料は<strong>「+ アイテム追加」</strong>から手入力で追加できます。</p>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="inventory">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">在庫数の入力を速くするコツはありますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>以下のキーボード操作が使えます。</p>
-        <table>
-          <tr><th>キー</th><th>動作</th></tr>
-          <tr><td><kbd>Enter</kbd></td><td>次の入力欄へ移動</td></tr>
-          <tr><td><kbd>Shift</kbd> + <kbd>Enter</kbd></td><td>ひとつ上の入力欄へ移動</td></tr>
-          <tr><td><kbd>Tab</kbd></td><td>次の入力欄へ移動</td></tr>
-          <tr><td><kbd>Shift</kbd> + <kbd>Tab</kbd></td><td>ひとつ上へ移動</td></tr>
-        </table>
-        <div class="tip">入力欄をクリックすると数値が全選択されるので、そのまま打ち替えできます。</div>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="inventory">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">「発注推奨」バッジとは何ですか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>在庫が<strong>「発注点以下」</strong>になると、品名横に「発注推奨」バッジが表示されます。ホバーするとツールチップで「発注点以下」と表示されます。</p>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="inventory">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">棚卸しを完了して履歴に保存するにはどうしますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <ol class="steps">
-          <li>「棚卸し完了」を押す</li>
-          <li>保存名（タイトル）を確認・変更</li>
-          <li>棚卸し後の在庫数: 「0にリセット」または「そのまま保持」を選択</li>
-          <li>保存を実行</li>
-        </ol>
-        <p>保存済み棚卸しは「📜 履歴」から詳細表示・CSV出力・復元・削除ができます。</p>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="inventory">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">「月次統合」とは何ですか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>月内に複数回棚卸しした場合でも、<strong>月次の集計</strong>を作れる機能です。同名品目は月内の最新データを採用して集計します。業者別の合計、内訳（食材/ドリンク/備品）を確認でき、CSV出力も可能です。</p>
-      </div></div>
-    </div>
-  </div>
-
-  <!-- ==================== 仕込み・発注 ==================== -->
-  <div class="cat-group" data-category="planner">
-    <div class="cat-title"><span class="cat-icon">📅</span>仕込み・発注</div>
-
-    <div class="qa-item" data-cat="planner">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">仕込みカレンダーはどう使いますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>いつ、どのレシピを仕込むかを登録する画面です。発注リストの入力元にもなります。</p>
-        <ul>
-          <li>左のレシピ一覧から、日付へ<strong>ドラッグ</strong>して予定を追加</li>
-          <li>既存予定をドラッグして<strong>別日に移動</strong></li>
-          <li>予定の<strong>削除</strong>（確認あり）</li>
-        </ul>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="planner">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">発注リストはどうやって作成しますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <ol class="steps">
-          <li>期間（開始日 / 終了日）を指定</li>
-          <li>「生成」して発注リストを作成</li>
-          <li>必要に応じてコピー・印刷</li>
-        </ol>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="planner">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">発注量はどのように算出されますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <ul>
-          <li>期間内の仕込み予定の材料を<strong>合算</strong></li>
-          <li>在庫を<strong>差し引き</strong></li>
-          <li>材料マスターの「内容量」がある材料は、残在庫が「1単位の2割」を切ると<strong>発注対象</strong></li>
-          <li>発注単位ラベルは「元の単位（CSV）」を優先</li>
-        </ul>
-      </div></div>
-    </div>
-  </div>
-
-  <!-- ==================== 管理者向け ==================== -->
-  <div class="cat-group" data-category="admin">
-    <div class="cat-title"><span class="cat-icon">👤</span>管理者向け</div>
-
-    <div class="qa-item" data-cat="admin">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">ユーザーの管理はどこからできますか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>メニューから<strong>「ユーザー管理」</strong>を開きます（管理者のみ表示）。管理者と一般ユーザーが一覧表示されます。</p>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="admin">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">「マスターレシピ表示」のON/OFFとは？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>各ユーザーに対して、共有レシピ（マスター）を見せるかどうかの<strong>運用スイッチ</strong>です。</p>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="admin">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">ユーザーのパスワードを再設定するには？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>方法は<strong>2種類</strong>あります。</p>
-        <ul>
-          <li>再設定メールを送信</li>
-          <li>管理者が新しいパスワードを直接設定</li>
-        </ul>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="admin">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">価格データや材料マスターを他のアカウントへコピーするには？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <h4 style="margin-top:0">価格データのコピー</h4>
-        <ol class="steps">
-          <li>データ管理 → 「価格データ」</li>
-          <li>サイドバー「共有（コピー）」→「他アカウントへコピー」</li>
-          <li>コピー先アカウントを選択</li>
-          <li>確認画面で「コピー開始」</li>
-        </ol>
-        <h4>材料マスターのコピー</h4>
-        <ol class="steps">
-          <li>データ管理 → 「材料マスター」</li>
-          <li>「他アカウントへコピー」をクリック</li>
-          <li>コピー先を選択、上書き有無を選択</li>
-          <li>確認画面で実行</li>
-        </ol>
-        <div class="note">どちらも同期はされません（1回コピー）。</div>
-      </div></div>
-    </div>
-  </div>
-
-  <!-- ==================== ルヴァンガイド ==================== -->
-  <div class="cat-group" data-category="basic">
-    <div class="cat-title"><span class="cat-icon">🍞</span>ルヴァンガイド</div>
-
-    <div class="qa-item" data-cat="basic">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">ルヴァンガイドとは何ですか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>メニューから「LEVAIN GUIDE」を開くと、ルヴァン種の解説ページを閲覧できます。</p>
-        <ul>
-          <li>ルヴァン種の基礎</li>
-          <li>作成方法</li>
-          <li>日常管理</li>
-          <li>トラブルシュート</li>
-        </ul>
-      </div></div>
-    </div>
-  </div>
-
-  <!-- ==================== トラブル ==================== -->
-  <div class="cat-group" data-category="trouble">
-    <div class="cat-title"><span class="cat-icon">🔧</span>よくあるトラブルと対処</div>
-
-    <div class="qa-item" data-cat="trouble">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">価格がレシピに反映されません。どうすればいいですか？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <ul>
-          <li>価格データ（CSV）をアップロード後、少し待ってから<strong>再読み込み</strong>してください。</li>
-          <li>材料名の<strong>表記ゆれ</strong>（全角/半角、末尾スペース）で一致しない場合があります。</li>
-        </ul>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="trouble">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">在庫に同じ商品がダブって見えるのですが？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <ul>
-          <li>業者名と品名が同じものは重複が出ないよう調整されています。</li>
-          <li>それでもダブる場合は、<strong>品名表記（空白違い等）</strong>を確認してください。</li>
-        </ul>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="trouble">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">単位や桁が合わない（原価/在庫/発注）のですが？</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>材料マスターの「内容量」「単位」「仕入れ値」が<strong>未整備</strong>の可能性があります。</p>
-        <div class="tip">「CSV取込」で未登録を整備するのが最短です。</div>
-      </div></div>
-    </div>
-
-    <div class="qa-item" data-cat="trouble">
-      <div class="qa-q" onclick="toggle(this)">
-        <span class="q-badge">Q</span>
-        <span class="q-text">手入力した材料がどこにあるか分かりません。</span>
-        <span class="q-arrow">▼</span>
-      </div>
-      <div class="qa-a"><div class="qa-a-inner">
-        <p>材料マスターの<strong>「手入力」タブ</strong>にまとまって表示されます。</p>
-      </div></div>
-    </div>
-  </div>
-
-  <div class="no-results" id="noResults">
-    🔍 該当する質問が見つかりませんでした。別のキーワードで検索してみてください。
-  </div>
-
-</div>
-
-<button class="back-top" id="backTop" onclick="window.scrollTo({top:0})">↑</button>
-
-<script>
-// Toggle single Q&A
-function toggle(el) {
-  const item = el.closest('.qa-item');
-  const answer = item.querySelector('.qa-a');
-  if (item.classList.contains('open')) {
-    answer.style.maxHeight = null;
-    item.classList.remove('open');
-  } else {
-    answer.style.maxHeight = answer.scrollHeight + 'px';
-    item.classList.add('open');
-  }
-}
-
-// Toggle all
-function toggleAll(open) {
-  document.querySelectorAll('.qa-item:not(.hidden)').forEach(item => {
-    const answer = item.querySelector('.qa-a');
-    if (open) {
-      item.classList.add('open');
-      answer.style.maxHeight = answer.scrollHeight + 'px';
-    } else {
-      item.classList.remove('open');
-      answer.style.maxHeight = null;
+  <button class="back-top" id="backTop" onclick="window.scrollTo({top:0})">↑</button>
+
+  <script>
+    // Toggle single Q&A
+    function toggle(el) {
+      const item = el.closest('.qa-item');
+      const answer = item.querySelector('.qa-a');
+      if (item.classList.contains('open')) {
+        answer.style.maxHeight = null;
+        item.classList.remove('open');
+      } else {
+        answer.style.maxHeight = answer.scrollHeight + 'px';
+        item.classList.add('open');
+      }
     }
-  });
-}
 
-// Search
-const searchInput = document.getElementById('searchInput');
-const searchCount = document.getElementById('searchCount');
-const noResults = document.getElementById('noResults');
-
-searchInput.addEventListener('input', () => {
-  const query = searchInput.value.trim().toLowerCase();
-  let visible = 0;
-  document.querySelectorAll('.qa-item').forEach(item => {
-    const text = item.textContent.toLowerCase();
-    const match = !query || text.includes(query);
-    item.classList.toggle('hidden', !match);
-    if (match) visible++;
-  });
-  // Show/hide category groups
-  document.querySelectorAll('.cat-group').forEach(group => {
-    const hasVisible = group.querySelectorAll('.qa-item:not(.hidden)').length > 0;
-    group.style.display = hasVisible ? '' : 'none';
-  });
-  noResults.classList.toggle('show', visible === 0);
-  searchCount.textContent = query ? `${visible} 件ヒット` : '';
-});
-
-// Category filter
-document.querySelectorAll('.cat-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const cat = btn.dataset.cat;
-    searchInput.value = '';
-    searchCount.textContent = '';
-    noResults.classList.remove('show');
-
-    if (cat === 'all') {
-      document.querySelectorAll('.qa-item').forEach(i => i.classList.remove('hidden'));
-      document.querySelectorAll('.cat-group').forEach(g => g.style.display = '');
-    } else {
-      document.querySelectorAll('.cat-group').forEach(group => {
-        const groupCat = group.dataset.category;
-        const show = groupCat === cat;
-        group.style.display = show ? '' : 'none';
-        group.querySelectorAll('.qa-item').forEach(item => {
-          item.classList.toggle('hidden', !show);
-        });
+    // Toggle all
+    function toggleAll(open) {
+      document.querySelectorAll('.qa-item:not(.hidden)').forEach(item => {
+        const answer = item.querySelector('.qa-a');
+        if (open) {
+          item.classList.add('open');
+          answer.style.maxHeight = answer.scrollHeight + 'px';
+        } else {
+          item.classList.remove('open');
+          answer.style.maxHeight = null;
+        }
       });
     }
-  });
-});
 
-// Back to top
-window.addEventListener('scroll', () => {
-  document.getElementById('backTop').classList.toggle('show', window.scrollY > 400);
-});
-</script>
+    // Search
+    const searchInput = document.getElementById('searchInput');
+    const searchCount = document.getElementById('searchCount');
+    const noResults = document.getElementById('noResults');
+
+    searchInput.addEventListener('input', () => {
+      const query = searchInput.value.trim().toLowerCase();
+      let visible = 0;
+      document.querySelectorAll('.qa-item').forEach(item => {
+        const text = item.textContent.toLowerCase();
+        const match = !query || text.includes(query);
+        item.classList.toggle('hidden', !match);
+        if (match) visible++;
+      });
+      // Show/hide category groups
+      document.querySelectorAll('.cat-group').forEach(group => {
+        const hasVisible = group.querySelectorAll('.qa-item:not(.hidden)').length > 0;
+        group.style.display = hasVisible ? '' : 'none';
+      });
+      noResults.classList.toggle('show', visible === 0);
+      searchCount.textContent = query ? `${visible} 件ヒット` : '';
+    });
+
+    // Category filter
+    document.querySelectorAll('.cat-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const cat = btn.dataset.cat;
+        searchInput.value = '';
+        searchCount.textContent = '';
+        noResults.classList.remove('show');
+
+        if (cat === 'all') {
+          document.querySelectorAll('.qa-item').forEach(i => i.classList.remove('hidden'));
+          document.querySelectorAll('.cat-group').forEach(g => g.style.display = '');
+        } else {
+          document.querySelectorAll('.cat-group').forEach(group => {
+            const groupCat = group.dataset.category;
+            const show = groupCat === cat;
+            group.style.display = show ? '' : 'none';
+            group.querySelectorAll('.qa-item').forEach(item => {
+              item.classList.toggle('hidden', !show);
+            });
+          });
+        }
+      });
+    });
+
+    // Back to top
+    window.addEventListener('scroll', () => {
+      document.getElementById('backTop').classList.toggle('show', window.scrollY > 400);
+    });
+  </script>
 </body>
+
 </html>
