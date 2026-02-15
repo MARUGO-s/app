@@ -31,7 +31,12 @@ const supportsVoiceInput = () => {
     );
 };
 
-const cleanTranscript = (text) => String(text || '').trim();
+// 音声認識で末尾に付く「。」「○」「〇」を除去（材料名などで不要な句点・丸を削除）
+const cleanTranscript = (text) => {
+    let s = String(text || '').trim();
+    s = s.replace(/[。○〇]+$/u, '');
+    return s.trim();
+};
 
 const appendWithSpacing = (existingText, transcript) => {
     const current = String(existingText || '').trim();
