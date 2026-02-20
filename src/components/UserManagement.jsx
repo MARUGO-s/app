@@ -125,180 +125,182 @@ export const UserManagement = ({ onBack }) => {
     );
 
     return (
-        <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', paddingBottom: '40px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', color: 'var(--text-color)' }}>
-                <h2>ユーザー管理</h2>
-                <Button variant="ghost" onClick={onBack}>戻る</Button>
-            </div>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', width: '100%', overflowY: 'auto', flex: 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', color: 'var(--text-color)' }}>
+                    <h2>ユーザー管理</h2>
+                    <Button variant="ghost" onClick={onBack}>戻る</Button>
+                </div>
 
-            {error && (
-                <div style={{ padding: '10px', backgroundColor: '#ffebee', color: '#c62828', borderRadius: '4px', marginBottom: '20px' }}>{error}</div>
-            )}
+                {error && (
+                    <div style={{ padding: '10px', backgroundColor: '#ffebee', color: '#c62828', borderRadius: '4px', marginBottom: '20px' }}>{error}</div>
+                )}
 
-            {loading ? (
-                <div style={{ textAlign: 'center', padding: '20px' }}>読み込み中...</div>
-            ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
-                    {admins.length > 0 && (
+                {loading ? (
+                    <div style={{ textAlign: 'center', padding: '20px' }}>読み込み中...</div>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+                        {admins.length > 0 && (
+                            <div>
+                                <h3 style={{ borderBottom: '2px solid var(--color-primary)', paddingBottom: '0.5rem', marginBottom: '1rem', color: 'var(--color-primary)' }}>管理者</h3>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    {admins.map(u => <UserCard key={u.id} user={u} isAdmin={true} />)}
+                                </div>
+                            </div>
+                        )}
+
                         <div>
-                            <h3 style={{ borderBottom: '2px solid var(--color-primary)', paddingBottom: '0.5rem', marginBottom: '1rem', color: 'var(--color-primary)' }}>管理者</h3>
+                            <h3 style={{ borderBottom: '2px solid #ddd', paddingBottom: '0.5rem', marginBottom: '1rem', color: 'var(--text-color)' }}>登録ユーザー</h3>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                {admins.map(u => <UserCard key={u.id} user={u} isAdmin={true} />)}
+                                {regulars.length > 0 ? (
+                                    regulars.map(u => <UserCard key={u.id} user={u} isAdmin={false} />)
+                                ) : (
+                                    <div style={{ textAlign: 'center', padding: '20px', color: '#666', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+                                        一般ユーザーはいません
+                                    </div>
+                                )}
                             </div>
                         </div>
-                    )}
-
-                    <div>
-                        <h3 style={{ borderBottom: '2px solid #ddd', paddingBottom: '0.5rem', marginBottom: '1rem', color: 'var(--text-color)' }}>登録ユーザー</h3>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {regulars.length > 0 ? (
-                                regulars.map(u => <UserCard key={u.id} user={u} isAdmin={false} />)
-                            ) : (
-                                <div style={{ textAlign: 'center', padding: '20px', color: '#666', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
-                                    一般ユーザーはいません
-                                </div>
-                            )}
-                        </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            <Modal
-                isOpen={!!resetTarget}
-                onClose={() => {
-                    if (isResetting) return;
-                    setResetTarget(null);
-                }}
-                title="管理者: パスワード再設定"
-                size="small"
-            >
-                <div style={{ color: '#333', lineHeight: 1.5 }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>
-                        対象: {resetTarget?.display_id || resetTarget?.email || resetTarget?.id}
-                    </div>
-                    {resetTarget?.email && (
-                        <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '12px', wordBreak: 'break-all' }}>
-                            {resetTarget.email}
+                <Modal
+                    isOpen={!!resetTarget}
+                    onClose={() => {
+                        if (isResetting) return;
+                        setResetTarget(null);
+                    }}
+                    title="管理者: パスワード再設定"
+                    size="small"
+                >
+                    <div style={{ color: '#333', lineHeight: 1.5 }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>
+                            対象: {resetTarget?.display_id || resetTarget?.email || resetTarget?.id}
                         </div>
-                    )}
+                        {resetTarget?.email && (
+                            <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '12px', wordBreak: 'break-all' }}>
+                                {resetTarget.email}
+                            </div>
+                        )}
 
-                    <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '12px' }}>
-                        新しいパスワードを設定します（8文字以上）。パスワードそのものは保存・表示されません。
-                    </div>
+                        <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '12px' }}>
+                            新しいパスワードを設定します（8文字以上）。パスワードそのものは保存・表示されません。
+                        </div>
 
-                    {resetError && (
-                        <div style={{ backgroundColor: '#ffebee', color: '#c62828', padding: '10px', borderRadius: '6px', marginBottom: '12px' }}>
-                            {resetError}
-                        </div>
-                    )}
-                    {resetSuccess && (
-                        <div style={{ backgroundColor: '#e8f5e9', color: '#2e7d32', padding: '10px', borderRadius: '6px', marginBottom: '12px' }}>
-                            {resetSuccess}
-                        </div>
-                    )}
+                        {resetError && (
+                            <div style={{ backgroundColor: '#ffebee', color: '#c62828', padding: '10px', borderRadius: '6px', marginBottom: '12px' }}>
+                                {resetError}
+                            </div>
+                        )}
+                        {resetSuccess && (
+                            <div style={{ backgroundColor: '#e8f5e9', color: '#2e7d32', padding: '10px', borderRadius: '6px', marginBottom: '12px' }}>
+                                {resetSuccess}
+                            </div>
+                        )}
 
-                    <div style={{ display: 'grid', gap: '10px' }}>
-                        <div>
-                            <label style={{ display: 'block', fontSize: '0.85rem', color: '#555', marginBottom: '6px' }}>新しいパスワード</label>
-                            <input
-                                type="password"
-                                value={resetPw1}
-                                onChange={(e) => setResetPw1(e.target.value)}
-                                autoComplete="new-password"
-                                placeholder="8文字以上"
-                                style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ddd' }}
-                            />
+                        <div style={{ display: 'grid', gap: '10px' }}>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.85rem', color: '#555', marginBottom: '6px' }}>新しいパスワード</label>
+                                <input
+                                    type="password"
+                                    value={resetPw1}
+                                    onChange={(e) => setResetPw1(e.target.value)}
+                                    autoComplete="new-password"
+                                    placeholder="8文字以上"
+                                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ddd' }}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.85rem', color: '#555', marginBottom: '6px' }}>確認</label>
+                                <input
+                                    type="password"
+                                    value={resetPw2}
+                                    onChange={(e) => setResetPw2(e.target.value)}
+                                    autoComplete="new-password"
+                                    placeholder="もう一度入力"
+                                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ddd' }}
+                                />
+                            </div>
                         </div>
-                        <div>
-                            <label style={{ display: 'block', fontSize: '0.85rem', color: '#555', marginBottom: '6px' }}>確認</label>
-                            <input
-                                type="password"
-                                value={resetPw2}
-                                onChange={(e) => setResetPw2(e.target.value)}
-                                autoComplete="new-password"
-                                placeholder="もう一度入力"
-                                style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ddd' }}
-                            />
-                        </div>
-                    </div>
 
-                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' }}>
-                        <Button
-                            variant="ghost"
-                            onClick={() => setResetTarget(null)}
-                            disabled={isResetting}
-                        >
-                            キャンセル
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            isLoading={isSendingResetEmail}
-                            disabled={!resetTarget?.email || isResetting}
-                            onClick={async () => {
-                                setResetError('');
-                                setResetSuccess('');
-                                if (!resetTarget?.email) {
-                                    setResetError('メールアドレスが登録されていません');
-                                    return;
-                                }
-                                setIsSendingResetEmail(true);
-                                try {
-                                    await userService.sendPasswordResetEmail(resetTarget.email);
-                                    setResetSuccess('パスワード再設定メールを送信しました');
-                                } catch (e) {
-                                    console.error(e);
-                                    setResetError(e?.message || '送信に失敗しました');
-                                } finally {
-                                    setIsSendingResetEmail(false);
-                                }
-                            }}
-                            style={{ whiteSpace: 'nowrap' }}
-                        >
-                            再設定メール送信
-                        </Button>
-                        <Button
-                            variant="danger"
-                            isLoading={isResetting}
-                            onClick={async () => {
-                                setResetError('');
-                                setResetSuccess('');
-                                if (!resetTarget?.id) return;
-                                if (!resetPw1 || resetPw1.length < 8) {
-                                    setResetError('パスワードは8文字以上にしてください');
-                                    return;
-                                }
-                                if (resetPw1 !== resetPw2) {
-                                    setResetError('パスワードが一致しません');
-                                    return;
-                                }
-                                setIsResetting(true);
-                                try {
-                                    await userService.adminResetPassword(resetTarget.id, resetPw1);
-                                    setResetSuccess('パスワードを更新しました');
-                                    setResetPw1('');
-                                    setResetPw2('');
-                                } catch (e) {
-                                    console.error(e);
-                                    const msg = e?.message || '更新に失敗しました';
-                                    // If Edge Function isn't deployed, guide to email-based reset path.
-                                    if (
-                                        /FunctionsHttpError|not found|404/i.test(msg) ||
-                                        /admin-reset-password/i.test(msg)
-                                    ) {
-                                        setResetError('直接更新（管理者設定）は未デプロイのため失敗しました。代わりに「再設定メール送信」を使ってください。');
-                                    } else {
-                                        setResetError(msg);
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' }}>
+                            <Button
+                                variant="ghost"
+                                onClick={() => setResetTarget(null)}
+                                disabled={isResetting}
+                            >
+                                キャンセル
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                isLoading={isSendingResetEmail}
+                                disabled={!resetTarget?.email || isResetting}
+                                onClick={async () => {
+                                    setResetError('');
+                                    setResetSuccess('');
+                                    if (!resetTarget?.email) {
+                                        setResetError('メールアドレスが登録されていません');
+                                        return;
                                     }
-                                } finally {
-                                    setIsResetting(false);
-                                }
-                            }}
-                        >
-                            更新する
-                        </Button>
+                                    setIsSendingResetEmail(true);
+                                    try {
+                                        await userService.sendPasswordResetEmail(resetTarget.email);
+                                        setResetSuccess('パスワード再設定メールを送信しました');
+                                    } catch (e) {
+                                        console.error(e);
+                                        setResetError(e?.message || '送信に失敗しました');
+                                    } finally {
+                                        setIsSendingResetEmail(false);
+                                    }
+                                }}
+                                style={{ whiteSpace: 'nowrap' }}
+                            >
+                                再設定メール送信
+                            </Button>
+                            <Button
+                                variant="danger"
+                                isLoading={isResetting}
+                                onClick={async () => {
+                                    setResetError('');
+                                    setResetSuccess('');
+                                    if (!resetTarget?.id) return;
+                                    if (!resetPw1 || resetPw1.length < 8) {
+                                        setResetError('パスワードは8文字以上にしてください');
+                                        return;
+                                    }
+                                    if (resetPw1 !== resetPw2) {
+                                        setResetError('パスワードが一致しません');
+                                        return;
+                                    }
+                                    setIsResetting(true);
+                                    try {
+                                        await userService.adminResetPassword(resetTarget.id, resetPw1);
+                                        setResetSuccess('パスワードを更新しました');
+                                        setResetPw1('');
+                                        setResetPw2('');
+                                    } catch (e) {
+                                        console.error(e);
+                                        const msg = e?.message || '更新に失敗しました';
+                                        // If Edge Function isn't deployed, guide to email-based reset path.
+                                        if (
+                                            /FunctionsHttpError|not found|404/i.test(msg) ||
+                                            /admin-reset-password/i.test(msg)
+                                        ) {
+                                            setResetError('直接更新（管理者設定）は未デプロイのため失敗しました。代わりに「再設定メール送信」を使ってください。');
+                                        } else {
+                                            setResetError(msg);
+                                        }
+                                    } finally {
+                                        setIsResetting(false);
+                                    }
+                                }}
+                            >
+                                更新する
+                            </Button>
+                        </div>
                     </div>
-                </div>
-            </Modal>
+                </Modal>
+            </div>
         </div>
     );
 };
