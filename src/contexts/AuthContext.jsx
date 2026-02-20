@@ -250,7 +250,7 @@ export const AuthProvider = ({ children }) => {
             password,
             options: {
                 data: { display_id: displayId },
-                emailRedirectTo: window.location.origin
+                emailRedirectTo: window.location.origin + import.meta.env.BASE_URL
             }
         });
 
@@ -327,7 +327,7 @@ export const AuthProvider = ({ children }) => {
 
     const sendPasswordResetEmail = useCallback(async (email) => {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin
+            redirectTo: window.location.origin + import.meta.env.BASE_URL
         });
         if (error) {
             console.error('Password reset email error:', error);
