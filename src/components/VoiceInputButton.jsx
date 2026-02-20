@@ -208,7 +208,9 @@ export const VoiceInputButton = ({
                     console.error('[VoiceInputButton] transcription failed:', error);
                     toast.error(error?.message || '音声入力に失敗しました');
                 } finally {
+                    // eslint-disable-next-line no-empty
                     try { cleanupStream(); } catch { }
+                    // eslint-disable-next-line no-empty
                     try { resetRecorder(); } catch { }
 
                     // Force reset regardless of mounted state to fix stuck UI

@@ -6,15 +6,7 @@ const ROOT_FOLDER = 'incoming-stock';
 const STOCK_FILE_NAME = 'stock.json';
 const APPLIED_FOLDER_NAME = 'applied';
 
-const readBlobAsText = async (blob) => {
-  if (!blob) return '';
-  const buffer = await blob.arrayBuffer();
-  try {
-    return new TextDecoder('utf-8').decode(buffer);
-  } catch {
-    return String.fromCharCode(...new Uint8Array(buffer));
-  }
-};
+
 
 const safeNumber = (value) => {
   const n = typeof value === 'number' ? value : parseFloat(String(value || '').replace(/[^0-9.+-]/g, ''));
@@ -44,39 +36,9 @@ const isAlreadyExistsError = (error) => {
   return msg.includes('already exists') || msg.includes('duplicate') || msg.includes('409');
 };
 
-const parseResponseJsonSafe = async (res) => {
-  if (!res || typeof res !== 'object') return null;
-  const clone = typeof res.clone === 'function' ? res.clone() : res;
-  if (!clone || typeof clone.json !== 'function') return null;
-  try {
-    return await clone.json();
-  } catch {
-    return null;
-  }
-};
 
-const isMissingObjectDownloadError = async (error) => {
-  // Storage download() uses `noResolveJson: true`, so errors can be StorageUnknownError
-  // with `originalError` being a Response. In that case, `error.message` is often "{}".
-  if (isNotFoundError(error)) return true;
 
-  const res = error?.originalError;
-  const status = typeof res?.status === 'number' ? res.status : null;
-  if (status === 404) return true;
 
-  // Supabase Storage returns 400 with JSON { statusCode:"404", error:"not_found", message:"Object not found" }
-  // for missing objects.
-  if (status === 400) {
-    const body = await parseResponseJsonSafe(res);
-    const statusCodeRaw = body?.statusCode ?? null;
-    const statusCode = typeof statusCodeRaw === 'string' ? parseInt(statusCodeRaw, 10) : statusCodeRaw;
-    const errCode = String(body?.error || '').toLowerCase();
-    const msg = String(body?.message || '').toLowerCase();
-    if (statusCode === 404 && (errCode === 'not_found' || msg.includes('object not found'))) return true;
-  }
-
-  return false;
-};
 
 const computeDeltaItems = (parsed) => {
   const acc = new Map(); // key -> { vendor, name, unit, quantity }

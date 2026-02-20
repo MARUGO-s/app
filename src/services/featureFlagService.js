@@ -86,7 +86,7 @@ export const featureFlagService = {
         }
     },
 
-    async getVoiceInputEnabled(options) {
+    async getVoiceInputEnabled() {
         // 開発中は常に有効にする
         return true;
         // return this.getFlag(VOICE_INPUT_FLAG_KEY, options);

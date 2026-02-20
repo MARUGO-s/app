@@ -5,6 +5,7 @@ import pdfWorkerUrl from 'pdf-parse/lib/pdf.js/v2.0.550/build/pdf.worker.js?url'
 
 const isNonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;
 
+// eslint-disable-next-line no-control-regex
 const toCleanLine = (v) => String(v ?? '').replace(/\u0000/g, '').trim();
 
 const parseNumber = (value) => {
