@@ -147,7 +147,7 @@ export const AuthProvider = ({ children }) => {
                         console.warn('[Auth] Failed to save cache', e);
                     }
                 }
-            }).catch(() => {});
+            }).catch(() => { });
             return;
         }
 
@@ -249,7 +249,8 @@ export const AuthProvider = ({ children }) => {
             email,
             password,
             options: {
-                data: { display_id: displayId }
+                data: { display_id: displayId },
+                emailRedirectTo: window.location.origin
             }
         });
 
