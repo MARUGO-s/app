@@ -99,8 +99,23 @@ export const ingredientSearchService = {
 
                 // Load CSV data (if not cached yet)
                 if (!this._csvCache) {
-                    const csvData = await purchasePriceService.getPriceListArray();
-                    this._csvCache = csvData.map(item => ({
+                    console.log('📥 Building cache from CSV and manual data...');
+                    const [csvData, manualDataMap] = await Promise.all([
+                        purchasePriceService.getPriceListArray(),
+                        unitConversionService.getAllConversions()
+                    ]);
+
+                    const manualResults = Array.from(manualDataMap.values()).map(item => ({
+                        name: item.ingredientName,
+                        price: item.lastPrice,
+                        size: item.packetSize,
+                        unit: item.packetUnit,
+                        itemCategory: item.itemCategory || null,
+                        source: 'manual',
+                        displaySource: '📦 マスター'
+                    }));
+
+                    const csvResults = csvData.map(item => ({
                         name: item.name,
                         price: item.price,
                         size: null,
@@ -108,6 +123,11 @@ export const ingredientSearchService = {
                         source: 'csv',
                         displaySource: '💰 CSV'
                     }));
+
+                    const manualNames = new Set(manualResults.map(r => r.name));
+                    const uniqueCsvResults = csvResults.filter(r => !manualNames.has(r.name));
+
+                    this._csvCache = [...manualResults, ...uniqueCsvResults];
                 }
 
                 const scoreFor = (nameKey) => {
