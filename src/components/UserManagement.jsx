@@ -125,7 +125,7 @@ export const UserManagement = ({ onBack }) => {
     );
 
     return (
-        <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', height: '100%', overflowY: 'auto' }}>
+        <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', paddingBottom: '40px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', color: 'var(--text-color)' }}>
                 <h2>ユーザー管理</h2>
                 <Button variant="ghost" onClick={onBack}>戻る</Button>
