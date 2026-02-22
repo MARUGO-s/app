@@ -97,63 +97,98 @@ export const UserManagement = ({ onBack }) => {
         }
     };
 
-    const UserCard = ({ user, isAdmin }) => (
-        <Card key={user.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', backgroundColor: 'white' }}>
-            <div>
-                <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#333' }}>
-                    {user.display_id} {isAdmin && <span style={{ fontSize: '0.8rem', backgroundColor: '#e0e0e0', padding: '2px 6px', borderRadius: '4px', marginLeft: '6px', color: '#555' }}>管理者</span>}
-                </div>
-                {user.email && (
-                    <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px', wordBreak: 'break-all' }}>
-                        {user.email}
-                    </div>
-                )}
-                <div style={{ fontSize: '0.85rem', color: '#666' }}>
-                    登録: {new Date(user.created_at).toLocaleString()}
-                </div>
-                <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
-                    更新: {user.updated_at ? new Date(user.updated_at).toLocaleString() : '---'}
-                </div>
-                <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
-                    最終ログイン: {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : '記録なし'}
-                </div>
-            </div>
+    const UserCard = ({ user, isAdmin }) => {
+        const getLoginBadge = (lastSignInAt) => {
+            if (!lastSignInAt) return null;
+            const diffHours = (Date.now() - new Date(lastSignInAt).getTime()) / (1000 * 60 * 60);
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', color: '#555' }}>
-                    <input
-                        type="checkbox"
-                        checked={user.show_master_recipes || false}
-                        disabled={savingMasterTargets.has(user.id)}
-                        onChange={(e) => handleToggleMasterRecipeVisibility(user, e.target.checked)}
-                    />
-                    マスター表示
-                </label>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleOpenLoginLogs(user)}
-                    style={{ whiteSpace: 'nowrap' }}
-                >
-                    ログイン履歴
-                </Button>
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                        setResetTarget({ id: user.id, display_id: user.display_id, email: user.email });
-                        setResetPw1('');
-                        setResetPw2('');
-                        setResetError('');
-                        setResetSuccess('');
-                    }}
-                    style={{ whiteSpace: 'nowrap' }}
-                >
-                    パスワード再設定
-                </Button>
-            </div>
-        </Card>
-    );
+            if (diffHours < 24) {
+                return { text: '24h', color: '#ff2d55', bg: '#ffe5e9' }; // Highlight Red
+            } else if (diffHours < 24 * 3) {
+                return { text: '3日以内', color: '#ff9500', bg: '#fff0d4' }; // Orange
+            } else if (diffHours < 24 * 7) {
+                return { text: '1週間', color: '#34c759', bg: '#e5f9e7' }; // Green
+            } else if (diffHours < 24 * 30) {
+                return { text: '1ヶ月', color: '#007aff', bg: '#e5f1ff' }; // Blue
+            }
+            return null; // older than 30 days
+        };
+
+        const badge = getLoginBadge(user.last_sign_in_at);
+
+        return (
+            <Card key={user.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', backgroundColor: 'white' }}>
+                <div>
+                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#333' }}>
+                        {user.display_id} {isAdmin && <span style={{ fontSize: '0.8rem', backgroundColor: '#e0e0e0', padding: '2px 6px', borderRadius: '4px', marginLeft: '6px', color: '#555' }}>管理者</span>}
+                    </div>
+                    {user.email && (
+                        <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px', wordBreak: 'break-all' }}>
+                            {user.email}
+                        </div>
+                    )}
+                    <div style={{ fontSize: '0.85rem', color: '#666' }}>
+                        登録: {new Date(user.created_at).toLocaleString()}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+                        更新: {user.updated_at ? new Date(user.updated_at).toLocaleString() : '---'}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px', display: 'flex', alignItems: 'center' }}>
+                        最終ログイン: {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : '記録なし'}
+                        {badge && (
+                            <span style={{
+                                backgroundColor: badge.bg,
+                                color: badge.color,
+                                border: `1px solid ${badge.color}`,
+                                padding: '1px 6px',
+                                borderRadius: '12px',
+                                fontSize: '0.7rem',
+                                marginLeft: '8px',
+                                fontWeight: 'bold',
+                                lineHeight: 1
+                            }}>
+                                {badge.text}
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', color: '#555' }}>
+                        <input
+                            type="checkbox"
+                            checked={user.show_master_recipes || false}
+                            disabled={savingMasterTargets.has(user.id)}
+                            onChange={(e) => handleToggleMasterRecipeVisibility(user, e.target.checked)}
+                        />
+                        マスター表示
+                    </label>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleOpenLoginLogs(user)}
+                        style={{ whiteSpace: 'nowrap' }}
+                    >
+                        ログイン履歴
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                            setResetTarget({ id: user.id, display_id: user.display_id, email: user.email });
+                            setResetPw1('');
+                            setResetPw2('');
+                            setResetError('');
+                            setResetSuccess('');
+                        }}
+                        style={{ whiteSpace: 'nowrap' }}
+                    >
+                        パスワード再設定
+                    </Button>
+                </div>
+            </Card>
+        );
+    };
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>

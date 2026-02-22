@@ -47,25 +47,29 @@
 
 /* Variants */
 .btn--primary {
-    background: hsl(var(--color-primary));
-    color: white;
-    border-color: hsl(var(--color-primary));
+    background-color: hsl(var(--color-primary)) !important;
+    background-image: none !important;
+    color: white !important;
+    border-color: hsl(var(--color-primary)) !important;
+    box-shadow: none !important;
 }
 
 .btn--primary:not(:disabled):hover {
-    background: hsl(var(--color-primary-hover));
+    background-color: hsl(var(--color-primary-hover)) !important;
 }
 
 .btn--secondary {
-    background: white;
-    color: #333;
+    background-color: white !important;
+    background-image: none !important;
+    color: #333 !important;
     /* Explicit dark text for white button */
-    border-color: hsl(var(--color-border-dark));
+    border-color: hsl(var(--color-border-dark)) !important;
+    box-shadow: none !important;
 }
 
 .btn--secondary:not(:disabled):hover {
-    background: hsl(var(--color-bg-surface));
-    border-color: hsl(var(--color-text-muted));
+    background-color: hsl(var(--color-bg-surface)) !important;
+    border-color: hsl(var(--color-text-muted)) !important;
 }
 
 .btn--ghost {
@@ -95,6 +99,7 @@
         transform: rotate(360deg);
     }
 }
+
 .btn--danger {
     background: #dc3545;
     color: white;

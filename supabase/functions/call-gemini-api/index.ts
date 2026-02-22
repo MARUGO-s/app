@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts";
 
 type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -102,6 +103,22 @@ serve(async (req) => {
   }
 
   try {
+    const token = getAuthToken(req);
+    if (!token) {
+      return new Response(JSON.stringify({ error: '認証が必要です。再ログインしてください。' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    try {
+      await verifySupabaseJWT(token);
+    } catch (_e) {
+      return new Response(JSON.stringify({ error: 'トークンが無効または期限切れです。再ログインしてください。' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const body: RequestPayload = await req.json();
     const apiKey = Deno.env.get("GOOGLE_API_KEY");
     if (!apiKey) {

@@ -1,3 +1,5 @@
+import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -135,6 +137,22 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const token = getAuthToken(req);
+    if (!token) {
+      return new Response(JSON.stringify({ ok: false, error: '認証が必要です。再ログインしてください。' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    try {
+      await verifySupabaseJWT(token);
+    } catch (_e) {
+      return new Response(JSON.stringify({ ok: false, error: 'トークンが無効または期限切れです。再ログインしてください。' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const body = await req.json();
     const fileBase64 = stripDataUrlPrefix(String(body?.fileBase64 || body?.pdfBase64 || ""));
     const fileName = String(body?.fileName || "");

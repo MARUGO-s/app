@@ -18,10 +18,15 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
     // - auto: best-effort. Groq -> (Azure OCR -> Groq) -> Gemini last.
     // - gemini: Gemini only (better for handwriting, higher cost).
     // - groq_vision: Groq (Vision) only (no OCR). Fast/cheap, but handwriting may be weaker.
-    const DEFAULT_IMAGE_ENGINE = 'auto';
+    const DEFAULT_IMAGE_ENGINE = 'groq';
     const [imageEngine, setImageEngine] = useState(() => {
         try {
-            return localStorage.getItem('preferredImageEngine') || DEFAULT_IMAGE_ENGINE;
+            const saved = localStorage.getItem('preferredImageEngine');
+            // Force 'groq' as default if the user previously had 'auto' (Best Effort) selected
+            if (!saved || saved === 'auto') {
+                return DEFAULT_IMAGE_ENGINE;
+            }
+            return saved;
         } catch {
             return DEFAULT_IMAGE_ENGINE;
         }

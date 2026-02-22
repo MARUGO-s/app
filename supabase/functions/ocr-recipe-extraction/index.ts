@@ -1,4 +1,5 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,6 +13,22 @@ serve(async (req) => {
   }
 
   try {
+    const token = getAuthToken(req);
+    if (!token) {
+      return new Response(JSON.stringify({ error: '認証が必要です。再ログインしてください。' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    try {
+      await verifySupabaseJWT(token);
+    } catch (_e) {
+      return new Response(JSON.stringify({ error: 'トークンが無効または期限切れです。再ログインしてください。' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     console.log('🔧 OCR function called')
 
     // 環境変数の確認
