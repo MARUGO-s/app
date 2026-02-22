@@ -19,11 +19,12 @@ export const UserManagement = ({ onBack }) => {
     const [isSendingResetEmail, setIsSendingResetEmail] = useState(false);
     const [savingMasterTargets, setSavingMasterTargets] = useState(new Set());
 
-    useEffect(() => {
-        loadUsers();
-    }, []);
+    // Login Logs state
+    const [logTarget, setLogTarget] = useState(null); // { id, display_id, email }
+    const [loginLogs, setLoginLogs] = useState([]);
+    const [isLoadingLogs, setIsLoadingLogs] = useState(false);
 
-    const loadUsers = async () => {
+    const loadUsers = React.useCallback(async () => {
         try {
             setLoading(true);
             const data = await userService.fetchAllProfiles();
@@ -34,7 +35,11 @@ export const UserManagement = ({ onBack }) => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        loadUsers();
+    }, [loadUsers]);
 
     const admins = users.filter(u => u.role === 'admin');
     const regulars = users.filter(u => u.role !== 'admin');
@@ -77,6 +82,21 @@ export const UserManagement = ({ onBack }) => {
         }
     };
 
+    const handleOpenLoginLogs = async (user) => {
+        setLogTarget(user);
+        setIsLoadingLogs(true);
+        setError('');
+        try {
+            const logs = await userService.adminGetLoginLogs(user.id);
+            setLoginLogs(logs);
+        } catch (err) {
+            console.error(err);
+            setError('ログイン履歴の取得に失敗しました');
+        } finally {
+            setIsLoadingLogs(false);
+        }
+    };
+
     const UserCard = ({ user, isAdmin }) => (
         <Card key={user.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', backgroundColor: 'white' }}>
             <div>
@@ -94,9 +114,12 @@ export const UserManagement = ({ onBack }) => {
                 <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
                     更新: {user.updated_at ? new Date(user.updated_at).toLocaleString() : '---'}
                 </div>
+                <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+                    最終ログイン: {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : '記録なし'}
+                </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', color: '#555' }}>
                     <input
                         type="checkbox"
@@ -104,8 +127,16 @@ export const UserManagement = ({ onBack }) => {
                         disabled={savingMasterTargets.has(user.id)}
                         onChange={(e) => handleToggleMasterRecipeVisibility(user, e.target.checked)}
                     />
-                    マスターレシピ表示
+                    マスター表示
                 </label>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleOpenLoginLogs(user)}
+                    style={{ whiteSpace: 'nowrap' }}
+                >
+                    ログイン履歴
+                </Button>
                 <Button
                     variant="secondary"
                     size="sm"
@@ -296,6 +327,56 @@ export const UserManagement = ({ onBack }) => {
                                 }}
                             >
                                 更新する
+                            </Button>
+                        </div>
+                    </div>
+                </Modal>
+
+                <Modal
+                    isOpen={!!logTarget}
+                    onClose={() => setLogTarget(null)}
+                    title="ログイン履歴"
+                    size="medium"
+                >
+                    <div style={{ color: 'var(--text-color)', lineHeight: 1.5, minHeight: '300px', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: '16px', paddingBottom: '8px', borderBottom: '1px solid #ddd' }}>
+                            対象: {logTarget?.display_id || logTarget?.email || logTarget?.id}
+                        </div>
+
+                        {isLoadingLogs ? (
+                            <div style={{ textAlign: 'center', padding: '40px 0', color: '#666' }}>読み込み中...</div>
+                        ) : loginLogs.length > 0 ? (
+                            <div style={{ flex: 1, overflowY: 'auto', maxHeight: '400px' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <thead>
+                                        <tr>
+                                            <th style={{ textAlign: 'left', padding: '8px', borderBottom: '2px solid #ddd', backgroundColor: '#f5f5f5' }}>日時</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {loginLogs.map((log, i) => (
+                                            <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
+                                                <td style={{ padding: '8px' }}>
+                                                    {new Date(log.login_at).toLocaleString('ja-JP', {
+                                                        year: 'numeric', month: '2-digit', day: '2-digit',
+                                                        hour: '2-digit', minute: '2-digit', second: '2-digit'
+                                                    })}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <div style={{ textAlign: 'center', padding: '40px 0', color: '#666', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+                                ログイン履歴はありません<br />
+                                <span style={{ fontSize: '0.85rem' }}>※機能追加前の履歴、または一度もログインしていない場合は表示されません</span>
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+                            <Button variant="secondary" onClick={() => setLogTarget(null)}>
+                                閉じる
                             </Button>
                         </div>
                     </div>

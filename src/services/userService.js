@@ -115,6 +115,14 @@ export const userService = {
     }
     ,
 
+    async adminGetLoginLogs(userId) {
+        const { data, error } = await supabase.rpc('admin_get_login_logs', {
+            p_user_id: userId
+        });
+        if (error) throw error;
+        return data || [];
+    },
+
     async adminResetPassword(userId, newPassword) {
         const { data, error } = await supabase.functions.invoke('admin-reset-password', {
             body: { userId, newPassword }
