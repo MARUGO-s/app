@@ -197,7 +197,7 @@
     }
 }
 
-@media (min-width: 1100px) {
+@media (min-width: 900px) {
     .recipe-form-mock__meta-grid {
         grid-template-columns: repeat(4, minmax(0, 1fr));
     }
@@ -215,9 +215,9 @@
     background: transparent;
 }
 
-@media (min-width: 1100px) {
+@media (min-width: 900px) {
     .recipe-form-mock__grid {
-        grid-template-columns: 360px minmax(0, 1fr);
+        grid-template-columns: minmax(280px, 3.5fr) 6.5fr;
         align-items: start;
     }
 }
@@ -235,7 +235,7 @@
     align-self: start;
 }
 
-@media (max-width: 1099px) {
+@media (max-width: 899px) {
     .recipe-form-mock__col--side {
         position: static;
         top: auto;
@@ -562,8 +562,8 @@
 }
 
 /* Section header (first child div inside Card) */
-.recipe-form-mock .ingredient-section > div:first-child,
-.recipe-form-mock .step-section > div:first-child {
+.recipe-form-mock .ingredient-section>div:first-child,
+.recipe-form-mock .step-section>div:first-child {
     position: relative;
     border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
     padding: 10px 12px !important;
@@ -571,7 +571,7 @@
     background: rgba(0, 0, 0, 0.14) !important;
 }
 
-.recipe-form-mock .step-section > div:first-child {
+.recipe-form-mock .step-section>div:first-child {
     background: rgba(0, 0, 0, 0.14) !important;
 }
 

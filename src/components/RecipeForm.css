@@ -2,7 +2,7 @@
     padding: 0 var(--space-sm);
 }
 
-@media (min-width: 750px) {
+@media (min-width: 900px) {
     .recipe-form {
         padding: 0;
     }
@@ -48,7 +48,7 @@
     /* Safety for very narrow screens */
 }
 
-@media (min-width: 750px) {
+@media (min-width: 900px) {
     .recipe-form__header {
         flex-direction: row;
         justify-content: space-between;
@@ -69,7 +69,7 @@
     gap: var(--space-lg);
 }
 
-@media (min-width: 750px) {
+@media (min-width: 900px) {
     .recipe-form__grid {
         grid-template-columns: 3fr 7fr;
     }
@@ -118,7 +118,7 @@ h3 {
     /* Prevent overflow */
 }
 
-@media (min-width: 750px) {
+@media (min-width: 900px) {
     .form-row-3 {
         grid-template-columns: 1fr 1fr 1fr;
     }
@@ -151,7 +151,7 @@ h3 {
     padding: 0;
 }
 
-@media (max-width: 749px) {
+@media (max-width: 899px) {
     .recipe-scroll-wrapper {
         width: calc(100% + 32px);
         margin-left: -16px;

@@ -649,7 +649,7 @@ export const DataManagement = ({ onBack }) => {
                         </div>
                     </div>
                     <div className="voice-feature-card__right">
-                        <label className={`voice - feature -switch ${voiceFlagEnabled ? 'is-on' : ''}`}>
+                        <label className={`voice-feature-switch ${voiceFlagEnabled ? 'is-on' : ''}`}>
                             <input
                                 type="checkbox"
                                 checked={voiceFlagEnabled}
@@ -667,7 +667,7 @@ export const DataManagement = ({ onBack }) => {
                         </div>
                     </div>
                     {voiceFlagStatus.message && (
-                        <div className={`status - msg ${voiceFlagStatus.type || 'info'} `} style={{ marginTop: '10px', width: '100%' }}>
+                        <div className={`status-msg ${voiceFlagStatus.type || 'info'} `} style={{ marginTop: '10px', width: '100%' }}>
                             {voiceFlagStatus.message}
                         </div>
                     )}
@@ -728,7 +728,7 @@ export const DataManagement = ({ onBack }) => {
                                                 <button
                                                     key={item.key}
                                                     type="button"
-                                                    className={`dup - item ${isActive ? 'active' : ''} `}
+                                                    className={`dup-item ${isActive ? 'active' : ''} `}
                                                     onClick={() => setDupSelectedKey(item.key)}
                                                 >
                                                     <div className="dup-item-top">
@@ -1008,7 +1008,7 @@ export const DataManagement = ({ onBack }) => {
                                 </Button>
 
                                 {backupStatus.message && (
-                                    <div className={`status - msg ${backupStatus.type} `} style={{ marginTop: '10px' }}>
+                                    <div className={`status-msg ${backupStatus.type} `} style={{ marginTop: '10px' }}>
                                         {backupStatus.message}
                                     </div>
                                 )}
@@ -1049,7 +1049,7 @@ export const DataManagement = ({ onBack }) => {
                             </div>
 
                             {status.message && (
-                                <div className={`status - msg ${status.type} `}>
+                                <div className={`status-msg ${status.type} `}>
                                     {status.message}
                                 </div>
                             )}
@@ -1121,7 +1121,7 @@ export const DataManagement = ({ onBack }) => {
                                 全ての価格データCSVをゴミ箱へ移動します。ゴミ箱からの復元・完全削除は「ゴミ箱」タブから行えます。
                             </p>
                             {bulkDeletePriceResult && (
-                                <div className={`status - msg ${bulkDeletePriceResult.type} `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
+                                <div className={`status-msg ${bulkDeletePriceResult.type} `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
                                     {bulkDeletePriceResult.message}
                                 </div>
                             )}
@@ -1147,12 +1147,12 @@ export const DataManagement = ({ onBack }) => {
                                         ⚡ 通常ユーザーの価格データを一括削除（永続削除）します。ゴミ箱には移動しません。
                                     </p>
                                     {adminClearResult && (
-                                        <div className={`status - msg ${adminClearResult.type} `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
+                                        <div className={`status-msg ${adminClearResult.type} `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
                                             {adminClearResult.message}
                                         </div>
                                     )}
                                     {adminTargetClearResult && (
-                                        <div className={`status - msg ${adminTargetClearResult.type} `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
+                                        <div className={`status-msg ${adminTargetClearResult.type} `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
                                             {adminTargetClearResult.message}
                                         </div>
                                     )}
@@ -1183,7 +1183,7 @@ export const DataManagement = ({ onBack }) => {
                                         📋 通常ユーザー全員の材料マスター（単位変換・CSV単位上書き）を一括削除します。
                                     </p>
                                     {adminClearMasterResult && (
-                                        <div className={`status - msg ${adminClearMasterResult.type} `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
+                                        <div className={`status-msg ${adminClearMasterResult.type} `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
                                             {adminClearMasterResult.message}
                                         </div>
                                     )}
@@ -1341,7 +1341,7 @@ export const DataManagement = ({ onBack }) => {
                     )}
 
                     {backupStatus.message && (
-                        <div className={`status - msg ${backupStatus.type || 'info'} `} style={{ whiteSpace: 'pre-wrap' }}>
+                        <div className={`status-msg ${backupStatus.type || 'info'} `} style={{ whiteSpace: 'pre-wrap' }}>
                             {backupStatus.message}
                         </div>
                     )}
