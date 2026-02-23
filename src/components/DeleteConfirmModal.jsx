@@ -22,6 +22,7 @@ export const DeleteConfirmModal = ({
     description,
     confirmWord = 'DELETE',
     loading = false,
+    loadingNode = null,
 }) => {
     const [inputValue, setInputValue] = useState('');
 
@@ -86,7 +87,22 @@ export const DeleteConfirmModal = ({
                     />
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                {loading && loadingNode && (
+                    <div style={{ marginTop: '4px', padding: '12px', background: '#f3f4f6', borderRadius: '8px', fontSize: '0.9rem', color: '#374151', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '16px', height: '16px', flexShrink: 0, border: '3px solid #e5e7eb', borderTopColor: '#6b7280', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                        <div style={{ wordBreak: 'break-all' }}>{loadingNode}</div>
+                        <style>
+                            {`
+                        @keyframes spin {
+                            0% { transform: rotate(0deg); }
+                            100% { transform: rotate(360deg); }
+                        }
+                        `}
+                        </style>
+                    </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
                     <Button variant="ghost" onClick={handleClose} disabled={loading}>
                         キャンセル
                     </Button>

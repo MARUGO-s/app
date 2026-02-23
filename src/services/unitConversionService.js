@@ -211,6 +211,23 @@ export const unitConversionService = {
     },
 
     /**
+     * Admin-only: 管理者の材料マスター（unit_conversions + csv_unit_overrides）を
+     * 全ての通常ユーザーに一括でコピー（Upsert）する
+     */
+    async adminCopyMasterToAllUsers() {
+        const userId = await this._getCurrentUserId();
+        if (!userId) throw new Error('ログインが必要です');
+
+        // Call the new RPC
+        const { error } = await supabase.rpc('admin_copy_master_to_all_users', {
+            p_admin_id: userId
+        });
+
+        if (error) throw error;
+        return { success: true };
+    },
+
+    /**
      * 現在ユーザーの全材料マスターをゴミ箱（trash_ingredient_master）へ移動する
      */
     async moveAllToTrash() {

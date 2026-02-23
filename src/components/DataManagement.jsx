@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { userService } from '../services/userService';
 import { featureFlagService } from '../services/featureFlagService';
+import { unitConversionService } from '../services/unitConversionService'; // Added import
 import { useAuth } from '../contexts/useAuth';
 import { IngredientMaster } from './IngredientMaster';
 import { Button } from './Button';
@@ -12,9 +13,10 @@ import CsvToMasterImporter from './CsvToMasterImporter';
 import { Modal } from './Modal';
 import { TrashBin } from './TrashBin';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
-import { AdminTargetDeleteModal } from './AdminTargetDeleteModal'; // New import
+import { AdminTargetDeleteModal } from './AdminTargetDeleteModal';
+import { AdminCopyAllModal } from './AdminCopyAllModal';
 import { supabase } from '../supabase';
-import './DataManagement.css'; // New styles
+import './DataManagement.css';
 
 const toMonthKey = (dateStr) => {
     const s = String(dateStr || '');
@@ -27,6 +29,13 @@ export const DataManagement = ({ onBack }) => {
     const [searchParams, setSearchParams] = useSearchParams();
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('price'); // 'price' | 'ingredients' | 'csv-import' | 'duplicates' | 'trash'
+
+    // 一括コピー用ステート
+    const [adminCopyAllOpen, setAdminCopyAllOpen] = useState(false);
+    const [adminCopyAllLoading, setAdminCopyAllLoading] = useState(false);
+    const [adminCopyAllStatus, setAdminCopyAllStatus] = useState(null);
+    const [adminCopyAllResult, setAdminCopyAllResult] = useState(null);
+
     // 一括削除（ゴミ箱移動）用の状態
     const [bulkDeletePriceModal, setBulkDeletePriceModal] = useState(false);
     const [bulkDeletePriceLoading, setBulkDeletePriceLoading] = useState(false);
@@ -37,7 +46,7 @@ export const DataManagement = ({ onBack }) => {
     const [adminClearLoading, setAdminClearLoading] = useState(false);
     const [adminClearProgress, setAdminClearProgress] = useState({ total: 0, done: 0, current: '' });
     const [adminClearResult, setAdminClearResult] = useState(null);
-    // 管理者専用: 特定ユーザーの価格データクリア // New state variables
+    // 管理者専用: 特定ユーザーの価格データクリア
     const [adminTargetClearModal, setAdminTargetClearModal] = useState(false);
     const [adminTargetClearLoading, setAdminTargetClearLoading] = useState(false);
     const [adminTargetClearResult, setAdminTargetClearResult] = useState(null);
@@ -567,6 +576,43 @@ export const DataManagement = ({ onBack }) => {
             setCopyResult({ type: 'error', message: `コピーに失敗しました: ${String(e?.message || e)} ` });
         } finally {
             setCopyInProgress(false);
+        }
+    };
+
+    const handleAdminCopyAll = async () => {
+        setAdminCopyAllLoading(true);
+        setAdminCopyAllResult(null);
+        setAdminCopyAllStatus({ phase: 'start', message: '一斉コピーの準備中...' });
+
+        try {
+            // 1. 各ユーザーへのファイルコピーループ
+            const csvRes = await purchasePriceService.adminCopyCsvsToAllUsers((statusInfo) => {
+                setAdminCopyAllStatus(prev => ({ ...prev, ...statusInfo }));
+            });
+
+            // 2. マスターデータの一括コピー（RPC）
+            setAdminCopyAllStatus({
+                phase: 'progress_master',
+                message: '材料マスターデータを全ユーザーへ配信中...'
+            });
+            await unitConversionService.adminCopyMasterToAllUsers();
+
+            // 3. 完了処理
+            setAdminCopyAllStatus({ phase: 'done', message: '全ての処理が完了しました' });
+            setAdminCopyAllResult({
+                totalTargetUsers: csvRes.totalTargetUsers,
+                csvResults: csvRes.results,
+                masterSuccess: true
+            });
+
+        } catch (err) {
+            console.error(err);
+            setAdminCopyAllStatus({
+                phase: 'error',
+                message: `エラーが発生しました: ${err.message}`
+            });
+        } finally {
+            setAdminCopyAllLoading(false);
         }
     };
 
@@ -1125,11 +1171,6 @@ export const DataManagement = ({ onBack }) => {
                                     {bulkDeletePriceResult.message}
                                 </div>
                             )}
-                            {bulkDeletePriceLoading && (
-                                <div style={{ fontSize: '0.82rem', color: '#666', marginBottom: '8px' }}>
-                                    処理中... {bulkDeletePriceProgress.current && `(${bulkDeletePriceProgress.current})`}
-                                </div>
-                            )}
                             <Button
                                 variant="danger"
                                 onClick={() => setBulkDeletePriceModal(true)}
@@ -1139,10 +1180,25 @@ export const DataManagement = ({ onBack }) => {
                                 🗑️ 全件ゴミ箱へ移動
                             </Button>
 
-                            {/* 管理者専用: 全通常ユーザーの一括削除 */}
+                            {/* 管理者専用: 全通常ユーザーへの一括配布と削除 */}
                             {user?.role === 'admin' && (
                                 <>
                                     <hr style={{ margin: '12px 0', border: 'none', borderTop: '1px solid #fecaca' }} />
+
+                                    <div style={{ marginBottom: '16px', padding: '12px', background: '#ecfdf5', borderRadius: '8px', border: '1px solid #6ee7b7' }}>
+                                        <div className="sidebar-title" style={{ color: '#047857', marginBottom: '8px', fontSize: '0.9rem' }}>🌐 管理者一括配布</div>
+                                        <p style={{ fontSize: '0.8rem', color: '#065f46', marginBottom: '12px', lineHeight: 1.4 }}>
+                                            あなたの「価格データ」と「材料マスター（単位上書き等）」を全通常ユーザーへ一気にコピー・配布します。
+                                        </p>
+                                        <Button
+                                            variant="primary"
+                                            onClick={() => setAdminCopyAllOpen(true)}
+                                            style={{ width: '100%', background: '#059669', borderColor: '#047857' }}
+                                        >
+                                            📤 全ユーザーへ一括配布
+                                        </Button>
+                                    </div>
+
                                     <p style={{ fontSize: '0.8rem', color: '#666', margin: '0 0 8px' }}>
                                         ⚡ 通常ユーザーの価格データを一括削除（永続削除）します。ゴミ箱には移動しません。
                                     </p>
@@ -1154,11 +1210,6 @@ export const DataManagement = ({ onBack }) => {
                                     {adminTargetClearResult && (
                                         <div className={`status-msg ${adminTargetClearResult.type} `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
                                             {adminTargetClearResult.message}
-                                        </div>
-                                    )}
-                                    {adminClearLoading && (
-                                        <div style={{ fontSize: '0.82rem', color: '#666', marginBottom: '8px' }}>
-                                            処理中 ({adminClearProgress.done}/{adminClearProgress.total})... {adminClearProgress.current && `${adminClearProgress.current} `}
                                         </div>
                                     )}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1186,9 +1237,6 @@ export const DataManagement = ({ onBack }) => {
                                         <div className={`status-msg ${adminClearMasterResult.type} `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
                                             {adminClearMasterResult.message}
                                         </div>
-                                    )}
-                                    {adminClearMasterLoading && (
-                                        <div style={{ fontSize: '0.82rem', color: '#666', marginBottom: '8px' }}>処理中...</div>
                                     )}
                                     <Button
                                         variant="danger"
@@ -1599,6 +1647,11 @@ export const DataManagement = ({ onBack }) => {
                     </span>
                 }
                 loading={bulkDeletePriceLoading}
+                loadingNode={
+                    bulkDeletePriceProgress.current ? (
+                        <span>処理中... <strong>{bulkDeletePriceProgress.current}</strong></span>
+                    ) : '処理中...'
+                }
             />
 
             {/* 管理者専用: 通常ユーザーの価格データCSV全件削除モーダル */}
@@ -1617,6 +1670,9 @@ export const DataManagement = ({ onBack }) => {
                     </span>
                 }
                 loading={adminClearLoading}
+                loadingNode={
+                    <span>処理中 ({adminClearProgress.done}/{adminClearProgress.total})... {adminClearProgress.current && <strong>{adminClearProgress.current}</strong>}</span>
+                }
             />
 
             {/* 管理者専用: 通常ユーザーの材料マスター全件削除モーダル */}
@@ -1635,6 +1691,7 @@ export const DataManagement = ({ onBack }) => {
                     </span>
                 }
                 loading={adminClearMasterLoading}
+                loadingNode="処理中..."
             />
 
             {/* 管理者専用: 特定ユーザーの価格データCSV削除モーダル */}
@@ -1650,6 +1707,21 @@ export const DataManagement = ({ onBack }) => {
                     </span>
                 }
                 loading={adminTargetClearLoading}
+                loadingNode="処理中..."
+            />
+
+            {/* 管理者専用: 全ユーザーへの価格・マスター一括配布モーダル */}
+            <AdminCopyAllModal
+                isOpen={adminCopyAllOpen}
+                onClose={() => {
+                    setAdminCopyAllOpen(false);
+                    setAdminCopyAllStatus(null);
+                    setAdminCopyAllResult(null);
+                }}
+                onConfirm={handleAdminCopyAll}
+                loading={adminCopyAllLoading}
+                progressStatus={adminCopyAllStatus}
+                copyResult={adminCopyAllResult}
             />
         </div>
     );

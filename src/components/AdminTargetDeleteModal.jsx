@@ -9,7 +9,8 @@ export const AdminTargetDeleteModal = ({
     onConfirm,
     title,
     description,
-    loading
+    loading,
+    loadingNode = null,
 }) => {
     const [profiles, setProfiles] = useState([]);
     const [profilesLoading, setProfilesLoading] = useState(false);
@@ -120,6 +121,14 @@ export const AdminTargetDeleteModal = ({
                                 marginBottom: '15px'
                             }}
                         />
+
+                        {loading && loadingNode && (
+                            <div style={{ marginBottom: '15px', padding: '12px', background: '#f3f4f6', borderRadius: '8px', fontSize: '0.9rem', color: '#374151', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ width: '16px', height: '16px', flexShrink: 0, border: '3px solid #e5e7eb', borderTopColor: '#6b7280', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                                <div style={{ wordBreak: 'break-all' }}>{loadingNode}</div>
+                            </div>
+                        )}
+
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                             <Button variant="secondary" onClick={() => setConfirming(false)} disabled={loading}>
                                 戻る

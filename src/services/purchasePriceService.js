@@ -560,6 +560,83 @@ export const purchasePriceService = {
     },
 
     /**
+     * 管理者専用: 自身のCSVを全通常ユーザーに一括でコピーする
+     * onProgress: ({ phase, totalUser, doneUser, currentUser, totalFile, doneFile, currentFile }) => void
+     */
+    async adminCopyCsvsToAllUsers(onProgress) {
+        const sourceUserId = await this._getCurrentUserId();
+        if (!sourceUserId) throw new Error('ログインが必要です');
+
+        onProgress?.({ phase: 'start', message: '送信先リストを取得中...' });
+
+        // 1. 全ユーザープロファイルを取得
+        const { data: profiles, error: profErr } = await supabase.rpc('admin_list_profiles');
+        if (profErr) throw profErr;
+
+        // 2. adminロール以外のユーザーIDを抽出
+        const targetUsers = (profiles || []).filter(p => p.role !== 'admin' && p.id !== sourceUserId);
+        const totalUser = targetUsers.length;
+
+        if (totalUser === 0) {
+            onProgress?.({ phase: 'done', message: '通常ユーザーが見つかりません' });
+            return { success: true, totalTargetUsers: 0, results: [] };
+        }
+
+        const overallResults = [];
+        let doneUser = 0;
+
+        for (const user of targetUsers) {
+            const destUserId = user.id;
+            const displayName = user.email || destUserId;
+
+            onProgress?.({
+                phase: 'progress_user',
+                totalUser,
+                doneUser,
+                currentUser: displayName,
+                message: `${displayName} へコピー中...`
+            });
+
+            // ユーザーごとの進捗を伝達するラップ用コールバック
+            const userProgressHandler = (info) => {
+                if (info.phase === 'progress') {
+                    onProgress?.({
+                        phase: 'progress_file',
+                        totalUser,
+                        doneUser,
+                        currentUser: displayName,
+                        totalFile: info.total,
+                        doneFile: info.done,
+                        currentFile: info.current,
+                        message: `${displayName} (${info.done}/${info.total}ファイル)`
+                    });
+                }
+            };
+
+            try {
+                const res = await this.copyPriceFilesToUser({
+                    targetUserId: destUserId,
+                    sourceUserId: sourceUserId,
+                    onProgress: userProgressHandler
+                });
+                overallResults.push({ userId: destUserId, result: res, error: null });
+            } catch (err) {
+                overallResults.push({ userId: destUserId, result: null, error: String(err?.message || err) });
+            }
+
+            doneUser++;
+        }
+
+        onProgress?.({ phase: 'done', message: '全てのユーザーへのコピーが完了しました' });
+
+        return {
+            success: true,
+            totalTargetUsers: totalUser,
+            results: overallResults
+        };
+    },
+
+    /**
      * Custom Parser for 12.csv format
      * Format: Quoted fields.
      * Indices (0-based):
