@@ -342,7 +342,7 @@ export const DataManagement = ({ onBack }) => {
 
                 const updatedCount = await recipeService.updateRecipeCosts(priceMap);
 
-                setStatus({ type: 'success', message: `アップロード完了。${ updatedCount } 件のレシピ原価を更新しました。` });
+                setStatus({ type: 'success', message: `アップロード完了。${updatedCount} 件のレシピ原価を更新しました。` });
             } catch (e) {
                 console.error("Cost update failed", e);
                 setStatus({ type: 'warning', message: 'アップロードは完了しましたが、原価の自動更新に失敗しました。' });
@@ -354,14 +354,14 @@ export const DataManagement = ({ onBack }) => {
             if (fileInput) fileInput.value = '';
             loadData(); // Reload table and file list
         } else {
-            setStatus({ type: 'error', message: `エラー: ${ result.error.message } ` });
+            setStatus({ type: 'error', message: `エラー: ${result.error.message} ` });
         }
         setIsUploading(false);
     };
 
     const handleDeleteFile = (fileName) => {
         setConfirmModal({
-            message: `「${ fileName }」を本当に削除しますか？\nこの操作は取り消せません。`,
+            message: `「${fileName}」を本当に削除しますか？\nこの操作は取り消せません。`,
             onConfirm: async () => {
                 setIsUploading(true);
                 const result = await purchasePriceService.deletePriceFile(fileName);
@@ -371,7 +371,7 @@ export const DataManagement = ({ onBack }) => {
                     setStatus({ type: 'success', message: 'ファイルを削除しました。' });
                     loadData();
                 } else {
-                    setStatus({ type: 'error', message: `削除エラー: ${ result.error.message } ` });
+                    setStatus({ type: 'error', message: `削除エラー: ${result.error.message} ` });
                 }
             }
         });
@@ -409,7 +409,7 @@ export const DataManagement = ({ onBack }) => {
             const errCount = Array.isArray(result?.errors) ? result.errors.length : 0;
             setBackupStatus({
                 type: errCount > 0 ? 'warning' : 'success',
-                message: `復元しました: ${ okCount }件${ errCount > 0 ? ` / 失敗: ${errCount}件` : '' } `
+                message: `復元しました: ${okCount}件${errCount > 0 ? ` / 失敗: ${errCount}件` : ''} `
             });
             setBackupImportModalOpen(false);
             setBackupImportFile(null);
@@ -432,7 +432,7 @@ export const DataManagement = ({ onBack }) => {
             const result = await purchasePriceService.moveAllToTrash((p) => {
                 setBulkDeletePriceProgress(p);
             });
-            setBulkDeletePriceResult({ type: 'success', message: `ゴミ箱へ移動完了: ${ result.moved } 件` });
+            setBulkDeletePriceResult({ type: 'success', message: `ゴミ箱へ移動完了: ${result.moved} 件` });
             // ファイル一覧を更新
             const files = await purchasePriceService.getFileList();
             setUploadedFiles(files);
@@ -453,8 +453,8 @@ export const DataManagement = ({ onBack }) => {
             const result = await purchasePriceService.adminClearAllNonAdminCsvs((p) => {
                 setAdminClearProgress(p);
             });
-            const msg = `完了: ${ result.totalDeleted } ファイル削除（${ result.results.length } ユーザー処理）` +
-                (result.failedUsers.length > 0 ? ` / ${ result.failedUsers.length } 件エラー` : '');
+            const msg = `完了: ${result.totalDeleted} ファイル削除（${result.results.length} ユーザー処理）` +
+                (result.failedUsers.length > 0 ? ` / ${result.failedUsers.length} 件エラー` : '');
             setAdminClearResult({ type: result.failedUsers.length > 0 ? 'error' : 'success', message: msg, details: result });
             // ファイル一覧を更新
             const files = await purchasePriceService.getFileList();
@@ -475,7 +475,7 @@ export const DataManagement = ({ onBack }) => {
             const result = await purchasePriceService.adminClearTargetUserCsvs(targetUserId, (p) => {
                 // Here we could use a progress state if we wanted, but since it's just one user's files, it's usually fast.
             });
-            setAdminTargetClearResult({ type: 'success', message: `${ result.deleted } ファイルの削除が完了しました` });
+            setAdminTargetClearResult({ type: 'success', message: `${result.deleted} ファイルの削除が完了しました` });
             // 自ビューの表示ファイルが変わる可能性は低いが、念のため更新
             const files = await purchasePriceService.getFileList();
             setUploadedFiles(files);
@@ -498,7 +498,7 @@ export const DataManagement = ({ onBack }) => {
             if (data?.success) {
                 const uc = data.deletedUnitConversions ?? 0;
                 const cuo = data.deletedCsvOverrides ?? 0;
-                setAdminClearMasterResult({ type: 'success', message: `削除完了: 単位変換 ${ uc } 件 / CSV単位上書き ${ cuo } 件` });
+                setAdminClearMasterResult({ type: 'success', message: `削除完了: 単位変換 ${uc} 件 / CSV単位上書き ${cuo} 件` });
             } else {
                 throw new Error(data?.error || '削除に失敗しました');
             }
@@ -558,13 +558,13 @@ export const DataManagement = ({ onBack }) => {
 
             setCopyResult({
                 type: failed > 0 ? 'error' : 'success',
-                message: `コピー完了: ${ copied }件${ failed > 0 ? ` / 失敗: ${failed}件` : '' } `,
+                message: `コピー完了: ${copied}件${failed > 0 ? ` / 失敗: ${failed}件` : ''} `,
                 failed: res?.failed || []
             });
             // ユーザーによって「閉じる」ボタンが明示的に押されるまでモーダルを維持します
         } catch (e) {
             console.error(e);
-            setCopyResult({ type: 'error', message: `コピーに失敗しました: ${ String(e?.message || e) } ` });
+            setCopyResult({ type: 'error', message: `コピーに失敗しました: ${String(e?.message || e)} ` });
         } finally {
             setCopyInProgress(false);
         }
@@ -608,31 +608,31 @@ export const DataManagement = ({ onBack }) => {
             <div className="tabs-container">
                 <div className="tabs">
                     <button
-                        className={`tab ${ activeTab === 'price' ? 'active' : '' } `}
+                        className={`tab ${activeTab === 'price' ? 'active' : ''} `}
                         onClick={() => setActiveTab('price')}
                     >
                         💰 価格データ
                     </button>
                     <button
-                        className={`tab ${ activeTab === 'ingredients' ? 'active' : '' } `}
+                        className={`tab ${activeTab === 'ingredients' ? 'active' : ''} `}
                         onClick={() => setActiveTab('ingredients')}
                     >
                         📦 材料マスター
                     </button>
                     <button
-                        className={`tab ${ activeTab === 'csv-import' ? 'active' : '' } `}
+                        className={`tab ${activeTab === 'csv-import' ? 'active' : ''} `}
                         onClick={() => setActiveTab('csv-import')}
                     >
                         📥 CSV取込
                     </button>
                     <button
-                        className={`tab ${ activeTab === 'duplicates' ? 'active' : '' } `}
+                        className={`tab ${activeTab === 'duplicates' ? 'active' : ''} `}
                         onClick={() => setActiveTab('duplicates')}
                     >
                         🔁 重複アイテム
                     </button>
                     <button
-                        className={`tab ${ activeTab === 'trash' ? 'active' : '' } `}
+                        className={`tab ${activeTab === 'trash' ? 'active' : ''} `}
                         onClick={() => setActiveTab('trash')}
                     >
                         🗑️ ゴミ箱
@@ -667,7 +667,7 @@ export const DataManagement = ({ onBack }) => {
                         </div>
                     </div>
                     {voiceFlagStatus.message && (
-                        <div className={`status - msg ${ voiceFlagStatus.type || 'info' } `} style={{ marginTop: '10px', width: '100%' }}>
+                        <div className={`status - msg ${voiceFlagStatus.type || 'info'} `} style={{ marginTop: '10px', width: '100%' }}>
                             {voiceFlagStatus.message}
                         </div>
                     )}
@@ -728,7 +728,7 @@ export const DataManagement = ({ onBack }) => {
                                                 <button
                                                     key={item.key}
                                                     type="button"
-                                                    className={`dup - item ${ isActive ? 'active' : '' } `}
+                                                    className={`dup - item ${isActive ? 'active' : ''} `}
                                                     onClick={() => setDupSelectedKey(item.key)}
                                                 >
                                                     <div className="dup-item-top">
@@ -742,8 +742,8 @@ export const DataManagement = ({ onBack }) => {
                                                     </div>
                                                     <div className="dup-item-meta">
                                                         <span>
-                                                            {item.lastPrice !== null ? `¥${ Math.round(item.lastPrice).toLocaleString() } ` : '¥-'}
-                                                            {item.unit ? ` / ${ item.unit } ` : ''}
+                                                            {item.lastPrice !== null ? `¥${Math.round(item.lastPrice).toLocaleString()} ` : '¥-'}
+                                                            {item.unit ? ` / ${item.unit} ` : ''}
                                                         </span>
                                                         <span>
                                                             入荷: {item.lastIncomingQty !== null ? Math.round(item.lastIncomingQty).toLocaleString() : '-'}
@@ -875,7 +875,7 @@ export const DataManagement = ({ onBack }) => {
                                             {displayRows.length === 0 ? (
                                                 <tr>
                                                     <td colSpan="7" className="no-data">
-                                                        {dupMonth ? `指定月（${ dupMonth }）の履歴がありません` : '履歴がありません'}
+                                                        {dupMonth ? `指定月（${dupMonth}）の履歴がありません` : '履歴がありません'}
                                                     </td>
                                                 </tr>
                                             ) : (
@@ -884,23 +884,23 @@ export const DataManagement = ({ onBack }) => {
                                                     const pct = r?._pct;
                                                     const diffLabel = (diff === null || diff === undefined || !Number.isFinite(diff))
                                                         ? '-'
-                                                        : `${ diff >= 0 ? '+' : '' }${ Math.round(diff).toLocaleString() } `;
+                                                        : `${diff >= 0 ? '+' : ''}${Math.round(diff).toLocaleString()} `;
                                                     const pctLabel = (pct === null || pct === undefined || !Number.isFinite(pct))
                                                         ? ''
-                                                        : ` (${ pct >= 0 ? '+' : ''}${ pct.toFixed(1) } %)`;
+                                                        : ` (${pct >= 0 ? '+' : ''}${pct.toFixed(1)} %)`;
                                                     const diffColor = (diff === null || diff === undefined || !Number.isFinite(diff))
                                                         ? '#888'
                                                         : (diff > 0 ? '#c92a2a' : diff < 0 ? '#2b8a3e' : '#666');
 
                                                     const price = Number(r?.price);
-                                                    const priceLabel = Number.isFinite(price) ? `¥${ Math.round(price).toLocaleString() } ` : '¥-';
+                                                    const priceLabel = Number.isFinite(price) ? `¥${Math.round(price).toLocaleString()} ` : '¥-';
                                                     const qty = Number(r?.incomingQty);
                                                     const qtyLabel = Number.isFinite(qty) ? Math.round(qty).toLocaleString() : '-';
                                                     const amount = (Number.isFinite(qty) && Number.isFinite(price)) ? (qty * price) : NaN;
-                                                    const amountLabel = Number.isFinite(amount) ? `¥${ Math.round(amount).toLocaleString() } ` : '-';
+                                                    const amountLabel = Number.isFinite(amount) ? `¥${Math.round(amount).toLocaleString()} ` : '-';
 
                                                     return (
-                                                        <tr key={`${ r?.dateStr || 'd' } -${ idx } `}>
+                                                        <tr key={`${r?.dateStr || 'd'} -${idx} `}>
                                                             <td className="col-date">{r?.dateStr || '-'}</td>
                                                             <td>{r?.vendor || '-'}</td>
                                                             <td style={{ fontWeight: 500 }}>{r?.displayName || '-'}</td>
@@ -922,7 +922,7 @@ export const DataManagement = ({ onBack }) => {
                                             <tfoot>
                                                 <tr>
                                                     <td colSpan="3" style={{ fontWeight: 700 }}>
-                                                        合計{dupMonth ? `（${ dupMonth }）` : ''}
+                                                        合計{dupMonth ? `（${dupMonth}）` : ''}
                                                     </td>
                                                     <td className="col-number" style={{ fontWeight: 700 }}>
                                                         {Math.round(totalIncomingQty).toLocaleString()}
@@ -967,7 +967,7 @@ export const DataManagement = ({ onBack }) => {
                                             const url = URL.createObjectURL(blob);
                                             const a = document.createElement('a');
                                             a.href = url;
-                                            a.download = `recipe_backup_${ new Date().toISOString().slice(0, 10) }.json`;
+                                            a.download = `recipe_backup_${new Date().toISOString().slice(0, 10)}.json`;
                                             document.body.appendChild(a);
                                             a.click();
                                             document.body.removeChild(a);
@@ -1008,7 +1008,7 @@ export const DataManagement = ({ onBack }) => {
                                 </Button>
 
                                 {backupStatus.message && (
-                                    <div className={`status - msg ${ backupStatus.type } `} style={{ marginTop: '10px' }}>
+                                    <div className={`status - msg ${backupStatus.type} `} style={{ marginTop: '10px' }}>
                                         {backupStatus.message}
                                     </div>
                                 )}
@@ -1049,7 +1049,7 @@ export const DataManagement = ({ onBack }) => {
                             </div>
 
                             {status.message && (
-                                <div className={`status - msg ${ status.type } `}>
+                                <div className={`status - msg ${status.type} `}>
                                     {status.message}
                                 </div>
                             )}
@@ -1121,13 +1121,13 @@ export const DataManagement = ({ onBack }) => {
                                 全ての価格データCSVをゴミ箱へ移動します。ゴミ箱からの復元・完全削除は「ゴミ箱」タブから行えます。
                             </p>
                             {bulkDeletePriceResult && (
-                                <div className={`status - msg ${ bulkDeletePriceResult.type } `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
+                                <div className={`status - msg ${bulkDeletePriceResult.type} `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
                                     {bulkDeletePriceResult.message}
                                 </div>
                             )}
                             {bulkDeletePriceLoading && (
                                 <div style={{ fontSize: '0.82rem', color: '#666', marginBottom: '8px' }}>
-                                    処理中... {bulkDeletePriceProgress.current && `(${ bulkDeletePriceProgress.current })`}
+                                    処理中... {bulkDeletePriceProgress.current && `(${bulkDeletePriceProgress.current})`}
                                 </div>
                             )}
                             <Button
@@ -1147,18 +1147,18 @@ export const DataManagement = ({ onBack }) => {
                                         ⚡ 通常ユーザーの価格データを一括削除（永続削除）します。ゴミ箱には移動しません。
                                     </p>
                                     {adminClearResult && (
-                                        <div className={`status - msg ${ adminClearResult.type } `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
+                                        <div className={`status - msg ${adminClearResult.type} `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
                                             {adminClearResult.message}
                                         </div>
                                     )}
                                     {adminTargetClearResult && (
-                                        <div className={`status - msg ${ adminTargetClearResult.type } `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
+                                        <div className={`status - msg ${adminTargetClearResult.type} `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
                                             {adminTargetClearResult.message}
                                         </div>
                                     )}
                                     {adminClearLoading && (
                                         <div style={{ fontSize: '0.82rem', color: '#666', marginBottom: '8px' }}>
-                                            処理中 ({adminClearProgress.done}/{adminClearProgress.total})... {adminClearProgress.current && `${ adminClearProgress.current } `}
+                                            処理中 ({adminClearProgress.done}/{adminClearProgress.total})... {adminClearProgress.current && `${adminClearProgress.current} `}
                                         </div>
                                     )}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1183,7 +1183,7 @@ export const DataManagement = ({ onBack }) => {
                                         📋 通常ユーザー全員の材料マスター（単位変換・CSV単位上書き）を一括削除します。
                                     </p>
                                     {adminClearMasterResult && (
-                                        <div className={`status - msg ${ adminClearMasterResult.type } `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
+                                        <div className={`status - msg ${adminClearMasterResult.type} `} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
                                             {adminClearMasterResult.message}
                                         </div>
                                     )}
@@ -1341,7 +1341,7 @@ export const DataManagement = ({ onBack }) => {
                     )}
 
                     {backupStatus.message && (
-                        <div className={`status - msg ${ backupStatus.type || 'info' } `} style={{ whiteSpace: 'pre-wrap' }}>
+                        <div className={`status - msg ${backupStatus.type || 'info'} `} style={{ whiteSpace: 'pre-wrap' }}>
                             {backupStatus.message}
                         </div>
                     )}
@@ -1397,7 +1397,7 @@ export const DataManagement = ({ onBack }) => {
                                             .filter(p => String(p?.id) && String(p?.id) !== String(user?.id))
                                             .map((p) => (
                                                 <option key={p.id} value={p.id}>
-                                                    {p.display_id}{p.email ? ` (${ p.email })` : ''}{p.role === 'admin' ? ' [管理者]' : ''}
+                                                    {p.display_id}{p.email ? ` (${p.email})` : ''}{p.role === 'admin' ? ' [管理者]' : ''}
                                                 </option>
                                             ))}
                                     </select>
@@ -1428,7 +1428,7 @@ export const DataManagement = ({ onBack }) => {
                             {(() => {
                                 const target = copyProfiles.find(p => String(p?.id) === String(copyTargetId));
                                 const label = target
-                                    ? `${ target.display_id }${ target.email ? ` (${target.email})` : '' } `
+                                    ? `${target.display_id}${target.email ? ` (${target.email})` : ''} `
                                     : (copyTargetId ? String(copyTargetId).slice(0, 8) : '-');
                                 return (
                                     <div style={{
@@ -1494,7 +1494,7 @@ export const DataManagement = ({ onBack }) => {
                                         <div>
                                             <div className="bulk-progress-title">コピー中...</div>
                                             <div className="bulk-progress-subtitle">
-                                                {copyProgress.total ? `${ copyProgress.done } / ${copyProgress.total}` : '準備中...'}
+                                                {copyProgress.total ? `${copyProgress.done} / ${copyProgress.total}` : '準備中...'}
                                             </div >
                                         </div >
                                     </div >
@@ -1512,146 +1512,145 @@ export const DataManagement = ({ onBack }) => {
                                 </div >
                             )}
 
-{
-    copyResult?.message && (
-        <div className={`status-msg ${copyResult.type || 'info'}`}>
-            {copyResult.message}
-        </div>
-    )
-}
+                            {
+                                copyResult?.message && (
+                                    <div className={`status-msg ${copyResult.type || 'info'}`}>
+                                        {copyResult.message}
+                                    </div>
+                                )
+                            }
 
-{
-    Array.isArray(copyResult?.failed) && copyResult.failed.length > 0 && (
-        <div className="bulk-progress-failures">
-            <div style={{ fontWeight: 700, marginBottom: '6px' }}>
-                失敗: {copyResult.failed.length}件
-            </div>
-            <ul style={{ paddingLeft: '1.2rem', margin: 0 }}>
-                {copyResult.failed.slice(0, 10).map((f, i) => (
-                    <li key={`${f?.file || 'f'}-${i}`}>
-                        {f?.file || '-'}: {f?.errorMessage || 'unknown error'}
-                    </li>
-                ))}
-            </ul>
-            {copyResult.failed.length > 10 && (
-                <div style={{ marginTop: '6px' }}>
-                    ...他 {copyResult.failed.length - 10}件
-                </div>
-            )}
-        </div>
-    )
-}
+                            {
+                                Array.isArray(copyResult?.failed) && copyResult.failed.length > 0 && (
+                                    <div className="bulk-progress-failures">
+                                        <div style={{ fontWeight: 700, marginBottom: '6px' }}>
+                                            失敗: {copyResult.failed.length}件
+                                        </div>
+                                        <ul style={{ paddingLeft: '1.2rem', margin: 0 }}>
+                                            {copyResult.failed.slice(0, 10).map((f, i) => (
+                                                <li key={`${f?.file || 'f'}-${i}`}>
+                                                    {f?.file || '-'}: {f?.errorMessage || 'unknown error'}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                        {copyResult.failed.length > 10 && (
+                                            <div style={{ marginTop: '6px' }}>
+                                                ...他 {copyResult.failed.length - 10}件
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            }
                         </>
                     )}
                 </div >
             </Modal >
 
-    {/* Custom Confirm Modal */ }
-{
-    confirmModal && (
-        <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 2000,
-            animation: 'fadeIn 0.2s ease-out'
-        }} onClick={() => setConfirmModal(null)}>
-            <div style={{
-                backgroundColor: 'white',
-                padding: '24px',
-                borderRadius: '8px',
-                maxWidth: '400px',
-                width: '90%',
-                boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
-            }} onClick={e => e.stopPropagation()}>
-                <h3 style={{ marginTop: 0, marginBottom: '16px', color: '#333' }}>確認</h3>
-                <p style={{ whiteSpace: 'pre-wrap', marginBottom: '24px', color: '#666' }}>{confirmModal.message}</p>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                    <Button variant="ghost" onClick={() => setConfirmModal(null)}>キャンセル</Button>
-                    <Button variant="danger" onClick={() => {
-                        confirmModal.onConfirm();
-                        setConfirmModal(null);
-                    }}>削除する</Button>
-                </div>
-            </div>
+            {/* Custom Confirm Modal */}
+            {
+                confirmModal && (
+                    <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0,0,0,0.5)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 2000,
+                        animation: 'fadeIn 0.2s ease-out'
+                    }} onClick={() => setConfirmModal(null)}>
+                        <div style={{
+                            backgroundColor: 'white',
+                            padding: '24px',
+                            borderRadius: '8px',
+                            maxWidth: '400px',
+                            width: '90%',
+                            boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+                        }} onClick={e => e.stopPropagation()}>
+                            <h3 style={{ marginTop: 0, marginBottom: '16px', color: '#333' }}>確認</h3>
+                            <p style={{ whiteSpace: 'pre-wrap', marginBottom: '24px', color: '#666' }}>{confirmModal.message}</p>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                                <Button variant="ghost" onClick={() => setConfirmModal(null)}>キャンセル</Button>
+                                <Button variant="danger" onClick={() => {
+                                    confirmModal.onConfirm();
+                                    setConfirmModal(null);
+                                }}>削除する</Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+            {/* 価格データ CSVの一括ゴミ箱移動確認モーダル */}
+            <DeleteConfirmModal
+                isOpen={bulkDeletePriceModal}
+                onClose={() => { if (!bulkDeletePriceLoading) { setBulkDeletePriceModal(false); setBulkDeletePriceResult(null); } }}
+                onConfirm={async () => {
+                    await handleBulkMoveToTrash();
+                    setBulkDeletePriceModal(false);
+                }}
+                title="価格データを全件ゴミ箱へ移動"
+                description={
+                    <span>
+                        アップロード済みの価格データCSVファイル（<strong>{uploadedFiles.length}件</strong>）を全てゴミ箱へ移動します。<br />
+                        ゴミ箱タブから復元・完全削除が行えます。
+                    </span>
+                }
+                loading={bulkDeletePriceLoading}
+            />
+
+            {/* 管理者専用: 通常ユーザーの価格データCSV全件削除モーダル */}
+            <DeleteConfirmModal
+                isOpen={adminClearModal}
+                onClose={() => { if (!adminClearLoading) { setAdminClearModal(false); setAdminClearResult(null); } }}
+                onConfirm={async () => {
+                    await handleAdminClearNonAdminCsvs();
+                    setAdminClearModal(false);
+                }}
+                title="通常ユーザーの価格データを全件削除"
+                description={
+                    <span>
+                        <strong style={{ color: '#b91c1c' }}>管理者・admin以外の全ユーザー</strong>の価格データCSVを<strong>永続削除</strong>します。<br />
+                        ゴミ箱には移動しません。この操作は取り消せません。
+                    </span>
+                }
+                loading={adminClearLoading}
+            />
+
+            {/* 管理者専用: 通常ユーザーの材料マスター全件削除モーダル */}
+            <DeleteConfirmModal
+                isOpen={adminClearMasterModal}
+                onClose={() => { if (!adminClearMasterLoading) { setAdminClearMasterModal(false); setAdminClearMasterResult(null); } }}
+                onConfirm={async () => {
+                    await handleAdminClearNonAdminIngredientMaster();
+                    setAdminClearMasterModal(false);
+                }}
+                title="通常ユーザーの材料マスターを全件削除"
+                description={
+                    <span>
+                        <strong style={{ color: '#b91c1c' }}>管理者・admin以外の全ユーザー</strong>の材料マスター（単位変換・CSV単位上書き）を<strong>永続削除</strong>します。<br />
+                        この操作は取り消せません。
+                    </span>
+                }
+                loading={adminClearMasterLoading}
+            />
+
+            {/* 管理者専用: 特定ユーザーの価格データCSV削除モーダル */}
+            <AdminTargetDeleteModal
+                isOpen={adminTargetClearModal}
+                onClose={() => { if (!adminTargetClearLoading) { setAdminTargetClearModal(false); setAdminTargetClearResult(null); } }}
+                onConfirm={handleAdminTargetClearCsvs}
+                title="特定ユーザーの価格データを削除"
+                description={
+                    <span>
+                        指定したユーザーの価格データCSVを<strong>永続削除</strong>します。<br />
+                        ゴミ箱には移動しません。この操作は取り消せません。
+                    </span>
+                }
+                loading={adminTargetClearLoading}
+            />
         </div>
-    )
-}
-
-{/* 価格データ CSVの一括ゴミ箱移動確認モーダル */ }
-<DeleteConfirmModal
-    isOpen={bulkDeletePriceModal}
-    onClose={() => { if (!bulkDeletePriceLoading) { setBulkDeletePriceModal(false); setBulkDeletePriceResult(null); } }}
-    onConfirm={async () => {
-        await handleBulkMoveToTrash();
-        setBulkDeletePriceModal(false);
-    }}
-    title="価格データを全件ゴミ箱へ移動"
-    description={
-        <span>
-            アップロード済みの価格データCSVファイル（<strong>{uploadedFiles.length}件</strong>）を全てゴミ箱へ移動します。<br />
-            ゴミ箱タブから復元・完全削除が行えます。
-        </span>
-    }
-    loading={bulkDeletePriceLoading}
-/>
-
-{/* 管理者専用: 通常ユーザーの価格データCSV全件削除モーダル */ }
-<DeleteConfirmModal
-    isOpen={adminClearModal}
-    onClose={() => { if (!adminClearLoading) { setAdminClearModal(false); setAdminClearResult(null); } }}
-    onConfirm={async () => {
-        await handleAdminClearNonAdminCsvs();
-        setAdminClearModal(false);
-    }}
-    title="通常ユーザーの価格データを全件削除"
-    description={
-        <span>
-            <strong style={{ color: '#b91c1c' }}>管理者・admin以外の全ユーザー</strong>の価格データCSVを<strong>永続削除</strong>します。<br />
-            ゴミ箱には移動しません。この操作は取り消せません。
-        </span>
-    }
-    loading={adminClearLoading}
-/>
-
-{/* 管理者専用: 通常ユーザーの材料マスター全件削除モーダル */ }
-<DeleteConfirmModal
-    isOpen={adminClearMasterModal}
-    onClose={() => { if (!adminClearMasterLoading) { setAdminClearMasterModal(false); setAdminClearMasterResult(null); } }}
-    onConfirm={async () => {
-        await handleAdminClearNonAdminIngredientMaster();
-        setAdminClearMasterModal(false);
-    }}
-    title="通常ユーザーの材料マスターを全件削除"
-    description={
-        <span>
-            <strong style={{ color: '#b91c1c' }}>管理者・admin以外の全ユーザー</strong>の材料マスター（単位変換・CSV単位上書き）を<strong>永続削除</strong>します。<br />
-            この操作は取り消せません。
-        </span>
-    }
-    loading={adminClearMasterLoading}
-/>
-
-{/* 管理者専用: 特定ユーザーの価格データCSV削除モーダル */ }
-<AdminTargetDeleteModal
-    isOpen={adminTargetClearModal}
-    onClose={() => { if (!adminTargetClearLoading) { setAdminTargetClearModal(false); setAdminTargetClearResult(null); } }}
-    onConfirm={handleAdminTargetClearCsvs}
-    title="特定ユーザーの価格データを削除"
-    description={
-        <span>
-            指定したユーザーの価格データCSVを<strong>永続削除</strong>します。<br />
-            ゴミ箱には移動しません。この操作は取り消せません。
-        </span>
-    }
-    loading={adminTargetClearLoading}
-/>
-        </div >
     );
 };
