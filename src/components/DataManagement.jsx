@@ -1,4 +1,3 @@
-```javascript
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { purchasePriceService } from '../services/purchasePriceService';
@@ -205,7 +204,7 @@ export const DataManagement = ({ onBack }) => {
             setVoiceFlagEnabled(saved);
             setVoiceFlagStatus({
                 type: 'success',
-                message: `音声入力を${ saved ? '有効化' : '無効化' } しました。`
+                message: '音声入力を' + (saved ? '有効化' : '無効化') + 'しました。'
             });
         } catch (error) {
             console.error('Failed to save voice feature flag:', error);
@@ -1656,4 +1655,3 @@ export const DataManagement = ({ onBack }) => {
         </div >
     );
 };
-```

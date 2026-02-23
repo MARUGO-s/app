@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from './Modal';
 import { Button } from './Button';
-import { Select } from './Select';
 import { userService } from '../services/userService';
 
 export const AdminTargetDeleteModal = ({
@@ -63,10 +62,11 @@ export const AdminTargetDeleteModal = ({
                 ) : (
                     <div className="form-group">
                         <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>対象ユーザーを選択</label>
-                        <Select
+                        <select
                             value={targetId}
                             onChange={(e) => setTargetId(e.target.value)}
                             disabled={loading || confirming}
+                            style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
                         >
                             <option value="">-- ユーザーを選択してください --</option>
                             {profiles.map(p => (
@@ -74,7 +74,7 @@ export const AdminTargetDeleteModal = ({
                                     {p.display_id}{p.email ? ` (${p.email})` : ''}
                                 </option>
                             ))}
-                        </Select>
+                        </select>
                     </div>
                 )}
 
