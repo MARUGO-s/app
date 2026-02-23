@@ -353,6 +353,49 @@ export const purchasePriceService = {
         return { results, totalDeleted, failedUsers };
     },
 
+    /**
+     * 管理者専用: 指定したユーザーのCSVファイルをStorageから全て削除する
+     */
+    async adminClearTargetUserCsvs(targetUserId, onProgress) {
+        const currentUserId = await this._getCurrentUserId();
+        if (!currentUserId) throw new Error('ログインが必要です');
+
+        if (targetUserId === currentUserId) {
+            throw new Error('自分自身のデータはこの機能で削除できません');
+        }
+
+        if (onProgress) onProgress({ total: 1, done: 0, current: 'ファイル一覧を取得中...' });
+
+        // ユーザーのCSVファイル一覧を取得
+        const { data: files, error: listErr } = await supabase.storage
+            .from(BUCKET_NAME)
+            .list(targetUserId);
+
+        if (listErr) throw listErr;
+
+        const csvFiles = (files || []).filter(f => String(f?.name || '').toLowerCase().endsWith('.csv'));
+        if (csvFiles.length === 0) {
+            if (onProgress) onProgress({ total: 1, done: 1, current: '完了' });
+            return { deleted: 0, error: null };
+        }
+
+        const total = csvFiles.length;
+        if (onProgress) onProgress({ total, done: 0, current: `削除中... (0/${total})` });
+
+        // Storageから削除
+        const paths = csvFiles.map(f => `${targetUserId}/${f.name}`);
+        const { error: removeErr } = await supabase.storage
+            .from(BUCKET_NAME)
+            .remove(paths);
+
+        if (removeErr) throw removeErr;
+
+        if (onProgress) onProgress({ total, done: total, current: '完了' });
+        this.clearCache(targetUserId);
+
+        return { deleted: total, error: null };
+    },
+
     _splitFileName(name) {
         const raw = String(name || '');
         const lastDot = raw.lastIndexOf('.');

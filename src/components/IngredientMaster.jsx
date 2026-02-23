@@ -14,6 +14,7 @@ import { Button } from './Button';
 import { Input } from './Input';
 import { Modal } from './Modal';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { AdminTargetDeleteModal } from './AdminTargetDeleteModal';
 import './IngredientMaster.css';
 
 const CATEGORY_MANUAL_KEY = 'manual';
@@ -107,6 +108,11 @@ export const IngredientMaster = () => {
     const [adminClearMasterModal, setAdminClearMasterModal] = useState(false);
     const [adminClearMasterLoading, setAdminClearMasterLoading] = useState(false);
     const [adminClearMasterResult, setAdminClearMasterResult] = useState(null);
+
+    // 管理者専用: 特定ユーザーの材料マスター削除（永続削除）
+    const [adminTargetClearMasterModal, setAdminTargetClearMasterModal] = useState(false);
+    const [adminTargetClearMasterLoading, setAdminTargetClearMasterLoading] = useState(false);
+    const [adminTargetClearMasterResult, setAdminTargetClearMasterResult] = useState(null);
 
     const normalizeItemCategory = (value) => {
         const normalized = String(value || '').trim();
@@ -642,6 +648,25 @@ export const IngredientMaster = () => {
         }
     };
 
+    const handleAdminTargetClearMaster = async (targetUserId) => {
+        setAdminTargetClearMasterLoading(true);
+        setAdminTargetClearMasterResult(null);
+        try {
+            const result = await unitConversionService.adminClearTargetUserMaster(targetUserId);
+            setAdminTargetClearMasterResult({
+                type: 'success',
+                message: `完了: 材料マスター ${result.deleted_unit_conversions}件 / CSV設定 ${result.deleted_csv_overrides}件 を削除しました`
+            });
+            await loadConversionsAndOverrides(); // もしadmin自身のビューに影響があれば再読み込み
+        } catch (e) {
+            console.error(e);
+            setAdminTargetClearMasterResult({ type: 'error', message: '処理に失敗しました: ' + (e?.message || String(e)) });
+        } finally {
+            setAdminTargetClearMasterLoading(false);
+            setAdminTargetClearMasterModal(false);
+        }
+    };
+
     const openCopyModal = async () => {
         if (user?.role !== 'admin') return;
 
@@ -722,15 +747,26 @@ export const IngredientMaster = () => {
                         🗑️ 全件ゴミ箱へ
                     </Button>
                     {user?.role === 'admin' && (
-                        <Button
-                            variant="danger"
-                            onClick={() => setAdminClearMasterModal(true)}
-                            disabled={editingId !== null || adminClearMasterLoading}
-                            title="通常ユーザーの材料マスターを全件削除（永続削除）"
-                            style={{ background: '#7f1d1d' }}
-                        >
-                            🧹 ユーザー材料クリア
-                        </Button>
+                        <>
+                            <Button
+                                variant="danger"
+                                onClick={() => setAdminTargetClearMasterModal(true)}
+                                disabled={editingId !== null || adminTargetClearMasterLoading || adminClearMasterLoading}
+                                title="特定ユーザーの材料マスターを削除（永続削除）"
+                                style={{ background: '#b91c1c' }}
+                            >
+                                👤 ユーザー個別材料クリア
+                            </Button>
+                            <Button
+                                variant="danger"
+                                onClick={() => setAdminClearMasterModal(true)}
+                                disabled={editingId !== null || adminTargetClearMasterLoading || adminClearMasterLoading}
+                                title="通常ユーザー全件の材料マスターを全件削除（永続削除）"
+                                style={{ background: '#7f1d1d' }}
+                            >
+                                🧹 ユーザー全体材料クリア
+                            </Button>
+                        </>
                     )}
                     <Button variant="primary" onClick={handleAddNew} disabled={editingId !== null}>
                         + 新規材料
@@ -740,6 +776,11 @@ export const IngredientMaster = () => {
             {bulkTrashResult && (
                 <div className={`status-msg ${bulkTrashResult.type}`} style={{ marginBottom: '8px' }}>
                     {bulkTrashResult.message}
+                </div>
+            )}
+            {adminTargetClearMasterResult && (
+                <div className={`status-msg ${adminTargetClearMasterResult.type}`} style={{ marginBottom: '8px' }}>
+                    {adminTargetClearMasterResult.message}
                 </div>
             )}
             {adminClearMasterResult && (
@@ -1309,6 +1350,21 @@ export const IngredientMaster = () => {
                     </span>
                 }
                 loading={adminClearMasterLoading}
+            />
+
+            {/* 管理者専用: 特定ユーザーの材料マスター削除（永続削除）確認モーダル */}
+            <AdminTargetDeleteModal
+                isOpen={adminTargetClearMasterModal}
+                onClose={() => { if (!adminTargetClearMasterLoading) { setAdminTargetClearMasterModal(false); setAdminTargetClearMasterResult(null); } }}
+                onConfirm={handleAdminTargetClearMaster}
+                title="特定ユーザーの材料マスターを削除"
+                description={
+                    <span>
+                        指定したユーザーの材料マスター（単位換算・CSVマッピング）を<strong>永続削除</strong>します。<br />
+                        ゴミ箱には移動しません。この操作は取り消せません。
+                    </span>
+                }
+                loading={adminTargetClearMasterLoading}
             />
         </div>
     );

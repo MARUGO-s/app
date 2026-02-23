@@ -281,5 +281,28 @@ export const unitConversionService = {
             deleted_csv_overrides: result.deleted_csv_overrides || 0
         };
     },
+
+    /**
+     * 管理者専用: 指定したユーザーの材料マスター（unit_conversions + csv_unit_overrides）を一括削除する
+     */
+    async adminClearTargetUserMaster(targetUserId) {
+        const currentUserId = await this._getCurrentUserId();
+        if (!currentUserId) throw new Error('ログインが必要です');
+
+        if (targetUserId === currentUserId) {
+            throw new Error('自分自身のデータはこの機能で削除できません');
+        }
+
+        const { data: result, error } = await supabase.rpc('admin_clear_target_user_ingredient_master', {
+            target_user_id: targetUserId
+        });
+
+        if (error) throw error;
+
+        return {
+            deleted_unit_conversions: result.deleted_unit_conversions || 0,
+            deleted_csv_overrides: result.deleted_csv_overrides || 0
+        };
+    },
 };
 
