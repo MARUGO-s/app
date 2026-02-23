@@ -249,7 +249,8 @@ export const AuthProvider = ({ children }) => {
             email,
             password,
             options: {
-                data: { display_id: displayId }
+                data: { display_id: displayId },
+                emailRedirectTo: window.location.origin
             }
         });
 
