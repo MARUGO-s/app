@@ -265,5 +265,21 @@ export const unitConversionService = {
 
         return { moved: total };
     },
+
+    /**
+     * 管理者専用: adminロール以外の全ユーザーの材料マスター（unit_conversions + csv_unit_overrides）を一括削除する
+     */
+    async adminClearAllNonAdminMaster() {
+        const userId = await this._getCurrentUserId();
+        if (!userId) throw new Error('ログインが必要です');
+
+        const { data: result, error } = await supabase.rpc('admin_clear_all_non_admin_ingredient_master');
+        if (error) throw error;
+
+        return {
+            deleted_unit_conversions: result.deleted_unit_conversions || 0,
+            deleted_csv_overrides: result.deleted_csv_overrides || 0
+        };
+    },
 };
 

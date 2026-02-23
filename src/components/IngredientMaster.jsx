@@ -98,10 +98,15 @@ export const IngredientMaster = () => {
     const [copyResult, setCopyResult] = useState(null); // { type, message, details? }
     const [copyConfirming, setCopyConfirming] = useState(false);
 
-    // 材料マスター一括ゴミ箱移動（admin-only）
+    // 材料マスター一括ゴミ箱移動
     const [bulkTrashModal, setBulkTrashModal] = useState(false);
     const [bulkTrashLoading, setBulkTrashLoading] = useState(false);
     const [bulkTrashResult, setBulkTrashResult] = useState(null);
+
+    // 管理者専用: 全通常ユーザーの材料マスター一括削除（永続削除）
+    const [adminClearMasterModal, setAdminClearMasterModal] = useState(false);
+    const [adminClearMasterLoading, setAdminClearMasterLoading] = useState(false);
+    const [adminClearMasterResult, setAdminClearMasterResult] = useState(null);
 
     const normalizeItemCategory = (value) => {
         const normalized = String(value || '').trim();
@@ -619,6 +624,24 @@ export const IngredientMaster = () => {
         }
     };
 
+    const handleAdminClearNonAdminMaster = async () => {
+        setAdminClearMasterLoading(true);
+        setAdminClearMasterResult(null);
+        try {
+            const result = await unitConversionService.adminClearAllNonAdminMaster();
+            setAdminClearMasterResult({
+                type: 'success',
+                message: `完了: 材料マスター ${result.deleted_unit_conversions}件 / CSV上書き設定 ${result.deleted_csv_overrides}件 を削除しました`
+            });
+            await loadConversionsAndOverrides(); // もしadmin自身のビューに影響があれば再読み込み
+        } catch (e) {
+            console.error(e);
+            setAdminClearMasterResult({ type: 'error', message: '処理に失敗しました: ' + (e?.message || String(e)) });
+        } finally {
+            setAdminClearMasterLoading(false);
+        }
+    };
+
     const openCopyModal = async () => {
         if (user?.role !== 'admin') return;
 
@@ -698,6 +721,17 @@ export const IngredientMaster = () => {
                     >
                         🗑️ 全件ゴミ箱へ
                     </Button>
+                    {user?.role === 'admin' && (
+                        <Button
+                            variant="danger"
+                            onClick={() => setAdminClearMasterModal(true)}
+                            disabled={editingId !== null || adminClearMasterLoading}
+                            title="通常ユーザーの材料マスターを全件削除（永続削除）"
+                            style={{ background: '#7f1d1d' }}
+                        >
+                            🧹 ユーザー材料クリア
+                        </Button>
+                    )}
                     <Button variant="primary" onClick={handleAddNew} disabled={editingId !== null}>
                         + 新規材料
                     </Button>
@@ -706,6 +740,11 @@ export const IngredientMaster = () => {
             {bulkTrashResult && (
                 <div className={`status-msg ${bulkTrashResult.type}`} style={{ marginBottom: '8px' }}>
                     {bulkTrashResult.message}
+                </div>
+            )}
+            {adminClearMasterResult && (
+                <div className={`status-msg ${adminClearMasterResult.type}`} style={{ marginBottom: '8px' }}>
+                    {adminClearMasterResult.message}
                 </div>
             )}
 
@@ -1252,6 +1291,24 @@ export const IngredientMaster = () => {
                     </span>
                 }
                 loading={bulkTrashLoading}
+            />
+
+            {/* 管理者専用: 全通常ユーザーの材料マスター一括削除（永続削除）確認モーダル */}
+            <DeleteConfirmModal
+                isOpen={adminClearMasterModal}
+                onClose={() => { if (!adminClearMasterLoading) { setAdminClearMasterModal(false); setAdminClearMasterResult(null); } }}
+                onConfirm={async () => {
+                    await handleAdminClearNonAdminMaster();
+                    setAdminClearMasterModal(false);
+                }}
+                title="通常ユーザーの材料マスターを全件削除"
+                description={
+                    <span>
+                        <strong style={{ color: '#b91c1c' }}>管理者・admin以外の全ユーザー</strong>の材料マスター（単位換算・CSVマッピング）を<strong>永続削除</strong>します。<br />
+                        ゴミ箱には移動しません。この操作は取り消せません。
+                    </span>
+                }
+                loading={adminClearMasterLoading}
             />
         </div>
     );

@@ -12,6 +12,7 @@ import CsvToMasterImporter from './CsvToMasterImporter';
 import { Modal } from './Modal';
 import { TrashBin } from './TrashBin';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { supabase } from '../supabase';
 import './DataManagement.css'; // New styles
 
 const toMonthKey = (dateStr) => {
@@ -35,6 +36,10 @@ export const DataManagement = ({ onBack }) => {
     const [adminClearLoading, setAdminClearLoading] = useState(false);
     const [adminClearProgress, setAdminClearProgress] = useState({ total: 0, done: 0, current: '' });
     const [adminClearResult, setAdminClearResult] = useState(null);
+    // 管理者専用: 通常ユーザーの材料マスター全件クリア
+    const [adminClearMasterModal, setAdminClearMasterModal] = useState(false);
+    const [adminClearMasterLoading, setAdminClearMasterLoading] = useState(false);
+    const [adminClearMasterResult, setAdminClearMasterResult] = useState(null);
 
     const [file, setFile] = useState(null);
     const [status, setStatus] = useState({ type: '', message: '' });
@@ -454,6 +459,28 @@ export const DataManagement = ({ onBack }) => {
             setAdminClearResult({ type: 'error', message: '処理に失敗しました: ' + (e?.message || String(e)) });
         } finally {
             setAdminClearLoading(false);
+        }
+    };
+
+    // 管理者専用: 通常ユーザーの材料マスター（unit_conversions, csv_unit_overrides）を全件削除
+    const handleAdminClearNonAdminIngredientMaster = async () => {
+        setAdminClearMasterLoading(true);
+        setAdminClearMasterResult(null);
+        try {
+            const { data, error } = await supabase.functions.invoke('admin-clear-non-admin-ingredient-master', { body: {} });
+            if (error) throw error;
+            if (data?.success) {
+                const uc = data.deletedUnitConversions ?? 0;
+                const cuo = data.deletedCsvOverrides ?? 0;
+                setAdminClearMasterResult({ type: 'success', message: `削除完了: 単位変換 ${uc}件 / CSV単位上書き ${cuo}件` });
+            } else {
+                throw new Error(data?.error || '削除に失敗しました');
+            }
+        } catch (e) {
+            console.error(e);
+            setAdminClearMasterResult({ type: 'error', message: '処理に失敗しました: ' + (e?.message || String(e)) });
+        } finally {
+            setAdminClearMasterLoading(false);
         }
     };
 
@@ -1111,6 +1138,25 @@ export const DataManagement = ({ onBack }) => {
                                     >
                                         🧹 通常ユーザーの価格データを全件削除
                                     </Button>
+                                    <p style={{ fontSize: '0.8rem', color: '#666', margin: '12px 0 8px' }}>
+                                        📋 通常ユーザー全員の材料マスター（単位変換・CSV単位上書き）を一括削除します。
+                                    </p>
+                                    {adminClearMasterResult && (
+                                        <div className={`status-msg ${adminClearMasterResult.type}`} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
+                                            {adminClearMasterResult.message}
+                                        </div>
+                                    )}
+                                    {adminClearMasterLoading && (
+                                        <div style={{ fontSize: '0.82rem', color: '#666', marginBottom: '8px' }}>処理中...</div>
+                                    )}
+                                    <Button
+                                        variant="danger"
+                                        onClick={() => setAdminClearMasterModal(true)}
+                                        disabled={adminClearMasterLoading}
+                                        style={{ width: '100%', background: '#7f1d1d' }}
+                                    >
+                                        📋 通常ユーザーの材料マスターを全件削除
+                                    </Button>
                                 </>
                             )}
                         </div>
@@ -1525,6 +1571,24 @@ export const DataManagement = ({ onBack }) => {
                     </span>
                 }
                 loading={adminClearLoading}
+            />
+
+            {/* 管理者専用: 通常ユーザーの材料マスター全件削除モーダル */}
+            <DeleteConfirmModal
+                isOpen={adminClearMasterModal}
+                onClose={() => { if (!adminClearMasterLoading) { setAdminClearMasterModal(false); setAdminClearMasterResult(null); } }}
+                onConfirm={async () => {
+                    await handleAdminClearNonAdminIngredientMaster();
+                    setAdminClearMasterModal(false);
+                }}
+                title="通常ユーザーの材料マスターを全件削除"
+                description={
+                    <span>
+                        <strong style={{ color: '#b91c1c' }}>管理者・admin以外の全ユーザー</strong>の材料マスター（単位変換・CSV単位上書き）を<strong>永続削除</strong>します。<br />
+                        この操作は取り消せません。
+                    </span>
+                }
+                loading={adminClearMasterLoading}
             />
         </div>
     );
