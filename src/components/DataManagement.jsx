@@ -205,7 +205,7 @@ export const DataManagement = ({ onBack }) => {
             setVoiceFlagEnabled(saved);
             setVoiceFlagStatus({
                 type: 'success',
-                message: `音声入力を${ saved ? '有効化' : '無効化' } しました。`,
+                message: `音声入力を${ saved ? '有効化' : '無効化' } しました。`
             });
         } catch (error) {
             console.error('Failed to save voice feature flag:', error);
