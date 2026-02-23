@@ -24,6 +24,12 @@ export const UserManagement = ({ onBack }) => {
     const [loginLogs, setLoginLogs] = useState([]);
     const [isLoadingLogs, setIsLoadingLogs] = useState(false);
 
+    // Delete User state
+    const [deleteTarget, setDeleteTarget] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const isSuperAdmin = (u) => u?.email === 'pingus0428@gmail.com';
+
     const loadUsers = React.useCallback(async () => {
         try {
             setLoading(true);
@@ -97,44 +103,75 @@ export const UserManagement = ({ onBack }) => {
         }
     };
 
-    const UserCard = ({ user, isAdmin }) => {
-        const getLoginBadge = (lastSignInAt) => {
-            if (!lastSignInAt) return null;
-            const diffHours = (Date.now() - new Date(lastSignInAt).getTime()) / (1000 * 60 * 60);
+    const handleRoleChange = async (targetUser, newRole) => {
+        setError(null);
+        try {
+            await userService.adminSetRole(targetUser.id, newRole);
+            setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, role: newRole } : u));
+        } catch (err) {
+            console.error(err);
+            setError('権限の変更に失敗しました。');
+        }
+    };
 
-            if (diffHours < 24) {
-                return { text: '24h', color: '#ff2d55', bg: '#ffe5e9' }; // Highlight Red
-            } else if (diffHours < 24 * 3) {
-                return { text: '3日以内', color: '#ff9500', bg: '#fff0d4' }; // Orange
-            } else if (diffHours < 24 * 7) {
-                return { text: '1週間', color: '#34c759', bg: '#e5f9e7' }; // Green
-            } else if (diffHours < 24 * 30) {
-                return { text: '1ヶ月', color: '#007aff', bg: '#e5f1ff' }; // Blue
-            }
-            return null; // older than 30 days
-        };
+    const handleDeleteUser = async () => {
+        if (!deleteTarget) return;
+        setIsDeleting(true);
+        setError(null);
+        try {
+            await userService.adminDeleteUser(deleteTarget.id);
+            setUsers(prev => prev.filter(u => u.id !== deleteTarget.id));
+            setDeleteTarget(null);
+        } catch (err) {
+            console.error(err);
+            setError('ユーザーの削除に失敗しました。');
+        } finally {
+            setIsDeleting(false);
+        }
+    };
 
+    const getLoginBadge = (lastSignInAt) => {
+        if (!lastSignInAt) {
+            return { text: '未ログイン', color: '#666666', bg: '#f0f0f0' }; // Gray for never logged in
+        }
+        const diffHours = (Date.now() - new Date(lastSignInAt).getTime()) / (1000 * 60 * 60);
+
+        if (diffHours < 24) {
+            return { text: '24h', color: '#ff2d55', bg: '#ffe5e9' }; // Highlight Red
+        } else if (diffHours < 24 * 3) {
+            return { text: '3日以内', color: '#ff9500', bg: '#fff0d4' }; // Orange
+        } else if (diffHours < 24 * 7) {
+            return { text: '1週間', color: '#34c759', bg: '#e5f9e7' }; // Green
+        } else if (diffHours < 24 * 30) {
+            return { text: '1ヶ月', color: '#007aff', bg: '#e5f1ff' }; // Blue
+        }
+        return null; // older than 30 days
+    };
+
+    const UserCard = ({
+        user,
+        isAdmin,
+        isSuperAdmin,
+        currentUser,
+        handleRoleChange,
+        savingMasterTargets,
+        handleToggleMasterRecipeVisibility,
+        handleOpenLoginLogs,
+        setResetTarget,
+        setResetPw1,
+        setResetPw2,
+        setResetError,
+        setResetSuccess,
+        setDeleteTarget
+    }) => {
         const badge = getLoginBadge(user.last_sign_in_at);
 
         return (
-            <Card key={user.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', backgroundColor: 'white' }}>
-                <div>
-                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#333' }}>
-                        {user.display_id} {isAdmin && <span style={{ fontSize: '0.8rem', backgroundColor: '#e0e0e0', padding: '2px 6px', borderRadius: '4px', marginLeft: '6px', color: '#555' }}>管理者</span>}
-                    </div>
-                    {user.email && (
-                        <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px', wordBreak: 'break-all' }}>
-                            {user.email}
-                        </div>
-                    )}
-                    <div style={{ fontSize: '0.85rem', color: '#666' }}>
-                        登録: {new Date(user.created_at).toLocaleString()}
-                    </div>
-                    <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
-                        更新: {user.updated_at ? new Date(user.updated_at).toLocaleString() : '---'}
-                    </div>
-                    <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px', display: 'flex', alignItems: 'center' }}>
-                        最終ログイン: {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : '記録なし'}
+            <Card key={user.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '15px', backgroundColor: 'white' }}>
+                <div style={{ flex: 1, minWidth: 0, marginRight: '16px' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#333', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.display_id}</span>
+                        {isAdmin && <span style={{ fontSize: '0.8rem', backgroundColor: '#e0e0e0', padding: '2px 6px', borderRadius: '4px', color: '#555' }}>管理者</span>}
                         {badge && (
                             <span style={{
                                 backgroundColor: badge.bg,
@@ -142,8 +179,7 @@ export const UserManagement = ({ onBack }) => {
                                 border: `1px solid ${badge.color}`,
                                 padding: '1px 6px',
                                 borderRadius: '12px',
-                                fontSize: '0.7rem',
-                                marginLeft: '8px',
+                                fontSize: '0.75rem',
                                 fontWeight: 'bold',
                                 lineHeight: 1
                             }}>
@@ -151,40 +187,100 @@ export const UserManagement = ({ onBack }) => {
                             </span>
                         )}
                     </div>
+                    {user.email && (
+                        <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '6px', wordBreak: 'break-all' }}>
+                            {user.email}
+                        </div>
+                    )}
+                    <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '4px' }}>
+                        登録: {new Date(user.created_at).toLocaleString()}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+                        更新: {user.updated_at ? new Date(user.updated_at).toLocaleString() : '---'}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+                        最終ログイン: {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : '記録なし'}
+                    </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', color: '#555' }}>
-                        <input
-                            type="checkbox"
-                            checked={user.show_master_recipes || false}
-                            disabled={savingMasterTargets.has(user.id)}
-                            onChange={(e) => handleToggleMasterRecipeVisibility(user, e.target.checked)}
-                        />
-                        マスター表示
-                    </label>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleOpenLoginLogs(user)}
-                        style={{ whiteSpace: 'nowrap' }}
-                    >
-                        ログイン履歴
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => {
-                            setResetTarget({ id: user.id, display_id: user.display_id, email: user.email });
-                            setResetPw1('');
-                            setResetPw2('');
-                            setResetError('');
-                            setResetSuccess('');
-                        }}
-                        style={{ whiteSpace: 'nowrap' }}
-                    >
-                        パスワード再設定
-                    </Button>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px', flexShrink: 0 }}>
+
+                    {!isSuperAdmin(user) && currentUser?.id !== user.id && (
+                        <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid #d1d5db', backgroundColor: '#f3f4f6', padding: '2px' }}>
+                            <button
+                                onClick={() => handleRoleChange(user, 'user')}
+                                disabled={user.role !== 'admin'}
+                                style={{
+                                    padding: '4px 14px', fontSize: '0.85rem', cursor: user.role !== 'admin' ? 'default' : 'pointer', border: 'none', transition: 'all 0.2s', outline: 'none',
+                                    backgroundColor: user.role !== 'admin' ? '#fff' : 'transparent',
+                                    fontWeight: user.role !== 'admin' ? 'bold' : 'normal',
+                                    color: user.role !== 'admin' ? '#111827' : '#6b7280',
+                                    boxShadow: user.role !== 'admin' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                                    borderRadius: '4px'
+                                }}
+                            >通常</button>
+                            <button
+                                onClick={() => handleRoleChange(user, 'admin')}
+                                disabled={user.role === 'admin'}
+                                style={{
+                                    padding: '4px 14px', fontSize: '0.85rem', cursor: user.role === 'admin' ? 'default' : 'pointer', border: 'none', transition: 'all 0.2s', outline: 'none',
+                                    backgroundColor: user.role === 'admin' ? '#fff' : 'transparent',
+                                    fontWeight: user.role === 'admin' ? 'bold' : 'normal',
+                                    color: user.role === 'admin' ? '#ef4444' : '#6b7280',
+                                    boxShadow: user.role === 'admin' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                                    borderRadius: '4px'
+                                }}
+                            >管理者</button>
+                        </div>
+                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        {!isSuperAdmin(user) && (
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', color: '#555' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={user.show_master_recipes || false}
+                                    disabled={savingMasterTargets.has(user.id)}
+                                    onChange={(e) => handleToggleMasterRecipeVisibility(user, e.target.checked)}
+                                />
+                                マスター表示
+                            </label>
+                        )}
+
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleOpenLoginLogs(user)}
+                            style={{ whiteSpace: 'nowrap' }}
+                        >
+                            ログイン履歴
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                                setResetTarget({ id: user.id, display_id: user.display_id, email: user.email });
+                                setResetPw1('');
+                                setResetPw2('');
+                                setResetError('');
+                                setResetSuccess('');
+                            }}
+                            style={{ whiteSpace: 'nowrap' }}
+                        >
+                            パスワード再設定
+                        </Button>
+
+                        {!isSuperAdmin(user) && currentUser?.id !== user.id && (
+                            <Button
+                                variant="danger"
+                                size="sm"
+                                onClick={() => setDeleteTarget(user)}
+                                style={{ whiteSpace: 'nowrap' }}
+                            >
+                                削除
+                            </Button>
+                        )}
+                    </div>
                 </div>
             </Card>
         );
@@ -210,7 +306,25 @@ export const UserManagement = ({ onBack }) => {
                             <div>
                                 <h3 style={{ borderBottom: '2px solid var(--color-primary)', paddingBottom: '0.5rem', marginBottom: '1rem', color: 'var(--color-primary)' }}>管理者</h3>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                    {admins.map(u => <UserCard key={u.id} user={u} isAdmin={true} />)}
+                                    {admins.map(u => (
+                                        <UserCard
+                                            key={u.id}
+                                            user={u}
+                                            isAdmin={true}
+                                            isSuperAdmin={isSuperAdmin}
+                                            currentUser={currentUser}
+                                            handleRoleChange={handleRoleChange}
+                                            savingMasterTargets={savingMasterTargets}
+                                            handleToggleMasterRecipeVisibility={handleToggleMasterRecipeVisibility}
+                                            handleOpenLoginLogs={handleOpenLoginLogs}
+                                            setResetTarget={setResetTarget}
+                                            setResetPw1={setResetPw1}
+                                            setResetPw2={setResetPw2}
+                                            setResetError={setResetError}
+                                            setResetSuccess={setResetSuccess}
+                                            setDeleteTarget={setDeleteTarget}
+                                        />
+                                    ))}
                                 </div>
                             </div>
                         )}
@@ -219,7 +333,25 @@ export const UserManagement = ({ onBack }) => {
                             <h3 style={{ borderBottom: '2px solid #ddd', paddingBottom: '0.5rem', marginBottom: '1rem', color: 'var(--text-color)' }}>登録ユーザー</h3>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                 {regulars.length > 0 ? (
-                                    regulars.map(u => <UserCard key={u.id} user={u} isAdmin={false} />)
+                                    regulars.map(u => (
+                                        <UserCard
+                                            key={u.id}
+                                            user={u}
+                                            isAdmin={false}
+                                            isSuperAdmin={isSuperAdmin}
+                                            currentUser={currentUser}
+                                            handleRoleChange={handleRoleChange}
+                                            savingMasterTargets={savingMasterTargets}
+                                            handleToggleMasterRecipeVisibility={handleToggleMasterRecipeVisibility}
+                                            handleOpenLoginLogs={handleOpenLoginLogs}
+                                            setResetTarget={setResetTarget}
+                                            setResetPw1={setResetPw1}
+                                            setResetPw2={setResetPw2}
+                                            setResetError={setResetError}
+                                            setResetSuccess={setResetSuccess}
+                                            setDeleteTarget={setDeleteTarget}
+                                        />
+                                    ))
                                 ) : (
                                     <div style={{ textAlign: 'center', padding: '20px', color: '#666', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
                                         一般ユーザーはいません
@@ -412,6 +544,43 @@ export const UserManagement = ({ onBack }) => {
                         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
                             <Button variant="secondary" onClick={() => setLogTarget(null)}>
                                 閉じる
+                            </Button>
+                        </div>
+                    </div>
+                </Modal>
+
+                <Modal
+                    isOpen={!!deleteTarget}
+                    onClose={() => { if (!isDeleting) setDeleteTarget(null); }}
+                    title="ユーザーの削除確認"
+                    size="small"
+                >
+                    <div style={{ color: '#333', lineHeight: 1.5 }}>
+                        <div style={{ marginBottom: '16px' }}>
+                            以下のユーザーを完全に削除します。この操作は取り消せません。よろしいですか？
+                        </div>
+                        <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>
+                            対象: {deleteTarget?.display_id || deleteTarget?.email || deleteTarget?.id}
+                        </div>
+                        {deleteTarget?.email && (
+                            <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '20px', wordBreak: 'break-all' }}>
+                                {deleteTarget.email}
+                            </div>
+                        )}
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                            <Button
+                                variant="ghost"
+                                onClick={() => setDeleteTarget(null)}
+                                disabled={isDeleting}
+                            >
+                                キャンセル
+                            </Button>
+                            <Button
+                                variant="danger"
+                                isLoading={isDeleting}
+                                onClick={handleDeleteUser}
+                            >
+                                削除する
                             </Button>
                         </div>
                     </div>

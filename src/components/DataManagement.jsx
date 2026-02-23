@@ -10,6 +10,8 @@ import { Input } from './Input';
 import { Card } from './Card';
 import CsvToMasterImporter from './CsvToMasterImporter';
 import { Modal } from './Modal';
+import { TrashBin } from './TrashBin';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 import './DataManagement.css'; // New styles
 
 const toMonthKey = (dateStr) => {
@@ -22,7 +24,18 @@ const toMonthKey = (dateStr) => {
 export const DataManagement = ({ onBack }) => {
     const [searchParams, setSearchParams] = useSearchParams();
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState('price'); // 'price' or 'ingredients'
+    const [activeTab, setActiveTab] = useState('price'); // 'price' | 'ingredients' | 'csv-import' | 'duplicates' | 'trash'
+    // 一括削除（ゴミ箱移動）用の状態
+    const [bulkDeletePriceModal, setBulkDeletePriceModal] = useState(false);
+    const [bulkDeletePriceLoading, setBulkDeletePriceLoading] = useState(false);
+    const [bulkDeletePriceProgress, setBulkDeletePriceProgress] = useState({ total: 0, done: 0, current: '' });
+    const [bulkDeletePriceResult, setBulkDeletePriceResult] = useState(null);
+    // 管理者専用: 通常ユーザーの価格データ全件クリア
+    const [adminClearModal, setAdminClearModal] = useState(false);
+    const [adminClearLoading, setAdminClearLoading] = useState(false);
+    const [adminClearProgress, setAdminClearProgress] = useState({ total: 0, done: 0, current: '' });
+    const [adminClearResult, setAdminClearResult] = useState(null);
+
     const [file, setFile] = useState(null);
     const [status, setStatus] = useState({ type: '', message: '' });
     const [isUploading, setIsUploading] = useState(false);
@@ -400,6 +413,50 @@ export const DataManagement = ({ onBack }) => {
         }
     };
 
+    // 一括削除（ゴミ箱移動）ハンドラ
+    const handleBulkMoveToTrash = async () => {
+        setBulkDeletePriceLoading(true);
+        setBulkDeletePriceProgress({ total: 0, done: 0, current: '' });
+        setBulkDeletePriceResult(null);
+        try {
+            const result = await purchasePriceService.moveAllToTrash((p) => {
+                setBulkDeletePriceProgress(p);
+            });
+            setBulkDeletePriceResult({ type: 'success', message: `ゴミ箱へ移動完了: ${result.moved}件` });
+            // ファイル一覧を更新
+            const files = await purchasePriceService.getFileList();
+            setUploadedFiles(files);
+        } catch (e) {
+            console.error(e);
+            setBulkDeletePriceResult({ type: 'error', message: 'ゴミ箱への移動に失敗しました: ' + (e?.message || String(e)) });
+        } finally {
+            setBulkDeletePriceLoading(false);
+        }
+    };
+
+    // 管理者専用: 通常ユーザーの価格データCSVを全件削除するハンドラ
+    const handleAdminClearNonAdminCsvs = async () => {
+        setAdminClearLoading(true);
+        setAdminClearProgress({ total: 0, done: 0, current: '' });
+        setAdminClearResult(null);
+        try {
+            const result = await purchasePriceService.adminClearAllNonAdminCsvs((p) => {
+                setAdminClearProgress(p);
+            });
+            const msg = `完了: ${result.totalDeleted}ファイル削除（${result.results.length}ユーザー処理）` +
+                (result.failedUsers.length > 0 ? ` / ${result.failedUsers.length}件エラー` : '');
+            setAdminClearResult({ type: result.failedUsers.length > 0 ? 'error' : 'success', message: msg, details: result });
+            // ファイル一覧を更新
+            const files = await purchasePriceService.getFileList();
+            setUploadedFiles(files);
+        } catch (e) {
+            console.error(e);
+            setAdminClearResult({ type: 'error', message: '処理に失敗しました: ' + (e?.message || String(e)) });
+        } finally {
+            setAdminClearLoading(false);
+        }
+    };
+
     const openCopyModal = async () => {
         setCopyModalOpen(true);
         setCopyResult(null);
@@ -451,6 +508,7 @@ export const DataManagement = ({ onBack }) => {
                 message: `コピー完了: ${copied}件${failed > 0 ? ` / 失敗: ${failed}件` : ''}`,
                 failed: res?.failed || []
             });
+            // ユーザーによって「閉じる」ボタンが明示的に押されるまでモーダルを維持します
         } catch (e) {
             console.error(e);
             setCopyResult({ type: 'error', message: `コピーに失敗しました: ${String(e?.message || e)}` });
@@ -471,9 +529,11 @@ export const DataManagement = ({ onBack }) => {
             <div className="dashboard-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <h2 className="section-title" style={{ margin: 0, fontSize: '1.5rem' }}>データ管理</h2>
-                    <span style={{ fontSize: '0.85rem', color: '#666', background: '#eee', padding: '2px 8px', borderRadius: '12px' }}>
-                        Admin Mode
-                    </span>
+                    {user?.role === 'admin' && (
+                        <span style={{ fontSize: '0.85rem', color: '#666', background: '#eee', padding: '2px 8px', borderRadius: '12px' }}>
+                            Admin Mode
+                        </span>
+                    )}
                 </div>
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     {activeTab === 'csv-import' && (
@@ -518,6 +578,12 @@ export const DataManagement = ({ onBack }) => {
                     >
                         🔁 重複アイテム
                     </button>
+                    <button
+                        className={`tab ${activeTab === 'trash' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('trash')}
+                    >
+                        🗑️ ゴミ箱
+                    </button>
                 </div>
             </div>
 
@@ -559,6 +625,8 @@ export const DataManagement = ({ onBack }) => {
                 <IngredientMaster />
             ) : activeTab === 'csv-import' ? (
                 <CsvToMasterImporter />
+            ) : activeTab === 'trash' ? (
+                <TrashBin />
             ) : activeTab === 'duplicates' ? (
                 <div className="dashboard-content">
                     <aside className="dashboard-sidebar">
@@ -993,6 +1061,61 @@ export const DataManagement = ({ onBack }) => {
                             )}
                         </div>
 
+                        {/* 一括操作（全ユーザー: 自分のデータをゴミ箱へ移動） */}
+                        <div className="sidebar-card" style={{ borderLeft: '4px solid #ef4444' }}>
+                            <div className="sidebar-title" style={{ color: '#ef4444' }}>⚠️ 一括操作</div>
+                            <p style={{ fontSize: '0.8rem', color: '#666', margin: '0 0 10px' }}>
+                                全ての価格データCSVをゴミ箱へ移動します。ゴミ箱からの復元・完全削除は「ゴミ箱」タブから行えます。
+                            </p>
+                            {bulkDeletePriceResult && (
+                                <div className={`status-msg ${bulkDeletePriceResult.type}`} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
+                                    {bulkDeletePriceResult.message}
+                                </div>
+                            )}
+                            {bulkDeletePriceLoading && (
+                                <div style={{ fontSize: '0.82rem', color: '#666', marginBottom: '8px' }}>
+                                    処理中... {bulkDeletePriceProgress.current && `(${bulkDeletePriceProgress.current})`}
+                                </div>
+                            )}
+                            <Button
+                                variant="danger"
+                                onClick={() => setBulkDeletePriceModal(true)}
+                                disabled={bulkDeletePriceLoading || uploadedFiles.length === 0}
+                                style={{ width: '100%' }}
+                            >
+                                🗑️ 全件ゴミ箱へ移動
+                            </Button>
+
+                            {/* 管理者専用: 全通常ユーザーの一括削除 */}
+                            {user?.role === 'admin' && (
+                                <>
+                                    <hr style={{ margin: '12px 0', border: 'none', borderTop: '1px solid #fecaca' }} />
+                                    <p style={{ fontSize: '0.8rem', color: '#666', margin: '0 0 8px' }}>
+                                        ⚡ 通常ユーザー全員の価格データを一括削除（永続削除）します。ゴミ箱には移動しません。
+                                    </p>
+                                    {adminClearResult && (
+                                        <div className={`status-msg ${adminClearResult.type}`} style={{ marginBottom: '8px', fontSize: '0.82rem' }}>
+                                            {adminClearResult.message}
+                                        </div>
+                                    )}
+                                    {adminClearLoading && (
+                                        <div style={{ fontSize: '0.82rem', color: '#666', marginBottom: '8px' }}>
+                                            処理中 ({adminClearProgress.done}/{adminClearProgress.total})... {adminClearProgress.current && `${adminClearProgress.current}`}
+                                        </div>
+                                    )}
+                                    <Button
+                                        variant="danger"
+                                        onClick={() => setAdminClearModal(true)}
+                                        disabled={adminClearLoading}
+                                        style={{ width: '100%', background: '#7f1d1d' }}
+                                    >
+                                        🧹 通常ユーザーの価格データを全件削除
+                                    </Button>
+                                </>
+                            )}
+                        </div>
+
+
                         <div className="sidebar-card">
                             <div className="sidebar-title">ℹ️ ヒント</div>
                             <ul style={{ fontSize: '0.75rem', color: '#666', paddingLeft: '1.2rem', margin: 0 }}>
@@ -1002,6 +1125,7 @@ export const DataManagement = ({ onBack }) => {
                             </ul>
                         </div>
                     </aside>
+
 
                     {/* Right Main: Data Table */}
                     <main className="dashboard-main">
@@ -1239,70 +1363,94 @@ export const DataManagement = ({ onBack }) => {
                                 );
                             })()}
 
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
-                                <Button variant="ghost" onClick={() => setCopyConfirming(false)} disabled={copyInProgress}>
-                                    戻る
-                                </Button>
-                                <Button
-                                    variant="primary"
-                                    onClick={startCopyToAccount}
-                                    disabled={!copyTargetId || copyInProgress}
-                                >
-                                    {copyInProgress ? 'コピー中...' : 'この内容でコピー'}
-                                </Button>
-                            </div>
-                        </>
-                    )}
-
-                    {copyInProgress && (
-                        <div className="bulk-progress" style={{ marginTop: '10px' }}>
-                            <div className="bulk-progress-head">
-                                <div className="bulk-progress-spinner" />
-                                <div>
-                                    <div className="bulk-progress-title">コピー中...</div>
-                                    <div className="bulk-progress-subtitle">
-                                        {copyProgress.total ? `${copyProgress.done} / ${copyProgress.total}` : '準備中...'}
+                            {/* コピー実行中またはエラー・成功時のボタン表示 */}
+                            {copyResult ? (
+                                <div style={{ marginTop: '16px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
+                                    <div style={{ marginBottom: '16px', color: '#374151', fontSize: '0.95rem', fontWeight: 500 }}>
+                                        {copyResult.type === 'success' ? 'コピーが完了しました。他のアカウントにも続けてコピーしますか？' : '再度操作を行いますか？（エラー）'}
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                                        <Button variant="ghost" onClick={closeCopyModal}>
+                                            閉じる
+                                        </Button>
+                                        <Button
+                                            variant="primary"
+                                            onClick={() => {
+                                                setCopyResult(null);
+                                                setCopyConfirming(false);
+                                                setCopyTargetId('');
+                                            }}
+                                        >
+                                            続けてコピーする
+                                        </Button>
                                     </div>
                                 </div>
-                            </div>
-                            <div className="bulk-progress-bar">
-                                <div
-                                    className="bulk-progress-bar-inner"
-                                    style={{
-                                        width: copyProgress.total ? `${Math.round((copyProgress.done / copyProgress.total) * 100)}%` : '0%'
-                                    }}
-                                />
-                            </div>
-                            <div className="bulk-progress-current" title={copyProgress.current}>
-                                {copyProgress.current}
-                            </div>
-                        </div>
-                    )}
-
-                    {copyResult?.message && (
-                        <div className={`status-msg ${copyResult.type || 'info'}`}>
-                            {copyResult.message}
-                        </div>
-                    )}
-
-                    {Array.isArray(copyResult?.failed) && copyResult.failed.length > 0 && (
-                        <div className="bulk-progress-failures">
-                            <div style={{ fontWeight: 700, marginBottom: '6px' }}>
-                                失敗: {copyResult.failed.length}件
-                            </div>
-                            <ul style={{ paddingLeft: '1.2rem', margin: 0 }}>
-                                {copyResult.failed.slice(0, 10).map((f, i) => (
-                                    <li key={`${f?.file || 'f'}-${i}`}>
-                                        {f?.file || '-'}: {f?.errorMessage || 'unknown error'}
-                                    </li>
-                                ))}
-                            </ul>
-                            {copyResult.failed.length > 10 && (
-                                <div style={{ marginTop: '6px' }}>
-                                    ...他 {copyResult.failed.length - 10}件
+                            ) : (
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+                                    <Button variant="ghost" onClick={() => setCopyConfirming(false)} disabled={copyInProgress}>
+                                        戻る
+                                    </Button>
+                                    <Button
+                                        variant="primary"
+                                        onClick={startCopyToAccount}
+                                        disabled={!copyTargetId || copyInProgress}
+                                    >
+                                        {copyInProgress ? 'コピー中...' : 'この内容でコピー'}
+                                    </Button>
                                 </div>
                             )}
-                        </div>
+
+                            {copyInProgress && (
+                                <div className="bulk-progress" style={{ marginTop: '10px' }}>
+                                    <div className="bulk-progress-head">
+                                        <div className="bulk-progress-spinner" />
+                                        <div>
+                                            <div className="bulk-progress-title">コピー中...</div>
+                                            <div className="bulk-progress-subtitle">
+                                                {copyProgress.total ? `${copyProgress.done} / ${copyProgress.total}` : '準備中...'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bulk-progress-bar">
+                                        <div
+                                            className="bulk-progress-bar-inner"
+                                            style={{
+                                                width: copyProgress.total ? `${Math.round((copyProgress.done / copyProgress.total) * 100)}%` : '0%'
+                                            }}
+                                        />
+                                    </div>
+                                    <div className="bulk-progress-current" title={copyProgress.current}>
+                                        {copyProgress.current}
+                                    </div>
+                                </div>
+                            )}
+
+                            {copyResult?.message && (
+                                <div className={`status-msg ${copyResult.type || 'info'}`}>
+                                    {copyResult.message}
+                                </div>
+                            )}
+
+                            {Array.isArray(copyResult?.failed) && copyResult.failed.length > 0 && (
+                                <div className="bulk-progress-failures">
+                                    <div style={{ fontWeight: 700, marginBottom: '6px' }}>
+                                        失敗: {copyResult.failed.length}件
+                                    </div>
+                                    <ul style={{ paddingLeft: '1.2rem', margin: 0 }}>
+                                        {copyResult.failed.slice(0, 10).map((f, i) => (
+                                            <li key={`${f?.file || 'f'}-${i}`}>
+                                                {f?.file || '-'}: {f?.errorMessage || 'unknown error'}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    {copyResult.failed.length > 10 && (
+                                        <div style={{ marginTop: '6px' }}>
+                                            ...他 {copyResult.failed.length - 10}件
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             </Modal>
@@ -1342,6 +1490,42 @@ export const DataManagement = ({ onBack }) => {
                     </div>
                 </div>
             )}
+
+            {/* 価格データ CSVの一括ゴミ箱移動確認モーダル */}
+            <DeleteConfirmModal
+                isOpen={bulkDeletePriceModal}
+                onClose={() => { if (!bulkDeletePriceLoading) { setBulkDeletePriceModal(false); setBulkDeletePriceResult(null); } }}
+                onConfirm={async () => {
+                    await handleBulkMoveToTrash();
+                    setBulkDeletePriceModal(false);
+                }}
+                title="価格データを全件ゴミ箱へ移動"
+                description={
+                    <span>
+                        アップロード済みの価格データCSVファイル（<strong>{uploadedFiles.length}件</strong>）を全てゴミ箱へ移動します。<br />
+                        ゴミ箱タブから復元・完全削除が行えます。
+                    </span>
+                }
+                loading={bulkDeletePriceLoading}
+            />
+
+            {/* 管理者専用: 通常ユーザーの価格データCSV全件削除モーダル */}
+            <DeleteConfirmModal
+                isOpen={adminClearModal}
+                onClose={() => { if (!adminClearLoading) { setAdminClearModal(false); setAdminClearResult(null); } }}
+                onConfirm={async () => {
+                    await handleAdminClearNonAdminCsvs();
+                    setAdminClearModal(false);
+                }}
+                title="通常ユーザーの価格データを全件削除"
+                description={
+                    <span>
+                        <strong style={{ color: '#b91c1c' }}>管理者・admin以外の全ユーザー</strong>の価格データCSVを<strong>永続削除</strong>します。<br />
+                        ゴミ箱には移動しません。この操作は取り消せません。
+                    </span>
+                }
+                loading={adminClearLoading}
+            />
         </div>
     );
 };

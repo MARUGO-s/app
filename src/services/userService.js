@@ -138,5 +138,22 @@ export const userService = {
         });
         if (error) throw error;
         return true;
+    },
+
+    async adminSetRole(userId, newRole) {
+        const { error } = await supabase.rpc('admin_set_role', {
+            p_user_id: userId,
+            p_role: newRole
+        });
+        if (error) throw error;
+        return true;
+    },
+
+    async adminDeleteUser(userId) {
+        const { error } = await supabase.rpc('admin_delete_user', {
+            p_user_id: userId
+        });
+        if (error) throw error;
+        return true;
     }
 };

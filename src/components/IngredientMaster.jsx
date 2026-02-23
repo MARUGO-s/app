@@ -13,6 +13,7 @@ import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
 import { Button } from './Button';
 import { Input } from './Input';
 import { Modal } from './Modal';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 import './IngredientMaster.css';
 
 const CATEGORY_MANUAL_KEY = 'manual';
@@ -96,6 +97,11 @@ export const IngredientMaster = () => {
     const [copyInProgress, setCopyInProgress] = useState(false);
     const [copyResult, setCopyResult] = useState(null); // { type, message, details? }
     const [copyConfirming, setCopyConfirming] = useState(false);
+
+    // 材料マスター一括ゴミ箱移動（admin-only）
+    const [bulkTrashModal, setBulkTrashModal] = useState(false);
+    const [bulkTrashLoading, setBulkTrashLoading] = useState(false);
+    const [bulkTrashResult, setBulkTrashResult] = useState(null);
 
     const normalizeItemCategory = (value) => {
         const normalized = String(value || '').trim();
@@ -597,6 +603,22 @@ export const IngredientMaster = () => {
         }
     };
 
+    const handleBulkMoveToTrash = async () => {
+        setBulkTrashLoading(true);
+        setBulkTrashResult(null);
+        try {
+            const result = await unitConversionService.moveAllToTrash();
+            setBulkTrashResult({ type: 'success', message: `ゴミ箱へ移動完了: ${result.moved}件` });
+            // Reload ingredient list
+            await loadIngredients();
+        } catch (e) {
+            console.error(e);
+            setBulkTrashResult({ type: 'error', message: 'ゴミ箱への移動に失敗しました: ' + (e?.message || String(e)) });
+        } finally {
+            setBulkTrashLoading(false);
+        }
+    };
+
     const openCopyModal = async () => {
         if (user?.role !== 'admin') return;
 
@@ -657,7 +679,7 @@ export const IngredientMaster = () => {
         <div className="ingredient-master-container">
             <div className="master-header">
                 <h3>📦 材料マスター管理</h3>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-start' }}>
                     {user?.role === 'admin' && (
                         <Button
                             variant="secondary"
@@ -668,11 +690,24 @@ export const IngredientMaster = () => {
                             他アカウントへコピー
                         </Button>
                     )}
+                    <Button
+                        variant="danger"
+                        onClick={() => setBulkTrashModal(true)}
+                        disabled={editingId !== null || loading || bulkTrashLoading || ingredients.length === 0}
+                        title="全材料をゴミ箱へ移動します"
+                    >
+                        🗑️ 全件ゴミ箱へ
+                    </Button>
                     <Button variant="primary" onClick={handleAddNew} disabled={editingId !== null}>
                         + 新規材料
                     </Button>
                 </div>
             </div>
+            {bulkTrashResult && (
+                <div className={`status-msg ${bulkTrashResult.type}`} style={{ marginBottom: '8px' }}>
+                    {bulkTrashResult.message}
+                </div>
+            )}
 
             <div className="master-search">
                 <Input
@@ -848,212 +883,213 @@ export const IngredientMaster = () => {
                                         : '重複候補';
 
                                     return (
-                                    <tr
-                                        key={clientId}
-                                        className={[
-                                            item.isEditing ? 'editing' : '',
-                                            isDuplicate ? 'duplicate' : '',
-                                        ].filter(Boolean).join(' ')}
-                                    >
-                                        <td className="master-col-no">
-                                            <span className="master-col-no__text">{_filteredIndex + 1}</span>
-                                        </td>
-                                        <td>
-                                            {item.isEditing ? (
-                                                <div className="ingredient-name-cell">
-                                                    <Input
-                                                        value={item.ingredientName}
-                                                        onChange={e => handleChange(clientId, 'ingredientName', e.target.value)}
-                                                        placeholder="例: 強力粉"
-                                                        disabled={!item.isNew}
-                                                        wrapperClassName="input-group--no-margin"
-                                                    />
-                                                    <Input
-                                                        value={item.vendor || ''}
-                                                        onChange={e => handleChange(clientId, 'vendor', e.target.value)}
-                                                        placeholder="業者名"
-                                                        wrapperClassName="input-group--no-margin"
-                                                    />
-                                                    {showCsvVendorHint && (
-                                                        <div className="ingredient-vendor-tags">
-                                                            <span className="vendor-tag vendor-tag--csv" title="業者名（CSV）">
-                                                                参考: {csvVendor}
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <div className="ingredient-name-cell">
-                                                    <div className="ingredient-name-row">
-                                                        <span>{item.ingredientName}</span>
-                                                        {isDuplicate && (
-                                                            <span className="ingredient-dup-badge" title={dupTitle}>
-                                                                重複
-                                                            </span>
+                                        <tr
+                                            key={clientId}
+                                            className={[
+                                                item.isEditing ? 'editing' : '',
+                                                isDuplicate ? 'duplicate' : '',
+                                            ].filter(Boolean).join(' ')}
+                                        >
+                                            <td className="master-col-no">
+                                                <span className="master-col-no__text">{_filteredIndex + 1}</span>
+                                            </td>
+                                            <td>
+                                                {item.isEditing ? (
+                                                    <div className="ingredient-name-cell">
+                                                        <Input
+                                                            value={item.ingredientName}
+                                                            onChange={e => handleChange(clientId, 'ingredientName', e.target.value)}
+                                                            placeholder="例: 強力粉"
+                                                            disabled={!item.isNew}
+                                                            wrapperClassName="input-group--no-margin"
+                                                        />
+                                                        <Input
+                                                            value={item.vendor || ''}
+                                                            onChange={e => handleChange(clientId, 'vendor', e.target.value)}
+                                                            placeholder="業者名"
+                                                            wrapperClassName="input-group--no-margin"
+                                                        />
+                                                        {showCsvVendorHint && (
+                                                            <div className="ingredient-vendor-tags">
+                                                                <span className="vendor-tag vendor-tag--csv" title="業者名（CSV）">
+                                                                    参考: {csvVendor}
+                                                                </span>
+                                                            </div>
                                                         )}
                                                     </div>
-                                                    <div className="ingredient-vendor-tags">
-                                                        <span
-                                                            className={`vendor-tag ${vendorSourceClass}`}
-                                                            title={vendorTitle}
-                                                        >
-                                                            業者: {effectiveVendor || '-'}
-                                                        </span>
+                                                ) : (
+                                                    <div className="ingredient-name-cell">
+                                                        <div className="ingredient-name-row">
+                                                            <span>{item.ingredientName}</span>
+                                                            {isDuplicate && (
+                                                                <span className="ingredient-dup-badge" title={dupTitle}>
+                                                                    重複
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="ingredient-vendor-tags">
+                                                            <span
+                                                                className={`vendor-tag ${vendorSourceClass}`}
+                                                                title={vendorTitle}
+                                                            >
+                                                                業者: {effectiveVendor || '-'}
+                                                            </span>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="master-col-category">
-                                            {item.isEditing ? (
-                                                <select
-                                                    value={normalizedCategory}
-                                                    onChange={e => handleChange(clientId, 'itemCategory', e.target.value)}
-                                                    className="category-select"
-                                                >
-                                                    <option value="food">食材（8%）</option>
-                                                    <option value="soft_drink">ソフトドリンク（8%）</option>
-                                                    <option value="alcohol">アルコール（10%）</option>
-                                                    <option value="supplies">備品（10%）</option>
-                                                </select>
-                                            ) : (
-                                                <span title="税率判定に使われます">{getItemCategoryLabel(item?.itemCategory)}</span>
-                                            )}
-                                        </td>
-                                        <td>
-                                            {item.isEditing ? (
-                                                <Input
-                                                    type="number"
-                                                    value={item.lastPrice}
-                                                    onChange={e => handleChange(clientId, 'lastPrice', e.target.value)}
-                                                    placeholder="例: 500"
-                                                />
-                                            ) : (
-                                                `¥${parseFloat(item.lastPrice || 0).toLocaleString()}`
-                                            )}
-                                        </td>
-                                        <td>
-                                            {item.isEditing ? (
-                                                <div className="input-with-hint">
+                                                )}
+                                            </td>
+                                            <td className="master-col-category">
+                                                {item.isEditing ? (
+                                                    <select
+                                                        value={normalizedCategory}
+                                                        onChange={e => handleChange(clientId, 'itemCategory', e.target.value)}
+                                                        className="category-select"
+                                                    >
+                                                        <option value="food">食材（8%）</option>
+                                                        <option value="soft_drink">ソフトドリンク（8%）</option>
+                                                        <option value="alcohol">アルコール（10%）</option>
+                                                        <option value="supplies">備品（10%）</option>
+                                                    </select>
+                                                ) : (
+                                                    <span title="税率判定に使われます">{getItemCategoryLabel(item?.itemCategory)}</span>
+                                                )}
+                                            </td>
+                                            <td>
+                                                {item.isEditing ? (
                                                     <Input
                                                         type="number"
-                                                        value={item.packetSize}
-                                                        onChange={e => handleChange(clientId, 'packetSize', e.target.value)}
-                                                        placeholder={['個', '本', '枚', 'PC', '箱', '缶', '包'].includes(item.packetUnit) ? '数量 (例: 1)' : '例: 1000'}
+                                                        value={item.lastPrice}
+                                                        onChange={e => handleChange(clientId, 'lastPrice', e.target.value)}
+                                                        placeholder="例: 500"
                                                     />
-                                                    {['個', '本', '枚', 'PC', '箱', '缶', '包'].includes(item.packetUnit) && (
-                                                        <span className="unit-hint">1{item.packetUnit}あたりの価格なら「1」</span>
+                                                ) : (
+                                                    `¥${parseFloat(item.lastPrice || 0).toLocaleString()}`
+                                                )}
+                                            </td>
+                                            <td>
+                                                {item.isEditing ? (
+                                                    <div className="input-with-hint">
+                                                        <Input
+                                                            type="number"
+                                                            value={item.packetSize}
+                                                            onChange={e => handleChange(clientId, 'packetSize', e.target.value)}
+                                                            placeholder={['個', '本', '枚', 'PC', '箱', '缶', '包'].includes(item.packetUnit) ? '数量 (例: 1)' : '例: 1000'}
+                                                        />
+                                                        {['個', '本', '枚', 'PC', '箱', '缶', '包'].includes(item.packetUnit) && (
+                                                            <span className="unit-hint">1{item.packetUnit}あたりの価格なら「1」</span>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    item.packetSize
+                                                )}
+                                            </td>
+                                            <td>
+                                                {item.isEditing ? (
+                                                    <select
+                                                        value={item.packetUnit}
+                                                        onChange={e => handleChange(clientId, 'packetUnit', e.target.value)}
+                                                        className="unit-select"
+                                                    >
+                                                        <option value="g">g</option>
+                                                        <option value="ml">ml</option>
+                                                        <option value="cc">cc</option>
+                                                        <option value="cl">cl</option>
+                                                        <option value="個">個</option>
+                                                        <option value="袋">袋</option>
+                                                        <option value="本">本</option>
+                                                        <option value="枚">枚</option>
+                                                        <option value="パック">パック</option>
+                                                    </select>
+                                                ) : (
+                                                    item.packetUnit
+                                                )}
+                                            </td>
+                                            <td className="csv-unit-cell">
+                                                {item.isEditing ? (
+                                                    <Input
+                                                        value={getEditableCsvUnit(item.ingredientName)}
+                                                        onChange={(e) => {
+                                                            const name = (item.ingredientName ?? '').toString().trim();
+                                                            const val = e.target.value;
+                                                            setCsvUnitEdits(prev => ({ ...prev, [name]: val }));
+                                                        }}
+                                                        onBlur={(e) => saveCsvUnitOverride(item.ingredientName, e.target.value)}
+                                                        placeholder={getCsvUnit(item.ingredientName) === '-' ? '未設定' : `CSV: ${getCsvUnit(item.ingredientName)}`}
+                                                    />
+                                                ) : (
+                                                    <span>{getDisplayCsvUnit(item.ingredientName)}</span>
+                                                )}
+                                            </td>
+                                            <td className="normalized-cost">{calculateNormalizedCost(item)}</td>
+                                            <td>
+                                                {isFoodCategory ? (
+                                                    item.isEditing ? (
+                                                        <Input
+                                                            type="number"
+                                                            value={item.yieldPercent ?? ''}
+                                                            onChange={e => handleChange(clientId, 'yieldPercent', e.target.value)}
+                                                            placeholder="100"
+                                                            min="1"
+                                                            max="100"
+                                                            step="0.1"
+                                                            title="可食率（歩留まり）: 100% = 補正なし"
+                                                        />
+                                                    ) : (
+                                                        (() => {
+                                                            const n = parseFloat(item.yieldPercent);
+                                                            if (!Number.isFinite(n) || n <= 0) return '-';
+                                                            const rounded = Math.round(n * 10) / 10;
+                                                            return `${Number.isInteger(rounded) ? Math.round(rounded) : rounded}%`;
+                                                        })()
+                                                    )
+                                                ) : (
+                                                    <span style={{ color: '#999' }}>-</span>
+                                                )}
+                                            </td>
+                                            <td>
+                                                <div className="action-buttons">
+                                                    {item.isEditing ? (
+                                                        <>
+                                                            <Button
+                                                                variant="primary"
+                                                                size="sm"
+                                                                onClick={() => handleSave(clientId)}
+                                                            >
+                                                                保存
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => handleCancel(clientId)}
+                                                            >
+                                                                キャンセル
+                                                            </Button>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="sm"
+                                                                onClick={() => handleEdit(clientId)}
+                                                                disabled={editingId !== null}
+                                                            >
+                                                                編集
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => handleDelete(clientId)}
+                                                                disabled={editingId !== null}
+                                                            >
+                                                                削除
+                                                            </Button>
+                                                        </>
                                                     )}
                                                 </div>
-                                            ) : (
-                                                item.packetSize
-                                            )}
-                                        </td>
-                                        <td>
-                                            {item.isEditing ? (
-                                                <select
-                                                    value={item.packetUnit}
-                                                    onChange={e => handleChange(clientId, 'packetUnit', e.target.value)}
-                                                    className="unit-select"
-                                                >
-                                                    <option value="g">g</option>
-                                                    <option value="ml">ml</option>
-                                                    <option value="cc">cc</option>
-                                                    <option value="cl">cl</option>
-                                                    <option value="個">個</option>
-                                                    <option value="袋">袋</option>
-                                                    <option value="本">本</option>
-                                                    <option value="枚">枚</option>
-                                                    <option value="パック">パック</option>
-                                                </select>
-                                            ) : (
-                                                item.packetUnit
-                                            )}
-                                        </td>
-                                        <td className="csv-unit-cell">
-                                            {item.isEditing ? (
-                                                <Input
-                                                    value={getEditableCsvUnit(item.ingredientName)}
-                                                    onChange={(e) => {
-                                                        const name = (item.ingredientName ?? '').toString().trim();
-                                                        const val = e.target.value;
-                                                        setCsvUnitEdits(prev => ({ ...prev, [name]: val }));
-                                                    }}
-                                                    onBlur={(e) => saveCsvUnitOverride(item.ingredientName, e.target.value)}
-                                                    placeholder={getCsvUnit(item.ingredientName) === '-' ? '未設定' : `CSV: ${getCsvUnit(item.ingredientName)}`}
-                                                />
-                                            ) : (
-                                                <span>{getDisplayCsvUnit(item.ingredientName)}</span>
-                                            )}
-                                        </td>
-                                        <td className="normalized-cost">{calculateNormalizedCost(item)}</td>
-                                        <td>
-                                            {isFoodCategory ? (
-                                                item.isEditing ? (
-                                                    <Input
-                                                        type="number"
-                                                        value={item.yieldPercent ?? ''}
-                                                        onChange={e => handleChange(clientId, 'yieldPercent', e.target.value)}
-                                                        placeholder="100"
-                                                        min="1"
-                                                        max="100"
-                                                        step="0.1"
-                                                        title="可食率（歩留まり）: 100% = 補正なし"
-                                                    />
-                                                ) : (
-                                                    (() => {
-                                                        const n = parseFloat(item.yieldPercent);
-                                                        if (!Number.isFinite(n) || n <= 0) return '-';
-                                                        const rounded = Math.round(n * 10) / 10;
-                                                        return `${Number.isInteger(rounded) ? Math.round(rounded) : rounded}%`;
-                                                    })()
-                                                )
-                                            ) : (
-                                                <span style={{ color: '#999' }}>-</span>
-                                            )}
-                                        </td>
-                                        <td>
-                                            <div className="action-buttons">
-                                                {item.isEditing ? (
-                                                    <>
-                                                        <Button
-                                                            variant="primary"
-                                                            size="sm"
-                                                            onClick={() => handleSave(clientId)}
-                                                        >
-                                                            保存
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => handleCancel(clientId)}
-                                                        >
-                                                            キャンセル
-                                                        </Button>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Button
-                                                            variant="secondary"
-                                                            size="sm"
-                                                            onClick={() => handleEdit(clientId)}
-                                                            disabled={editingId !== null}
-                                                        >
-                                                            編集
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => handleDelete(clientId)}
-                                                            disabled={editingId !== null}
-                                                        >
-                                                            削除
-                                                        </Button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )})
+                                            </td>
+                                        </tr>
+                                    )
+                                })
                             )}
                         </tbody>
                     </table>
@@ -1199,6 +1235,24 @@ export const IngredientMaster = () => {
                     )}
                 </div>
             </Modal>
+
+            {/* 材料マスター一括ゴミ箱移動確認モーダル */}
+            <DeleteConfirmModal
+                isOpen={bulkTrashModal}
+                onClose={() => { if (!bulkTrashLoading) { setBulkTrashModal(false); setBulkTrashResult(null); } }}
+                onConfirm={async () => {
+                    await handleBulkMoveToTrash();
+                    setBulkTrashModal(false);
+                }}
+                title="材料マスターを全件ゴミ箱へ移動"
+                description={
+                    <span>
+                        登録済みの材料マスター（<strong>{ingredients.length.toLocaleString()}件</strong>）を全てゴミ箱へ移動します。<br />
+                        ゴミ箱タブから復元・完全削除が行えます。
+                    </span>
+                }
+                loading={bulkTrashLoading}
+            />
         </div>
     );
 };

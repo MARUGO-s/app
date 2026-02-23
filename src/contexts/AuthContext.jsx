@@ -139,7 +139,8 @@ export const AuthProvider = ({ children }) => {
                     const metaDisplayId = (sessionUser?.user_metadata?.display_id || '').toString().trim();
                     const displayId = p.display_id || metaDisplayId || cachedUser.displayId || getEmailLocalPart(email) || uid.slice(0, 8);
                     const role = String((p.role || 'user')).trim().toLowerCase();
-                    const showMasterRecipes = p.show_master_recipes === true;
+                    const isSuperAdmin = email === 'pingus0428@gmail.com';
+                    const showMasterRecipes = isSuperAdmin ? true : (p.show_master_recipes === true);
                     setUser({ id: uid, email, displayId, role, showMasterRecipes });
                     try {
                         localStorage.setItem('auth_user_cache', JSON.stringify({ id: uid, email, displayId, role, showMasterRecipes }));
@@ -167,8 +168,10 @@ export const AuthProvider = ({ children }) => {
             cachedUser?.role ||
             'user';
         const role = String(rawRole).trim().toLowerCase();
-        const showMasterRecipes = (profile?.show_master_recipes === true)
-            || (profile?.show_master_recipes == null && cachedUser?.showMasterRecipes === true);
+
+        const isSuperAdmin = email === 'pingus0428@gmail.com';
+        const showMasterRecipes = isSuperAdmin ? true : ((profile?.show_master_recipes === true)
+            || (profile?.show_master_recipes == null && cachedUser?.showMasterRecipes === true));
 
         const newUser = {
             id: uid,

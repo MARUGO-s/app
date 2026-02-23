@@ -208,5 +208,62 @@ export const unitConversionService = {
         });
         if (error) throw error;
         return data;
-    }
+    },
+
+    /**
+     * 現在ユーザーの全材料マスターをゴミ箱（trash_ingredient_master）へ移動する
+     */
+    async moveAllToTrash() {
+        const userId = await this._getCurrentUserId();
+        if (!userId) throw new Error('ログインが必要です');
+
+        // Fetch all unit_conversions
+        const { data: ucData, error: ucErr } = await supabase
+            .from('unit_conversions')
+            .select('*')
+            .eq('user_id', userId);
+        if (ucErr) throw ucErr;
+
+        // Fetch all csv_unit_overrides
+        const { data: cuData, error: cuErr } = await supabase
+            .from('csv_unit_overrides')
+            .select('*')
+            .eq('user_id', userId);
+        if (cuErr) throw cuErr;
+
+        const total = (ucData || []).length;
+        if (total === 0 && (cuData || []).length === 0) return { moved: 0 };
+
+        // Insert snapshot into trash
+        const { error: insertErr } = await supabase
+            .from('trash_ingredient_master')
+            .insert([{
+                user_id: userId,
+                label: `一括削除（${new Date().toLocaleDateString('ja-JP')}）`,
+                snapshot_unit_conversions: ucData || [],
+                snapshot_csv_unit_overrides: cuData || [],
+            }]);
+        if (insertErr) throw insertErr;
+
+        // Delete all unit_conversions for this user
+        if ((ucData || []).length > 0) {
+            const { error: delUcErr } = await supabase
+                .from('unit_conversions')
+                .delete()
+                .eq('user_id', userId);
+            if (delUcErr) throw delUcErr;
+        }
+
+        // Delete all csv_unit_overrides for this user
+        if ((cuData || []).length > 0) {
+            const { error: delCuErr } = await supabase
+                .from('csv_unit_overrides')
+                .delete()
+                .eq('user_id', userId);
+            if (delCuErr) throw delCuErr;
+        }
+
+        return { moved: total };
+    },
 };
+

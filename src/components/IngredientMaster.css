@@ -6,8 +6,9 @@
 
 .master-header {
     display: flex;
-    justify-content: space-between;
+    flex-wrap: wrap;
     align-items: center;
+    gap: 12px;
     margin-bottom: 1.5rem;
 }
 

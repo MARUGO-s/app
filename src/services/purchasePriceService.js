@@ -202,6 +202,157 @@ export const purchasePriceService = {
         }
     },
 
+    /**
+     * 全CSVファイルをゴミ箱（trash_price_csvs）へ移動する
+     * ProgressCallback: ({ total, done, current }) => void
+     */
+    async moveAllToTrash(onProgress) {
+        const userId = await this._getCurrentUserId();
+        if (!userId) throw new Error('ログインが必要です');
+
+        // 1. List all CSV files
+        const { data: files, error: listErr } = await supabase.storage
+            .from(BUCKET_NAME)
+            .list(userId);
+        if (listErr) throw listErr;
+
+        const csvFiles = (files || []).filter(f => String(f?.name || '').toLowerCase().endsWith('.csv'));
+        const total = csvFiles.length;
+        let done = 0;
+
+        if (total === 0) return { moved: 0 };
+
+        const trashRows = [];
+        const failedFiles = [];
+
+        for (const file of csvFiles) {
+            const path = this._getUserScopedPath(userId, file.name);
+            if (onProgress) onProgress({ total, done, current: file.name });
+
+            try {
+                // Download file content
+                const { data: blob, error: dlErr } = await supabase.storage
+                    .from(BUCKET_NAME)
+                    .download(path);
+                if (dlErr) throw dlErr;
+
+                // Try to read as Shift-JIS, fallback to UTF-8
+                const buffer = await blob.arrayBuffer();
+                let csvContent = '';
+                try {
+                    csvContent = new TextDecoder('shift-jis').decode(buffer);
+                } catch {
+                    csvContent = new TextDecoder('utf-8').decode(buffer);
+                }
+
+                trashRows.push({
+                    user_id: userId,
+                    file_name: file.name,
+                    csv_content: csvContent,
+                    original_path: path,
+                });
+            } catch (e) {
+                console.error('Failed to read file for trash:', file.name, e);
+                failedFiles.push(file.name);
+            }
+            done++;
+        }
+
+        if (onProgress) onProgress({ total, done, current: 'ゴミ箱へ保存中...' });
+
+        // 2. Insert all to trash
+        if (trashRows.length > 0) {
+            const { error: insertErr } = await supabase
+                .from('trash_price_csvs')
+                .insert(trashRows);
+            if (insertErr) throw insertErr;
+        }
+
+        if (onProgress) onProgress({ total, done, current: 'Storageから削除中...' });
+
+        // 3. Delete from Storage
+        const pathsToRemove = trashRows.map(r => r.original_path);
+        if (pathsToRemove.length > 0) {
+            const { error: removeErr } = await supabase.storage
+                .from(BUCKET_NAME)
+                .remove(pathsToRemove);
+            if (removeErr) throw removeErr;
+        }
+
+        this.clearCache(userId);
+        return { moved: trashRows.length, failed: failedFiles };
+    },
+
+    /**
+     * 管理者専用: adminロール以外の全ユーザーのCSVファイルをStorageから一括削除する
+     * onProgress: ({ total, done, current }) => void
+     */
+    async adminClearAllNonAdminCsvs(onProgress) {
+        const currentUserId = await this._getCurrentUserId();
+        if (!currentUserId) throw new Error('ログインが必要です');
+
+        // 1. 全ユーザープロファイルを取得（admin_list_profiles RPCを使用）
+        const { data: profiles, error: profErr } = await supabase.rpc('admin_list_profiles');
+        if (profErr) throw profErr;
+
+        // 2. adminロール以外のユーザーIDを抽出（自分自身も除外）
+        const nonAdminUsers = (profiles || []).filter(p =>
+            p.role !== 'admin' && p.id !== currentUserId
+        );
+
+        const total = nonAdminUsers.length;
+        let done = 0;
+        const results = [];
+
+        for (const profile of nonAdminUsers) {
+            const targetUserId = profile.id;
+            const displayName = profile.email || profile.id;
+            if (onProgress) onProgress({ total, done, current: displayName });
+
+            try {
+                // ユーザーのCSVファイル一覧を取得
+                const { data: files, error: listErr } = await supabase.storage
+                    .from(BUCKET_NAME)
+                    .list(targetUserId);
+
+                if (listErr) {
+                    console.warn(`Failed to list files for ${displayName}:`, listErr.message);
+                    results.push({ userId: targetUserId, email: displayName, deleted: 0, error: listErr.message });
+                    done++;
+                    continue;
+                }
+
+                const csvFiles = (files || []).filter(f => String(f?.name || '').toLowerCase().endsWith('.csv'));
+                if (csvFiles.length === 0) {
+                    results.push({ userId: targetUserId, email: displayName, deleted: 0, error: null });
+                    done++;
+                    continue;
+                }
+
+                const paths = csvFiles.map(f => `${targetUserId}/${f.name}`);
+                const { error: removeErr } = await supabase.storage
+                    .from(BUCKET_NAME)
+                    .remove(paths);
+
+                if (removeErr) {
+                    results.push({ userId: targetUserId, email: displayName, deleted: 0, error: removeErr.message });
+                } else {
+                    results.push({ userId: targetUserId, email: displayName, deleted: csvFiles.length, error: null });
+                    this.clearCache(targetUserId);
+                }
+            } catch (e) {
+                results.push({ userId: targetUserId, email: displayName, deleted: 0, error: String(e?.message || e) });
+            }
+            done++;
+        }
+
+        if (onProgress) onProgress({ total, done, current: '完了' });
+
+        const totalDeleted = results.reduce((acc, r) => acc + (r.deleted || 0), 0);
+        const failedUsers = results.filter(r => r.error);
+        return { results, totalDeleted, failedUsers };
+    },
+
     _splitFileName(name) {
         const raw = String(name || '');
         const lastDot = raw.lastIndexOf('.');
