@@ -18,6 +18,7 @@ import { Planner } from './components/Planner';
 import { OrderList } from './components/OrderList';
 import ApiUsageLogs from './components/ApiUsageLogs';
 import { recipeService } from './services/recipeService';
+import { formatDisplayId } from './utils/formatUtils';
 import { userService } from './services/userService';
 import { STORE_LIST } from './constants';
 import { AuthProvider } from './contexts/AuthContext.jsx';
@@ -1060,7 +1061,7 @@ function AppContent() {
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
                           <div style={{ fontWeight: 'bold' }}>
-                            ログイン: {user?.displayId || user?.email || (user?.id ? `${String(user.id).slice(0, 8)}…` : '---')}
+                            ログイン: {formatDisplayId(user?.displayId || user?.email || (user?.id ? `${String(user.id).slice(0, 8)}…` : '---'))}
                           </div>
                           {user?.role === 'admin' && (
                             <span style={{

@@ -15,6 +15,7 @@ import { TrashBin } from './TrashBin';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { AdminTargetDeleteModal } from './AdminTargetDeleteModal';
 import { AdminCopyAllModal } from './AdminCopyAllModal';
+import { BackupManagement } from './BackupManagement';
 import { supabase } from '../supabase';
 import './DataManagement.css';
 
@@ -28,7 +29,7 @@ const toMonthKey = (dateStr) => {
 export const DataManagement = ({ onBack }) => {
     const [searchParams, setSearchParams] = useSearchParams();
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState('price'); // 'price' | 'ingredients' | 'csv-import' | 'duplicates' | 'trash'
+    const [activeTab, setActiveTab] = useState('price'); // 'price' | 'ingredients' | 'csv-import' | 'duplicates' | 'trash' | 'backup-management'
 
     // 一括コピー用ステート
     const [adminCopyAllOpen, setAdminCopyAllOpen] = useState(false);
@@ -683,6 +684,14 @@ export const DataManagement = ({ onBack }) => {
                     >
                         🗑️ ゴミ箱
                     </button>
+                    {user?.role === 'admin' && (
+                        <button
+                            className={`tab ${activeTab === 'backup-management' ? 'active' : ''} `}
+                            onClick={() => setActiveTab('backup-management')}
+                        >
+                            🗄️ バックアップ管理
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -726,6 +735,8 @@ export const DataManagement = ({ onBack }) => {
                 <CsvToMasterImporter />
             ) : activeTab === 'trash' ? (
                 <TrashBin />
+            ) : activeTab === 'backup-management' ? (
+                <BackupManagement />
             ) : activeTab === 'duplicates' ? (
                 <div className="dashboard-content">
                     <aside className="dashboard-sidebar">
@@ -1008,7 +1019,7 @@ export const DataManagement = ({ onBack }) => {
                                     block
                                     onClick={async () => {
                                         try {
-                                            const data = await import('../services/recipeService').then(m => m.recipeService.exportAllRecipes());
+                                            const data = await import('../services/recipeService').then(m => m.recipeService.exportAllRecipes(user));
                                             const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                                             const url = URL.createObjectURL(blob);
                                             const a = document.createElement('a');

@@ -852,10 +852,10 @@ export const recipeService = {
         await Promise.all(updates);
     },
 
-    async exportAllRecipes() {
+    async exportAllRecipes(currentUser) {
         // Fetch all data for backup
         // We reuse fetchRecipes to get the clean frontend format
-        return await this.fetchRecipes();
+        return await this.fetchRecipes(currentUser);
     },
 
     async importRecipes(recipes) {

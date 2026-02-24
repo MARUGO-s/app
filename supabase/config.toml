@@ -386,3 +386,9 @@ entrypoint = "./functions/db_tester/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/db_tester/*.html" ]
+
+[functions.scheduled-backup]
+enabled = true
+# cronジョブから呼ばれるためJWT検証はなし（SUPABASE_SERVICE_ROLE_KEY で自己認証）
+verify_jwt = false
+entrypoint = "./functions/scheduled-backup/index.ts"

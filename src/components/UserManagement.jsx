@@ -4,6 +4,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { Modal } from './Modal';
 import { useAuth } from '../contexts/useAuth';
+import { formatDisplayId } from '../utils/formatUtils';
 
 export const UserManagement = ({ onBack }) => {
     const { user: currentUser, patchCurrentUserProfile } = useAuth();
@@ -170,7 +171,7 @@ export const UserManagement = ({ onBack }) => {
             <Card key={user.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '15px', backgroundColor: 'white' }}>
                 <div style={{ flex: 1, minWidth: 0, marginRight: '16px' }}>
                     <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#333', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.display_id}</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatDisplayId(user.display_id)}</span>
                         {isAdmin && <span style={{ fontSize: '0.8rem', backgroundColor: '#e0e0e0', padding: '2px 6px', borderRadius: '4px', color: '#555' }}>管理者</span>}
                         {badge && (
                             <span style={{
@@ -373,7 +374,7 @@ export const UserManagement = ({ onBack }) => {
                 >
                     <div style={{ color: '#333', lineHeight: 1.5 }}>
                         <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>
-                            対象: {resetTarget?.display_id || resetTarget?.email || resetTarget?.id}
+                            対象: {formatDisplayId(resetTarget?.display_id || resetTarget?.email || resetTarget?.id)}
                         </div>
                         {resetTarget?.email && (
                             <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '12px', wordBreak: 'break-all' }}>
@@ -507,7 +508,7 @@ export const UserManagement = ({ onBack }) => {
                 >
                     <div style={{ color: 'var(--text-color)', lineHeight: 1.5, minHeight: '300px', display: 'flex', flexDirection: 'column' }}>
                         <div style={{ fontWeight: 'bold', marginBottom: '16px', paddingBottom: '8px', borderBottom: '1px solid #ddd' }}>
-                            対象: {logTarget?.display_id || logTarget?.email || logTarget?.id}
+                            対象: {formatDisplayId(logTarget?.display_id || logTarget?.email || logTarget?.id)}
                         </div>
 
                         {isLoadingLogs ? (
@@ -560,7 +561,7 @@ export const UserManagement = ({ onBack }) => {
                             以下のユーザーを完全に削除します。この操作は取り消せません。よろしいですか？
                         </div>
                         <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>
-                            対象: {deleteTarget?.display_id || deleteTarget?.email || deleteTarget?.id}
+                            対象: {formatDisplayId(deleteTarget?.display_id || deleteTarget?.email || deleteTarget?.id)}
                         </div>
                         {deleteTarget?.email && (
                             <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '20px', wordBreak: 'break-all' }}>
