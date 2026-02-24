@@ -1,16 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { userService } from '../services/userService';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Modal } from './Modal';
 import { useAuth } from '../contexts/useAuth';
 import { formatDisplayId } from '../utils/formatUtils';
+import './UserManagement.css';
+
+const NARROW_BREAKPOINT = 480;
 
 export const UserManagement = ({ onBack }) => {
     const { user: currentUser, patchCurrentUserProfile } = useAuth();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [isNarrow, setIsNarrow] = useState(false);
+    const innerRef = useRef(null);
     const [resetTarget, setResetTarget] = useState(null); // { id, display_id, email }
     const [resetPw1, setResetPw1] = useState('');
     const [resetPw2, setResetPw2] = useState('');
@@ -47,6 +52,26 @@ export const UserManagement = ({ onBack }) => {
     useEffect(() => {
         loadUsers();
     }, [loadUsers]);
+
+    useEffect(() => {
+        const el = innerRef.current;
+        if (!el) return;
+        const supportsResizeObserver = typeof window !== 'undefined' && typeof window.ResizeObserver !== 'undefined';
+        if (!supportsResizeObserver) {
+            setIsNarrow(el.getBoundingClientRect().width < NARROW_BREAKPOINT);
+            return undefined;
+        }
+
+        const ro = new window.ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const w = entry.contentRect.width;
+                setIsNarrow(w < NARROW_BREAKPOINT);
+            }
+        });
+        ro.observe(el);
+        setIsNarrow(el.getBoundingClientRect().width < NARROW_BREAKPOINT);
+        return () => ro.disconnect();
+    }, []);
 
     const admins = users.filter(u => u.role === 'admin');
     const regulars = users.filter(u => u.role !== 'admin');
@@ -166,78 +191,65 @@ export const UserManagement = ({ onBack }) => {
         setDeleteTarget
     }) => {
         const badge = getLoginBadge(user.last_sign_in_at);
+        const isEditableRoleTarget = !isSuperAdmin(user) && currentUser?.id !== user.id;
 
         return (
-            <Card key={user.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '15px', backgroundColor: 'white' }}>
-                <div style={{ flex: 1, minWidth: 0, marginRight: '16px' }}>
-                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#333', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatDisplayId(user.display_id)}</span>
-                        {isAdmin && <span style={{ fontSize: '0.8rem', backgroundColor: '#e0e0e0', padding: '2px 6px', borderRadius: '4px', color: '#555' }}>管理者</span>}
+            <Card key={user.id} className="user-management__card">
+                <div className="user-management__card-left">
+                    <div className="user-management__identity-row">
+                        <span className="user-management__display-id">{formatDisplayId(user.display_id)}</span>
+                        {isAdmin && <span className="user-management__role-badge">管理者</span>}
                         {badge && (
-                            <span style={{
+                            <span className="user-management__login-badge" style={{
                                 backgroundColor: badge.bg,
                                 color: badge.color,
-                                border: `1px solid ${badge.color}`,
-                                padding: '1px 6px',
-                                borderRadius: '12px',
-                                fontSize: '0.75rem',
-                                fontWeight: 'bold',
-                                lineHeight: 1
+                                borderColor: badge.color
                             }}>
                                 {badge.text}
                             </span>
                         )}
                     </div>
                     {user.email && (
-                        <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '6px', wordBreak: 'break-all' }}>
+                        <div className="user-management__email">
                             {user.email}
                         </div>
                     )}
-                    <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '4px' }}>
+                    <div className="user-management__meta">
                         登録: {new Date(user.created_at).toLocaleString()}
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+                    <div className="user-management__meta">
                         更新: {user.updated_at ? new Date(user.updated_at).toLocaleString() : '---'}
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+                    <div className="user-management__meta">
                         最終ログイン: {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : '記録なし'}
                     </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px', flexShrink: 0 }}>
-
-                    {!isSuperAdmin(user) && currentUser?.id !== user.id && (
-                        <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid #d1d5db', backgroundColor: '#f3f4f6', padding: '2px' }}>
+                <div className="user-management__card-right">
+                    {isEditableRoleTarget && (
+                        <div className="user-management__role-toggle-wrap">
                             <button
+                                type="button"
+                                className={`user-management__role-toggle-btn ${user.role !== 'admin' ? 'user-management__role-toggle-btn--active' : ''}`}
                                 onClick={() => handleRoleChange(user, 'user')}
                                 disabled={user.role !== 'admin'}
-                                style={{
-                                    padding: '4px 14px', fontSize: '0.85rem', cursor: user.role !== 'admin' ? 'default' : 'pointer', border: 'none', transition: 'all 0.2s', outline: 'none',
-                                    backgroundColor: user.role !== 'admin' ? '#fff' : 'transparent',
-                                    fontWeight: user.role !== 'admin' ? 'bold' : 'normal',
-                                    color: user.role !== 'admin' ? '#111827' : '#6b7280',
-                                    boxShadow: user.role !== 'admin' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
-                                    borderRadius: '4px'
-                                }}
-                            >通常</button>
+                            >
+                                通常
+                            </button>
                             <button
+                                type="button"
+                                className={`user-management__role-toggle-btn user-management__role-toggle-btn--admin ${user.role === 'admin' ? 'user-management__role-toggle-btn--active' : ''}`}
                                 onClick={() => handleRoleChange(user, 'admin')}
                                 disabled={user.role === 'admin'}
-                                style={{
-                                    padding: '4px 14px', fontSize: '0.85rem', cursor: user.role === 'admin' ? 'default' : 'pointer', border: 'none', transition: 'all 0.2s', outline: 'none',
-                                    backgroundColor: user.role === 'admin' ? '#fff' : 'transparent',
-                                    fontWeight: user.role === 'admin' ? 'bold' : 'normal',
-                                    color: user.role === 'admin' ? '#ef4444' : '#6b7280',
-                                    boxShadow: user.role === 'admin' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
-                                    borderRadius: '4px'
-                                }}
-                            >管理者</button>
+                            >
+                                管理者
+                            </button>
                         </div>
                     )}
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <div className="user-management__card-actions-row">
                         {!isSuperAdmin(user) && (
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', color: '#555' }}>
+                            <label className="user-management__master-toggle">
                                 <input
                                     type="checkbox"
                                     checked={user.show_master_recipes || false}
@@ -249,10 +261,10 @@ export const UserManagement = ({ onBack }) => {
                         )}
 
                         <Button
-                            variant="ghost"
+                            variant="secondary"
                             size="sm"
                             onClick={() => handleOpenLoginLogs(user)}
-                            style={{ whiteSpace: 'nowrap' }}
+                            className="user-management__action-btn"
                         >
                             ログイン履歴
                         </Button>
@@ -266,7 +278,7 @@ export const UserManagement = ({ onBack }) => {
                                 setResetError('');
                                 setResetSuccess('');
                             }}
-                            style={{ whiteSpace: 'nowrap' }}
+                            className="user-management__action-btn"
                         >
                             パスワード再設定
                         </Button>
@@ -276,7 +288,7 @@ export const UserManagement = ({ onBack }) => {
                                 variant="danger"
                                 size="sm"
                                 onClick={() => setDeleteTarget(user)}
-                                style={{ whiteSpace: 'nowrap' }}
+                                className="user-management__action-btn"
                             >
                                 削除
                             </Button>
@@ -288,9 +300,9 @@ export const UserManagement = ({ onBack }) => {
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', width: '100%', overflowY: 'auto', flex: 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', color: 'var(--text-color)' }}>
+        <div className={`user-management${isNarrow ? ' user-management--narrow' : ''}`}>
+            <div ref={innerRef} className="user-management__inner">
+                <div className="user-management__header">
                     <h2>ユーザー管理</h2>
                     <Button variant="ghost" onClick={onBack}>戻る</Button>
                 </div>
@@ -302,11 +314,11 @@ export const UserManagement = ({ onBack }) => {
                 {loading ? (
                     <div style={{ textAlign: 'center', padding: '20px' }}>読み込み中...</div>
                 ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+                    <div className="user-management__content">
                         {admins.length > 0 && (
                             <div>
-                                <h3 style={{ borderBottom: '2px solid var(--color-primary)', paddingBottom: '0.5rem', marginBottom: '1rem', color: 'var(--color-primary)' }}>管理者</h3>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <h3 className="user-management__section-title user-management__section-title--admin">管理者</h3>
+                                <div className="user-management__list">
                                     {admins.map(u => (
                                         <UserCard
                                             key={u.id}
@@ -331,8 +343,8 @@ export const UserManagement = ({ onBack }) => {
                         )}
 
                         <div>
-                            <h3 style={{ borderBottom: '2px solid #ddd', paddingBottom: '0.5rem', marginBottom: '1rem', color: 'var(--text-color)' }}>登録ユーザー</h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <h3 className="user-management__section-title user-management__section-title--default">登録ユーザー</h3>
+                            <div className="user-management__list">
                                 {regulars.length > 0 ? (
                                     regulars.map(u => (
                                         <UserCard
