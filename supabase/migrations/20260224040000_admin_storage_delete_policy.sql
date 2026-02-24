@@ -12,7 +12,6 @@ create policy "Admins can delete any file in app-data"
       and profiles.role = 'admin'
     )
   );
-
 -- 管理者が自分のファイルをアップロードできるポリシーを追加（既存の場合はスキップ）
 drop policy if exists "Admins can upload files to app-data" on storage.objects;
 create policy "Admins can upload files to app-data"
@@ -25,7 +24,6 @@ create policy "Admins can upload files to app-data"
       and profiles.role = 'admin'
     )
   );
-
 -- 通常ユーザーが自分のフォルダにファイルをアップロード/削除できるポリシー
 drop policy if exists "Users can manage own files in app-data" on storage.objects;
 create policy "Users can manage own files in app-data"

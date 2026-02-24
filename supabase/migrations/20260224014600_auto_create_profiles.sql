@@ -22,13 +22,11 @@ begin
   return new;
 end;
 $$;
-
 -- auth.usersテーブルにトリガーを設定
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
-
 -- まだプロファイルが作成されていない既存ユーザーを一括登録（バックフィル）
 insert into public.profiles (id, display_id, email, role, show_master_recipes)
 select 

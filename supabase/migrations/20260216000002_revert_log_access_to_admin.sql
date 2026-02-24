@@ -2,7 +2,6 @@
 
 DROP POLICY IF EXISTS "ログインユーザーは閲覧可能" ON api_usage_logs;
 DROP POLICY IF EXISTS "全ユーザー閲覧可能" ON api_usage_logs;
-
 CREATE POLICY "管理者のみ閲覧可能" ON api_usage_logs
   FOR SELECT
   TO authenticated

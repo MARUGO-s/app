@@ -1,6 +1,5 @@
 -- Create/normalize meal_plans table for planner persistence (Supabase-first, user scoped)
 begin;
-
 create table if not exists public.meal_plans (
   id uuid primary key default gen_random_uuid(),
   user_id text not null,
@@ -13,7 +12,6 @@ create table if not exists public.meal_plans (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 do $$
 begin
   if not exists (
@@ -114,69 +112,54 @@ begin
     alter table public.meal_plans add column updated_at timestamptz default now();
   end if;
 end $$;
-
 alter table public.meal_plans alter column user_id set not null;
 alter table public.meal_plans alter column plan_date set not null;
 alter table public.meal_plans alter column recipe_id set not null;
-
 alter table public.meal_plans alter column meal_type set default 'dinner';
 update public.meal_plans set meal_type = coalesce(nullif(meal_type, ''), 'dinner');
 alter table public.meal_plans alter column meal_type set not null;
-
 alter table public.meal_plans alter column note set default '';
 update public.meal_plans set note = coalesce(note, '');
 alter table public.meal_plans alter column note set not null;
-
 alter table public.meal_plans alter column multiplier set default 1;
 update public.meal_plans set multiplier = coalesce(multiplier, 1);
 alter table public.meal_plans alter column multiplier set not null;
-
 alter table public.meal_plans alter column created_at set default now();
 update public.meal_plans set created_at = coalesce(created_at, now());
 alter table public.meal_plans alter column created_at set not null;
-
 alter table public.meal_plans alter column updated_at set default now();
 update public.meal_plans set updated_at = coalesce(updated_at, now());
 alter table public.meal_plans alter column updated_at set not null;
-
 create index if not exists meal_plans_user_date_idx
   on public.meal_plans (user_id, plan_date);
-
 create index if not exists meal_plans_user_recipe_idx
   on public.meal_plans (user_id, recipe_id);
-
 alter table public.meal_plans enable row level security;
-
 drop policy if exists meal_plans_select_own on public.meal_plans;
 drop policy if exists meal_plans_insert_own on public.meal_plans;
 drop policy if exists meal_plans_update_own on public.meal_plans;
 drop policy if exists meal_plans_delete_own on public.meal_plans;
-
 create policy meal_plans_select_own
 on public.meal_plans
 for select
 to authenticated
 using (user_id = auth.uid()::text);
-
 create policy meal_plans_insert_own
 on public.meal_plans
 for insert
 to authenticated
 with check (user_id = auth.uid()::text);
-
 create policy meal_plans_update_own
 on public.meal_plans
 for update
 to authenticated
 using (user_id = auth.uid()::text)
 with check (user_id = auth.uid()::text);
-
 create policy meal_plans_delete_own
 on public.meal_plans
 for delete
 to authenticated
 using (user_id = auth.uid()::text);
-
 create or replace function public.update_updated_at_column()
 returns trigger as $$
 begin
@@ -184,11 +167,9 @@ begin
   return new;
 end;
 $$ language plpgsql;
-
 drop trigger if exists update_meal_plans_updated_at on public.meal_plans;
 create trigger update_meal_plans_updated_at
 before update on public.meal_plans
 for each row
 execute function public.update_updated_at_column();
-
 commit;

@@ -3,4 +3,3 @@
 
 alter table public.unit_conversions
   add column if not exists vendor text;
-

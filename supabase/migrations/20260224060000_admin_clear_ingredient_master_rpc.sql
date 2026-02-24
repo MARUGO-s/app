@@ -37,5 +37,4 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION admin_clear_all_non_admin_ingredient_master() TO authenticated;

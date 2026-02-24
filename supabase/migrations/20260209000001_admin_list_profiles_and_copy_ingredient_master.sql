@@ -34,10 +34,7 @@ begin
     order by p.created_at desc;
 end;
 $$;
-
 grant execute on function public.admin_list_profiles() to authenticated;
-
-
 create or replace function public.admin_copy_ingredient_master(
   target_profile_id uuid,
   overwrite boolean default false
@@ -248,6 +245,4 @@ begin
   );
 end;
 $$;
-
 grant execute on function public.admin_copy_ingredient_master(uuid, boolean) to authenticated;
-

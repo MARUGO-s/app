@@ -2,7 +2,6 @@
 -- 今回は要望通り「全員が見れる」ように全公開とする
 
 DROP POLICY IF EXISTS "管理者のみ閲覧可能" ON api_usage_logs;
-
 CREATE POLICY "ログインユーザーは閲覧可能" ON api_usage_logs
   FOR SELECT
   TO authenticated

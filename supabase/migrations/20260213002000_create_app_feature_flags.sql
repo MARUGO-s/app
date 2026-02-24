@@ -8,20 +8,16 @@ create table if not exists public.app_feature_flags (
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now()
 );
-
 insert into public.app_feature_flags (feature_key, enabled)
 values ('voice_input_enabled', false)
 on conflict (feature_key) do nothing;
-
 alter table public.app_feature_flags enable row level security;
-
 drop policy if exists app_feature_flags_select_authenticated on public.app_feature_flags;
 create policy app_feature_flags_select_authenticated
   on public.app_feature_flags
   for select
   to authenticated
   using (true);
-
 -- Direct writes are admin-only.
 drop policy if exists app_feature_flags_insert_admin on public.app_feature_flags;
 create policy app_feature_flags_insert_admin
@@ -29,7 +25,6 @@ create policy app_feature_flags_insert_admin
   for insert
   to authenticated
   with check (public.is_admin());
-
 drop policy if exists app_feature_flags_update_admin on public.app_feature_flags;
 create policy app_feature_flags_update_admin
   on public.app_feature_flags
@@ -37,14 +32,12 @@ create policy app_feature_flags_update_admin
   to authenticated
   using (public.is_admin())
   with check (public.is_admin());
-
 drop policy if exists app_feature_flags_delete_admin on public.app_feature_flags;
 create policy app_feature_flags_delete_admin
   on public.app_feature_flags
   for delete
   to authenticated
   using (public.is_admin());
-
 create or replace function public.get_feature_flag(p_key text)
 returns boolean
 language plpgsql
@@ -69,9 +62,7 @@ begin
   return coalesce(v_enabled, false);
 end;
 $$;
-
 grant execute on function public.get_feature_flag(text) to authenticated;
-
 create or replace function public.admin_set_feature_flag(p_key text, p_enabled boolean)
 returns public.app_feature_flags
 language plpgsql
@@ -111,5 +102,4 @@ begin
   return out_row;
 end;
 $$;
-
 grant execute on function public.admin_set_feature_flag(text, boolean) to authenticated;

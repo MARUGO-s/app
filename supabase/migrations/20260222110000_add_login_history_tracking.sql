@@ -6,13 +6,10 @@ create table if not exists public.user_login_logs (
     user_id uuid not null references auth.users(id) on delete cascade on update cascade,
     login_at timestamp with time zone not null default now()
 );
-
 -- Index for faster queries per user (sorted by recent)
 create index if not exists idx_user_login_logs_user_id ON public.user_login_logs (user_id, login_at desc);
-
 -- RLS: Only admins can view logs
 alter table public.user_login_logs enable row level security;
-
 create policy "Admins can view all login logs" on public.user_login_logs
     for select
     to authenticated
@@ -22,7 +19,6 @@ create policy "Admins can view all login logs" on public.user_login_logs
             where profiles.id = auth.uid() and profiles.role = 'admin'
         )
     );
-
 -- 2. Create trigger function to record logins
 -- This listens to updates on auth.users.last_sign_in_at
 create or replace function public.log_user_login()
@@ -40,15 +36,12 @@ begin
     return NEW;
 end;
 $$;
-
 -- Attach trigger to auth.users
 drop trigger if exists on_auth_user_login on auth.users;
 create trigger on_auth_user_login
     after update of last_sign_in_at on auth.users
     for each row
     execute function public.log_user_login();
-
-
 -- 3. Create Admin RPC to fetch logs
 create or replace function public.admin_get_login_logs(p_user_id uuid)
 returns table (
@@ -78,14 +71,10 @@ begin
         order by l.login_at desc;
 end;
 $$;
-
 grant execute on function public.admin_get_login_logs(uuid) to authenticated;
-
-
 -- 4. Update admin_list_profiles to include last_sign_in_at from auth.users
 -- Drop existing implementation of admin_list_profiles to redefine return type
 drop function if exists public.admin_list_profiles();
-
 create or replace function public.admin_list_profiles()
 -- Return table with profile fields + last_sign_in_at
 returns table (
@@ -139,5 +128,4 @@ begin
     order by p.created_at desc;
 end;
 $$;
-
 grant execute on function public.admin_list_profiles() to authenticated;

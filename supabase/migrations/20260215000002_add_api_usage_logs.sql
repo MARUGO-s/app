@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS api_usage_logs (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   
   -- API情報
-  api_name TEXT NOT NULL,  -- 'gemini', 'openai', 'deepl', 'azure', 'groq'
+  api_name TEXT NOT NULL,  -- 'gemini', 'openai', 'deepl', 'azure', 'groq', 'avalon'
   endpoint TEXT NOT NULL,  -- Edge Function名 (例: 'analyze-image', 'parse-delivery-pdf')
   model_name TEXT,  -- 使用したモデル名 (例: 'gemini-1.5-flash', 'gpt-4o-mini')
   
@@ -29,14 +29,12 @@ CREATE TABLE IF NOT EXISTS api_usage_logs (
   -- メタデータ
   metadata JSONB  -- その他の追加情報
 );
-
 -- インデックス作成
 CREATE INDEX IF NOT EXISTS idx_api_usage_logs_created_at ON api_usage_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_api_usage_logs_api_name ON api_usage_logs(api_name);
 CREATE INDEX IF NOT EXISTS idx_api_usage_logs_endpoint ON api_usage_logs(endpoint);
 CREATE INDEX IF NOT EXISTS idx_api_usage_logs_user_id ON api_usage_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_api_usage_logs_status ON api_usage_logs(status);
-
 -- 古いログを自動削除する関数（90日以上前）
 CREATE OR REPLACE FUNCTION cleanup_old_api_usage_logs()
 RETURNS void AS $$
@@ -45,10 +43,8 @@ BEGIN
   WHERE created_at < NOW() - INTERVAL '90 days';
 END;
 $$ LANGUAGE plpgsql;
-
 -- 管理者のみアクセス可能にするRLSポリシー
 ALTER TABLE api_usage_logs ENABLE ROW LEVEL SECURITY;
-
 -- 管理者のみ全データを閲覧可能
 CREATE POLICY "管理者のみ閲覧可能" ON api_usage_logs
   FOR SELECT
@@ -60,13 +56,11 @@ CREATE POLICY "管理者のみ閲覧可能" ON api_usage_logs
       AND profiles.role = 'admin'
     )
   );
-
 -- サービスロール（Edge Function）は常に挿入可能
 CREATE POLICY "サービスロールは挿入可能" ON api_usage_logs
   FOR INSERT
   TO service_role
   WITH CHECK (true);
-
 -- コメント
 COMMENT ON TABLE api_usage_logs IS 'API使用ログ（管理者専用）';
 COMMENT ON COLUMN api_usage_logs.api_name IS 'API名（gemini, openai, deepl等）';

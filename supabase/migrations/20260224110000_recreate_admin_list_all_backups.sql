@@ -2,7 +2,6 @@
 -- RETURNS TABLE のカラム名 'id' が PL/pgSQL 内部変数と衝突するため 'backup_id' に変更
 
 DROP FUNCTION IF EXISTS public.admin_list_all_backups();
-
 CREATE FUNCTION public.admin_list_all_backups()
 RETURNS TABLE (
   backup_id    uuid,
@@ -41,5 +40,4 @@ BEGIN
   ORDER BY p.display_id, ab.generation;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.admin_list_all_backups() TO authenticated;

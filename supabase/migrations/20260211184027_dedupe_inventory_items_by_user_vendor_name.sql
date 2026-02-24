@@ -10,7 +10,6 @@ set
 where
   name <> btrim(name)
   or coalesce(vendor, '') <> coalesce(nullif(btrim(vendor), ''), '');
-
 -- 2) Remove duplicates and keep only the latest row in each key group.
 with ranked as (
   select
@@ -31,7 +30,6 @@ delete from public.inventory_items i
 using ranked r
 where i.id = r.id
   and r.rn > 1;
-
 -- 3) Prevent future duplicates for the same logical key.
 create unique index if not exists idx_inventory_items_user_name_vendor_unique_norm
 on public.inventory_items (

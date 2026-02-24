@@ -40,5 +40,4 @@ BEGIN
   ORDER BY p.display_id, ab.generation;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.admin_list_all_backups() TO authenticated;

@@ -11,20 +11,16 @@ CREATE TABLE IF NOT EXISTS public.account_backups (
   -- ユーザーごとに generation は一意（UPSERT で上書きするため）
   UNIQUE (user_id, generation)
 );
-
 -- インデックス
 CREATE INDEX IF NOT EXISTS idx_account_backups_user_id ON public.account_backups (user_id);
 CREATE INDEX IF NOT EXISTS idx_account_backups_created_at ON public.account_backups (created_at DESC);
-
 -- RLS 有効化
 ALTER TABLE public.account_backups ENABLE ROW LEVEL SECURITY;
-
 -- ユーザーは自分のバックアップを参照可能
 DROP POLICY IF EXISTS "Users can read own backups" ON public.account_backups;
 CREATE POLICY "Users can read own backups"
   ON public.account_backups FOR SELECT
   USING (auth.uid() = user_id);
-
 -- 管理者は全件参照可能（profiles テーブルで role = 'admin' チェック）
 DROP POLICY IF EXISTS "Admins can read all backups" ON public.account_backups;
 CREATE POLICY "Admins can read all backups"
@@ -35,14 +31,12 @@ CREATE POLICY "Admins can read all backups"
       WHERE id = auth.uid() AND role = 'admin'
     )
   );
-
 -- サービスロール（Edge Function）は全件INSERT/UPDATE可能
 DROP POLICY IF EXISTS "Service role can upsert backups" ON public.account_backups;
 CREATE POLICY "Service role can upsert backups"
   ON public.account_backups FOR ALL
   USING (auth.role() = 'service_role')
   WITH CHECK (auth.role() = 'service_role');
-
 -- 管理者もINSERT/UPDATE可能（手動バックアップ用）
 DROP POLICY IF EXISTS "Admins can upsert backups" ON public.account_backups;
 CREATE POLICY "Admins can upsert backups"
@@ -59,7 +53,6 @@ CREATE POLICY "Admins can upsert backups"
       WHERE id = auth.uid() AND role = 'admin'
     )
   );
-
 -- ============================================================
 -- RPC: admin_list_all_backups
 -- 全ユーザーのバックアップ一覧を管理者向けに返す
@@ -103,9 +96,7 @@ BEGIN
   ORDER BY p.display_id, ab.generation;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.admin_list_all_backups() TO authenticated;
-
 -- ============================================================
 -- RPC: admin_trigger_backup_for_user
 -- 特定ユーザーのレシピを backup_data として受け取り保存する
@@ -167,6 +158,5 @@ BEGIN
     created_at   = EXCLUDED.created_at;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.admin_save_backup(uuid, jsonb, integer, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_save_backup(uuid, jsonb, integer, text) TO service_role;

@@ -4,4 +4,3 @@
 
 alter table public.inventory_items
   add column if not exists tax10_override boolean default false;
-

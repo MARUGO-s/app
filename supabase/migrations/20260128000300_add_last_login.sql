@@ -11,5 +11,4 @@ begin
     add column if not exists last_login_at timestamp with time zone;
   end if;
 end $$;
-
--- Optional: set initial value for existing users (null is fine, means 'never logged in' or 'unknown')
+-- Optional: set initial value for existing users (null is fine, means 'never logged in' or 'unknown');

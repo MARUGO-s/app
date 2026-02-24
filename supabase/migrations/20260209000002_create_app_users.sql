@@ -8,6 +8,5 @@ CREATE TABLE IF NOT EXISTS app_users (
     secret_answer TEXT,
     last_login_at TIMESTAMP WITH TIME ZONE
 );
-
 -- Add comments
 COMMENT ON TABLE app_users IS 'Application users table synced from production';

@@ -1,7 +1,6 @@
 -- Final fix to ensure admin_list_profiles correctly returns last_sign_in_at without cache issues
 
 drop function if exists public.admin_list_profiles();
-
 -- Using a simpler explicit column list and ensuring we don't return unexpected columns
 create or replace function public.admin_list_profiles()
 returns table (
@@ -55,8 +54,6 @@ begin
     order by p.created_at desc;
 end;
 $$;
-
 grant execute on function public.admin_list_profiles() to authenticated;
-
 -- Also explicitly rebuild the cache
 NOTIFY pgrst, 'reload schema';

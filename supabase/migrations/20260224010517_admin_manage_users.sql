@@ -36,10 +36,7 @@ begin
     where id = p_user_id;
 end;
 $$;
-
 grant execute on function public.admin_set_role(uuid, text) to authenticated;
-
-
 -- 2. admin_delete_user
 -- Admin user can delete other users
 create or replace function public.admin_delete_user(
@@ -92,5 +89,4 @@ begin
 
 end;
 $$;
-
 grant execute on function public.admin_delete_user(uuid) to authenticated;

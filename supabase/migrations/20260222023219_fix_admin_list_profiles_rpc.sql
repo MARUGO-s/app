@@ -1,6 +1,5 @@
 -- Drop existing implementation of admin_list_profiles to redefine return type without avatar_url
 drop function if exists public.admin_list_profiles();
-
 create or replace function public.admin_list_profiles()
 -- Return table with profile fields + last_sign_in_at
 returns table (
@@ -52,5 +51,4 @@ begin
     order by p.created_at desc;
 end;
 $$;
-
 grant execute on function public.admin_list_profiles() to authenticated;

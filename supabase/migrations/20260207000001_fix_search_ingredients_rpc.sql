@@ -34,6 +34,5 @@ BEGIN
     LIMIT max_results;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
-
 -- Grant execution permission to authenticated users
 GRANT EXECUTE ON FUNCTION public.search_ingredients(TEXT, INT) TO authenticated;

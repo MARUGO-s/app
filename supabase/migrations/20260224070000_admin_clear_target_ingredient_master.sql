@@ -39,5 +39,4 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION admin_clear_target_user_ingredient_master(UUID) TO authenticated;

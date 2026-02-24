@@ -36,5 +36,4 @@ as $$
     select 'owner:admin'
   ) t;
 $$;
-
 grant execute on function public.get_master_recipe_owner_tags() to authenticated;

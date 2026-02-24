@@ -36,5 +36,4 @@ BEGIN
   );
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION admin_clear_all_user_trash() TO authenticated;

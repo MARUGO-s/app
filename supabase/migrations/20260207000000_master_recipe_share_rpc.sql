@@ -45,9 +45,7 @@ begin
   return updated_profile;
 end;
 $$;
-
 grant execute on function public.admin_set_show_master_recipes(uuid, boolean) to authenticated;
-
 create or replace function public.get_master_recipe_owner_tags()
 returns text[]
 language sql
@@ -78,5 +76,4 @@ as $$
     select 'owner:admin'
   ) t;
 $$;
-
 grant execute on function public.get_master_recipe_owner_tags() to authenticated;

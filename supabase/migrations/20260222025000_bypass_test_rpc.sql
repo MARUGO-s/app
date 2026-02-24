@@ -30,7 +30,6 @@ begin
     order by p.created_at desc;
 end;
 $$;
-
 create or replace function public.admin_get_login_logs_test(p_user_id uuid)
 returns table (
     login_at timestamp with time zone
@@ -47,9 +46,7 @@ begin
         order by l.login_at desc;
 end;
 $$;
-
 grant execute on function public.admin_list_profiles_test() to anon, authenticated;
 grant execute on function public.admin_get_login_logs_test(uuid) to anon, authenticated;
-
 -- Force postgREST schematic reload
 NOTIFY pgrst, 'reload schema';
