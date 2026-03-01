@@ -589,6 +589,110 @@ Deno.serve(async (req) => {
     }
 
     // ---------------------------------------------------------
+    // Site-Specific Logic: Freddy's Harajuku (WordPress paragraphs + <br>)
+    // ---------------------------------------------------------
+    if (!recipeData && url.includes('freddysharajuku.com')) {
+      console.log("Detecting Freddy's Harajuku URL...");
+
+      const title =
+        $('h1.entry-title').first().text().trim() ||
+        $('meta[property="og:title"]').attr('content')?.trim() ||
+        $('h1').first().text().trim();
+      const description =
+        $('meta[name="description"]').attr('content') ||
+        $('meta[property="og:description"]').attr('content') ||
+        '';
+      const image =
+        $('meta[property="og:image"]').attr('content') ||
+        $('.entry-content img').first().attr('src') ||
+        '';
+
+      const ingredients: any[] = [];
+      const steps: string[] = [];
+      let recipeYield = '';
+      let currentGroup = 'Main';
+      let inRecipeSection = false;
+
+      const isIngredientLike = (line: string) => {
+        const text = String(line || '').trim();
+        if (!text) return false;
+
+        // Ex: "1 oz sugar", ".25oz honey", "1/2 cup milk", "1 Korean pear..."
+        if (/^(?:\d+(?:\.\d+)?(?:\/\d+)?|\.\d+|[¼½¾⅓⅔⅛⅜⅝⅞])/.test(text)) return true;
+
+        const lower = text.toLowerCase();
+        // Ex: "a pinch of salt", "a knob ginger", "pinch of..."
+        if (/^(?:a|an)\s+(?:pinch|dash|few|handful|knob)\b/.test(lower)) return true;
+        if (/^(?:pinch|dash)\b/.test(lower)) return true;
+
+        return false;
+      };
+
+      $('.entry-content p.wp-block-paragraph, .entry-content p').each((_, el) => {
+        const paragraphHtml = $(el).html() || '';
+        if (!paragraphHtml) return;
+
+        const lines = paragraphHtml
+          .split(/<br\s*\/?>/i)
+          .map((part) => part.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim())
+          .filter(Boolean);
+
+        lines.forEach((rawLine) => {
+          const line = String(rawLine || '').trim();
+          if (!line) return;
+
+          // Ex: "Makes 6-8 servings:"
+          const makesMatch = line.match(/^makes?\s+(.+?)\s*(?:servings?)?[:：]?\s*$/i);
+          if (makesMatch) {
+            inRecipeSection = true;
+            if (!recipeYield) {
+              recipeYield = makesMatch[1].trim();
+            }
+            return;
+          }
+
+          // Ex: "For the ginger sable:"
+          const groupMatch = line.match(/^for\s+(.+?)[:：]\s*$/i);
+          if (groupMatch) {
+            inRecipeSection = true;
+            currentGroup = groupMatch[1].trim() || 'Main';
+            return;
+          }
+
+          // Skip intros before recipe starts
+          if (!inRecipeSection) return;
+
+          if (isIngredientLike(line)) {
+            const parsed = parseIngredient(line);
+            if (parsed?.name) {
+              ingredients.push({
+                ...parsed,
+                group: currentGroup || 'Main',
+              });
+            }
+            return;
+          }
+
+          // In this site, instruction lines are plain sentences after ingredient lines.
+          if (line.length >= 12) {
+            steps.push(line);
+          }
+        });
+      });
+
+      if (title && (ingredients.length > 0 || steps.length > 0)) {
+        recipeData = {
+          name: title,
+          description,
+          image,
+          recipeIngredient: ingredients,
+          recipeInstructions: steps,
+          recipeYield: recipeYield || '',
+        };
+      }
+    }
+
+    // ---------------------------------------------------------
     // Strategy 2: Universal HTML Parsing (Fallback)
     // ---------------------------------------------------------
     if (!recipeData) {
