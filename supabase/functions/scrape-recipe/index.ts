@@ -858,7 +858,47 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Fallback 2: markdown-reader for heavily JS-rendered cases.
+      // Fallback 2: Extract from embedded script payload (Wix initial state JSON).
+      if (ingredients.length === 0 || steps.length === 0) {
+        try {
+          let scriptBlob = '';
+          $('script').each((_, el) => {
+            const txt = String($(el).html() || '');
+            if (!txt || txt.length < 300) return;
+            if (!/ingredients?/i.test(txt)) return;
+            if (!/(process|method|instruction|directions?)/i.test(txt)) return;
+            scriptBlob += `\n${txt}`;
+          });
+
+          if (scriptBlob) {
+            const decoded = scriptBlob
+              .replace(/\\n/g, '\n')
+              .replace(/\\"/g, '"')
+              .replace(/\\'/g, "'")
+              .replace(/\\u003[Cc]/g, '<')
+              .replace(/\\u003[Ee]/g, '>')
+              .replace(/\\u0026/g, '&')
+              .replace(/\\\//g, '/');
+
+            const scriptLines = decoded
+              .replace(/<br\s*\/?>/gi, '\n')
+              .replace(/<\/p>/gi, '\n')
+              .replace(/<[^>]+>/g, ' ')
+              .split('\n')
+              .flatMap((line) => line.split(/\s{2,}/));
+
+            const scriptParsed = parseAndreaLines(scriptLines, false);
+            if (ingredients.length === 0 && scriptParsed.ingredients.length > 0) ingredients = scriptParsed.ingredients;
+            if (steps.length === 0 && scriptParsed.steps.length > 0) steps = scriptParsed.steps;
+            if (!description && scriptParsed.description) description = scriptParsed.description;
+            console.log(`Andrea script parse: ingredients=${scriptParsed.ingredients.length}, steps=${scriptParsed.steps.length}`);
+          }
+        } catch (e) {
+          console.warn('Andrea script fallback failed', e);
+        }
+      }
+
+      // Fallback 3: markdown-reader for heavily JS-rendered cases.
       if (ingredients.length === 0 || steps.length === 0) {
         const sourceUrl = url.replace(/^https?:\/\//i, '');
         const readerUrl = `https://r.jina.ai/http://${sourceUrl}`;
