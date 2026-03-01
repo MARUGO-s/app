@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,6 +18,22 @@ serve(async (req) => {
   }
 
   try {
+    const token = getAuthToken(req);
+    if (!token) {
+      return new Response(
+        JSON.stringify({ success: false, error: '認証が必要です。' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      )
+    }
+    try {
+      await verifySupabaseJWT(token);
+    } catch {
+      return new Response(
+        JSON.stringify({ success: false, error: 'トークンが無効または期限切れです。' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      )
+    }
+
     // レート制限チェック
     const clientIP = req.headers.get('x-forwarded-for') || 'unknown'
     const now = Date.now()

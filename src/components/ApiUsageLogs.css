@@ -222,6 +222,18 @@
   font-weight: 600;
 }
 
+.cost-breakdown {
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: 0.88;
+  min-width: 220px;
+}
+
+.cost-breakdown-total {
+  margin-top: 2px;
+  font-weight: 700;
+}
+
 .error-msg {
   color: #ff6b6b;
   font-size: 12px;

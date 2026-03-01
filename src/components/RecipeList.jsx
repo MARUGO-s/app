@@ -254,6 +254,14 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
     const otherUsersPublicRecipes = publicRecipes.filter(r => !isOwnedByCurrentUser(r));
     const nonPublicShared = recipes.filter(r => !isPublicRecipe(r));
 
+    // If all available recipes are public, avoid looking "empty" by auto-showing a public section.
+    const effectivePublicRecipeView = (() => {
+        if (publicRecipeView !== 'none') return publicRecipeView;
+        if (publicRecipes.length === 0 || nonPublicShared.length > 0) return 'none';
+        if (myPublicRecipes.length > 0) return 'mine';
+        return 'others';
+    })();
+
     const {
         cookingRecipes,
         breadRecipes,
@@ -357,9 +365,9 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
     };
 
     const renderPublicRecipeSections = () => {
-        if (publicRecipeView !== 'mine' && publicRecipeView !== 'others') return null;
+        if (effectivePublicRecipeView !== 'mine' && effectivePublicRecipeView !== 'others') return null;
 
-        const isMine = publicRecipeView === 'mine';
+        const isMine = effectivePublicRecipeView === 'mine';
         const title = isMine ? '自分が公開中' : '他ユーザー公開';
         const icon = isMine ? '🟢' : '🌐';
         const sectionPrefix = isMine ? 'public-mine' : 'public-others';
@@ -395,7 +403,7 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
     };
 
     const shouldShowPublicHiddenHint =
-        publicRecipeView === 'none' &&
+        effectivePublicRecipeView === 'none' &&
         publicRecipes.length > 0 &&
         nonPublicShared.length === 0;
 

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts";
+import { APILogger, getGeminiCostBreakdown } from "../_shared/api-logger.ts";
 
 type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -20,6 +21,13 @@ type RequestPayload = {
   mode?: string;
   siteLanguage?: string;
   isJapaneseSite?: boolean;
+  logFeature?: string;
+  logContext?: {
+    source?: string;
+    feature?: string;
+    currentView?: string;
+    assistantMode?: string;
+  };
 };
 
 const corsHeaders = {
@@ -27,16 +35,23 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const DEFAULT_MODEL = "gemini-1.5-flash";
+const FORCED_LITE_MODEL = "gemini-2.5-flash-lite";
 const PRO_MODEL_SEGMENT_RE = /(^|[-_])pro($|[-_])/i;
+const LITE_MODEL_SEGMENT_RE = /(^|[-_])flash[-_]?lite($|[-_])/i;
 
-function assertGeminiModelAllowed(modelId: string) {
-  const m = String(modelId || "").trim();
-  if (!m) return;
+function resolveGeminiModel(requestedModel?: string): string {
+  const m = String(requestedModel || "").trim();
+  if (!m) return FORCED_LITE_MODEL;
   // Cost safety: never allow Pro-family models from this endpoint.
   if (PRO_MODEL_SEGMENT_RE.test(m)) {
     throw new Error(`高額課金になりやすいProモデルは使用できません: ${m}`);
   }
+  // Force Lite-family models for predictable and low cost.
+  if (!LITE_MODEL_SEGMENT_RE.test(m)) {
+    console.warn(`⚠️ Lite固定のためモデルを上書きします: ${m} -> ${FORCED_LITE_MODEL}`);
+    return FORCED_LITE_MODEL;
+  }
+  return m;
 }
 
 function buildMessagesFromPayload(payload: RequestPayload): ChatMessage[] {
@@ -97,10 +112,31 @@ ${text}
 `;
 }
 
+function readString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function toFiniteNonNegativeInt(value: unknown): number {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) return 0;
+  return Math.trunc(num);
+}
+
+function buildErrorMessage(status: number, statusText: string, errorText: string): string {
+  return `Gemini API error: ${status} ${statusText} - ${errorText}`;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+
+  let apiLogger: APILogger | null = null;
+  let logWritten = false;
+  let requestBody: RequestPayload | null = null;
+  let requestSizeBytes = 0;
 
   try {
     const token = getAuthToken(req);
@@ -110,8 +146,9 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    let authPayload: Record<string, unknown>;
     try {
-      await verifySupabaseJWT(token);
+      authPayload = await verifySupabaseJWT(token) as Record<string, unknown>;
     } catch (_e) {
       return new Response(JSON.stringify({ error: 'トークンが無効または期限切れです。再ログインしてください。' }), {
         status: 401,
@@ -120,6 +157,7 @@ serve(async (req) => {
     }
 
     const body: RequestPayload = await req.json();
+    requestBody = body;
     const apiKey = Deno.env.get("GOOGLE_API_KEY");
     if (!apiKey) {
       throw new Error("GOOGLE_API_KEY が設定されていません");
@@ -143,8 +181,12 @@ serve(async (req) => {
       });
     }
 
-    const modelId = String(body.model || DEFAULT_MODEL).trim() || DEFAULT_MODEL;
-    assertGeminiModelAllowed(modelId);
+    const modelId = resolveGeminiModel(body.model);
+    apiLogger = new APILogger("gemini", "call-gemini-api", modelId);
+    apiLogger.setUser(
+      readString(authPayload.sub) || null,
+      readString(authPayload.email) || null,
+    );
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
 
     // Gemini API用のリクエスト形式に変換
@@ -173,6 +215,7 @@ serve(async (req) => {
         topP: body.topP || 1,
       }
     };
+    requestSizeBytes = new TextEncoder().encode(JSON.stringify(geminiRequest)).length;
 
     console.log("🚀 Gemini API呼び出し開始:", { model: modelId, messages: messages.length });
 
@@ -188,10 +231,50 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error("❌ Gemini API error:", response.status, response.statusText, errorText);
-      throw new Error(`Gemini API error: ${response.status} ${response.statusText} - ${errorText}`);
+      const errorMessage = buildErrorMessage(response.status, response.statusText, errorText);
+
+      if (apiLogger) {
+        const errorMetadata = {
+          model: modelId,
+          http_status: response.status,
+          http_status_text: response.statusText,
+          mode: body.mode || null,
+          feature: readString(body.logFeature) || readString(body.logContext?.feature) || null,
+          source: readString(body.logContext?.source) || null,
+          current_view: readString(body.logContext?.currentView) || null,
+          assistant_mode: readString(body.logContext?.assistantMode) || null,
+        };
+        if (response.status === 429) {
+          await apiLogger.logRateLimit(errorMetadata);
+        } else {
+          await apiLogger.logError(errorMessage, errorMetadata);
+        }
+        logWritten = true;
+      }
+
+      throw new Error(errorMessage);
     }
 
-    const result = await response.json();
+    const rawResponseText = await response.text();
+    const responseSizeBytes = new TextEncoder().encode(rawResponseText).length;
+
+    let result: any;
+    try {
+      result = JSON.parse(rawResponseText);
+    } catch (parseErr) {
+      if (apiLogger) {
+        await apiLogger.logError(`GeminiレスポンスJSON解析に失敗: ${String(parseErr)}`, {
+          model: modelId,
+          mode: body.mode || null,
+          feature: readString(body.logFeature) || readString(body.logContext?.feature) || null,
+          source: readString(body.logContext?.source) || null,
+          current_view: readString(body.logContext?.currentView) || null,
+          assistant_mode: readString(body.logContext?.assistantMode) || null,
+        });
+        logWritten = true;
+      }
+      throw parseErr;
+    }
     const content = result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
     console.log("✅ Gemini API レスポンス取得成功:", content.substring(0, 100) + "...");
@@ -242,6 +325,41 @@ serve(async (req) => {
       };
     }
 
+    const usage = result?.usageMetadata || {};
+    const inputTokens = toFiniteNonNegativeInt(usage?.promptTokenCount);
+    const outputTokens = toFiniteNonNegativeInt(usage?.candidatesTokenCount);
+    const billing = getGeminiCostBreakdown(modelId, inputTokens, outputTokens);
+
+    if (apiLogger) {
+      await apiLogger.logSuccess({
+        requestSizeBytes,
+        responseSizeBytes,
+        inputTokens,
+        outputTokens,
+        estimatedCostJpy: billing.totalCostJpy,
+        metadata: {
+          mode: body.mode || null,
+          feature: readString(body.logFeature) || readString(body.logContext?.feature) || "general",
+          source: readString(body.logContext?.source) || null,
+          current_view: readString(body.logContext?.currentView) || null,
+          assistant_mode: readString(body.logContext?.assistantMode) || null,
+          message_count: Array.isArray(messages) ? messages.length : 0,
+          usage_metadata: usage,
+          billing_type: "token_weighted",
+          billing_breakdown: {
+            model: billing.normalizedModel,
+            rate_per_1m_jpy: billing.ratePer1M,
+            input_tokens: billing.inputTokens,
+            output_tokens: billing.outputTokens,
+            input_cost_jpy: billing.inputCostJpy,
+            output_cost_jpy: billing.outputCostJpy,
+            total_cost_jpy: billing.totalCostJpy,
+          },
+        },
+      });
+      logWritten = true;
+    }
+
     return new Response(
       JSON.stringify({
         ok: true,
@@ -255,6 +373,19 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("❌ call-gemini-api error:", error);
+
+    if (apiLogger && !logWritten) {
+      await apiLogger.logError(
+        error instanceof Error ? error.message : String(error),
+        {
+          mode: requestBody?.mode || null,
+          feature: readString(requestBody?.logFeature) || readString(requestBody?.logContext?.feature) || null,
+          source: readString(requestBody?.logContext?.source) || null,
+          current_view: readString(requestBody?.logContext?.currentView) || null,
+          assistant_mode: readString(requestBody?.logContext?.assistantMode) || null,
+        },
+      );
+    }
 
     return new Response(
       JSON.stringify({

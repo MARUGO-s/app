@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { userService } from '../services/userService';
@@ -57,6 +57,8 @@ export const DataManagement = ({ onBack }) => {
     const [adminClearMasterResult, setAdminClearMasterResult] = useState(null);
 
     const [file, setFile] = useState(null);
+    const [isCsvDragging, setIsCsvDragging] = useState(false);
+    const csvDragDepthRef = useRef(0);
     const [status, setStatus] = useState({ type: '', message: '' });
     const [isUploading, setIsUploading] = useState(false);
     const [previewData, setPreviewData] = useState([]);
@@ -326,20 +328,101 @@ export const DataManagement = ({ onBack }) => {
         }
     };
 
+    const isCsvFile = (targetFile) => {
+        if (!targetFile) return false;
+        const type = String(targetFile.type || '').toLowerCase();
+        const name = String(targetFile.name || '').toLowerCase();
+        if (name.endsWith('.csv')) return true;
+        return type === 'text/csv' || type === 'application/csv' || type === 'application/vnd.ms-excel';
+    };
+
     const handleFileChange = (e) => {
-        if (e.target.files && e.target.files[0]) {
-            setFile(e.target.files[0]);
-            setStatus({ type: '', message: '' });
+        const selectedFile = e.target.files?.[0];
+        if (!selectedFile) return;
+
+        if (!isCsvFile(selectedFile)) {
+            setFile(null);
+            setStatus({ type: 'error', message: 'CSVファイル（.csv）のみアップロードできます。' });
+            e.target.value = '';
+            return;
+        }
+
+        setFile(selectedFile);
+        setStatus({ type: '', message: '' });
+    };
+
+    const resetCsvDragState = () => {
+        csvDragDepthRef.current = 0;
+        setIsCsvDragging(false);
+    };
+
+    const handleCsvDragEnter = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        csvDragDepthRef.current += 1;
+        setIsCsvDragging(true);
+    };
+
+    const handleCsvDragOver = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        if (!isCsvDragging) setIsCsvDragging(true);
+    };
+
+    const handleCsvDragLeave = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        csvDragDepthRef.current = Math.max(0, csvDragDepthRef.current - 1);
+        if (csvDragDepthRef.current === 0) {
+            setIsCsvDragging(false);
         }
     };
 
-    const handleUpload = async () => {
-        if (!file) return;
+    const handleCsvDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        resetCsvDragState();
+
+        if (isUploading) return;
+
+        const droppedFiles = (() => {
+            const fromFiles = Array.from(e.dataTransfer?.files || []);
+            if (fromFiles.length > 0) return fromFiles;
+            const fromItems = Array.from(e.dataTransfer?.items || [])
+                .filter((item) => item?.kind === 'file')
+                .map((item) => item.getAsFile())
+                .filter(Boolean);
+            return fromItems;
+        })();
+        if (droppedFiles.length === 0) return;
+
+        const csvFile = droppedFiles.find(isCsvFile);
+        if (!csvFile) {
+            setFile(null);
+            setStatus({ type: 'error', message: 'CSVファイル（.csv）のみアップロードできます。' });
+            return;
+        }
+
+        setFile(csvFile);
+        setStatus({ type: 'info', message: `「${csvFile.name}」をアップロードしています...` });
+
+        // Keep file input and drop selection behavior consistent.
+        const fileInput = document.getElementById('csv-upload-input');
+        if (fileInput) fileInput.value = '';
+
+        // Restore drag-and-drop upload behavior.
+        void handleUpload(csvFile);
+    };
+
+    const handleUpload = async (fileArg = null) => {
+        const targetFile = fileArg || file;
+        if (!targetFile || isUploading) return;
 
         setIsUploading(true);
         setStatus({ type: 'info', message: 'アップロード中...' });
 
-        const result = await purchasePriceService.uploadPriceList(file);
+        const result = await purchasePriceService.uploadPriceList(targetFile);
 
         if (result.success) {
             setStatus({ type: 'success', message: 'アップロード完了。レシピ原価を再計算しています...' });
@@ -482,7 +565,7 @@ export const DataManagement = ({ onBack }) => {
         setAdminTargetClearLoading(true);
         setAdminTargetClearResult(null);
         try {
-            const result = await purchasePriceService.adminClearTargetUserCsvs(targetUserId, (p) => {
+            const result = await purchasePriceService.adminClearTargetUserCsvs(targetUserId, () => {
                 // Here we could use a progress state if we wanted, but since it's just one user's files, it's usually fast.
             });
             setAdminTargetClearResult({ type: 'success', message: `${result.deleted} ファイルの削除が完了しました` });
@@ -1077,7 +1160,14 @@ export const DataManagement = ({ onBack }) => {
                             <div className="sidebar-title">
                                 <span>📂</span> ファイル操作
                             </div>
-                            <div className="upload-area">
+                            <div
+                                className={`upload-area upload-area--dropzone ${isCsvDragging ? 'upload-area--dragging' : ''} `}
+                                onDragEnter={handleCsvDragEnter}
+                                onDragOver={handleCsvDragOver}
+                                onDragLeave={handleCsvDragLeave}
+                                onDropCapture={handleCsvDrop}
+                                onDrop={handleCsvDrop}
+                            >
                                 <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem' }}>
                                     仕入れCSV (Shift-JIS)<br />
                                     <span style={{ fontSize: '0.75rem', color: '#888' }}>
@@ -1085,6 +1175,9 @@ export const DataManagement = ({ onBack }) => {
                                         ※ 形式2: 業務用システム出力
                                     </span>
                                 </p>
+                                <div className="upload-drop-hint">
+                                    {isCsvDragging ? 'ここにドロップして選択' : 'CSVをドラッグ＆ドロップできます'}
+                                </div>
                                 <input
                                     type="file"
                                     accept=".csv"
@@ -1093,6 +1186,11 @@ export const DataManagement = ({ onBack }) => {
                                     className="csv-input"
                                     style={{ width: '100%', marginBottom: '0.5rem', fontSize: '0.85rem' }}
                                 />
+                                {file && (
+                                    <div className="upload-selected-file" title={file.name}>
+                                        選択中: {file.name}
+                                    </div>
+                                )}
                                 <Button
                                     variant="primary"
                                     onClick={handleUpload}

@@ -133,25 +133,63 @@ export class APILogger {
 /**
  * Gemini APIのコスト推定
  */
+export type GeminiRate = { input: number; output: number }
+
+const GEMINI_RATES_JPY_PER_1M: Record<string, GeminiRate> = {
+    // 料金（1Mトークンあたりの円、2026年2月時点の概算）
+    'gemini-2.5-flash-lite': { input: 2, output: 6 },
+    'gemini-1.5-flash': { input: 5, output: 15 },
+    'gemini-2.0-flash': { input: 10, output: 30 },
+    'gemini-2.5-pro': { input: 150, output: 400 },
+    'gemini-pro': { input: 75, output: 200 },
+}
+
+function normalizeGeminiModelName(modelName: string): string {
+    const normalized = String(modelName || '').trim().toLowerCase()
+    if (!normalized) return 'gemini-1.5-flash'
+    if (normalized.includes('flash-lite')) return 'gemini-2.5-flash-lite'
+    if (normalized.includes('2.5-pro') || normalized.includes('pro')) return 'gemini-2.5-pro'
+    if (normalized.includes('2.0-flash')) return 'gemini-2.0-flash'
+    if (normalized.includes('1.5-flash') || normalized.includes('flash')) return 'gemini-1.5-flash'
+    return 'gemini-1.5-flash'
+}
+
+export function getGeminiRatePerMillion(modelName: string): GeminiRate {
+    const key = normalizeGeminiModelName(modelName)
+    return GEMINI_RATES_JPY_PER_1M[key] || GEMINI_RATES_JPY_PER_1M['gemini-1.5-flash']
+}
+
+export function getGeminiCostBreakdown(
+    modelName: string,
+    inputTokens: number,
+    outputTokens: number
+) {
+    const safeInputTokens = Number.isFinite(Number(inputTokens)) ? Math.max(0, Number(inputTokens)) : 0
+    const safeOutputTokens = Number.isFinite(Number(outputTokens)) ? Math.max(0, Number(outputTokens)) : 0
+    const normalizedModel = normalizeGeminiModelName(modelName)
+    const rate = getGeminiRatePerMillion(normalizedModel)
+
+    const inputCostRaw = (safeInputTokens / 1_000_000) * rate.input
+    const outputCostRaw = (safeOutputTokens / 1_000_000) * rate.output
+    const totalCostRaw = inputCostRaw + outputCostRaw
+
+    return {
+        normalizedModel,
+        ratePer1M: rate,
+        inputTokens: safeInputTokens,
+        outputTokens: safeOutputTokens,
+        inputCostJpy: Math.round(inputCostRaw * 10000) / 10000,
+        outputCostJpy: Math.round(outputCostRaw * 10000) / 10000,
+        totalCostJpy: Math.round(totalCostRaw * 100) / 100,
+    }
+}
+
 export function estimateGeminiCost(
     modelName: string,
     inputTokens: number,
     outputTokens: number
 ): number {
-    // 料金（1Mトークンあたりの円、2026年2月時点の概算）
-    const rates: Record<string, { input: number; output: number }> = {
-        'gemini-1.5-flash': { input: 5, output: 15 },
-        'gemini-2.0-flash': { input: 10, output: 30 },
-        'gemini-2.5-pro': { input: 150, output: 400 },
-        'gemini-pro': { input: 75, output: 200 }
-    }
-
-    const rate = rates[modelName] || rates['gemini-1.5-flash']
-
-    const inputCost = (inputTokens / 1_000_000) * rate.input
-    const outputCost = (outputTokens / 1_000_000) * rate.output
-
-    return Math.round((inputCost + outputCost) * 100) / 100
+    return getGeminiCostBreakdown(modelName, inputTokens, outputTokens).totalCostJpy
 }
 
 /**

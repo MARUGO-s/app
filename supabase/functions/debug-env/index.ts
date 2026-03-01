@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,21 +15,32 @@ serve(async (req) => {
   try {
     console.log('🔍 Debug environment variables function called')
 
+    const token = getAuthToken(req);
+    if (!token) {
+      return new Response(JSON.stringify({ success: false, error: '認証が必要です。' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    try {
+      await verifySupabaseJWT(token);
+    } catch {
+      return new Response(JSON.stringify({ success: false, error: 'トークンが無効または期限切れです。' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // 環境変数の確認
     const envInfo = {
       GOOGLE_API_KEY: {
-        exists: !!Deno.env.get('GOOGLE_API_KEY'),
-        length: Deno.env.get('GOOGLE_API_KEY')?.length || 0,
-        firstChars: Deno.env.get('GOOGLE_API_KEY')?.substring(0, 10) || 'N/A'
+        exists: !!Deno.env.get('GOOGLE_API_KEY')
       },
       VISION_API_KEY: {
-        exists: !!Deno.env.get('VISION_API_KEY'),
-        length: Deno.env.get('VISION_API_KEY')?.length || 0,
-        firstChars: Deno.env.get('VISION_API_KEY')?.substring(0, 10) || 'N/A'
+        exists: !!Deno.env.get('VISION_API_KEY')
       },
       GROQ_API_KEY: {
-        exists: !!Deno.env.get('GROQ_API_KEY'),
-        length: Deno.env.get('GROQ_API_KEY')?.length || 0
+        exists: !!Deno.env.get('GROQ_API_KEY')
       }
     }
 
@@ -52,8 +64,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message,
-        stack: error.stack,
+        error: error instanceof Error ? error.message : String(error),
         timestamp: new Date().toISOString()
       }),
       {

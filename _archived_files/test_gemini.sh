@@ -1,5 +1,5 @@
 #!/bin/bash
-API_KEY="REDACTED_GOOGLE_API_KEY"
+API_KEY="${GOOGLE_API_KEY:-your_google_api_key_here}"
 MODEL="gemini-2.0-flash"
 
 echo "Testing Gemini API with model: $MODEL"

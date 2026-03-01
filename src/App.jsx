@@ -17,6 +17,7 @@ import { IncomingStock } from './components/IncomingStock';
 import { Planner } from './components/Planner';
 import { OrderList } from './components/OrderList';
 import ApiUsageLogs from './components/ApiUsageLogs';
+import OperationAssistant from './components/OperationAssistant';
 import { recipeService } from './services/recipeService';
 import { formatDisplayId } from './utils/formatUtils';
 import { userService } from './services/userService';
@@ -502,6 +503,13 @@ function AppContent() {
       );
     });
   }, [recipes, selectedTag, recentIds, searchQuery]);
+
+  const resetListFilters = () => {
+    setSelectedTag('すべて');
+    setSearchQuery('');
+    setPublicRecipeView('none');
+    setDisplayMode('normal');
+  };
 
   const isDragEnabled = selectedTag === 'すべて' && !searchQuery.trim() && currentView === 'list';
 
@@ -1308,6 +1316,16 @@ function AppContent() {
                 {currentView === 'trash' ? 'ゴミ箱は空です' : 'レシピがありません'}
                 {selectedTag !== 'すべて' && <p>条件を変更して検索してください</p>}
               </div>
+            ) : filteredRecipes.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: '#888' }}>
+                条件に一致するレシピがありません
+                <p style={{ marginTop: '0.5rem' }}>検索/絞り込み/公開表示の条件を確認してください</p>
+                <div style={{ marginTop: '1rem' }}>
+                  <Button variant="secondary" size="sm" onClick={resetListFilters}>
+                    フィルターをリセット
+                  </Button>
+                </div>
+              </div>
             ) : (
               <div className="main-content-wrapper">
                 {currentView === 'list' && (
@@ -1481,6 +1499,7 @@ function AppContent() {
           </div>
         </>
       )}
+      <OperationAssistant currentView={currentView} userRole={user?.role} />
     </Layout>
   );
 }

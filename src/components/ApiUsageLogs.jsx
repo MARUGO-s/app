@@ -3,11 +3,65 @@ import { supabase } from '../supabase'
 import { userService } from '../services/userService'
 import './ApiUsageLogs.css'
 
+const toSafeNumber = (value, fallback = 0) => {
+    const n = Number(value)
+    return Number.isFinite(n) ? n : fallback
+}
+
+const isVoiceLog = (log) => {
+    const modelName = String(log?.model_name || '').toLowerCase()
+    const endpoint = String(log?.endpoint || '').toLowerCase()
+    const hasAudioMeta = log?.metadata && log.metadata.audio_duration_sec !== undefined
+    const isWhisper = modelName.includes('whisper')
+    const isVoiceEndpoint = endpoint.includes('voice')
+    return isWhisper || isVoiceEndpoint || hasAudioMeta
+}
+
+const isVisionLog = (log) => {
+    const endpoint = String(log?.endpoint || '').toLowerCase()
+    return endpoint.includes('analyze-image')
+}
+
+const isOperationQaLog = (log) => {
+    const endpoint = String(log?.endpoint || '').toLowerCase()
+    const feature = String(log?.metadata?.feature || '').toLowerCase()
+    const source = String(log?.metadata?.source || '').toLowerCase()
+    return endpoint === 'call-gemini-api'
+        && (feature === 'operation_qa' || source === 'operation_assistant')
+}
+
+const getBillingBreakdown = (log) => {
+    const metadata = log?.metadata
+    if (!metadata || typeof metadata !== 'object') return null
+    const breakdown = metadata.billing_breakdown
+    if (!breakdown || typeof breakdown !== 'object') return null
+
+    return {
+        model: String(breakdown.model || log?.model_name || ''),
+        inputTokens: toSafeNumber(breakdown.input_tokens, toSafeNumber(log?.input_tokens, 0)),
+        outputTokens: toSafeNumber(breakdown.output_tokens, toSafeNumber(log?.output_tokens, 0)),
+        inputCostJpy: toSafeNumber(breakdown.input_cost_jpy, 0),
+        outputCostJpy: toSafeNumber(breakdown.output_cost_jpy, 0),
+        totalCostJpy: toSafeNumber(
+            breakdown.total_cost_jpy,
+            toSafeNumber(log?.estimated_cost_jpy, 0)
+        ),
+        inputRatePer1M: toSafeNumber(breakdown.rate_per_1m_jpy?.input, 0),
+        outputRatePer1M: toSafeNumber(breakdown.rate_per_1m_jpy?.output, 0),
+    }
+}
+
+const formatBillingBreakdownText = (log) => {
+    const b = getBillingBreakdown(log)
+    if (!b) return '-'
+    return `入力${b.inputTokens.toLocaleString()}tok × ¥${b.inputRatePer1M}/100万 + 出力${b.outputTokens.toLocaleString()}tok × ¥${b.outputRatePer1M}/100万 = ¥${b.totalCostJpy}`
+}
+
 export default function ApiUsageLogs() {
     const [logs, setLogs] = useState([])
     const [userMap, setUserMap] = useState({})
     const [loading, setLoading] = useState(true)
-    const [activeTab, setActiveTab] = useState('all') // 'all', 'voice', 'vision'
+    const [activeTab, setActiveTab] = useState('all') // 'all', 'voice', 'vision', 'operation'
 
     // API名フィルタは使わず、全件取得後にクライアントサイドでタブフィルタを行う
     const [filter, setFilter] = useState({
@@ -22,6 +76,10 @@ export default function ApiUsageLogs() {
         successRate: 0,
         totalCost: 0,
         totalAudioSec: 0,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalInputCost: 0,
+        totalOutputCost: 0,
         byApi: {}
     })
 
@@ -29,6 +87,7 @@ export default function ApiUsageLogs() {
         { id: 'all', label: 'すべて' },
         { id: 'voice', label: '音声入力' },
         { id: 'vision', label: '画像解析' },
+        { id: 'operation', label: '操作質問AI' },
     ]
 
     // ログ取得処理
@@ -42,20 +101,15 @@ export default function ApiUsageLogs() {
             if (activeTab === 'all') return true
 
             if (activeTab === 'voice') {
-                // 音声入力の条件:
-                // 1. GroqのWhisperモデル
-                // 2. エンドポイントに'voice'が含まれる
-                // 3. メタデータに音声秒数がある
-                const isWhisper = log.model_name && log.model_name.toLowerCase().includes('whisper')
-                const isVoiceEndpoint = log.endpoint && log.endpoint.toLowerCase().includes('voice')
-                const hasAudioMeta = log.metadata && (log.metadata.audio_duration_sec !== undefined)
-                return isWhisper || isVoiceEndpoint || hasAudioMeta
+                return isVoiceLog(log)
             }
 
             if (activeTab === 'vision') {
-                // 画像解析の条件:
-                // エンドポイントが 'analyze-image' を含むもの
-                return log.endpoint && log.endpoint.toLowerCase().includes('analyze-image')
+                return isVisionLog(log)
+            }
+
+            if (activeTab === 'operation') {
+                return isOperationQaLog(log)
             }
 
             return true
@@ -121,19 +175,34 @@ export default function ApiUsageLogs() {
     function calculateStats(logsData) {
         const totalCalls = logsData.length
         const successCalls = logsData.filter(log => log.status === 'success').length
-        const totalCost = logsData.reduce((sum, log) => sum + (log.estimated_cost_jpy || 0), 0)
+        const totalCost = logsData.reduce((sum, log) => sum + toSafeNumber(log.estimated_cost_jpy, 0), 0)
 
         // 音声秒数は、表示されているログの中の音声ログのみ集計
         // (Visionタブを選択中に音声秒数が出るのはおかしいので、logsDataから計算)
         const totalAudioSec = logsData
             .filter(l => l.metadata?.audio_duration_sec)
-            .reduce((sum, log) => sum + (Number(log.metadata.audio_duration_sec) || 0), 0)
+            .reduce((sum, log) => sum + toSafeNumber(log.metadata.audio_duration_sec, 0), 0)
+
+        const totalInputTokens = logsData.reduce((sum, log) => sum + toSafeNumber(log.input_tokens, 0), 0)
+        const totalOutputTokens = logsData.reduce((sum, log) => sum + toSafeNumber(log.output_tokens, 0), 0)
+        const totalInputCost = logsData.reduce((sum, log) => {
+            const breakdown = getBillingBreakdown(log)
+            return sum + (breakdown ? toSafeNumber(breakdown.inputCostJpy, 0) : 0)
+        }, 0)
+        const totalOutputCost = logsData.reduce((sum, log) => {
+            const breakdown = getBillingBreakdown(log)
+            return sum + (breakdown ? toSafeNumber(breakdown.outputCostJpy, 0) : 0)
+        }, 0)
 
         setStats({
             totalCalls,
             successRate: totalCalls > 0 ? (successCalls / totalCalls * 100).toFixed(1) : 0,
             totalCost: totalCost.toFixed(2),
             totalAudioSec: totalAudioSec.toFixed(1),
+            totalInputTokens,
+            totalOutputTokens,
+            totalInputCost: Number(totalInputCost.toFixed(4)),
+            totalOutputCost: Number(totalOutputCost.toFixed(4)),
             byApi: {}
         })
     }
@@ -161,7 +230,7 @@ export default function ApiUsageLogs() {
 
     async function exportToCsv() {
         const csvRows = [
-            ['作成日時', 'API名', 'エンドポイント', 'モデル', 'ユーザーID', 'ステータス', '処理時間(ms)', '音声秒数/トークン', '推定コスト(円)', 'エラーメッセージ'].join(',')
+            ['作成日時', 'API名', 'エンドポイント', 'モデル', 'ユーザーID', 'ステータス', '処理時間(ms)', '詳細(秒数/トークン)', '入力トークン', '出力トークン', '推定コスト(円)', '従量課金内訳', 'エラーメッセージ'].join(',')
         ]
 
         // CSVエクスポートは「現在表示されているログ」を対象にするのが自然
@@ -172,6 +241,7 @@ export default function ApiUsageLogs() {
             } else if (log.input_tokens || log.output_tokens) {
                 details = `${log.input_tokens}↓ ${log.output_tokens}↑`
             }
+            const breakdownText = formatBillingBreakdownText(log)
 
             csvRows.push([
                 formatDate(log.created_at),
@@ -182,7 +252,10 @@ export default function ApiUsageLogs() {
                 log.status,
                 log.duration_ms || '',
                 details,
+                log.input_tokens || '',
+                log.output_tokens || '',
                 log.estimated_cost_jpy || '',
+                breakdownText.replace(/,/g, '、'),
                 (log.error_message || '').replace(/,/g, '、')
             ].join(','))
         })
@@ -246,11 +319,29 @@ export default function ApiUsageLogs() {
                         </div>
                         <div className="stat-card">
                             <div className="stat-label">推定コスト</div>
-                            <div className="stat-value">¥{parseFloat(stats.totalCost).toLocaleString()}</div>
+                            <div className="stat-value">¥{toSafeNumber(stats.totalCost, 0).toLocaleString()}</div>
                         </div>
                         <div className="stat-card">
                             <div className="stat-label">成功率</div>
                             <div className="stat-value">{stats.successRate}%</div>
+                        </div>
+                    </>
+                ) : activeTab === 'operation' ? (
+                    <>
+                        <div className="stat-card">
+                            <div className="stat-label">操作質問APIコール</div>
+                            <div className="stat-value">{stats.totalCalls.toLocaleString()}回</div>
+                            <div className="secondary-stat">{stats.successRate}% 成功</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-label">総トークン量</div>
+                            <div className="stat-value">↓{stats.totalInputTokens.toLocaleString()} / ↑{stats.totalOutputTokens.toLocaleString()}</div>
+                            <div className="secondary-stat">入力 / 出力</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-label">推定コスト（従量）</div>
+                            <div className="stat-value">¥{toSafeNumber(stats.totalCost, 0).toLocaleString()}</div>
+                            <div className="secondary-stat">入力 ¥{toSafeNumber(stats.totalInputCost, 0).toLocaleString()} / 出力 ¥{toSafeNumber(stats.totalOutputCost, 0).toLocaleString()}</div>
                         </div>
                     </>
                 ) : (
@@ -266,7 +357,7 @@ export default function ApiUsageLogs() {
                         </div>
                         <div className="stat-card">
                             <div className="stat-label">推定総コスト</div>
-                            <div className="stat-value">¥{parseFloat(stats.totalCost).toLocaleString()}</div>
+                            <div className="stat-value">¥{toSafeNumber(stats.totalCost, 0).toLocaleString()}</div>
                         </div>
                     </>
                 )}
@@ -320,6 +411,7 @@ export default function ApiUsageLogs() {
                                 <th>処理時間</th>
                                 <th>詳細 (秒数/トークン)</th>
                                 <th>推定コスト</th>
+                                <th>従量課金内訳</th>
                                 <th>エラー</th>
                             </tr>
                         </thead>
@@ -357,6 +449,19 @@ export default function ApiUsageLogs() {
                                         {(log.estimated_cost_jpy != null && log.estimated_cost_jpy !== '') ? (
                                             <span className="cost">¥{Number(log.estimated_cost_jpy)}</span>
                                         ) : '-'}
+                                    </td>
+                                    <td>
+                                        {(() => {
+                                            const billing = getBillingBreakdown(log)
+                                            if (!billing) return '-'
+                                            return (
+                                                <div className="cost-breakdown" title={formatBillingBreakdownText(log)}>
+                                                    <div>入力: {billing.inputTokens.toLocaleString()}tok × ¥{billing.inputRatePer1M}/100万 = ¥{billing.inputCostJpy}</div>
+                                                    <div>出力: {billing.outputTokens.toLocaleString()}tok × ¥{billing.outputRatePer1M}/100万 = ¥{billing.outputCostJpy}</div>
+                                                    <div className="cost-breakdown-total">合計: ¥{billing.totalCostJpy}</div>
+                                                </div>
+                                            )
+                                        })()}
                                     </td>
                                     <td className="error-cell">
                                         {log.error_message ? (
