@@ -32,7 +32,7 @@ const VIEW_LABEL_MAP = {
 
 const normalizeText = (value, max = 20000) => String(value || '').trim().slice(0, max);
 
-export default function RequestAssistant({ currentView, userRole, onOpenRequestsPage }) {
+export default function RequestAssistant({ currentView, userRole }) {
     const [isOpen, setIsOpen] = useState(false);
     const [requestType, setRequestType] = useState('feature');
     const [title, setTitle] = useState('');
@@ -217,9 +217,6 @@ export default function RequestAssistant({ currentView, userRole, onOpenRequests
                         <div className="request-assistant-actions">
                             <Button type="button" variant="ghost" onClick={resetForm} disabled={isSubmitting}>
                                 クリア
-                            </Button>
-                            <Button type="button" variant="secondary" onClick={onOpenRequestsPage} disabled={isSubmitting}>
-                                要望一覧
                             </Button>
                             <Button type="submit" variant="primary" disabled={!canSubmit}>
                                 {isSubmitting ? '送信中...' : '送信する'}

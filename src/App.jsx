@@ -184,6 +184,12 @@ function AppContent() {
   }, [currentView]);
 
   useEffect(() => {
+    if (currentView !== 'requests') return;
+    if (user?.role === 'admin') return;
+    setSearchParams({ view: 'list' });
+  }, [currentView, user?.role, setSearchParams]);
+
+  useEffect(() => {
     if (typeof document === 'undefined') return;
     if (!isMenuOpen) return;
 
@@ -1114,15 +1120,6 @@ function AppContent() {
                         <span style={{ marginRight: '8px' }}>📘</span> アプリガイド
                       </Button>
 
-                      <Button
-                        variant="secondary"
-                        onClick={() => {
-                          setSearchParams({ view: 'requests' });
-                          setIsMenuOpen(false);
-                        }}
-                      >
-                        <span style={{ marginRight: '8px' }}>📨</span> 要望
-                      </Button>
                       <div className="menu-divider"></div>
 
                       {currentView === 'list' && (
@@ -1170,6 +1167,9 @@ function AppContent() {
                               </Button>
                               <Button variant="secondary" onClick={() => { setSearchParams({ view: 'operation-logs' }); setIsMenuOpen(false); }}>
                                 <span style={{ marginRight: '8px' }}>🧾</span> 操作質問ログ
+                              </Button>
+                              <Button variant="secondary" onClick={() => { setSearchParams({ view: 'requests' }); setIsMenuOpen(false); }}>
+                                <span style={{ marginRight: '8px' }}>📨</span> 要望一覧
                               </Button>
                             </>
                           )}
@@ -1531,7 +1531,7 @@ function AppContent() {
           </div>
         </>
       )}
-      {currentView === 'requests' && (
+      {currentView === 'requests' && user?.role === 'admin' && (
         <>
           <div style={{ padding: '20px 20px 0', textAlign: 'left' }}>
             <Button onClick={() => setSearchParams({ view: 'list' })}>
@@ -1549,10 +1549,6 @@ function AppContent() {
       <RequestAssistant
         currentView={currentView}
         userRole={user?.role}
-        onOpenRequestsPage={() => {
-          setSearchParams({ view: 'requests' });
-          setIsMenuOpen(false);
-        }}
       />
       <OperationAssistant currentView={currentView} userRole={user?.role} />
     </Layout>
