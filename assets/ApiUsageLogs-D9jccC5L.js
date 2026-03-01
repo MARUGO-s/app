@@ -177,11 +177,13 @@ export default function ApiUsageLogs() {
             .filter((row) => row?.ai_attempted === true)
             .map((row) => {
                 const aiError = String(row?.metadata?.ai_error || '')
-                const status = row?.ai_used
-                    ? 'success'
-                    : aiError.includes('429')
-                        ? 'rate_limited'
-                        : 'error'
+                const aiStatus = String(row?.ai_status || '').toLowerCase()
+                let status = 'success'
+                if (aiStatus.includes('error_fallback')) {
+                    status = aiError.includes('429') ? 'rate_limited' : 'error'
+                } else if (!row?.ai_used && aiError) {
+                    status = aiError.includes('429') ? 'rate_limited' : 'error'
+                }
                 const billing = buildGeminiBillingBreakdown({
                     modelName: row?.ai_model || 'gemini-2.5-flash-lite',
                     inputTokens: row?.input_tokens,
@@ -197,7 +199,9 @@ export default function ApiUsageLogs() {
                     user_id: row.user_id || null,
                     user_email: row.user_email || null,
                     status,
-                    error_message: row?.ai_used ? '' : (aiError || 'AI呼び出し後にローカル回答へフォールバック'),
+                    error_message: status === 'success'
+                        ? ''
+                        : (aiError || 'AI呼び出し後にローカル回答へフォールバック'),
                     duration_ms: null,
                     input_tokens: row.input_tokens ?? null,
                     output_tokens: row.output_tokens ?? null,
