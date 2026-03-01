@@ -729,17 +729,29 @@ Deno.serve(async (req) => {
             $('meta[property="og:image"]').attr('content') ||
             '';
 
-          const contentStart = md.match(/Markdown Content:\s*([\s\S]*)$/i)?.[1] || '';
-          const ingredientsHeaderMatch = contentStart.match(/\nIngredients?\n[-=]+\n/i);
-          const processHeaderMatch = contentStart.match(/\n(?:Process|Method|Instructions?)\n[-=]+\n/i);
-          const ingredientsHeader = contentStart.search(/\nIngredients?\n[-=]+\n/i);
-          const processHeader = contentStart.search(/\n(?:Process|Method|Instructions?)\n[-=]+\n/i);
+          const contentStart = md.match(/Markdown Content:\s*([\s\S]*)$/i)?.[1] || md;
+          const lines = contentStart
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0);
+
+          const findHeadingIndex = (pattern: RegExp) => {
+            return lines.findIndex((line) => pattern.test(stripMd(line)));
+          };
+
+          const ingredientsHeaderIndex = findHeadingIndex(/^ingredients?$/i);
+          const stepsHeaderIndex = findHeadingIndex(/^(process|method|instruction|instructions|directions?)$/i);
+          const firstStepLineIndex = lines.findIndex((line) => /^\d+\.\s+/.test(line));
+          const sectionSplitIndex =
+            stepsHeaderIndex >= 0
+              ? stepsHeaderIndex
+              : (firstStepLineIndex >= 0 ? firstStepLineIndex : lines.length);
 
           let description = '';
-          if (ingredientsHeader > -1) {
-            const intro = contentStart.slice(0, ingredientsHeader);
-            const introLines = intro
-              .split('\n')
+          const introSliceEnd = ingredientsHeaderIndex >= 0 ? ingredientsHeaderIndex : sectionSplitIndex;
+          if (introSliceEnd > 0) {
+            const introLines = lines
+              .slice(0, introSliceEnd)
               .map((line) => stripMd(line))
               .filter((line) => line && !/^(?:\w{3}\s+\d{1,2},\s+\d{4}|\d+\s*min\b)/i.test(line));
             description = introLines
@@ -754,47 +766,54 @@ Deno.serve(async (req) => {
               || '';
           }
 
-          let ingredientsSection = '';
-          if (ingredientsHeader > -1 && ingredientsHeaderMatch?.[0]) {
-            const ingStart = ingredientsHeader + ingredientsHeaderMatch[0].length;
-            const ingEnd = processHeader > ingStart ? processHeader : contentStart.length;
-            ingredientsSection = contentStart.slice(ingStart, ingEnd);
-          }
-
-          let stepsSection = '';
-          if (processHeader > -1 && processHeaderMatch?.[0]) {
-            const stepStart = processHeader + processHeaderMatch[0].length;
-            stepsSection = contentStart.slice(stepStart);
-          }
-
           const ingredients: any[] = [];
-          ingredientsSection
-            .split('\n')
-            .map((line) => line.trim())
-            .filter((line) => /^\*\s+/.test(line))
-            .forEach((line) => {
-              let core = line.replace(/^\*\s+/, '').trim();
-              // If italic notes are appended, keep the first highlighted phrase as ingredient core.
-              const firstItalic = core.match(/_([^_]+)_/);
-              if (firstItalic && firstItalic[1]) {
-                core = firstItalic[1].trim();
-              }
-              core = stripMd(core);
-              if (!core) return;
+          const ingredientStart =
+            ingredientsHeaderIndex >= 0 ? ingredientsHeaderIndex + 1 : 0;
+          const ingredientLines = lines.slice(ingredientStart, sectionSplitIndex);
+          ingredientLines.forEach((line) => {
+            // Skip markdown heading separators such as "-----"
+            if (/^[-=]{3,}$/.test(line)) return;
+
+            // Prefer bullet entries, but also accept quantity-like plain lines.
+            const bulletCore = line.match(/^\*\s+(.+)$/)?.[1]?.trim();
+            let core = bulletCore ?? line;
+
+            if (!core) return;
+
+            // If italic notes are appended, keep the first highlighted phrase as ingredient core.
+            const firstItalic = core.match(/_([^_]+)_/);
+            if (firstItalic && firstItalic[1]) {
+              core = firstItalic[1].trim();
+            }
+
+            core = stripMd(core);
+            if (!core) return;
+
+            // Skip obvious metadata lines
+            if (/^\d+\s*min\b/i.test(core)) return;
+            if (/^\w{3}\s+\d{1,2},\s+\d{4}$/i.test(core)) return;
+
+            // Accept if bullet, or if line starts with quantity and has ingredient-ish text
+            if (bulletCore || /^(?:\d+(?:\.\d+)?(?:\/\d+)?|[¼½¾⅓⅔⅛⅜⅝⅞])\s*\w*/.test(core)) {
               ingredients.push(parseIngredient(core));
-            });
+            }
+          });
 
           const steps: string[] = [];
-          stepsSection
-            .split('\n')
-            .map((line) => line.trim())
-            .forEach((line) => {
+          const stepStart =
+            stepsHeaderIndex >= 0 ? stepsHeaderIndex + 1 : (firstStepLineIndex >= 0 ? firstStepLineIndex : -1);
+          if (stepStart >= 0) {
+            lines.slice(stepStart).forEach((line) => {
+              if (/^[-=]{3,}$/.test(line)) return;
               const m = line.match(/^(\d+)\.\s+(.+)$/);
               if (m && m[2]) {
                 const cleaned = stripMd(m[2]);
                 if (cleaned) steps.push(cleaned);
               }
             });
+          }
+
+          console.log(`Andrea fallback parsed: ingredients=${ingredients.length}, steps=${steps.length}`);
 
           if (title && (ingredients.length > 0 || steps.length > 0)) {
             recipeData = {
