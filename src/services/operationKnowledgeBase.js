@@ -1477,7 +1477,7 @@ const MENU_BUTTON_DETAIL_RULES = [
     },
     {
         label: '入荷PDF',
-        patterns: ['入荷pdf', '入荷 pdf'],
+        patterns: ['入荷pdf', '入荷 pdf', 'pdf入荷', 'pdf 入荷', 'pdf', '納品pdf'],
         can: '入荷PDF画面へ移動し、PDFを解析して保存できます。',
         caution: '解析後に保存を押さないと在庫反映に使えません。',
         pitfall: '対応外フォーマットのPDFは解析に失敗することがあります。'
@@ -1561,12 +1561,222 @@ const MENU_BUTTON_DETAIL_RULES = [
     },
 ];
 
+const EXTRA_BUTTON_DETAIL_RULES = [
+    {
+        label: '減損する',
+        patterns: ['減損する', '減損', 'ロス計上', '廃棄', '在庫減算', '在庫を減らす'],
+        can: '在庫の減損（ロス）を登録し、在庫数量を減算します。',
+        caution: '対象材料・数量・単位を確認してから実行してください。',
+        pitfall: '単位違い（kg/g, L/ml）で登録すると在庫・発注が大きくずれます。',
+        effect: '現在在庫が減るため、不足判定が厳しくなります。',
+        outcome: '発注リストの必要発注量が増える場合があります。'
+    },
+];
+
+const ALL_BUTTON_DETAIL_RULES = [
+    ...MENU_BUTTON_DETAIL_RULES,
+    ...EXTRA_BUTTON_DETAIL_RULES,
+];
+
+const BUTTON_INTENT_MARKERS = [
+    'ボタン',
+    'タブ',
+    '何をする',
+    '何する',
+    'どんな効果',
+    'どういう効果',
+    'どうなる',
+    '何がなされる',
+    '用途',
+    '意味',
+    'どこですか',
+];
+
+const BUTTON_EXPLANATION_OVERRIDES = {
+    'Q&A': {
+        effect: '操作質問AIの回答精度を上げるための質問パターン確認に使えます。',
+        outcome: '質問の書き方が整い、目的手順へ最短で到達しやすくなります。',
+    },
+    'アプリガイド': {
+        effect: '画面横断の運用手順（作成→原価→在庫→発注）を体系的に確認できます。',
+        outcome: '属人化を減らし、同じ手順で再現しやすい運用になります。',
+    },
+    'Webから追加': {
+        effect: 'URL先のレシピ本文からタイトル/材料/手順を自動抽出できます。',
+        outcome: '手入力時間を削減し、作成初期の入力を短時間で完了できます。',
+    },
+    '画像から追加': {
+        effect: '写真/スキャン/手書きからテキスト抽出して下書きを作成できます。',
+        outcome: '紙運用のレシピをデータ化し、検索・編集・原価計算に繋げられます。',
+    },
+    '在庫管理': {
+        effect: '棚卸し・在庫履歴管理・在庫差分の確認ができます。',
+        outcome: '発注過不足の抑制と、仕込み/発注精度の改善に繋がります。',
+    },
+    '入荷PDF': {
+        effect: '納品書PDFの解析結果を保存し、在庫反映前の下準備ができます。',
+        outcome: '入荷在庫画面で反映可能なデータが作成されます。',
+    },
+    '入荷在庫': {
+        effect: '入荷PDFの保存データを実在庫へ反映できます。',
+        outcome: '在庫数が更新され、発注不足/過剰判定が最新化されます。',
+    },
+    '仕込みカレンダー': {
+        effect: '日付ごとの仕込み予定を登録し、必要材料を時系列で管理できます。',
+        outcome: '発注リストの算出元が整い、必要量計算が安定します。',
+    },
+    '発注リスト': {
+        effect: '期間内の必要量と残在庫差し引きで発注量を算出できます。',
+        outcome: 'コピー/印刷可能な発注指示データを作成できます。',
+    },
+    'データ管理': {
+        effect: '価格CSV・材料マスター・CSV取込整備で原価基盤を管理できます。',
+        outcome: '材料候補表示と原価計算の精度が安定します。',
+    },
+    '一括削除 / 一括操作': {
+        effect: '複数件を同時に削除/復元/完全削除できます。',
+        outcome: '大量データの整理を短時間で実行できます。',
+    },
+    'ゴミ箱': {
+        effect: '削除済みデータの復元と完全削除を管理できます。',
+        outcome: '誤削除時の復旧と、不要データの最終整理ができます。',
+    },
+    '一覧に戻る': {
+        effect: 'どの画面からでもレシピ一覧へ戻れます。',
+        outcome: '対象レシピの再検索・再選択にすぐ戻れます。',
+    },
+    'ログアウト': {
+        effect: '現在セッションを終了して再認証状態に戻します。',
+        outcome: '共有端末運用時の誤操作・不正利用リスクを下げられます。',
+    },
+};
+
 const findMenuButtonDetailRule = (question) => {
     const text = String(question || '').toLowerCase();
     if (!text) return null;
     return MENU_BUTTON_DETAIL_RULES.find((rule) => (
         (rule.patterns || []).some((pattern) => text.includes(String(pattern || '').toLowerCase()))
     )) || null;
+};
+
+const isButtonIntentQuestion = (question) => {
+    const text = String(question || '');
+    if (!text) return false;
+    return BUTTON_INTENT_MARKERS.some((marker) => text.includes(marker));
+};
+
+const extractLikelyButtonTerm = (question) => {
+    const text = String(question || '').trim();
+    if (!text) return '';
+
+    const quoted = text.match(/[「『"“]([^」』"”]{2,40})[」』"”]/);
+    if (quoted?.[1]) return quoted[1].trim();
+
+    const buttonLike = text.match(/([^\s、。,.!?！？]{2,30})(?:ボタン|タブ)/);
+    if (buttonLike?.[1]) return buttonLike[1].trim();
+
+    return '';
+};
+
+const scoreButtonRule = ({ question, likelyTerm, rule }) => {
+    const normalizedQuestion = normalize(question);
+    const normalizedTerm = normalize(likelyTerm);
+    const candidates = [rule.label, ...(rule.patterns || [])]
+        .map((v) => String(v || '').trim())
+        .filter(Boolean);
+
+    let score = 0;
+    let bestSimilarity = 0;
+    for (const candidate of candidates) {
+        const normalizedCandidate = normalize(candidate);
+        if (!normalizedCandidate) continue;
+
+        if (normalizedQuestion.includes(normalizedCandidate)) score += 10;
+        if (normalizedTerm && (normalizedTerm.includes(normalizedCandidate) || normalizedCandidate.includes(normalizedTerm))) {
+            score += 8;
+        }
+
+        const simFromQuestion = similarityByBigrams(normalizedQuestion, normalizedCandidate);
+        const simFromTerm = normalizedTerm ? similarityByBigrams(normalizedTerm, normalizedCandidate) : 0;
+        const sim = Math.max(simFromQuestion, simFromTerm);
+        bestSimilarity = Math.max(bestSimilarity, sim);
+    }
+
+    score += Math.round(bestSimilarity * 10);
+    return {
+        score,
+        similarity: bestSimilarity,
+    };
+};
+
+const findBestButtonDetailRule = (question) => {
+    const likelyTerm = extractLikelyButtonTerm(question);
+    const ranked = ALL_BUTTON_DETAIL_RULES
+        .map((rule) => {
+            const scored = scoreButtonRule({ question, likelyTerm, rule });
+            return { rule, ...scored };
+        })
+        .sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            return b.similarity - a.similarity;
+        });
+
+    const top = ranked[0] || null;
+    if (!top) return { kind: 'none', top: null, alternatives: [] };
+
+    const alternatives = ranked.slice(1, 4).map((item) => item.rule);
+    const strongMatch = top.score >= 12 || top.similarity >= 0.45;
+    const weakButLikely = top.score >= 9 || top.similarity >= 0.34;
+    if (strongMatch) {
+        return { kind: 'matched', top: top.rule, alternatives };
+    }
+    if (isButtonIntentQuestion(question) && weakButLikely) {
+        return { kind: 'matched', top: top.rule, alternatives };
+    }
+    if (isButtonIntentQuestion(question)) {
+        return { kind: 'ambiguous', top: top.rule, alternatives: [top.rule, ...alternatives].slice(0, 3) };
+    }
+    return { kind: 'none', top: null, alternatives: [] };
+};
+
+const buildButtonDetailAnswer = ({ rule, responseStyle = 'balanced' }) => {
+    if (!rule) return '';
+    const isConcise = responseStyle === 'concise';
+    const isDetailed = responseStyle === 'detailed';
+    const lines = [];
+    const override = BUTTON_EXPLANATION_OVERRIDES[rule.label] || {};
+
+    lines.push(`「${rule.label}」`);
+    lines.push(`何をするか: ${rule.can}`);
+    if (!isConcise) {
+        if (override.effect || rule.effect) lines.push(`効果: ${override.effect || rule.effect}`);
+        if (override.outcome || rule.outcome) lines.push(`結果: ${override.outcome || rule.outcome}`);
+        if (rule.caution) lines.push(`注意点: ${rule.caution}`);
+    }
+    if (isDetailed && rule.pitfall) {
+        lines.push(`よくある失敗: ${rule.pitfall}`);
+    }
+    if (Array.isArray(rule.steps) && rule.steps.length > 0) {
+        lines.push('操作手順:');
+        const stepLimit = isConcise ? 3 : rule.steps.length;
+        rule.steps.slice(0, stepLimit).forEach((step, index) => {
+            lines.push(`${index + 1}. ${step}`);
+        });
+    }
+    return lines.join('\n');
+};
+
+const buildButtonAmbiguousAnswer = (alternatives = []) => {
+    const list = Array.isArray(alternatives) ? alternatives.filter(Boolean) : [];
+    if (list.length === 0) return '';
+    const lines = [];
+    lines.push('ボタン名が曖昧なので候補を出します。');
+    lines.push('番号だけ返信してください。');
+    list.forEach((rule, index) => {
+        lines.push(`${index + 1}. ${rule.label}`);
+    });
+    lines.push('返信例: 1');
+    return lines.join('\n');
 };
 
 const rankGuideKnowledge = ({ question, currentView, limit = 5 }) => (
@@ -1621,6 +1831,18 @@ const buildGuideDirectAnswer = ({ question, currentView, responseStyle = 'balanc
 };
 
 export const formatLocalOperationAnswer = ({ question, currentView, currentViewLabel = '', responseStyle = 'balanced' }) => {
+    const buttonRuleMatch = findBestButtonDetailRule(question);
+    if (buttonRuleMatch.kind === 'matched' && buttonRuleMatch.top) {
+        return buildButtonDetailAnswer({
+            rule: buttonRuleMatch.top,
+            responseStyle,
+        });
+    }
+    if (buttonRuleMatch.kind === 'ambiguous') {
+        const answer = buildButtonAmbiguousAnswer(buttonRuleMatch.alternatives);
+        if (answer) return answer;
+    }
+
     const normalizedQuestion = normalize(question);
     const questionWords = expandWithSynonyms(uniqueWords(question)
         .map((word) => normalize(word))
