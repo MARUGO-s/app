@@ -24,6 +24,7 @@ const VIEW_LABEL_MAP = {
     users: 'ユーザー管理',
     'api-logs': 'API使用ログ',
     'operation-logs': '操作質問ログ',
+    requests: '要望一覧',
     trash: 'ゴミ箱',
 };
 

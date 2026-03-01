@@ -19,6 +19,8 @@ import { OrderList } from './components/OrderList';
 import ApiUsageLogs from './components/ApiUsageLogs';
 import OperationQaLogs from './components/OperationQaLogs';
 import OperationAssistant from './components/OperationAssistant';
+import RequestAssistant from './components/RequestAssistant';
+import RequestLogs from './components/RequestLogs';
 import { recipeService } from './services/recipeService';
 import { formatDisplayId } from './utils/formatUtils';
 import { userService } from './services/userService';
@@ -1111,6 +1113,16 @@ function AppContent() {
                       >
                         <span style={{ marginRight: '8px' }}>📘</span> アプリガイド
                       </Button>
+
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setSearchParams({ view: 'requests' });
+                          setIsMenuOpen(false);
+                        }}
+                      >
+                        <span style={{ marginRight: '8px' }}>📨</span> 要望
+                      </Button>
                       <div className="menu-divider"></div>
 
                       {currentView === 'list' && (
@@ -1519,6 +1531,29 @@ function AppContent() {
           </div>
         </>
       )}
+      {currentView === 'requests' && (
+        <>
+          <div style={{ padding: '20px 20px 0', textAlign: 'left' }}>
+            <Button onClick={() => setSearchParams({ view: 'list' })}>
+              ← レシピリストに戻る
+            </Button>
+          </div>
+          <RequestLogs userRole={user?.role} />
+          <div style={{ padding: '20px', textAlign: 'center' }}>
+            <Button onClick={() => setSearchParams({ view: 'list' })}>
+              ← レシピリストに戻る
+            </Button>
+          </div>
+        </>
+      )}
+      <RequestAssistant
+        currentView={currentView}
+        userRole={user?.role}
+        onOpenRequestsPage={() => {
+          setSearchParams({ view: 'requests' });
+          setIsMenuOpen(false);
+        }}
+      />
       <OperationAssistant currentView={currentView} userRole={user?.role} />
     </Layout>
   );
