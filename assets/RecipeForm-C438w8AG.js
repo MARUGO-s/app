@@ -1,0 +1,567 @@
+const n=`.recipe-form {
+    padding: 0 var(--space-sm);
+}
+
+@media (min-width: 900px) {
+    .recipe-form {
+        padding: 0;
+    }
+}
+
+/* Make Cards in RecipeForm 50% transparent as requested */
+.recipe-form .glass-card {
+    background: rgba(255, 255, 255, 0.5);
+    /* Slightly greenish tint */
+    backdrop-filter: blur(8px);
+    /* Optional: adds nice glass effect */
+}
+
+/* Also make Inputs transparent to match */
+/* Increase opacity for better visibility */
+.recipe-form .input-field {
+    background: #ffffff !important;
+}
+
+.recipe-form .input-field:focus {
+    background: #ffffff !important;
+}
+
+/* Darken placeholder for readability */
+.recipe-form .input-field::placeholder {
+    color: #666 !important;
+}
+
+.recipe-form__header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-md);
+    margin-bottom: var(--space-lg);
+}
+
+.recipe-form__actions {
+    display: flex;
+    gap: var(--space-sm);
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    /* Safety for very narrow screens */
+}
+
+@media (min-width: 900px) {
+    .recipe-form__header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0;
+    }
+
+    .recipe-form__actions {
+        width: auto;
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+    }
+}
+
+.recipe-form__grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-lg);
+}
+
+@media (min-width: 900px) {
+    .recipe-form__grid {
+        grid-template-columns: 3fr 7fr;
+    }
+}
+
+.form-column {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    /* Prevent grid item from expanding to min-content width */
+}
+
+.mb-md {
+    margin-bottom: var(--space-md);
+}
+
+h3 {
+    margin-bottom: var(--space-md);
+    color: #000000;
+    /* Black as requested */
+}
+
+.form-row-3 {
+    display: grid;
+    grid-template-columns: 1fr;
+    /* Stack inputs on mobile */
+    gap: var(--space-md);
+}
+
+.form-row-2 {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+}
+
+/* Flex row that wraps on narrow space */
+.form-row-flex {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    width: 100%;
+}
+
+.form-row-flex>* {
+    min-width: 0;
+    /* Prevent overflow */
+}
+
+@media (min-width: 900px) {
+    .form-row-3 {
+        grid-template-columns: 1fr 1fr 1fr;
+    }
+}
+
+.tag-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin-top: var(--space-sm);
+}
+
+.store-select {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid hsl(var(--color-border));
+    border-radius: var(--radius-md);
+    background-color: hsl(var(--color-bg-surface));
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+/* Scroll Wrapper for Standard Form */
+.recipe-scroll-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    /* Changed from calc(100% + 32px) to prevent layout issues in intermediate widths */
+    margin: 0;
+    padding: 0;
+}
+
+@media (max-width: 899px) {
+    .recipe-scroll-wrapper {
+        width: calc(100% + 32px);
+        margin-left: -16px;
+        margin-right: -16px;
+        padding: 0 16px;
+    }
+}
+
+.dynamic-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Ensure ingredient name container fills the grid cell */
+.ingredient-name {
+    width: 100%;
+    min-width: 0;
+    /* Allows grid item to shrink below content size if needed */
+}
+
+/* Ensure inner input group fills container */
+.ingredient-name .input-group {
+    width: 100%;
+    margin-bottom: 0;
+}
+
+/* Additional responsive columns styling */
+.ingredient-qty,
+.ingredient-unit,
+.ingredient-cost {
+    width: 100%;
+    min-width: 0;
+}
+
+.ingredient-qty .input-group,
+.ingredient-unit .input-group,
+.ingredient-cost .input-group {
+    width: 100%;
+    margin-bottom: 0;
+}
+
+/* --- Mobile: hide header, card-style rows --- */
+.recipe-list-header {
+    display: none;
+}
+
+.form-ingredient-row {
+    display: grid;
+    /* Mobile Grid Layout: Optimized for iPhone width */
+    /* Col 1: Handle (24px) */
+    /* Col 2: Main Input Left (1fr) */
+    /* Col 3: Main Input Right (1fr) */
+    /* Col 4: Delete/Action (30px) */
+    grid-template-columns: 24px 1fr 1fr 30px;
+    grid-template-rows: auto auto auto;
+    gap: 8px 8px;
+    align-items: center;
+    min-width: 0;
+    width: 100%;
+    padding: 12px 4px;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+}
+
+/* --- Row 1: Name & Controls --- */
+.form-ingredient-row> :nth-child(1) {
+    grid-row: 1;
+    grid-column: 1;
+    align-self: center;
+}
+
+/* drag handle */
+
+.form-ingredient-row> :nth-child(2) {
+    grid-row: 1;
+    grid-column: 2 / 4;
+    width: 100%;
+}
+
+/* name (takes full available width) */
+
+.form-ingredient-row> :nth-child(8) {
+    grid-row: 1;
+    grid-column: 4;
+    justify-self: end;
+}
+
+/* delete */
+
+/* --- Row 2: Quantity & Unit --- */
+.form-ingredient-row> :nth-child(3) {
+    grid-row: 2;
+    grid-column: 2;
+}
+
+/* qty */
+
+.form-ingredient-row> :nth-child(4) {
+    grid-row: 2;
+    grid-column: 3;
+}
+
+/* unit */
+
+/* --- Row 3: Cost Info --- */
+.form-ingredient-row> :nth-child(5) {
+    grid-row: 3;
+    grid-column: 2;
+}
+
+/* purchase cost */
+
+.form-ingredient-row> :nth-child(6) {
+    grid-row: 3;
+    grid-column: 3;
+}
+
+/* cost */
+
+.form-ingredient-row> :nth-child(7) {
+    grid-row: 3;
+    grid-column: 4;
+}
+
+/* 10% checkbox */
+
+/* Reduced font for ALL inputs on mobile */
+.form-ingredient-row input,
+.form-ingredient-row select {
+    font-size: 0.9rem !important;
+    padding: 6px 4px !important;
+    height: 38px;
+    /* Touch friendly height */
+}
+
+/* Mobile: label cost fields inline */
+.form-ingredient-row .ingredient-cost::before {
+    content: attr(data-label);
+    font-size: 0.7rem;
+    color: #888;
+    display: block;
+    line-height: 1.2;
+    margin-bottom: 2px;
+}
+
+/* --- Tablet (600px+): single-row grid, show header --- */
+@media (min-width: 600px) {
+    .recipe-list-header {
+        display: grid;
+        grid-template-columns: 24px minmax(70px, 2fr) minmax(55px, 1.5fr) minmax(48px, 1fr) 65px 65px 26px 28px;
+        gap: 2px;
+        margin-bottom: 8px;
+        font-size: 0.8rem;
+        font-weight: bold;
+        color: var(--color-text-muted);
+        min-width: 0;
+        width: 100%;
+        padding: 0 2px;
+    }
+
+    .form-ingredient-row {
+        grid-template-columns: 24px minmax(70px, 2fr) minmax(55px, 1.5fr) minmax(48px, 1fr) 65px 65px 26px 28px;
+        grid-template-rows: auto;
+        gap: 2px;
+        padding: 0;
+        border-bottom: none;
+    }
+
+    /* Reset explicit grid placements for single-row mode */
+    .form-ingredient-row> :nth-child(1),
+    .form-ingredient-row> :nth-child(2),
+    .form-ingredient-row> :nth-child(3),
+    .form-ingredient-row> :nth-child(4),
+    .form-ingredient-row> :nth-child(5),
+    .form-ingredient-row> :nth-child(6),
+    .form-ingredient-row> :nth-child(7),
+    .form-ingredient-row> :nth-child(8) {
+        grid-row: auto;
+        grid-column: auto;
+    }
+
+    .form-ingredient-row input {
+        font-size: 0.85rem !important;
+        padding: 4px 2px !important;
+    }
+
+    .form-ingredient-row .ingredient-cost::before {
+        display: none;
+    }
+}
+
+/* --- Desktop (1200px+) --- */
+@media (min-width: 1200px) {
+    .recipe-list-header {
+        grid-template-columns: 30px 2fr 95px 75px 90px 90px 30px 40px;
+        gap: 8px;
+        font-size: 0.85rem;
+        min-width: 700px;
+    }
+
+    .form-ingredient-row {
+        grid-template-columns: 30px 2fr 95px 75px 90px 90px 30px 40px;
+        gap: 8px;
+        min-width: 700px;
+    }
+
+    .form-ingredient-row input {
+        font-size: 0.9rem !important;
+        padding: 4px 4px !important;
+    }
+}
+
+
+/* Steps Row */
+.step-row {
+    display: grid;
+    grid-template-columns: 30px 1fr 40px;
+    gap: 8px;
+    align-items: center;
+    /* Center vertical */
+    width: 100%;
+}
+
+.step-count {
+    color: hsl(var(--color-primary));
+    font-weight: bold;
+    text-align: center;
+}
+
+/* Reset margins for inputs inside grid */
+.form-ingredient-row .input-field,
+.step-row .input-field {
+    margin: 0;
+}
+
+.step-row .input-group {
+    margin-bottom: 0;
+}
+
+/* Consistent delete button */
+.remove-button-cell {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.icon-btn-delete {
+    background: none;
+    border: none;
+    color: #ff4d4f;
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+}
+
+.icon-btn-delete:hover {
+    color: #d9363e;
+    background-color: rgba(255, 77, 79, 0.1);
+    border-radius: 4px;
+}
+
+/* Hide legacy styles */
+.remove-btn {
+    display: none;
+    /* using new class */
+}
+
+/* Force black text for inputs and labels in RecipeForm */
+.recipe-form input,
+.recipe-form textarea,
+.recipe-form select,
+.recipe-form p,
+.recipe-form span,
+.recipe-form div {
+    color: #000 !important;
+}
+
+.recipe-form label {
+    color: #fff !important;
+}
+
+/* Ensure labels inside cards (light background) are black */
+.recipe-form .glass-card label {
+    color: #000 !important;
+}
+
+/* Exceptions */
+.recipe-form .step-count {
+    color: #666 !important;
+}
+
+/* Custom styling for file input button */
+.recipe-form input[type="file"]::file-selector-button {
+    border-radius: 4px;
+    /* Small rounded corners as requested */
+    border: 1px solid #ccc;
+    padding: 4px 12px;
+    margin-right: 10px;
+    background-color: #f9f9f9;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    color: #333;
+}
+
+.recipe-form input[type="file"]::file-selector-button:hover {
+    background-color: #e0e0e0;
+}
+
+/* Force Cancel button (ghost) in header to be white text */
+.recipe-form .recipe-form__actions .btn--ghost,
+.recipe-form .recipe-form__actions .btn--ghost span {
+    color: hsl(var(--color-text-main)) !important;
+}
+
+.import-actions-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 0.4rem;
+    flex-wrap: wrap;
+    /* Allow buttons to wrap on small screens */
+}
+
+.recipe-form__voice-action {
+    margin-top: -0.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.step-row__voice-action {
+    margin-top: 0.35rem;
+}
+
+.voice-input-btn {
+    font-size: 0.78rem;
+    line-height: 1.2;
+}
+
+.voice-input-btn.is-recording {
+    border-color: #b42318 !important;
+    color: #b42318 !important;
+    background: #fff5f5 !important;
+}
+
+.btn-import-web {
+    background-color: #e3f2fd !important;
+    color: #1976d2 !important;
+    border: 1px solid #bbdefb !important;
+    font-weight: bold !important;
+    font-size: 0.85rem !important;
+    padding: 6px 12px !important;
+}
+
+.btn-import-web:hover {
+    background-color: #bbdefb !important;
+}
+
+.btn-import-image {
+    background-color: #e8f5e9 !important;
+    color: #2e7d32 !important;
+    border: 1px solid #c8e6c9 !important;
+    font-weight: bold !important;
+    font-size: 0.85rem !important;
+    padding: 6px 12px !important;
+}
+
+.btn-import-image:hover {
+    background-color: #c8e6c9 !important;
+}
+
+/* Section Header Input Styling */
+.recipe-form .section-header-input {
+    background-color: hsl(25, 95%, 45%) !important;
+    /* Orange */
+    color: #ffffff !important;
+    /* White text */
+    border-radius: var(--radius-md) !important;
+    padding: 0.5rem 1rem !important;
+    /* Add padding for pill look */
+}
+
+.recipe-form .section-header-input:focus {
+    background-color: hsl(25, 95%, 40%) !important;
+    /* Slightly darker on focus */
+    color: #ffffff !important;
+}
+
+.recipe-form .section-header-input::placeholder {
+    color: rgba(255, 255, 255, 0.7) !important;
+    /* Lighter white for placeholder */
+}
+
+/* Group Delete Button Styling */
+.group-delete-btn {
+    color: #ffffff !important;
+    /* White as requested */
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 0.4rem 0.8rem;
+    font-weight: bold;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    /* Ensure visibility on light/mixed backgrounds */
+    white-space: nowrap;
+}
+
+.group-delete-btn:hover {
+    text-decoration: underline;
+    opacity: 0.9;
+}`;export{n as default};

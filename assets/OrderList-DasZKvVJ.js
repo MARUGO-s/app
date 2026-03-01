@@ -1,0 +1,533 @@
+const n=`.order-list-container {
+    padding: 1rem;
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.filter-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    margin-bottom: 2rem;
+}
+
+.date-range-inputs {
+    display: flex;
+    align-items: flex-end;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.date-range-inputs label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+    font-size: 0.9rem;
+    color: #111827;
+}
+
+.date-range-inputs input {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    color: #111827;
+}
+
+.results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.order-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.order-table th,
+.order-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #eee;
+    color: #1f2937;
+}
+
+.order-table th {
+    background: #f8f9fa;
+    text-align: left;
+    font-weight: 600;
+    color: #111827;
+}
+
+/* モーダル内のコンテンツスタイル */
+.copy-modal-content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.copy-instructions {
+    margin: 0;
+    color: #6b7280;
+    font-size: 0.95rem;
+}
+
+.copy-textarea {
+    width: 100%;
+    min-height: 200px;
+    padding: 12px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.95rem;
+    resize: vertical;
+    background-color: #f9fafb;
+    color: #111827;
+    line-height: 1.6;
+}
+
+.copy-textarea:focus {
+    outline: none;
+    border-color: hsl(var(--color-primary));
+    background-color: white;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 8px;
+}
+
+/* 印刷プレビュー用スタイル */
+.print-preview-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.print-preview-header {
+    text-align: center;
+    padding-bottom: 16px;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.print-preview-header h3 {
+    margin: 0 0 8px 0;
+    font-size: 1.5rem;
+    color: #111827;
+}
+
+.print-period {
+    margin: 0;
+    color: #6b7280;
+    font-size: 0.95rem;
+}
+
+.print-preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+}
+
+.print-preview-table th,
+.print-preview-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #e5e7eb;
+    color: #1f2937;
+}
+
+.print-preview-table th {
+    background: #f9fafb;
+    text-align: left;
+    font-weight: 600;
+    color: #374151;
+}
+
+.print-preview-table tbody tr:hover {
+    background-color: #f9fafb;
+}
+
+.print-preview-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.recipe-breakdown-print {
+    margin-top: 20px;
+}
+
+.recipe-breakdown-print h4 {
+    margin: 0 0 8px;
+    color: #111827;
+    font-size: 0.98rem;
+}
+
+.recipe-breakdown-section {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 3px solid #111;
+}
+
+.recipe-breakdown-section-title {
+    margin-bottom: 6px;
+    color: #111827;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.recipe-breakdown-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    table-layout: fixed;
+}
+
+.recipe-breakdown-table col.rb-col-name {
+    width: 60%;
+}
+
+.recipe-breakdown-table col.rb-col-required,
+.recipe-breakdown-table col.rb-col-stock {
+    width: 10%;
+}
+
+.recipe-breakdown-table col.rb-col-spec {
+    width: 20%;
+}
+
+.recipe-breakdown-table th,
+.recipe-breakdown-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #e5e7eb;
+    color: #1f2937;
+}
+
+.recipe-breakdown-table th {
+    text-align: left;
+    font-weight: 600;
+    color: #111827;
+}
+
+.recipe-breakdown-table th:first-child,
+.recipe-breakdown-table td:first-child {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.86rem;
+}
+
+.recipe-breakdown-table th:nth-child(2),
+.recipe-breakdown-table td:nth-child(2),
+.recipe-breakdown-table th:nth-child(3),
+.recipe-breakdown-table td:nth-child(3) {
+    padding-left: 8px;
+    padding-right: 8px;
+    font-size: 0.84rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.recipe-breakdown-table th:last-child,
+.recipe-breakdown-table td:last-child {
+    padding-left: 5px;
+    padding-right: 5px;
+    font-size: 0.76rem;
+    line-height: 1.2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.recipe-material-vendor {
+    font-size: 0.72em;
+    color: #6b7280;
+    font-weight: 400;
+}
+
+.recipe-breakdown-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 600px) {
+    .modal-actions {
+        flex-direction: column;
+    }
+
+    .modal-actions button {
+        width: 100%;
+    }
+
+    .copy-textarea {
+        min-height: 150px;
+        font-size: 0.9rem;
+    }
+
+    .print-preview-table th,
+    .print-preview-table td {
+        padding: 8px 12px;
+        font-size: 0.9rem;
+    }
+}
+
+/* 印刷時のスタイル */
+@media print {
+
+    /* Global Resets */
+    body {
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        background-color: white !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        height: auto !important;
+        visibility: visible !important;
+    }
+
+    /* Hide everything by default (but be careful not to hide roots) */
+    body>*:not(#root) {
+        display: none !important;
+    }
+
+    /* Ensure app root is visible and resets overflow */
+    #root,
+    .app-layout,
+    .app-main,
+    .order-list-container {
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
+        position: static !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        visibility: visible !important;
+    }
+
+    /* Hide UI Framework Elements */
+    .app-header,
+    .app-footer,
+    .container-header,
+    .filter-card,
+    .order-results,
+    .tag-filter-container,
+    .mobile-menu-toggle,
+    .secondary-actions,
+    .toast-container {
+        display: none !important;
+    }
+
+    /* --- MODAL PRINT STYLES --- */
+
+    /* Overlay becomes the print canvas */
+    .modal-overlay {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        background: white !important;
+        display: block !important;
+        z-index: 9999 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: visible !important;
+        visibility: visible !important;
+    }
+
+    /* Reset Modal Content constraints (CRITICAL FIX) */
+    .modal-content {
+        box-shadow: none !important;
+        border: none !important;
+        width: 100% !important;
+        max-width: none !important;
+        height: auto !important;
+        max-height: none !important;
+        /* Fix for blank pages due to height limits */
+        min-height: auto !important;
+        margin: 0 !important;
+        padding: 20px !important;
+        overflow: visible !important;
+        /* Fix for clipping */
+        display: block !important;
+        position: static !important;
+        transform: none !important;
+        animation: none !important;
+        visibility: visible !important;
+    }
+
+    /* Reset Modal Body scrolling */
+    .modal-body {
+        padding: 0 !important;
+        overflow: visible !important;
+        height: auto !important;
+        max-height: none !important;
+        display: block !important;
+        flex: none !important;
+        width: 100% !important;
+        visibility: visible !important;
+    }
+
+    /* Ensure all children of modal body are visible */
+    .modal-body * {
+        visibility: visible !important;
+    }
+
+    /* Hide Non-Printable Elements in Modal */
+    .modal-header,
+    .modal-actions,
+    .modal-close-btn {
+        display: none !important;
+    }
+
+    /* Content Styling */
+    .print-preview-content {
+        width: 100% !important;
+        display: block !important;
+        visibility: visible !important;
+    }
+
+    .print-preview-header {
+        border-bottom: 2px solid #333 !important;
+        margin-bottom: 20px !important;
+        text-align: center !important;
+        visibility: visible !important;
+    }
+
+    .print-preview-header h3 {
+        font-size: calc(24px - 3pt) !important;
+        margin-bottom: 10px !important;
+        visibility: visible !important;
+    }
+
+    .print-period {
+        font-size: calc(14px - 3pt) !important;
+        color: #666 !important;
+        visibility: visible !important;
+    }
+
+    .print-preview-table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        page-break-inside: auto;
+        visibility: visible !important;
+    }
+
+    .print-preview-table th,
+    .print-preview-table td {
+        border: 1px solid #000 !important;
+        padding: 8px !important;
+        color: black !important;
+        font-size: 7pt !important;
+        background-color: transparent !important;
+        visibility: visible !important;
+    }
+
+    .print-preview-table th {
+        background-color: #f0f0f0 !important;
+        font-weight: bold !important;
+    }
+
+    .print-preview-table tr {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+
+    .recipe-breakdown-print {
+        margin-top: 12px !important;
+    }
+
+    .recipe-breakdown-print h4 {
+        margin: 0 0 6px !important;
+        font-size: 8pt !important;
+        color: #111 !important;
+    }
+
+    .recipe-breakdown-section {
+        margin-top: 8px !important;
+        padding-top: 6px !important;
+        border-top: 2.5px solid #000 !important;
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+
+    .recipe-breakdown-section-title {
+        margin-bottom: 4px !important;
+        font-size: 7.5pt !important;
+        font-weight: 700 !important;
+        color: #111 !important;
+    }
+
+    .recipe-breakdown-table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        table-layout: fixed !important;
+    }
+
+    .recipe-breakdown-table col.rb-col-name {
+        width: 60% !important;
+    }
+
+    .recipe-breakdown-table col.rb-col-required,
+    .recipe-breakdown-table col.rb-col-stock {
+        width: 10% !important;
+    }
+
+    .recipe-breakdown-table col.rb-col-spec {
+        width: 20% !important;
+    }
+
+    .recipe-breakdown-table th,
+    .recipe-breakdown-table td {
+        border: 1px solid #000 !important;
+        padding: 5px 6px !important;
+        font-size: 7pt !important;
+        color: #000 !important;
+        background: transparent !important;
+    }
+
+    .recipe-breakdown-table th {
+        font-weight: 700 !important;
+    }
+
+    .recipe-breakdown-table th:first-child,
+    .recipe-breakdown-table td:first-child {
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        font-size: 6pt !important;
+    }
+
+    .recipe-breakdown-table th:nth-child(2),
+    .recipe-breakdown-table td:nth-child(2),
+    .recipe-breakdown-table th:nth-child(3),
+    .recipe-breakdown-table td:nth-child(3) {
+        font-size: 6.2pt !important;
+        padding-left: 5px !important;
+        padding-right: 5px !important;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .recipe-breakdown-table th:last-child,
+    .recipe-breakdown-table td:last-child {
+        font-size: 5.6pt !important;
+        line-height: 1.15 !important;
+        padding-left: 4px !important;
+        padding-right: 4px !important;
+        white-space: normal !important;
+        overflow-wrap: anywhere !important;
+        word-break: break-word !important;
+    }
+
+    .recipe-material-vendor {
+        font-size: 0.68em !important;
+        color: #444 !important;
+        font-weight: 400 !important;
+    }
+}
+`;export{n as default};

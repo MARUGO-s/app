@@ -1,0 +1,222 @@
+const n=`.operation-assistant-fab {
+    position: fixed;
+    right: 16px;
+    bottom: 18px;
+    z-index: 1100;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    background: linear-gradient(135deg, #d97706, #ea580c);
+    color: #ffffff;
+    border-radius: 999px;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 10px 18px rgba(0, 0, 0, 0.28);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.operation-assistant-fab:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 20px rgba(0, 0, 0, 0.32);
+}
+
+.operation-assistant-fab:active {
+    transform: translateY(0);
+}
+
+.operation-assistant-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 420px;
+}
+
+.operation-assistant-hint {
+    font-size: 0.82rem;
+    color: #555;
+    background: #f7f7f7;
+    border: 1px solid #ececec;
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+.operation-assistant-prompt-toggle-wrap {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.operation-assistant-prompt-toggle {
+    border: 1px solid #fcd9b6;
+    background: #fff7ed;
+    color: #9a3412;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+}
+
+.operation-assistant-prompt-toggle:hover {
+    background: #ffedd5;
+    border-color: #fdba74;
+}
+
+.operation-assistant-prompt-toggle:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.operation-assistant-quick-prompt-panel {
+    border: 1px solid #f3e8d7;
+    background: #fffdf8;
+    border-radius: 10px;
+    padding: 8px;
+}
+
+.operation-assistant-quick-prompt-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 140px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.operation-assistant-quick-prompt-row {
+    width: 100%;
+    text-align: left;
+    border: 1px solid #fcd9b6;
+    background: #fff7ed;
+    color: #9a3412;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 0.8rem;
+    line-height: 1.35;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.operation-assistant-quick-prompt-row:hover {
+    background: #ffedd5;
+    border-color: #fdba74;
+}
+
+.operation-assistant-quick-prompt-row:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.operation-assistant-messages {
+    flex: 1;
+    min-height: 240px;
+    max-height: 48vh;
+    overflow-y: auto;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #fafafa;
+}
+
+.operation-assistant-message {
+    max-width: 94%;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+    background: #ffffff;
+}
+
+.operation-assistant-message--user {
+    align-self: flex-end;
+    background: #fff7ed;
+    border-color: #fed7aa;
+}
+
+.operation-assistant-message--assistant {
+    align-self: flex-start;
+    background: #ffffff;
+}
+
+.operation-assistant-message-role {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #6b7280;
+    margin-bottom: 3px;
+}
+
+.operation-assistant-message-content {
+    color: #111827;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.operation-assistant-error {
+    font-size: 0.8rem;
+    color: #b91c1c;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+.operation-assistant-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.operation-assistant-input {
+    width: 100%;
+    resize: vertical;
+    min-height: 74px;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    padding: 10px 12px;
+    font-size: 0.92rem;
+    line-height: 1.4;
+    color: #111827;
+    background: #ffffff;
+}
+
+.operation-assistant-input:focus {
+    outline: none;
+    border-color: #d97706;
+    box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.15);
+}
+
+.operation-assistant-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+@media (max-width: 700px) {
+    .operation-assistant-fab {
+        right: 12px;
+        bottom: 12px;
+        padding: 9px 12px;
+        font-size: 0.8rem;
+    }
+
+    .operation-assistant-modal {
+        min-height: 360px;
+    }
+
+    .operation-assistant-quick-prompt-list {
+        max-height: 120px;
+    }
+
+    .operation-assistant-quick-prompt-row {
+        font-size: 0.75rem;
+    }
+
+    .operation-assistant-messages {
+        max-height: 44vh;
+    }
+}
+`;export{n as default};

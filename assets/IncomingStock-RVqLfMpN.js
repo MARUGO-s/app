@@ -1,0 +1,230 @@
+const n=`.incoming-stock {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.incoming-stock__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.incoming-stock__title {
+  margin: 0;
+}
+
+.incoming-stock__card {
+  padding: 16px;
+  /* Cards are light surfaces in this app; ensure readable dark text. */
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.incoming-stock__card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.incoming-stock__section-title {
+  margin: 0;
+}
+
+.incoming-stock__error {
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.08);
+  padding: 12px 14px;
+  color: rgba(0, 0, 0, 0.9);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.incoming-stock__file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.incoming-stock__file-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.02);
+  flex-wrap: wrap;
+  /* Allow wrapping */
+}
+
+.incoming-stock__file-info {
+  min-width: 0;
+  flex: 1;
+  /* Take available space */
+  word-break: break-all;
+  /* Prevent overflow */
+}
+
+.incoming-stock__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.12);
+  color: rgba(0, 0, 0, 0.78);
+  white-space: nowrap;
+}
+
+.incoming-stock__badge--pending {
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.12);
+  color: rgba(0, 0, 0, 0.78);
+}
+
+.incoming-stock__table-wrap {
+  overflow: auto;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.incoming-stock__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.incoming-stock__table th,
+.incoming-stock__table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  vertical-align: top;
+}
+
+.incoming-stock__table th {
+  text-align: left;
+  color: rgba(0, 0, 0, 0.85);
+  font-weight: 700;
+}
+
+.incoming-stock__table td {
+  color: rgba(0, 0, 0, 0.82);
+}
+
+.incoming-stock__table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+@media (max-width: 700px) {
+  .incoming-stock__file-row {
+    align-items: flex-start;
+  }
+}
+
+.incoming-stock__calc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.incoming-stock__calc-btn {
+  padding: 12px;
+  font-size: 1rem;
+  font-weight: 500;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.incoming-stock__calc-btn:active {
+  background: rgba(0, 0, 0, 0.05);
+  transform: translateY(1px);
+}
+
+.incoming-stock__calc-btn--clear {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+/* Tabs */
+.incoming-stock__tabs {
+  display: flex !important;
+  gap: 8px !important;
+  overflow-x: auto !important;
+  padding-bottom: 8px !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+  margin-bottom: 16px !important;
+  /* Hide scrollbar but keep functionality */
+  scrollbar-width: none !important;
+}
+
+.incoming-stock__tabs::-webkit-scrollbar {
+  display: none !important;
+}
+
+.incoming-stock__tab-button {
+  padding: 8px 16px !important;
+  border: none !important;
+  background: none !important;
+  border-radius: 8px !important;
+  font-size: 0.95rem !important;
+  font-weight: 600 !important;
+  color: rgba(0, 0, 0, 0.6) !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  transition: all 0.2s !important;
+}
+
+.incoming-stock__tab-button:hover {
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: rgba(0, 0, 0, 0.9) !important;
+}
+
+.incoming-stock__tab-button--active {
+  background: rgba(34, 197, 94, 0.12) !important;
+  /* Green tint matching primary */
+  color: #15803d !important;
+  /* Darker green */
+}
+
+/* Badge count in tab */
+.incoming-stock__tab-count {
+  display: inline-block !important;
+  margin-left: 6px !important;
+  font-size: 0.8em !important;
+  opacity: 0.8 !important;
+  background: rgba(0, 0, 0, 0.1) !important;
+  padding: 2px 6px !important;
+  border-radius: 99px !important;
+}
+
+/* Loading Spinner */
+.incoming-stock__spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  border-left-color: #22c55e;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}`;export{n as default};

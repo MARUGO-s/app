@@ -1,0 +1,129 @@
+const n=`/* Bread Form Styles */
+.bread-card {
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    box-shadow: none;
+    max-width: 100%;
+    overflow: hidden;
+    /* Ensure content obeys border radius and width */
+    min-width: 0;
+    /* Prevent flex item expansion */
+}
+
+.bread-form {
+    width: 100%;
+    max-width: 100%;
+    /* Changed from 100vw to be safer in nested contexts */
+    overflow-x: hidden;
+    /* Prevent page scroll */
+    min-width: 0;
+    /* Prevent flex item expansion */
+}
+
+.bread-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-sm);
+    border-bottom: 2px solid var(--color-primary);
+    padding-bottom: 4px;
+}
+
+.bread-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--color-text-main);
+}
+
+.bread-badge {
+    background: var(--color-primary);
+    color: white;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: bold;
+}
+
+.bread-subtitle {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+}
+
+.text-center {
+    text-align: center;
+}
+
+.bread-percent {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-weight: bold;
+    color: var(--color-primary);
+    font-size: 0.85rem;
+    min-height: 32px;
+}
+
+@media (min-width: 750px) {
+    .bread-percent {
+        font-size: 0.9rem;
+    }
+}
+
+/* Bread Specific Grid Layout */
+/* Unified Single Row Layout for all screen sizes (scrolls on small screens) */
+/* Columns: Handle | Name | Qty | Unit | % | Cost | Tax | Delete */
+/* Grid:    24px   | 3fr  | 1fr | 50px | 40px | 65px | 65px | 26px | 28px */
+
+.recipe-list-header--bread {
+    display: grid;
+    grid-template-columns: 24px minmax(100px, 2fr) minmax(70px, 1.5fr) 60px 40px 65px 65px 26px 28px;
+    gap: 4px;
+    margin-bottom: 8px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: var(--color-text-muted);
+    min-width: 600px;
+    /* Ensure check width triggers scroll */
+    width: 100%;
+    padding: 0 4px;
+}
+
+.form-ingredient-row--bread {
+    display: grid;
+    grid-template-columns: 24px minmax(100px, 2fr) minmax(70px, 1.5fr) 60px 40px 65px 65px 26px 28px;
+    gap: 4px;
+    align-items: center;
+    width: 100%;
+    min-width: 600px;
+    /* Ensure row has minimum width to maintain layout */
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+}
+
+/* Ensure inputs are readable */
+.form-ingredient-row--bread input {
+    font-size: 0.85rem !important;
+    padding: 4px !important;
+}
+
+/* Reset specific grid placements (all auto flow) */
+.form-ingredient-row--bread>* {
+    grid-row: auto;
+    grid-column: auto;
+}
+
+/* Desktop refinements (optional, primarily just slightly looser spacing) */
+@media (min-width: 1200px) {
+
+    .recipe-list-header--bread,
+    .form-ingredient-row--bread {
+        grid-template-columns: 30px 2fr 95px 70px 50px 90px 90px 30px 40px;
+        gap: 8px;
+        min-width: 700px;
+    }
+
+    .form-ingredient-row--bread input {
+        font-size: 0.9rem !important;
+    }
+}`;export{n as default};

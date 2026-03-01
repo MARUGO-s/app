@@ -1,0 +1,308 @@
+const n=`.backup-management {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 1rem 0;
+}
+
+/* ヘッダー */
+.backup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 1.25rem;
+    background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+    border-radius: 12px;
+    border: 1px solid #bfdbfe;
+}
+
+.backup-header-info {
+    flex: 1;
+    min-width: 200px;
+}
+
+.backup-title {
+    margin: 0 0 0.4rem;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #1e40af;
+}
+
+.backup-desc {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #4b5563;
+    line-height: 1.5;
+}
+
+.backup-header-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* ステータスメッセージ */
+.backup-status {
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.backup-status--info {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+
+.backup-status--success {
+    background: #f0fdf4;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+}
+
+.backup-status--error {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+}
+
+/* ローディング・空 */
+.backup-loading,
+.backup-empty,
+.backup-management-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #9ca3af;
+    font-size: 0.95rem;
+    line-height: 1.8;
+}
+
+/* ユーザー一覧 */
+.backup-user-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.backup-user-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.backup-user-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.backup-user-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.backup-user-id {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #111827;
+}
+
+.backup-user-email {
+    font-size: 0.8rem;
+    color: #6b7280;
+}
+
+/* 世代一覧グリッド */
+.backup-gen-list {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+}
+
+@media (max-width: 640px) {
+    .backup-gen-list {
+        grid-template-columns: 1fr;
+    }
+}
+
+.backup-gen-item {
+    padding: 0.85rem 1rem;
+    border-right: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.backup-gen-item:last-child {
+    border-right: none;
+}
+
+.backup-gen-item--empty {
+    background: #fafafa;
+    opacity: 0.6;
+}
+
+.backup-gen-item--exists {
+    background: #fff;
+}
+
+.backup-gen-number {
+    margin-bottom: 0.2rem;
+}
+
+.backup-gen-badge {
+    display: inline-block;
+    background: #1e40af;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.03em;
+}
+
+.backup-gen-item--empty .backup-gen-badge {
+    background: #d1d5db;
+    color: #9ca3af;
+}
+
+.backup-gen-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.backup-gen-label {
+    font-size: 0.82rem;
+    color: #374151;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.backup-gen-date {
+    font-size: 0.78rem;
+    color: #6b7280;
+}
+
+.backup-gen-count {
+    font-size: 0.8rem;
+    color: #4b5563;
+}
+
+.backup-gen-empty-text {
+    font-size: 0.82rem;
+    color: #9ca3af;
+    font-style: italic;
+    flex: 1;
+    display: flex;
+    align-items: center;
+}
+
+.backup-gen-actions {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+    margin-top: auto;
+    padding-top: 0.4rem;
+}
+
+/* cronジョブ説明 */
+.backup-cron-info {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    font-size: 0.85rem;
+    color: #78350f;
+}
+
+.backup-cron-title {
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: #92400e;
+}
+
+.backup-cron-list {
+    margin: 0 0 0.75rem;
+    padding-left: 1.4rem;
+    line-height: 1.8;
+}
+
+.backup-cron-sql {
+    background: #fff;
+    border: 1px solid #fde68a;
+    border-radius: 6px;
+    padding: 0.6rem 0.75rem;
+}
+
+.backup-cron-sql-label {
+    font-size: 0.78rem;
+    color: #92400e;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+}
+
+.backup-cron-code {
+    display: block;
+    font-size: 0.72rem;
+    color: #374151;
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-family: 'Courier New', monospace;
+    line-height: 1.5;
+}
+
+/* 復元情報ボックス */
+.restore-info-box {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 0.9rem 1rem;
+    font-size: 0.88rem;
+    color: #374151;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    line-height: 1.6;
+}
+
+/* プレビューテーブル */
+.backup-preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.backup-preview-table th {
+    text-align: left;
+    padding: 6px 8px;
+    background: #f3f4f6;
+    border-bottom: 2px solid #e5e7eb;
+    font-weight: 600;
+    color: #374151;
+}
+
+.backup-preview-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid #f0f0f0;
+    color: #4b5563;
+}
+
+.backup-preview-table tr:hover td {
+    background: #f9fafb;
+}`;export{n as default};

@@ -1,0 +1,70 @@
+const n=`.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: var(--space-md);
+}
+
+.input-group--no-margin {
+    margin-bottom: 0;
+}
+
+.input-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: hsl(var(--color-text-main));
+}
+
+.input-field {
+    background: #fff;
+    border: 1px solid hsl(var(--color-border-dark));
+    border-radius: var(--radius-md);
+    padding: 0.5rem 0.75rem;
+    color: #333;
+    /* Ensuring dark text on white background */
+    font-size: 0.95rem;
+    font-family: inherit;
+    transition: border-color var(--transition-fast);
+    line-height: 1.4;
+    /* Stick to standard */
+    min-height: 38px;
+    /* Force a comfortable standard height for touch targets */
+    box-sizing: border-box;
+}
+
+/* Remove number input spinners (keep clean UI for bulk editing). */
+.input-field[type='number']::-webkit-outer-spin-button,
+.input-field[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.input-field[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.input-field:focus {
+    outline: none;
+    border-color: hsl(var(--color-primary));
+    box-shadow: 0 0 0 1px hsl(var(--color-primary));
+}
+
+.input-field::placeholder {
+    color: #ccc;
+}
+
+textarea.input-field {
+    min-height: 100px;
+    resize: vertical;
+}
+
+.input-group--error .input-field {
+    border-color: #d32f2f;
+}
+
+.input-error {
+    font-size: 0.75rem;
+    color: #d32f2f;
+}
+`;export{n as default};

@@ -1,0 +1,80 @@
+const n=`.autocomplete-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.autocomplete-input {
+    width: 100%;
+    display: block;
+    /* Fix vertical misalignment caused by inline behavior */
+    /* Ensure height matches standard inputs */
+    padding: 0.5rem 0.75rem;
+    /* Match .input-field padding */
+    min-height: 38px;
+    /* Match standard input height */
+    box-sizing: border-box;
+    /* Critical for consistent sizing */
+    line-height: 1.4;
+    /* Match typical line-height */
+}
+
+.suggestions-list {
+    position: fixed; /* Use fixed for portal rendering */
+    top: auto; /* Reset, will be set by inline style */
+    bottom: auto; /* Reset, will be set by inline style */
+    /* left and right are set by inline style for responsive sizing */
+    z-index: 9999; /* High z-index for portal overlay */
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    max-height: 250px;
+    overflow-y: auto;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.suggestion-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background-color 0.1s;
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.suggestion-item:hover,
+.suggestion-item.selected {
+    background-color: #f1f8ff;
+}
+
+.suggestion-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.suggestion-name {
+    font-weight: 500;
+    color: #1f2937;
+}
+
+.suggestion-source {
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #eef2f6;
+    color: #64748b;
+}
+
+.suggestion-details {
+    font-size: 0.85rem;
+    color: #666;
+    font-family: monospace;
+}`;export{n as default};

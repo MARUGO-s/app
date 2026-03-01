@@ -1,0 +1,740 @@
+const n=`.recipe-form-mock {
+    /* Dark-mode look for create/edit pages (scoped to this mock only). */
+    --mock-surface: #1f1f1f;
+    --mock-base: #2b2b2b;
+    --mock-base-2: #323232;
+    --mock-border: rgba(255, 255, 255, 0.12);
+    --mock-border-strong: rgba(255, 255, 255, 0.22);
+    --mock-input: #141414;
+    --mock-row: #242424;
+    --mock-row-alt: #2a2a2a;
+    --mock-text: #f3f4f6;
+    --mock-muted: #a1a1aa;
+    --mock-shadow: 0 24px 55px rgba(0, 0, 0, 0.55);
+    --mock-shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 22px rgba(0, 0, 0, 0.45);
+    --mock-glass: rgba(255, 255, 255, 0.06);
+    --mock-glass-strong: rgba(255, 255, 255, 0.10);
+    --mock-glass-border: rgba(255, 255, 255, 0.16);
+    --mock-glass-border-strong: rgba(255, 255, 255, 0.24);
+    --mock-glass-blur: 16px;
+    --mock-glass-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+
+    padding: 0 var(--space-sm) 2rem;
+    color: var(--mock-text);
+    color-scheme: dark;
+}
+
+@media (min-width: 750px) {
+    .recipe-form-mock {
+        padding: 0 0 2rem;
+    }
+}
+
+/* Keep Card/Input styling local to the mock */
+.recipe-form-mock .glass-card {
+    background: var(--mock-surface);
+    border: 1px solid var(--mock-border);
+    border-radius: 14px;
+    box-shadow: var(--mock-shadow-sm);
+}
+
+.recipe-form-mock .input-label {
+    color: var(--mock-text);
+    font-weight: 800;
+    letter-spacing: 0.01em;
+}
+
+.recipe-form-mock .input-field {
+    background: var(--mock-input);
+    border-color: var(--mock-border-strong);
+    color: var(--mock-text);
+    caret-color: var(--mock-text);
+}
+
+.recipe-form-mock .input-field::placeholder {
+    color: rgba(161, 161, 170, 0.75);
+}
+
+.recipe-form-mock .input-field:focus {
+    border-color: hsl(var(--color-primary));
+    box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.28);
+}
+
+.recipe-form-mock__page {
+    position: relative;
+}
+
+.recipe-form-mock__commandbar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: rgba(53, 53, 53, 0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+    padding: 10px 0;
+    margin-bottom: 14px;
+}
+
+.recipe-form-mock__commandbar-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.recipe-form-mock__crumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 800;
+    font-size: 0.95rem;
+}
+
+.recipe-form-mock__crumb-app {
+    opacity: 0.75;
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+}
+
+.recipe-form-mock__crumb-sep {
+    opacity: 0.4;
+}
+
+.recipe-form-mock__crumb-page {
+    white-space: nowrap;
+}
+
+.recipe-form-mock__crumb-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(0, 0, 0, 0.18);
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+    opacity: 0.95;
+}
+
+.recipe-form-mock__actions {
+    display: flex;
+    gap: var(--space-sm);
+    justify-content: flex-end;
+}
+
+.recipe-form-mock__sheet {
+    background:
+        radial-gradient(1200px 650px at 12% 0%, rgba(249, 115, 22, 0.14), transparent 58%),
+        radial-gradient(1000px 620px at 92% 18%, rgba(14, 165, 233, 0.12), transparent 60%),
+        var(--mock-base);
+    border: 1px solid var(--mock-border);
+    border-radius: 18px;
+    box-shadow: var(--mock-shadow);
+    overflow: hidden;
+}
+
+.recipe-form-mock__doc {
+    position: relative;
+    padding: 16px;
+    background: var(--mock-surface);
+    border-bottom: 1px solid var(--mock-border);
+}
+
+.recipe-form-mock__doc::before {
+    content: none;
+}
+
+.recipe-form-mock__doc-title {
+    padding-left: 8px;
+}
+
+.recipe-form-mock__title-input {
+    width: 100%;
+    border: 1px solid var(--mock-border);
+    background: var(--mock-input);
+    color: var(--mock-text);
+    border-radius: 14px;
+    padding: 12px 14px;
+    font-size: 1.35rem;
+    font-weight: 900;
+    letter-spacing: 0.01em;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.recipe-form-mock__title-input::placeholder {
+    color: rgba(161, 161, 170, 0.85);
+    font-weight: 800;
+}
+
+.recipe-form-mock__title-input:focus {
+    outline: none;
+    border-color: hsl(var(--color-primary));
+    box-shadow: 0 0 0 4px rgba(230, 126, 34, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.recipe-form-mock__doc-sub {
+    margin-top: 8px;
+    color: var(--mock-muted);
+    font-size: 0.86rem;
+    font-weight: 650;
+    line-height: 1.35;
+}
+
+.recipe-form-mock__meta-grid {
+    margin-top: 14px;
+    padding-left: 8px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+
+@media (min-width: 650px) {
+    .recipe-form-mock__meta-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (min-width: 900px) {
+    .recipe-form-mock__meta-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+.recipe-form-mock__meta-grid .input-group {
+    margin-bottom: 0;
+}
+
+.recipe-form-mock__grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 16px;
+    background: transparent;
+}
+
+@media (min-width: 900px) {
+    .recipe-form-mock__grid {
+        grid-template-columns: minmax(280px, 3.5fr) 6.5fr;
+        align-items: start;
+    }
+}
+
+.recipe-form-mock__col {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.recipe-form-mock__col--side {
+    position: sticky;
+    top: 74px;
+    align-self: start;
+}
+
+@media (max-width: 899px) {
+    .recipe-form-mock__col--side {
+        position: static;
+        top: auto;
+    }
+}
+
+.recipe-form-mock__card-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 900;
+    color: var(--mock-text);
+    margin-bottom: 10px;
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
+}
+
+.recipe-form-mock__card-title::before {
+    content: '';
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--card-accent, #94a3b8);
+    box-shadow: 0 0 0 4px var(--card-accent-ring, rgba(148, 163, 184, 0.22));
+}
+
+.recipe-form-mock__card {
+    position: relative;
+    overflow: hidden;
+    --card-accent: #94a3b8;
+    --card-accent-ring: rgba(148, 163, 184, 0.20);
+}
+
+.recipe-form-mock__card::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 3px;
+    background: var(--card-accent);
+    opacity: 0.9;
+}
+
+.recipe-form-mock .recipe-form-mock__card--notes.glass-card {
+    --card-accent: #f97316;
+    --card-accent-ring: rgba(249, 115, 22, 0.22);
+    background: var(--mock-surface);
+    border-color: rgba(249, 115, 22, 0.28);
+}
+
+.recipe-form-mock .recipe-form-mock__card--image.glass-card {
+    --card-accent: #78716c;
+    --card-accent-ring: rgba(120, 113, 108, 0.18);
+    background: var(--mock-surface);
+    border-color: rgba(14, 165, 233, 0.24);
+}
+
+.recipe-form-mock .recipe-form-mock__card--import.glass-card {
+    --card-accent: #10b981;
+    --card-accent-ring: rgba(16, 185, 129, 0.20);
+    background: var(--mock-surface);
+    border-color: rgba(16, 185, 129, 0.24);
+}
+
+.recipe-form-mock .recipe-form-mock__card--tips.glass-card {
+    --card-accent: #f59e0b;
+    --card-accent-ring: rgba(245, 158, 11, 0.18);
+    background: var(--mock-surface);
+    border-color: rgba(245, 158, 11, 0.22);
+}
+
+.recipe-form-mock__tips-list {
+    padding-left: 1.1rem;
+    color: var(--mock-muted);
+    font-weight: 650;
+    line-height: 1.5;
+}
+
+.recipe-form-mock__tips-list li {
+    margin: 8px 0;
+}
+
+.recipe-form-mock__workspace {
+    background: linear-gradient(180deg, var(--mock-glass-strong), rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--mock-glass-border);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: var(--mock-glass-shadow);
+    backdrop-filter: blur(var(--mock-glass-blur)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--mock-glass-blur)) saturate(140%);
+    min-width: 0;
+}
+
+.recipe-form-mock__workspace-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 10px;
+    background: rgba(0, 0, 0, 0.16);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.recipe-form-mock__nav {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.recipe-form-mock__nav-btn {
+    appearance: none;
+    border: 1px solid var(--mock-border);
+    background: var(--mock-surface);
+    color: var(--mock-text);
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-weight: 900;
+    font-size: 0.92rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+
+.recipe-form-mock__nav-btn:hover {
+    border-color: var(--mock-border-strong);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.recipe-form-mock__nav-btn:active {
+    transform: translateY(1px);
+}
+
+.recipe-form-mock__nav-btn.active {
+    background: rgba(249, 115, 22, 0.16);
+    border-color: hsl(var(--color-primary));
+    color: #fed7aa;
+}
+
+.recipe-form-mock__nav-btn--steps.active {
+    background: rgba(14, 165, 233, 0.16);
+    border-color: #0ea5e9;
+    color: #bae6fd;
+}
+
+.recipe-form-mock__nav-btn--ingredients.active .recipe-form-mock__nav-count {
+    background: hsl(var(--color-primary));
+    color: #ffffff;
+}
+
+.recipe-form-mock__nav-btn--steps.active .recipe-form-mock__nav-count {
+    background: #0ea5e9;
+    color: #ffffff;
+}
+
+.recipe-form-mock__nav-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 0.8rem;
+    font-weight: 900;
+}
+
+.recipe-form-mock__workspace-right {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.recipe-form-mock__hint {
+    color: var(--mock-muted);
+    font-weight: 750;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.recipe-form-mock__segmented {
+    display: inline-flex;
+    border: 1px solid var(--mock-border);
+    background: var(--mock-surface);
+    border-radius: 999px;
+    overflow: hidden;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.recipe-form-mock__seg-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    padding: 7px 12px;
+    cursor: pointer;
+    font-weight: 900;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.recipe-form-mock__seg-btn.active {
+    background: rgba(255, 255, 255, 0.14);
+    color: var(--mock-text);
+}
+
+.recipe-form-mock__workspace-body {
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.10);
+}
+
+.recipe-form-mock__editor-surface {
+    position: relative;
+    background: rgba(0, 0, 0, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 14px;
+    padding: 12px;
+    overflow: hidden;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.recipe-form-mock__editor-surface::before {
+    content: none;
+}
+
+.recipe-form-mock__image-drop {
+    position: relative;
+    border: 1px dashed var(--mock-border-strong);
+    border-radius: 14px;
+    background: var(--mock-surface);
+    min-height: 160px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.recipe-form-mock__image-drop.is-active {
+    border-color: hsl(var(--color-primary));
+    background: rgba(249, 115, 22, 0.12);
+}
+
+.recipe-form-mock__image-input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.recipe-form-mock__image-empty {
+    padding: 18px;
+    color: var(--mock-text);
+    font-weight: 900;
+}
+
+.recipe-form-mock__image-sub {
+    font-size: 0.85rem;
+    color: var(--mock-muted);
+    font-weight: 650;
+    margin-top: 4px;
+}
+
+.recipe-form-mock__image-preview {
+    width: 100%;
+    height: 160px;
+    position: relative;
+    background: var(--mock-base-2);
+}
+
+.recipe-form-mock__image-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.recipe-form-mock__image-remove {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+}
+
+.recipe-form-mock__import-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+.recipe-form-mock__import-note {
+    margin-top: 10px;
+    font-size: 0.85rem;
+    color: var(--mock-muted);
+    font-weight: 650;
+}
+
+/* --- Embedded ingredient / step editors (table-like) --- */
+.recipe-form-mock .ingredient-section,
+.recipe-form-mock .step-section {
+    position: relative;
+    border: 1px solid var(--mock-glass-border) !important;
+    border-radius: 14px !important;
+    overflow: hidden;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32) !important;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.04)) !important;
+    backdrop-filter: blur(calc(var(--mock-glass-blur) - 2px)) saturate(140%);
+    -webkit-backdrop-filter: blur(calc(var(--mock-glass-blur) - 2px)) saturate(140%);
+}
+
+/* Section header (first child div inside Card) */
+.recipe-form-mock .ingredient-section>div:first-child,
+.recipe-form-mock .step-section>div:first-child {
+    position: relative;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
+    padding: 10px 12px !important;
+    margin: 0 !important;
+    background: rgba(0, 0, 0, 0.14) !important;
+}
+
+.recipe-form-mock .step-section>div:first-child {
+    background: rgba(0, 0, 0, 0.14) !important;
+}
+
+.recipe-form-mock .section-header-input {
+    background: var(--mock-input) !important;
+    border: 1px solid var(--mock-border-strong) !important;
+    border-radius: 10px !important;
+    padding: 6px 10px !important;
+    color: var(--mock-text) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.recipe-form-mock .ingredient-section .section-header-input {
+    background: rgba(249, 115, 22, 0.14) !important;
+    border-color: hsl(var(--color-primary)) !important;
+    color: #fed7aa !important;
+}
+
+.recipe-form-mock .ingredient-section .section-header-input:focus {
+    border-color: hsl(var(--color-primary)) !important;
+    box-shadow: 0 0 0 4px rgba(230, 126, 34, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.recipe-form-mock .step-section .section-header-input {
+    background: rgba(14, 165, 233, 0.14) !important;
+    border-color: #0ea5e9 !important;
+    color: #bae6fd !important;
+}
+
+.recipe-form-mock .step-section .section-header-input:focus {
+    border-color: #0ea5e9 !important;
+    box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.recipe-form-mock .group-delete-btn {
+    color: rgba(255, 255, 255, 0.62) !important;
+    text-shadow: none !important;
+}
+
+.recipe-form-mock .recipe-list-header {
+    background: rgba(0, 0, 0, 0.14) !important;
+    color: rgba(255, 255, 255, 0.55) !important;
+    border: none !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.10) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
+    border-radius: 0 !important;
+    padding: 8px 10px !important;
+}
+
+.recipe-form-mock .section-ingredients-list,
+.recipe-form-mock .section-steps-list {
+    padding: 8px 10px !important;
+    background: transparent;
+}
+
+.recipe-form-mock .form-ingredient-row {
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 10px;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.04);
+    margin-bottom: 8px;
+    box-shadow: none;
+}
+
+.recipe-form-mock .section-ingredients-list .form-ingredient-row:nth-child(even) {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.recipe-form-mock .form-ingredient-row:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.recipe-form-mock .form-ingredient-row .input-field {
+    background: var(--mock-input);
+    border-color: var(--mock-border-strong);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.recipe-form-mock .step-row {
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 12px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: none;
+}
+
+.recipe-form-mock .step-row .step-count {
+    background: rgba(14, 165, 233, 0.16) !important;
+    color: #bae6fd !important;
+}
+
+.recipe-form-mock .step-row textarea.input-field {
+    background: var(--mock-input);
+    border-color: var(--mock-border-strong);
+}
+
+/* Drag handles are too faint in the default form; make them readable in the mock. */
+.recipe-form-mock .ingredient-drag-handle,
+.recipe-form-mock .step-drag-handle {
+    color: rgba(255, 255, 255, 0.62) !important;
+}
+
+.recipe-form-mock .ingredient-drag-handle:hover,
+.recipe-form-mock .step-drag-handle:hover {
+    color: rgba(255, 255, 255, 0.92) !important;
+}
+
+/* Buttons inside the mock: make secondary/ghost readable on dark surfaces. */
+.recipe-form-mock .btn--secondary {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--mock-text);
+    border-color: rgba(255, 255, 255, 0.16);
+}
+
+.recipe-form-mock .btn--secondary:not(:disabled):hover {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.22);
+}
+
+/* Buttons inside editor surface: make ghost look like "add row" actions */
+.recipe-form-mock .btn--ghost {
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.recipe-form-mock .btn--ghost:not(:disabled):hover {
+    border-color: rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--mock-text);
+}
+
+.recipe-form-mock .recipe-form-drop-placeholder {
+    border: 1px dashed rgba(255, 255, 255, 0.25) !important;
+    color: rgba(255, 255, 255, 0.68) !important;
+    background: rgba(0, 0, 0, 0.10) !important;
+    border-radius: 12px !important;
+}
+
+.recipe-form-mock .ingredient-cost-conversion-btn {
+    color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.recipe-form-mock .ingredient-cost-conversion-btn:hover {
+    color: rgba(255, 255, 255, 0.94) !important;
+}
+
+.recipe-form-mock .ingredient-cost-ref,
+.recipe-form-mock .ingredient-yield-indicator {
+    color: rgba(255, 255, 255, 0.62) !important;
+}
+
+/* Bread form overrides (bread CSS is light by default). */
+.recipe-form-mock .bread-card {
+    background: var(--mock-surface);
+    border-color: var(--mock-border);
+}
+
+.recipe-form-mock .bread-header h3 {
+    color: var(--mock-text);
+}
+
+.recipe-form-mock .bread-subtitle {
+    color: var(--mock-muted);
+}`;export{n as default};

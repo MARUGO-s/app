@@ -1,0 +1,1080 @@
+const n=`.recipe-detail {
+    padding-bottom: var(--space-xl);
+}
+
+.recipe-detail__header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+    border-bottom: 1px solid hsl(var(--color-border));
+    padding-bottom: var(--space-sm);
+}
+
+.recipe-detail__actions {
+    display: flex;
+    flex-wrap: wrap;
+    /* Allow wrapping on mobile */
+    gap: 8px;
+    /* Slightly tighter gap for wrapping */
+    width: 100%;
+    /* Remove horizontal scroll */
+    overflow-x: visible;
+    padding-bottom: 0;
+    align-items: center;
+    /* Center items vertically */
+}
+
+.recipe-detail__actions button,
+.recipe-detail__actions select {
+    flex-shrink: 1;
+    /* Allow shrinking if needed, though wrap handles it mostly */
+    min-width: 0;
+    /* Allow shrinking below content size if necessary in flex container */
+    white-space: nowrap;
+    /* Prevent text wrapping inside buttons unless very tight */
+}
+
+/* Ensure select box doesn't take awkward width */
+.recipe-detail__actions select {
+    max-width: 100%;
+}
+
+@media (min-width: 750px) {
+    .recipe-detail__header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        gap: var(--space-sm);
+    }
+
+    .recipe-detail__actions {
+        width: auto;
+        justify-content: flex-end;
+        /* Inherits wrap from mobile base styles */
+    }
+}
+
+/* Image now separate from title */
+.recipe-detail__hero {
+    height: 200px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin-bottom: var(--space-md);
+    border: 1px solid hsl(var(--color-border));
+}
+
+.recipe-detail__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Title is just normal flow now */
+.recipe-detail__title-card {
+    position: static;
+    transform: none;
+    width: 100%;
+    padding: 0;
+    margin-bottom: var(--space-lg);
+    background: transparent;
+    border: none;
+    text-align: left;
+}
+
+.recipe-detail__title-card h1 {
+    font-size: 2rem;
+    margin-bottom: var(--space-xs);
+    color: hsl(var(--color-text-main));
+    background: none;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+}
+
+.recipe-detail__desc {
+    color: hsl(var(--color-text-muted));
+    margin-bottom: var(--space-md);
+    font-size: 1rem;
+}
+
+.recipe-detail__owner {
+    margin-top: 0.35rem;
+    font-size: 0.9rem;
+    /* Was hardcoded #666; increase contrast on dark background */
+    color: hsl(var(--color-text-main));
+    opacity: 0.82;
+}
+
+.recipe-detail__subtle {
+    /* Works on both light and dark surfaces via inherited color */
+    color: currentColor;
+    opacity: 0.75;
+}
+
+.recipe-detail__tax-note {
+    font-size: 0.75rem;
+}
+
+.recipe-detail__tax-footnote {
+    text-align: right;
+    font-size: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.recipe-detail__meta {
+    display: flex;
+    gap: var(--space-xl);
+    border: 1px solid hsl(var(--color-border));
+    background: hsl(var(--color-bg-surface));
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+}
+
+.meta-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.meta-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: #666;
+    font-weight: 600;
+}
+
+.meta-value {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #000;
+}
+
+.recipe-detail__main {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-lg);
+    align-items: start;
+}
+
+@media (min-width: 750px) {
+    .recipe-detail__main {
+        grid-template-columns: 1fr 1fr;
+        /* 2 columns for Ingredients vs Steps */
+        gap: var(--space-xl);
+    }
+}
+
+.recipe-detail__content {
+    /* Removed grid from here */
+    width: 100%;
+}
+
+.print-layout {
+    display: none;
+}
+
+.print-group-heading {
+    font-weight: 600;
+    margin: 0 0 0.5rem 0;
+}
+
+.cost-summary {
+    margin-top: var(--space-xl);
+    padding: var(--space-md);
+    border-top: 2px dashed hsl(var(--color-border));
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 1rem;
+}
+
+.cost-summary__label {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.cost-summary__value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: hsl(var(--color-primary));
+}
+
+.cost-summary__note {
+    font-size: 0.9rem;
+    color: hsl(var(--color-text-muted));
+}
+
+/* Compact Desktop Hero */
+@media (min-width: 1024px) {
+    .recipe-detail__hero {
+        height: 180px;
+        /* Even smaller for desktop efficiency */
+        width: 280px;
+        float: left;
+        margin-right: var(--space-lg);
+        margin-bottom: var(--space-md);
+    }
+
+    .recipe-detail__header {
+        /* Compact header */
+        padding-bottom: 0;
+        border-bottom: none;
+        margin-bottom: var(--space-md);
+    }
+
+    .recipe-detail__title-card h1 {
+        margin-top: 0;
+        font-size: 1.8rem;
+    }
+
+    /* Clear float after hero section */
+    .recipe-detail__title-card::after {
+        content: "";
+        display: table;
+        clear: both;
+    }
+}
+
+/* Print Styles - Classic Layout */
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 10mm 12mm 14mm;
+    }
+
+    :root {
+        --color-bg-base: #ffffff !important;
+        --color-bg-surface: #ffffff !important;
+        --color-text-main: #111111 !important;
+        --color-border: #111111 !important;
+    }
+
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        text-shadow: none !important;
+        box-shadow: none !important;
+    }
+
+    html,
+    body {
+        margin: 0;
+        padding: 0;
+        background: #ffffff !important;
+        font-family: 'Noto Sans JP', 'Yu Gothic', 'Hiragino Kaku Gothic ProN', sans-serif;
+        font-size: 9pt;
+        color: #111111 !important;
+    }
+
+    .recipe-detail {
+        display: none !important;
+    }
+
+    .print-layout {
+        display: block !important;
+        color: #111111;
+    }
+
+    .print-layout,
+    .print-layout * {
+        visibility: visible !important;
+    }
+
+    .print-layout {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
+
+    header,
+    footer,
+    .app-footer,
+    .no-print,
+    .fab-add,
+    .print-button,
+    .share-button-container,
+    .recipe-form-actions,
+    .bottom-nav,
+    button,
+    .print-preview-recipe {
+        display: none !important;
+    }
+
+    #root,
+    .app-layout,
+    .app-main,
+    .container {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        background: transparent !important;
+    }
+
+    input[type="checkbox"],
+    select,
+    .modal-overlay {
+        display: none !important;
+    }
+
+    .print-qr-container {
+        display: none !important;
+    }
+
+    .fade-in {
+        animation: none !important;
+        opacity: 1 !important;
+    }
+
+    .print-layout {
+        padding: 0;
+        margin: 0;
+    }
+
+    .recipe-detail__hero {
+        width: 150px;
+        height: 150px;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #d6d6d6;
+        float: left;
+        margin-right: 18px;
+        margin-bottom: 12px;
+    }
+
+    .recipe-detail__image {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .recipe-detail__title-card {
+        padding: 0;
+        margin: 0;
+    }
+
+    .recipe-detail__title-card h1 {
+        font-size: 24pt;
+        margin: 0 0 6px 0;
+        color: #111111 !important;
+        font-weight: 600;
+    }
+
+    .recipe-detail__desc {
+        margin: 0 0 10px 0;
+        font-size: 9pt;
+        color: #444444 !important;
+    }
+
+    .recipe-detail__meta {
+        border: none !important;
+        padding: 0 !important;
+        margin: 10px 0 !important;
+        display: grid !important;
+        grid-template-columns: 1fr 1fr 1fr !important;
+        gap: 0 !important;
+        background: none !important;
+    }
+
+    .meta-item {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        padding: 0 !important;
+    }
+
+    .meta-label {
+        font-size: 7pt !important;
+        color: #111111 !important;
+        font-weight: 700 !important;
+        margin-bottom: 2px !important;
+    }
+
+    .meta-value {
+        font-size: 12pt !important;
+        font-weight: 700 !important;
+        color: #111111 !important;
+    }
+
+    .meta-value--store {
+        font-size: 9pt !important;
+    }
+
+    .print-layout__source {
+        clear: both;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 8px 0 12px;
+    }
+
+    .print-layout__source-label {
+        font-size: 7pt;
+        font-weight: 700;
+        color: #111111 !important;
+    }
+
+    .print-layout__source-qr {
+        width: 64px;
+        height: 64px;
+        padding: 4px;
+        border: 1px solid #d6d6d6;
+        background: #fff;
+        box-sizing: border-box;
+    }
+
+    .print-layout__source-qr svg {
+        width: 100% !important;
+        height: 100% !important;
+        display: block;
+    }
+
+    .recipe-detail__main {
+        clear: both;
+        display: grid !important;
+        grid-template-columns: minmax(0, 56%) minmax(0, 44%);
+        gap: 16px;
+        margin-top: 10px;
+        border-top: 1.5px solid #000;
+        padding-top: 5px;
+    }
+
+    .detail-section {
+        break-inside: auto;
+        page-break-inside: auto;
+        min-width: 0;
+    }
+
+    .card {
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+    }
+
+    .detail-section h2 {
+        font-size: 12pt;
+        font-weight: 700;
+        margin: 0 0 8px 0;
+        padding-bottom: 0;
+        border-bottom: none;
+        color: #000 !important;
+    }
+
+    .ingredients-table {
+        width: 100%;
+        border-collapse: collapse;
+        border: none;
+        table-layout: fixed;
+        font-size: 8.5pt;
+        background: #ffffff;
+    }
+
+    .ingredients-table th {
+        background: transparent;
+        border: none;
+        border-bottom: 1.5px solid #000;
+        padding: 4px 6px;
+        font-size: 8pt;
+        font-weight: 700;
+        text-align: right;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .ingredients-table th:first-child {
+        text-align: center;
+        /* Image shows "材料名" centered or left, but header line spans all */
+    }
+
+    .ingredients-table td {
+        border: none;
+        border-bottom: 1px dotted #888;
+        padding: 6px 4px;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .ingredients-table th:nth-child(1),
+    .ingredients-table td:nth-child(1) {
+        width: 33%;
+    }
+
+    .ingredients-table th:nth-child(2),
+    .ingredients-table td:nth-child(2) {
+        width: 12%;
+    }
+
+    .ingredients-table th:nth-child(3),
+    .ingredients-table td:nth-child(3) {
+        width: 27%;
+    }
+
+    .ingredients-table th:nth-child(4),
+    .ingredients-table td:nth-child(4) {
+        width: 14%;
+    }
+
+    .ingredients-table th:nth-child(5),
+    .ingredients-table td:nth-child(5) {
+        width: 14%;
+    }
+
+    .ingredients-table td:nth-child(1) {
+        text-align: left;
+    }
+
+    .ingredients-table td:nth-child(2),
+    .ingredients-table td:nth-child(4),
+    .ingredients-table td:nth-child(5) {
+        text-align: right;
+    }
+
+    .ingredients-table td:nth-child(3) {
+        text-align: left;
+        padding-left: 8px;
+    }
+
+    .ingredient-name {
+        gap: 6px;
+    }
+
+    .steps-list {
+        display: block !important;
+        margin: 0;
+        padding: 0;
+        min-width: 0;
+    }
+
+    .step-card {
+        display: grid !important;
+        grid-template-columns: 25px minmax(0, 1fr);
+        column-gap: 10px;
+        padding: 0 !important;
+        border: none !important;
+        margin: 0 0 12px 0;
+        background: transparent !important;
+        min-width: 0;
+        break-inside: avoid-page;
+        page-break-inside: avoid;
+    }
+
+    .step-number {
+        background: none !important;
+        color: #111111 !important;
+        font-size: 12pt;
+        font-weight: 700;
+        border: none !important;
+        padding: 0;
+        margin: 0;
+        width: 25px;
+        flex-shrink: 0;
+        display: block !important;
+        text-align: left;
+        line-height: 1.2;
+    }
+
+    .step-text {
+        font-size: 9pt;
+        line-height: 1.6;
+        color: #111111 !important;
+        padding-top: 2px;
+        margin: 0;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .cost-summary {
+        margin-top: 15px;
+        padding-top: 10px;
+        border-top: 2px dashed #000;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        display: flex !important;
+    }
+
+    .cost-summary__label {
+        font-size: 14pt;
+        font-weight: 700;
+    }
+
+    .cost-summary__value {
+        font-size: 16pt;
+        font-weight: 700;
+        color: #000 !important;
+    }
+
+    .cost-summary__note {
+        display: none !important;
+        /* Image doesn't show (税込) in a prominent way similar to web */
+    }
+
+    .recipe-detail__tax-footnote {
+        display: none !important;
+    }
+}
+
+/* --- Restored Screen Styles --- */
+@media screen {
+
+    .ingredients-list,
+    .steps-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .ingredients-card,
+    .step-card {
+        border: none;
+        box-shadow: none;
+        background: transparent;
+        padding: 0;
+    }
+
+    .ingredients-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .ingredients-table th {
+        text-align: left;
+        padding: var(--space-sm);
+        border-bottom: 2px solid hsl(var(--color-border));
+        font-size: 0.85rem;
+        color: hsl(var(--color-text-muted));
+    }
+
+    .ingredients-table td {
+        padding: var(--space-sm) 0;
+        border-bottom: 1px solid hsl(var(--color-border));
+        font-size: 0.95rem;
+    }
+
+    /* Improve contrast for "仕入れ" column values on dark background */
+    .ingredient-cost-muted {
+        color: hsl(var(--color-text-muted));
+        opacity: 0.92;
+    }
+
+    .ingredient-name {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        width: 100%;
+        cursor: pointer;
+    }
+
+    .ingredient-name label {
+        flex: 1;
+        cursor: pointer;
+        padding: 4px 0;
+    }
+
+    .ingredient-row:last-child td {
+        border-bottom: none;
+    }
+
+    /* Steps Screen Layout */
+    .steps-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+    }
+
+    .step-card {
+        display: flex;
+        gap: var(--space-sm);
+        align-items: flex-start;
+        background: hsl(var(--color-bg-surface));
+        padding: var(--space-sm);
+        border-radius: var(--radius-md);
+        border: 1px solid hsl(var(--color-border));
+        color: #333;
+        /* Resurrected to ensure contrast on white cards */
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .step-card.is-completed .step-text {
+        text-decoration: line-through;
+        color: #888;
+    }
+
+    .step-text {
+        font-size: 0.85rem;
+        line-height: 1.35;
+    }
+
+    .step-card:hover {
+        border-color: hsl(var(--color-primary));
+    }
+
+    .step-number {
+        background: hsl(var(--color-primary));
+        color: white;
+        width: 22px;
+        height: 22px;
+        font-size: 0.75rem;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        flex-shrink: 0;
+        border: none;
+    }
+
+    /* Desktop override for step-card padding/margin if needed, currently reusing mobile */
+
+    .recipe-detail-dates {
+        margin-top: 1rem;
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        font-size: 0.8rem;
+        color: hsl(var(--color-text-muted));
+        border-top: 1px dotted hsl(var(--color-border));
+        padding-top: 0.5rem;
+    }
+
+    .print-only {
+        display: none;
+    }
+}
+
+/* レシピ印刷プレビューモーダル用スタイル */
+.print-preview-recipe {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.preview-header {
+    text-align: center;
+    border-bottom: 2px solid #e5e7eb;
+    padding-bottom: 16px;
+}
+
+.preview-header h2 {
+    margin: 0 0 12px 0;
+    font-size: 1.75rem;
+    color: #111827;
+}
+
+.preview-image {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 8px;
+    object-fit: cover;
+}
+
+/* プレビューでは画像を表示しない */
+.print-preview-recipe .preview-image {
+    display: none;
+}
+
+.preview-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    background: #f9fafb;
+    padding: 16px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+}
+
+.preview-meta strong {
+    color: #374151;
+    margin-right: 4px;
+}
+
+.preview-description {
+    padding: 12px 16px;
+    background: #f3f4f6;
+    border-left: 4px solid hsl(var(--color-primary));
+    border-radius: 4px;
+}
+
+/* プレビューでメタ情報・説明を非表示 */
+.print-preview-recipe .preview-meta,
+.print-preview-recipe .preview-description {
+    display: none;
+}
+
+.preview-description p {
+    margin: 0;
+    color: #4b5563;
+    line-height: 1.6;
+}
+
+.preview-controls {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 0.9rem;
+}
+
+.preview-control-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.preview-control-label {
+    font-weight: 600;
+    color: #374151;
+}
+
+.preview-control-mult {
+    font-weight: 700;
+    color: #4b5563;
+}
+
+.preview-control-input {
+    width: 90px;
+    padding: 6px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    text-align: right;
+}
+
+.preview-control-input[type="number"] {
+    -moz-appearance: textfield;
+}
+
+.preview-control-input::-webkit-outer-spin-button,
+.preview-control-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.preview-control-reset {
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    color: #374151;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.preview-control-reset:hover {
+    background: #f3f4f6;
+}
+
+.preview-control-note {
+    font-size: 0.85rem;
+    color: #6b7280;
+}
+
+.preview-section {
+    margin-top: 8px;
+}
+
+.preview-section h3 {
+    font-size: 1.25rem;
+    margin: 0 0 16px 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e5e7eb;
+    color: #111827;
+}
+
+.preview-section h4 {
+    font-size: 1.1rem;
+    margin: 16px 0 12px 0;
+    color: #374151;
+}
+
+/* パンレシピ用スタイル */
+.preview-ingredients-bread {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.bread-group {
+    background: #f9fafb;
+    padding: 16px;
+    border-radius: 8px;
+}
+
+.preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+}
+
+.preview-table th,
+.preview-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e5e7eb;
+    text-align: left;
+}
+
+.preview-table--normal th:nth-child(2),
+.preview-table--normal td:nth-child(2) {
+    text-align: right;
+}
+
+.preview-table--normal th:nth-child(3),
+.preview-table--normal td:nth-child(3) {
+    text-align: left;
+}
+
+.preview-table tbody tr {
+    cursor: pointer;
+}
+
+.preview-table tbody tr.is-completed td {
+    text-decoration: line-through;
+    color: #9ca3af;
+    background: #f1f1f1;
+}
+
+.preview-table th {
+    background: #f3f4f6;
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.9rem;
+}
+
+.preview-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* 通常レシピの材料スタイル */
+.preview-ingredients-normal {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.ingredient-group h4 {
+    margin: 0 0 8px 0;
+    color: #374151;
+    font-size: 1rem;
+}
+
+.ingredient-group ul,
+.preview-ingredients-normal>ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+}
+
+.ingredient-group li,
+.preview-ingredients-normal>ul>li {
+    padding: 8px 12px;
+    background: #f9fafb;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    color: #1f2937;
+}
+
+.ingredient-group li {
+    cursor: pointer;
+}
+
+.ingredient-group li.is-completed,
+.preview-ingredients-normal>ul>li.is-completed {
+    text-decoration: line-through;
+    color: #9ca3af;
+    background: #f1f1f1;
+}
+
+/* 作り方のスタイル */
+.preview-steps {
+    counter-reset: step-counter;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.preview-steps li {
+    position: relative;
+    padding-left: 48px;
+    line-height: 1.6;
+    color: #374151;
+    font-size: 0.95rem;
+}
+
+.preview-steps li {
+    cursor: pointer;
+}
+
+.preview-steps li.is-completed {
+    text-decoration: line-through;
+    color: #9ca3af;
+    background: #f1f1f1;
+}
+
+.preview-steps li.is-completed::before {
+    background: #cbd5f5;
+    color: #6b7280;
+}
+
+.preview-steps li::before {
+    counter-increment: step-counter;
+    content: counter(step-counter);
+    position: absolute;
+    left: 0;
+    top: 0;
+    background: hsl(var(--color-primary));
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 600px) {
+    .preview-header h2 {
+        font-size: 1.5rem;
+    }
+
+    .preview-meta {
+        grid-template-columns: 1fr;
+    }
+
+    .ingredient-group ul,
+    .preview-ingredients-normal>ul {
+        grid-template-columns: 1fr;
+    }
+
+    .preview-steps li {
+        padding-left: 40px;
+        font-size: 0.9rem;
+    }
+
+    .preview-steps li::before {
+        width: 28px;
+        height: 28px;
+        font-size: 0.85rem;
+    }
+}
+
+/* 印刷時のスタイル（モーダル内からの印刷用） */
+/* 印刷時のスタイル（モーダル内からの印刷用） - Removed to prevent conflict with main print styles */
+/* Primary print styles are defined at the top of the file */`;export{n as default};
