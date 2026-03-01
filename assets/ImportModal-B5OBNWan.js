@@ -555,6 +555,9 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                     } catch {
                         // ignore
                     }
+                    if (status === 401 && /invalid\\s+jwt|jwt/i.test(String(detail || ''))) {
+                        throw new Error('認証エラーです（Invalid JWT）。再ログイン後に再試行してください。改善しない場合は、接続先プロジェクトの不一致がないか確認してください。');
+                    }
                     const suffix = detail ? \`: \${detail}\` : '';
                     throw new Error(\`Server Error (\${status})\${suffix}\`);
                 }
