@@ -693,6 +693,126 @@ Deno.serve(async (req) => {
     }
 
     // ---------------------------------------------------------
+    // Site-Specific Logic: Andrea Home Pastry (Wix / JS-heavy page fallback)
+    // ---------------------------------------------------------
+    if (!recipeData && url.includes('andreahomepastry.com')) {
+      console.log("Detecting Andrea Home Pastry URL, using markdown-reader fallback...");
+
+      const sourceUrl = url.replace(/^https?:\/\//i, '');
+      const readerUrl = `https://r.jina.ai/http://${sourceUrl}`;
+
+      try {
+        const readerRes = await fetch(readerUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/plain,text/markdown;q=0.9,*/*;q=0.8',
+          },
+        });
+
+        if (readerRes.ok) {
+          const md = await readerRes.text();
+
+          const stripMd = (s: string) => String(s || '')
+            .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+            .replace(/[*_`~>#]+/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          const title =
+            (md.match(/^Title:\s*(.+)$/m)?.[1] || '').trim() ||
+            $('meta[property="og:title"]').attr('content')?.trim() ||
+            $('h1').first().text().trim();
+
+          const image =
+            (md.match(/!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/)?.[1] || '').trim() ||
+            $('meta[property="og:image"]').attr('content') ||
+            '';
+
+          const contentStart = md.match(/Markdown Content:\s*([\s\S]*)$/i)?.[1] || '';
+          const ingredientsHeaderMatch = contentStart.match(/\nIngredients?\n[-=]+\n/i);
+          const processHeaderMatch = contentStart.match(/\n(?:Process|Method|Instructions?)\n[-=]+\n/i);
+          const ingredientsHeader = contentStart.search(/\nIngredients?\n[-=]+\n/i);
+          const processHeader = contentStart.search(/\n(?:Process|Method|Instructions?)\n[-=]+\n/i);
+
+          let description = '';
+          if (ingredientsHeader > -1) {
+            const intro = contentStart.slice(0, ingredientsHeader);
+            const introLines = intro
+              .split('\n')
+              .map((line) => stripMd(line))
+              .filter((line) => line && !/^(?:\w{3}\s+\d{1,2},\s+\d{4}|\d+\s*min\b)/i.test(line));
+            description = introLines
+              .filter((line) => !/^https?:\/\//i.test(line))
+              .slice(0, 3)
+              .join(' ')
+              .trim();
+          }
+          if (!description) {
+            description = $('meta[name="description"]').attr('content')
+              || $('meta[property="og:description"]').attr('content')
+              || '';
+          }
+
+          let ingredientsSection = '';
+          if (ingredientsHeader > -1 && ingredientsHeaderMatch?.[0]) {
+            const ingStart = ingredientsHeader + ingredientsHeaderMatch[0].length;
+            const ingEnd = processHeader > ingStart ? processHeader : contentStart.length;
+            ingredientsSection = contentStart.slice(ingStart, ingEnd);
+          }
+
+          let stepsSection = '';
+          if (processHeader > -1 && processHeaderMatch?.[0]) {
+            const stepStart = processHeader + processHeaderMatch[0].length;
+            stepsSection = contentStart.slice(stepStart);
+          }
+
+          const ingredients: any[] = [];
+          ingredientsSection
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => /^\*\s+/.test(line))
+            .forEach((line) => {
+              let core = line.replace(/^\*\s+/, '').trim();
+              // If italic notes are appended, keep the first highlighted phrase as ingredient core.
+              const firstItalic = core.match(/_([^_]+)_/);
+              if (firstItalic && firstItalic[1]) {
+                core = firstItalic[1].trim();
+              }
+              core = stripMd(core);
+              if (!core) return;
+              ingredients.push(parseIngredient(core));
+            });
+
+          const steps: string[] = [];
+          stepsSection
+            .split('\n')
+            .map((line) => line.trim())
+            .forEach((line) => {
+              const m = line.match(/^(\d+)\.\s+(.+)$/);
+              if (m && m[2]) {
+                const cleaned = stripMd(m[2]);
+                if (cleaned) steps.push(cleaned);
+              }
+            });
+
+          if (title && (ingredients.length > 0 || steps.length > 0)) {
+            recipeData = {
+              name: title,
+              description,
+              image,
+              recipeIngredient: ingredients,
+              recipeInstructions: steps,
+              recipeYield: '',
+            };
+          }
+        }
+      } catch (e) {
+        console.warn('Andrea Home Pastry fallback parsing failed', e);
+      }
+    }
+
+    // ---------------------------------------------------------
     // Strategy 2: Universal HTML Parsing (Fallback)
     // ---------------------------------------------------------
     if (!recipeData) {
