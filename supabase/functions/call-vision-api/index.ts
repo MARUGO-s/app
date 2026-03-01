@@ -63,9 +63,9 @@ serve(async (req) => {
     })
 
     // Google Gemini Vision API を呼び出し
-    console.log('🔄 Calling Gemini API with endpoint:', `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent`)
+    console.log('🔄 Calling Gemini API with endpoint:', `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-lite:generateContent`)
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${googleApiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-lite:generateContent?key=${googleApiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -135,4 +135,3 @@ serve(async (req) => {
     )
   }
 })
-

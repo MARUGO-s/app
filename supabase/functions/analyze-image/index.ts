@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { encode } from "https://deno.land/std@0.168.0/encoding/base64.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { RateLimiter } from "../_shared/rate-limiter.ts";
-import { estimateGeminiCost, estimateGroqCost } from "../_shared/api-logger.ts";
+import { estimateGeminiCost, estimateGroqCost, getGeminiCostBreakdown } from "../_shared/api-logger.ts";
 import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts";
 
 const corsHeaders: Record<string, string> = {
@@ -66,7 +66,9 @@ function normalizeImageMimeType(file: File) {
 
 function normalizeGeminiModelForEstimation(modelName: string) {
     const m = String(modelName || '').trim().toLowerCase();
+    if (m.startsWith('gemini-2.5-flash-lite')) return 'gemini-2.5-flash-lite';
     if (m.startsWith('gemini-1.5-flash')) return 'gemini-1.5-flash';
+    if (m.startsWith('gemini-2.0-flash-lite')) return 'gemini-2.0-flash';
     if (m.startsWith('gemini-2.0-flash')) return 'gemini-2.0-flash';
     if (m.startsWith('gemini-2.5-pro')) return 'gemini-2.5-pro';
     if (m.startsWith('gemini-pro')) return 'gemini-pro';
@@ -74,9 +76,26 @@ function normalizeGeminiModelForEstimation(modelName: string) {
 }
 
 const PRO_MODEL_SEGMENT_RE = /(^|[-_])pro($|[-_])/i;
+const LITE_MODEL_SEGMENT_RE = /(^|[-_])flash[-_]?lite($|[-_])/i;
+const FORCED_GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-lite';
 
 function isBlockedGeminiModel(modelName: string) {
     return PRO_MODEL_SEGMENT_RE.test(String(modelName || '').trim());
+}
+
+function resolveGeminiImageOverrideModel(modelName: string) {
+    const m = String(modelName || '').trim();
+    if (!m) return '';
+    if (isBlockedGeminiModel(m)) {
+        console.warn(`Gemini image model override blocked (pro family): ${m}`);
+        return '';
+    }
+    // Cost safety: keep Gemini image path on Flash-Lite by default.
+    if (!LITE_MODEL_SEGMENT_RE.test(m)) {
+        console.warn(`Gemini image model override ignored (lite enforced): ${m} -> ${FORCED_GEMINI_IMAGE_MODEL}`);
+        return FORCED_GEMINI_IMAGE_MODEL;
+    }
+    return m;
 }
 
 // --------------------------------------------------------------------------
@@ -146,15 +165,15 @@ async function analyzeImageWithGemini(file: File, supabaseClient: any, ctx: Requ
         return null;
     }
 
-    const overrideModel = String(Deno.env.get('GEMINI_IMAGE_MODEL') || '').trim();
+    const overrideModel = resolveGeminiImageOverrideModel(Deno.env.get('GEMINI_IMAGE_MODEL') || '');
     const modelCandidates = Array.from(new Set([
-        // Allow override only when it's not a Pro-family model.
-        (overrideModel && !isBlockedGeminiModel(overrideModel)) ? overrideModel : '',
-        // Prefer cheaper Flash models first, then fall back gracefully if the key doesn't have access.
-        'gemini-1.5-flash',
-        'gemini-1.5-flash-latest',
-        // Some docs/keys refer to version-suffixed model IDs.
-        'gemini-1.5-flash-001',
+        // Cost safety: always try the Lite stable model first.
+        FORCED_GEMINI_IMAGE_MODEL,
+        // Allow explicit Lite override (including preview) while still enforcing no-Pro.
+        overrideModel,
+        // Fallback candidates when the key/project does not have Lite access.
+        'gemini-2.5-flash-lite-preview-09-2025',
+        'gemini-2.0-flash-lite',
         'gemini-2.0-flash',
     ].filter(Boolean))).filter((m) => !isBlockedGeminiModel(m));
 
@@ -298,8 +317,13 @@ async function analyzeImageWithGemini(file: File, supabaseClient: any, ctx: Requ
 	                        const usage = data.usageMetadata || {};
 	                        const tokensIn = usage.promptTokenCount || 0;
 	                        const tokensOut = usage.candidatesTokenCount || 0;
-	                        const estimatedCost = estimateGeminiCost(
+	                        const billing = getGeminiCostBreakdown(
 	                            normalizeGeminiModelForEstimation(modelId),
+	                            tokensIn,
+	                            tokensOut,
+	                        );
+	                        const estimatedCost = estimateGeminiCost(
+	                            billing.normalizedModel,
 	                            tokensIn,
 	                            tokensOut,
 	                        );
@@ -318,7 +342,22 @@ async function analyzeImageWithGemini(file: File, supabaseClient: any, ctx: Requ
 	                                status: 'success',
 	                                durationMs,
 	                                estimatedCostJpy: estimatedCost,
-	                                metadata: { requestId: ctx.requestId, engine: ctx.engine, clientIp: ctx.clientIp, apiVersion },
+	                                metadata: {
+	                                    requestId: ctx.requestId,
+	                                    engine: ctx.engine,
+	                                    clientIp: ctx.clientIp,
+	                                    apiVersion,
+	                                    billing_type: 'token_weighted',
+	                                    billing_breakdown: {
+	                                        model: billing.normalizedModel,
+	                                        rate_per_1m_jpy: billing.ratePer1M,
+	                                        input_tokens: billing.inputTokens,
+	                                        output_tokens: billing.outputTokens,
+	                                        input_cost_jpy: billing.inputCostJpy,
+	                                        output_cost_jpy: billing.outputCostJpy,
+	                                        total_cost_jpy: billing.totalCostJpy,
+	                                    },
+	                                },
 	                            }).catch(console.error);
 	                        }
 

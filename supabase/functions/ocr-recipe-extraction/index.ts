@@ -54,7 +54,7 @@ serve(async (req) => {
 
     // Google Gemini API でレシピ構造化
     console.log('🔧 Starting Google Gemini API analysis...')
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${googleApiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-lite:generateContent?key=${googleApiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
