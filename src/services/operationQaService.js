@@ -99,6 +99,22 @@ const ABSTRACT_HINT_PATTERNS = [
     'どこ',
 ];
 
+const BROAD_QUESTION_PATTERNS = [
+    'どうすれば',
+    'どれ',
+    'どこ',
+    'どの',
+    '何を',
+    '何から',
+];
+
+const DIRECT_ANSWER_INTENT_PATTERNS = [
+    /最近見た.*レシピ.*(開き直|開く)/,
+    /レシピ.*共有/,
+    /レシピ.*公開/,
+    /公開.*非公開/,
+];
+
 const SHORT_STYLE_HINT_PATTERNS = [
     '短く',
     '簡単に',
@@ -414,12 +430,36 @@ const shouldOfferNumberedChoices = (question, knowledgeAssessment) => {
     const q = String(question || '').trim();
     if (!q) return false;
 
-    const isLikelyAbstract = q.length <= 30 || ABSTRACT_HINT_PATTERNS.some((token) => q.includes(token));
-    const lowSpecificity = (knowledgeAssessment?.top?.matchedKeywords?.length || 0) <= 2;
-    const nearTie = (knowledgeAssessment?.scoreGap || 0) <= 3;
-    const uncertain = knowledgeAssessment?.confidence !== 'high' || (knowledgeAssessment?.bestScore || 0) < 10;
+    const top = knowledgeAssessment?.top || null;
+    const topScore = Number(knowledgeAssessment?.bestScore || 0);
+    const topKeywordCount = Number(top?.matchedKeywords?.length || 0);
+    const scoreGap = Number(knowledgeAssessment?.scoreGap || 0);
+    const titleSimilarity = Number(top?.titleSimilarity || 0);
+    const titleStrong = top?.titleMatched === true || titleSimilarity >= 0.34;
 
-    return knowledgeAssessment?.shouldAskClarification || (isLikelyAbstract && (lowSpecificity || nearTie || uncertain));
+    const hasRequestVerb = /(方法|手順|やり方|教えて|したい)/.test(q);
+    const hasBroadQuestionSignal = BROAD_QUESTION_PATTERNS.some((token) => q.includes(token));
+    const forcedDirectByIntent = DIRECT_ANSWER_INTENT_PATTERNS.some((re) => re.test(q));
+    const clearWinner = topScore >= 8 && scoreGap >= 4;
+    const likelyConcrete = (
+        hasRequestVerb
+        && !hasBroadQuestionSignal
+        && (
+            titleStrong
+            || (topScore >= 9 && topKeywordCount >= 1)
+            || (topScore >= 8 && topKeywordCount >= 2)
+        )
+    );
+    if (forcedDirectByIntent || clearWinner || likelyConcrete) {
+        return false;
+    }
+
+    const isLikelyAbstract = q.length <= 30 || ABSTRACT_HINT_PATTERNS.some((token) => q.includes(token));
+    const lowSpecificity = topKeywordCount <= 2;
+    const nearTie = scoreGap <= 3;
+    const uncertain = knowledgeAssessment?.confidence !== 'high' || topScore < 10;
+
+    return knowledgeAssessment?.shouldAskClarification || (isLikelyAbstract && (nearTie || (lowSpecificity && uncertain)));
 };
 
 const shouldForcePagePriorityDirectAnswer = ({ answerMode, currentView, knowledgeAssessment }) => {
