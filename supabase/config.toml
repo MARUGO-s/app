@@ -392,3 +392,9 @@ enabled = true
 # cronジョブから呼ばれるためJWT検証はなし（SUPABASE_SERVICE_ROLE_KEY で自己認証）
 verify_jwt = false
 entrypoint = "./functions/scheduled-backup/index.ts"
+
+[functions.call-gemini-api]
+enabled = true
+# 関数内で JWT を検証するため、ゲートウェイ側検証は無効化
+verify_jwt = false
+entrypoint = "./functions/call-gemini-api/index.ts"
