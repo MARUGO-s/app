@@ -189,7 +189,7 @@ export function getGeminiCostBreakdown(
         outputTokens: safeOutputTokens,
         inputCostJpy: Math.round(inputCostRaw * 10000) / 10000,
         outputCostJpy: Math.round(outputCostRaw * 10000) / 10000,
-        totalCostJpy: Math.round(totalCostRaw * 100) / 100,
+        totalCostJpy: Math.round(totalCostRaw * 1_000_000) / 1_000_000,
     }
 }
 
@@ -214,5 +214,5 @@ export function estimateGroqCost(
     const outputYenPer1M = 51
     const inputCost = (inputTokens / 1_000_000) * inputYenPer1M
     const outputCost = (outputTokens / 1_000_000) * outputYenPer1M
-    return Math.round((inputCost + outputCost) * 100) / 100
+    return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000
 }
