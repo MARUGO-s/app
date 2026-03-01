@@ -1069,6 +1069,44 @@ const expandWithSynonyms = (normalizedWords) => {
     return Array.from(expanded);
 };
 
+const GUIDE_SOURCE_SET = new Set(['recipe_html', 'recipe_management_pdf']);
+const GUIDE_INTENT_MARKERS = [
+    'q&a',
+    'qa',
+    'アプリガイド',
+    'ガイド',
+    'マニュアル',
+    '質問集',
+    '操作資料',
+    '操作手順書',
+];
+const GUIDE_CATALOG_MARKERS = [
+    'すべて',
+    '全部',
+    '一覧',
+    '全体',
+    '網羅',
+    '漏れ',
+    'カテゴリ',
+    '内容',
+];
+
+const isGuideIntentQuestion = (normalizedQuestion, questionWords = []) => {
+    const words = Array.isArray(questionWords) ? questionWords : [];
+    const normalizedMarkers = GUIDE_INTENT_MARKERS.map((marker) => normalize(marker)).filter(Boolean);
+    return normalizedMarkers.some((marker) => (
+        normalizedQuestion.includes(marker) || words.includes(marker)
+    ));
+};
+
+const isGuideCatalogQuestion = (normalizedQuestion, questionWords = []) => {
+    const words = Array.isArray(questionWords) ? questionWords : [];
+    const normalizedMarkers = GUIDE_CATALOG_MARKERS.map((marker) => normalize(marker)).filter(Boolean);
+    return normalizedMarkers.some((marker) => (
+        normalizedQuestion.includes(marker) || words.includes(marker)
+    ));
+};
+
 const buildGuideOperationKb = () => {
     const guideEntries = Array.isArray(operationGuideKnowledge?.entries) ? operationGuideKnowledge.entries : [];
     return guideEntries
@@ -1131,7 +1169,7 @@ const similarityByBigrams = (left, right) => {
     return intersection / union;
 };
 
-const scoreEntry = (entry, normalizedQuestion, questionWords, currentView) => {
+const scoreEntry = (entry, normalizedQuestion, questionWords, currentView, guideIntent = false) => {
     let score = 0;
     const matchedKeywords = [];
 
@@ -1184,9 +1222,9 @@ const scoreEntry = (entry, normalizedQuestion, questionWords, currentView) => {
         score = 0;
     }
 
-    if (entry?.source === 'recipe_html' && score > 0) {
-        // Keep first-party curated knowledge slightly prioritized.
-        score -= 1;
+    if (GUIDE_SOURCE_SET.has(entry?.source) && score > 0) {
+        // Guide knowledge is first-party content. Prefer it, and prioritize more when user explicitly asks for Q&A/Guide content.
+        score += guideIntent ? 4 : 1;
     }
 
     return {
@@ -1205,10 +1243,11 @@ const rankOperationKnowledge = ({ question, currentView, limit = 3 }) => {
     const questionWords = expandWithSynonyms(uniqueWords(question)
         .map((word) => normalize(word))
         .filter(Boolean));
+    const guideIntent = isGuideIntentQuestion(normalizedQuestion, questionWords);
 
     return OPERATION_KB
         .map((entry) => {
-            const scored = scoreEntry(entry, normalizedQuestion, questionWords, currentView);
+            const scored = scoreEntry(entry, normalizedQuestion, questionWords, currentView, guideIntent);
             return {
                 entry,
                 ...scored,
@@ -1530,7 +1569,71 @@ const findMenuButtonDetailRule = (question) => {
     )) || null;
 };
 
+const rankGuideKnowledge = ({ question, currentView, limit = 5 }) => (
+    rankOperationKnowledge({ question, currentView, limit: Math.max(limit, 3) })
+        .filter((item) => GUIDE_SOURCE_SET.has(item?.entry?.source))
+        .slice(0, limit)
+);
+
+const buildGuideCatalogAnswer = ({ guideHits, responseStyle = 'balanced' }) => {
+    if (!Array.isArray(guideHits) || guideHits.length === 0) return '';
+    const isConcise = responseStyle === 'concise';
+    const isDetailed = responseStyle === 'detailed';
+    const limit = isDetailed ? 10 : isConcise ? 4 : 7;
+    const lines = [];
+    lines.push('Q&A/アプリガイドの蓄積ナレッジから、関連度順で案内します。');
+    guideHits.slice(0, limit).forEach((hit, index) => {
+        lines.push(`${index + 1}. ${hit.entry.title}`);
+    });
+    lines.push('番号を返信すると、その項目の手順を詳細で返します（例: 2）。');
+    return lines.join('\n');
+};
+
+const buildGuideDirectAnswer = ({ question, currentView, responseStyle = 'balanced' }) => {
+    const guideHits = rankGuideKnowledge({ question, currentView, limit: 8 });
+    if (guideHits.length === 0) return '';
+
+    const normalizedQuestion = normalize(question);
+    const questionWords = expandWithSynonyms(uniqueWords(question)
+        .map((word) => normalize(word))
+        .filter(Boolean));
+    const catalogMode = isGuideCatalogQuestion(normalizedQuestion, questionWords);
+    if (catalogMode || guideHits.length >= 4) {
+        return buildGuideCatalogAnswer({ guideHits, responseStyle });
+    }
+
+    const top = guideHits[0].entry;
+    const isConcise = responseStyle === 'concise';
+    const isDetailed = responseStyle === 'detailed';
+    const lines = [];
+    lines.push(`ガイド回答（${top.title}）:`);
+    top.steps.slice(0, isConcise ? 3 : 6).forEach((step, index) => {
+        lines.push(`${index + 1}. ${step}`);
+    });
+    if (top.notes && !isConcise) {
+        lines.push(`補足: ${top.notes}`);
+    }
+    const related = guideHits.slice(1, isDetailed ? 4 : 3).map((hit) => hit.entry.title);
+    if (related.length > 0 && !isConcise) {
+        lines.push(`関連ガイド: ${related.join(' / ')}`);
+    }
+    return lines.join('\n');
+};
+
 export const formatLocalOperationAnswer = ({ question, currentView, currentViewLabel = '', responseStyle = 'balanced' }) => {
+    const normalizedQuestion = normalize(question);
+    const questionWords = expandWithSynonyms(uniqueWords(question)
+        .map((word) => normalize(word))
+        .filter(Boolean));
+    if (isGuideIntentQuestion(normalizedQuestion, questionWords)) {
+        const guideAnswer = buildGuideDirectAnswer({
+            question,
+            currentView,
+            responseStyle,
+        });
+        if (guideAnswer) return guideAnswer;
+    }
+
     const assessment = assessOperationKnowledge({ question, currentView, limit: 2 });
     if (assessment.shouldAskClarification) {
         return formatOperationClarificationAnswer({
