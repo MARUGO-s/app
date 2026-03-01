@@ -206,13 +206,56 @@ export function estimateGeminiCost(
  * llama-4-scout 等: input $0.11/1M, output $0.34/1M
  */
 export function estimateGroqCost(
-    _modelName: string,
+    modelName: string,
     inputTokens: number,
     outputTokens: number
 ): number {
-    const inputYenPer1M = 16.5
-    const outputYenPer1M = 51
-    const inputCost = (inputTokens / 1_000_000) * inputYenPer1M
-    const outputCost = (outputTokens / 1_000_000) * outputYenPer1M
-    return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000
+    return getGroqCostBreakdown(modelName, inputTokens, outputTokens).totalCostJpy
+}
+
+export type GroqRate = { input: number; output: number }
+
+const GROQ_RATES_JPY_PER_1M: Record<string, GroqRate> = {
+    // 2026-03 時点の概算（USD -> JPY 換算の内部運用値）
+    'meta-llama/llama-4-scout-17b-16e-instruct': { input: 16.5, output: 51 },
+    'llama-3.3-70b-versatile': { input: 16.5, output: 51 },
+    'default': { input: 16.5, output: 51 },
+}
+
+function normalizeGroqModelName(modelName: string): string {
+    const normalized = String(modelName || '').trim().toLowerCase()
+    if (!normalized) return 'default'
+    if (normalized.includes('llama-4-scout-17b-16e-instruct')) return 'meta-llama/llama-4-scout-17b-16e-instruct'
+    if (normalized.includes('llama-3.3-70b-versatile')) return 'llama-3.3-70b-versatile'
+    return 'default'
+}
+
+export function getGroqRatePerMillion(modelName: string): GroqRate {
+    const key = normalizeGroqModelName(modelName)
+    return GROQ_RATES_JPY_PER_1M[key] || GROQ_RATES_JPY_PER_1M.default
+}
+
+export function getGroqCostBreakdown(
+    modelName: string,
+    inputTokens: number,
+    outputTokens: number,
+) {
+    const safeInputTokens = Number.isFinite(Number(inputTokens)) ? Math.max(0, Number(inputTokens)) : 0
+    const safeOutputTokens = Number.isFinite(Number(outputTokens)) ? Math.max(0, Number(outputTokens)) : 0
+    const normalizedModel = normalizeGroqModelName(modelName)
+    const rate = getGroqRatePerMillion(normalizedModel)
+
+    const inputCostRaw = (safeInputTokens / 1_000_000) * rate.input
+    const outputCostRaw = (safeOutputTokens / 1_000_000) * rate.output
+    const totalCostRaw = inputCostRaw + outputCostRaw
+
+    return {
+        normalizedModel,
+        ratePer1M: rate,
+        inputTokens: safeInputTokens,
+        outputTokens: safeOutputTokens,
+        inputCostJpy: Math.round(inputCostRaw * 10000) / 10000,
+        outputCostJpy: Math.round(outputCostRaw * 10000) / 10000,
+        totalCostJpy: Math.round(totalCostRaw * 1_000_000) / 1_000_000,
+    }
 }

@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { encode } from "https://deno.land/std@0.168.0/encoding/base64.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { RateLimiter } from "../_shared/rate-limiter.ts";
-import { estimateGeminiCost, estimateGroqCost, getGeminiCostBreakdown } from "../_shared/api-logger.ts";
+import { estimateGeminiCost, estimateGroqCost, getGeminiCostBreakdown, getGroqCostBreakdown } from "../_shared/api-logger.ts";
 import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts";
 import { resolveGeminiModelCandidates } from "../_shared/gemini-model.ts";
 
@@ -612,6 +612,7 @@ async function analyzeImageWithGroqVision(file: File, supabaseClient: any, ctx: 
 	                const usage = data?.usage || {};
 	                const tokensIn = usage?.prompt_tokens || 0;
 	                const tokensOut = usage?.completion_tokens || 0;
+	                const billing = getGroqCostBreakdown(modelId, tokensIn, tokensOut);
 	                const estimatedCostJpy = estimateGroqCost(modelId, tokensIn, tokensOut);
 	                if (supabaseClient) {
 	                    logApiUsage(supabaseClient, {
@@ -626,7 +627,21 @@ async function analyzeImageWithGroqVision(file: File, supabaseClient: any, ctx: 
 	                        status: 'success',
 	                        durationMs,
 	                        estimatedCostJpy,
-	                        metadata: { requestId: ctx.requestId, engine: ctx.engine, clientIp: ctx.clientIp },
+	                        metadata: {
+	                            requestId: ctx.requestId,
+	                            engine: ctx.engine,
+	                            clientIp: ctx.clientIp,
+	                            billing_type: 'token_weighted',
+	                            billing_breakdown: {
+	                                model: billing.normalizedModel,
+	                                rate_per_1m_jpy: billing.ratePer1M,
+	                                input_tokens: billing.inputTokens,
+	                                output_tokens: billing.outputTokens,
+	                                input_cost_jpy: billing.inputCostJpy,
+	                                output_cost_jpy: billing.outputCostJpy,
+	                                total_cost_jpy: billing.totalCostJpy,
+	                            },
+	                        },
 	                    }).catch(console.error);
 	                }
 	            } catch {
@@ -891,6 +906,7 @@ ${shortText}
             const usage = data?.usage || {};
             const tokensIn = usage?.prompt_tokens || 0;
             const tokensOut = usage?.completion_tokens || 0;
+            const billing = getGroqCostBreakdown(modelId, tokensIn, tokensOut);
             const estimatedCostJpy = estimateGroqCost(modelId, tokensIn, tokensOut);
             if (supabaseClient) {
                 logApiUsage(supabaseClient, {
@@ -905,7 +921,22 @@ ${shortText}
                     status: 'success',
                     durationMs,
                     estimatedCostJpy,
-                    metadata: { requestId: ctx.requestId, engine: ctx.engine, clientIp: ctx.clientIp, stage: 'ocr_to_json' },
+                    metadata: {
+                        requestId: ctx.requestId,
+                        engine: ctx.engine,
+                        clientIp: ctx.clientIp,
+                        stage: 'ocr_to_json',
+                        billing_type: 'token_weighted',
+                        billing_breakdown: {
+                            model: billing.normalizedModel,
+                            rate_per_1m_jpy: billing.ratePer1M,
+                            input_tokens: billing.inputTokens,
+                            output_tokens: billing.outputTokens,
+                            input_cost_jpy: billing.inputCostJpy,
+                            output_cost_jpy: billing.outputCostJpy,
+                            total_cost_jpy: billing.totalCostJpy,
+                        },
+                    },
                 }).catch(console.error);
             }
         } catch {
