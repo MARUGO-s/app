@@ -47,11 +47,7 @@ export default function RequestAssistant({ currentView, userRole }) {
         [currentView]
     );
 
-    const canSubmit = useMemo(() => (
-        normalizeText(title, 200).length >= 1
-        && normalizeText(description, 20000).length >= 1
-        && !isSubmitting
-    ), [title, description, isSubmitting]);
+    const canSubmit = !isSubmitting;
 
     const openModal = () => {
         setSubmitMessage('');
@@ -81,7 +77,7 @@ export default function RequestAssistant({ currentView, userRole }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!canSubmit) return;
+        if (isSubmitting) return;
 
         const safeType = REQUEST_TYPES[requestType] ? requestType : 'other';
         const safeTitle = normalizeText(title, 200);
