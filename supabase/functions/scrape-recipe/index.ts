@@ -768,7 +768,7 @@ Deno.serve(async (req) => {
             if (!candidate) continue;
             if (/^\d+\s*min\b/i.test(candidate) || /^\w{3}\s+\d{1,2},\s+\d{4}$/i.test(candidate)) continue;
 
-            const quantityLike = /^(?:\d+(?:\.\d+)?(?:\/\d+)?|\.\d+|[¼½¾⅓⅔⅛⅜⅝⅞])/.test(candidate);
+            const quantityLike = /(?:\d+(?:\.\d+)?(?:\/\d+)?|\.\d+|[¼½¾⅓⅔⅛⅜⅝⅞])/.test(candidate);
             if (quantityLike) {
               candidate = trimIngredientNote(candidate);
               if (candidate) ingredients.push(parseIngredient(candidate));
@@ -830,7 +830,35 @@ Deno.serve(async (req) => {
 
       console.log(`Andrea DOM parse: ingredients=${ingredients.length}, steps=${steps.length}`);
 
-      // Fallback: markdown-reader for heavily JS-rendered cases.
+      // Fallback 1: Try bot-like UA for Wix SSR content.
+      if (ingredients.length === 0 || steps.length === 0) {
+        try {
+          const botRes = await fetch(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9',
+            },
+          });
+          if (botRes.ok) {
+            const botHtml = await botRes.text();
+            const $$ = cheerio.load(botHtml);
+            const botBodyRaw = $$('body').text().replace(/\u00a0/g, ' ');
+            const botBodyLines = botBodyRaw
+              .split('\n')
+              .flatMap((line) => line.split(/\s{2,}/));
+            const botParsed = parseAndreaLines(botBodyLines, false);
+            if (ingredients.length === 0 && botParsed.ingredients.length > 0) ingredients = botParsed.ingredients;
+            if (steps.length === 0 && botParsed.steps.length > 0) steps = botParsed.steps;
+            if (!description && botParsed.description) description = botParsed.description;
+            console.log(`Andrea bot parse: ingredients=${botParsed.ingredients.length}, steps=${botParsed.steps.length}`);
+          }
+        } catch (e) {
+          console.warn('Andrea bot fallback failed', e);
+        }
+      }
+
+      // Fallback 2: markdown-reader for heavily JS-rendered cases.
       if (ingredients.length === 0 || steps.length === 0) {
         const sourceUrl = url.replace(/^https?:\/\//i, '');
         const readerUrl = `https://r.jina.ai/http://${sourceUrl}`;
