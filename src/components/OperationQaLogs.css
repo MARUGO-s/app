@@ -116,6 +116,59 @@
     background: #f9fafb;
 }
 
+.operation-qa-logs__bulk-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.operation-qa-logs__action-btn {
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    color: #111827;
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.operation-qa-logs__action-btn:hover {
+    background: #f9fafb;
+}
+
+.operation-qa-logs__action-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.operation-qa-logs__action-btn--danger {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #991b1b;
+}
+
+.operation-qa-logs__action-btn--danger:hover {
+    background: #fee2e2;
+}
+
+.operation-qa-logs__action-btn--danger-soft {
+    border-color: #fca5a5;
+    background: #fff1f2;
+    color: #9f1239;
+}
+
+.operation-qa-logs__action-btn--danger-soft:hover {
+    background: #ffe4e6;
+}
+
+.operation-qa-logs__bulk-note {
+    margin-bottom: 12px;
+    font-size: 0.78rem;
+    color: #6b7280;
+}
+
 .operation-qa-logs__loading,
 .operation-qa-logs__empty {
     border: 1px solid #e5e7eb;
@@ -155,6 +208,12 @@
     background: #f8fafc;
     z-index: 1;
     color: #374151;
+}
+
+.operation-qa-logs__select-col {
+    width: 44px;
+    min-width: 44px;
+    text-align: center !important;
 }
 
 .operation-qa-logs__badge {

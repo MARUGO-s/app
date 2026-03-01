@@ -4,6 +4,7 @@ import './OperationQaLogs.css';
 
 const FETCH_PAGE_SIZE = 1000;
 const MAX_EXPORT_ROWS = 50000;
+const DELETE_BATCH_SIZE = 200;
 
 const SOURCE_FILTERS = {
     all: 'すべて',
@@ -118,6 +119,8 @@ export default function OperationQaLogs() {
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [exportingType, setExportingType] = useState('');
+    const [deletingType, setDeletingType] = useState('');
+    const [selectedIds, setSelectedIds] = useState(new Set());
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState({
         source: 'all',
@@ -160,6 +163,13 @@ export default function OperationQaLogs() {
     const displayedLogs = useMemo(() => {
         return filterLogsBySearch(logs, search);
     }, [logs, search]);
+    const displayedIds = useMemo(() => (
+        displayedLogs.map((log) => log.id).filter(Boolean)
+    ), [displayedLogs]);
+    const selectedCount = selectedIds.size;
+    const allDisplayedSelected = displayedIds.length > 0
+        && displayedIds.every((id) => selectedIds.has(id));
+    const isBusy = Boolean(exportingType || deletingType);
 
     const stats = useMemo(() => {
         const total = displayedLogs.length;
@@ -205,112 +215,214 @@ export default function OperationQaLogs() {
         return filterLogsBySearch(all, search);
     }, [filter.dateFrom, filter.dateTo, filter.source, search]);
 
-    const exportCsv = async () => {
-        setExportingType('csv');
-        let logsForExport = [];
+    const deleteLogsByIds = useCallback(async (ids) => {
+        const targets = Array.isArray(ids) ? ids.filter(Boolean) : [];
+        if (targets.length === 0) return 0;
+
+        let deletedCount = 0;
+        for (let start = 0; start < targets.length; start += DELETE_BATCH_SIZE) {
+            const chunk = targets.slice(start, start + DELETE_BATCH_SIZE);
+            const { error, count } = await supabase
+                .from('operation_qa_logs')
+                .delete({ count: 'exact' })
+                .in('id', chunk);
+            if (error) throw error;
+            deletedCount += Number.isFinite(Number(count)) ? Number(count) : chunk.length;
+        }
+        return deletedCount;
+    }, []);
+
+    const handleToggleSelectOne = (id) => {
+        if (!id || isBusy) return;
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    };
+
+    const handleToggleSelectAllDisplayed = () => {
+        if (isBusy || displayedIds.length === 0) return;
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (allDisplayedSelected) {
+                displayedIds.forEach((id) => next.delete(id));
+            } else {
+                displayedIds.forEach((id) => next.add(id));
+            }
+            return next;
+        });
+    };
+
+    const handleClearSelection = () => {
+        if (isBusy) return;
+        setSelectedIds(new Set());
+    };
+
+    const handleDeleteSelected = async () => {
+        const ids = Array.from(selectedIds);
+        if (ids.length === 0 || isBusy) return;
+        const ok = window.confirm(
+            `選択中の ${ids.length} 件を削除します。\nこの操作は元に戻せません。実行しますか？`
+        );
+        if (!ok) return;
+
+        setDeletingType('selected');
         try {
-            logsForExport = await fetchAllLogsForExport();
+            const deleted = await deleteLogsByIds(ids);
+            alert(`${deleted} 件のログを削除しました。`);
+            setSelectedIds(new Set());
+            await fetchLogs();
+        } catch (error) {
+            console.error('選択ログ削除に失敗:', error);
+            alert('選択ログの削除に失敗しました。権限または接続を確認してください。');
+        } finally {
+            setDeletingType('');
+        }
+    };
+
+    const handleDeleteAllFiltered = async () => {
+        if (isBusy) return;
+        setDeletingType('all');
+        try {
+            const logsForDelete = await fetchAllLogsForExport();
+            const ids = logsForDelete.map((log) => log.id).filter(Boolean);
+            if (ids.length === 0) {
+                alert('削除対象ログがありません。');
+                return;
+            }
+            const ok = window.confirm(
+                `現在のフィルタ条件に一致する ${ids.length} 件を全削除します。\nこの操作は元に戻せません。実行しますか？`
+            );
+            if (!ok) return;
+
+            const deleted = await deleteLogsByIds(ids);
+            alert(`${deleted} 件のログを削除しました。`);
+            setSelectedIds(new Set());
+            await fetchLogs();
+        } catch (error) {
+            console.error('条件一致ログ全削除に失敗:', error);
+            alert('条件一致ログの全削除に失敗しました。権限または接続を確認してください。');
+        } finally {
+            setDeletingType('');
+        }
+    };
+
+    useEffect(() => {
+        setSelectedIds((prev) => {
+            if (prev.size === 0) return prev;
+            const visibleSet = new Set(displayedIds);
+            const next = new Set(Array.from(prev).filter((id) => visibleSet.has(id)));
+            return next.size === prev.size ? prev : next;
+        });
+    }, [displayedIds]);
+
+    const exportCsv = async () => {
+        if (isBusy) return;
+        setExportingType('csv');
+        try {
+            const logsForExport = await fetchAllLogsForExport();
+            const rows = [
+                [
+                    'id',
+                    'created_at',
+                    '日時',
+                    'ユーザーID',
+                    'ユーザー',
+                    'ユーザーロール',
+                    '画面',
+                    '回答モード',
+                    '質問',
+                    '回答',
+                    '回答種別',
+                    'AI使用',
+                    'AI試行',
+                    '回答ソース',
+                    'AIモデル',
+                    'AIステータス',
+                    '入力トークン',
+                    '出力トークン',
+                    '推定コスト(円)',
+                    'metadata_json',
+                ].join(','),
+            ];
+
+            logsForExport.forEach((rawLog) => {
+                const log = normalizeExportRecord(rawLog);
+                rows.push([
+                    buildCsvCell(log.id || ''),
+                    buildCsvCell(log.created_at || ''),
+                    buildCsvCell(log.created_at_jst || ''),
+                    buildCsvCell(log.user_id || ''),
+                    buildCsvCell(log.user_email || ''),
+                    buildCsvCell(log.user_role || ''),
+                    buildCsvCell(log.current_view || ''),
+                    buildCsvCell(log.answer_mode || ''),
+                    buildCsvCell(log.question || ''),
+                    buildCsvCell(log.answer || ''),
+                    buildCsvCell(log.source_label || ''),
+                    buildCsvCell(log.ai_used ? 'true' : 'false'),
+                    buildCsvCell(log.ai_attempted ? 'true' : 'false'),
+                    buildCsvCell(log.answer_source || ''),
+                    buildCsvCell(log.ai_model || ''),
+                    buildCsvCell(log.ai_status || ''),
+                    buildCsvCell(log.input_tokens ?? ''),
+                    buildCsvCell(log.output_tokens ?? ''),
+                    buildCsvCell(log.estimated_cost_jpy ?? ''),
+                    buildCsvCell(JSON.stringify(log.metadata || {})),
+                ].join(','));
+            });
+
+            const csv = rows.join('\n');
+            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `operation_qa_logs_${new Date().toISOString().slice(0, 10)}.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
         } catch (error) {
             console.error('CSVエクスポート用ログ取得失敗:', error);
             alert('CSV出力用ログの取得に失敗しました');
+        } finally {
             setExportingType('');
-            return;
         }
-
-        const rows = [
-            [
-                'id',
-                'created_at',
-                '日時',
-                'ユーザーID',
-                'ユーザー',
-                'ユーザーロール',
-                '画面',
-                '回答モード',
-                '質問',
-                '回答',
-                '回答種別',
-                'AI使用',
-                'AI試行',
-                '回答ソース',
-                'AIモデル',
-                'AIステータス',
-                '入力トークン',
-                '出力トークン',
-                '推定コスト(円)',
-                'metadata_json',
-            ].join(','),
-        ];
-
-        logsForExport.forEach((rawLog) => {
-            const log = normalizeExportRecord(rawLog);
-            rows.push([
-                buildCsvCell(log.id || ''),
-                buildCsvCell(log.created_at || ''),
-                buildCsvCell(log.created_at_jst || ''),
-                buildCsvCell(log.user_id || ''),
-                buildCsvCell(log.user_email || ''),
-                buildCsvCell(log.user_role || ''),
-                buildCsvCell(log.current_view || ''),
-                buildCsvCell(log.answer_mode || ''),
-                buildCsvCell(log.question || ''),
-                buildCsvCell(log.answer || ''),
-                buildCsvCell(log.source_label || ''),
-                buildCsvCell(log.ai_used ? 'true' : 'false'),
-                buildCsvCell(log.ai_attempted ? 'true' : 'false'),
-                buildCsvCell(log.answer_source || ''),
-                buildCsvCell(log.ai_model || ''),
-                buildCsvCell(log.ai_status || ''),
-                buildCsvCell(log.input_tokens ?? ''),
-                buildCsvCell(log.output_tokens ?? ''),
-                buildCsvCell(log.estimated_cost_jpy ?? ''),
-                buildCsvCell(JSON.stringify(log.metadata || {})),
-            ].join(','));
-        });
-
-        const csv = rows.join('\n');
-        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `operation_qa_logs_${new Date().toISOString().slice(0, 10)}.csv`;
-        link.click();
-        URL.revokeObjectURL(url);
-        setExportingType('');
     };
 
     const exportJson = async () => {
+        if (isBusy) return;
         setExportingType('json');
-        let logsForExport = [];
         try {
-            logsForExport = await fetchAllLogsForExport();
+            const logsForExport = await fetchAllLogsForExport();
+            const payload = {
+                exported_at: new Date().toISOString(),
+                total_rows: logsForExport.length,
+                filters: {
+                    source: filter.source,
+                    date_from: filter.dateFrom || null,
+                    date_to: filter.dateTo || null,
+                    search: search || null,
+                },
+                rows: logsForExport.map((log) => normalizeExportRecord(log)),
+            };
+            const text = JSON.stringify(payload, null, 2);
+            const blob = new Blob([text], { type: 'application/json;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `operation_qa_logs_${new Date().toISOString().slice(0, 10)}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
         } catch (error) {
             console.error('JSONエクスポート用ログ取得失敗:', error);
             alert('JSON出力用ログの取得に失敗しました');
+        } finally {
             setExportingType('');
-            return;
         }
-
-        const payload = {
-            exported_at: new Date().toISOString(),
-            total_rows: logsForExport.length,
-            filters: {
-                source: filter.source,
-                date_from: filter.dateFrom || null,
-                date_to: filter.dateTo || null,
-                search: search || null,
-            },
-            rows: logsForExport.map((log) => normalizeExportRecord(log)),
-        };
-        const text = JSON.stringify(payload, null, 2);
-        const blob = new Blob([text], { type: 'application/json;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `operation_qa_logs_${new Date().toISOString().slice(0, 10)}.json`;
-        link.click();
-        URL.revokeObjectURL(url);
-        setExportingType('');
     };
 
     return (
@@ -322,7 +434,7 @@ export default function OperationQaLogs() {
                         type="button"
                         className="operation-qa-logs__export"
                         onClick={exportCsv}
-                        disabled={Boolean(exportingType)}
+                        disabled={isBusy}
                     >
                         {exportingType === 'csv' ? '出力中...' : '📥 CSV一括エクスポート'}
                     </button>
@@ -330,7 +442,7 @@ export default function OperationQaLogs() {
                         type="button"
                         className="operation-qa-logs__export operation-qa-logs__export--json"
                         onClick={exportJson}
-                        disabled={Boolean(exportingType)}
+                        disabled={isBusy}
                     >
                         {exportingType === 'json' ? '出力中...' : '🧩 JSON一括エクスポート'}
                     </button>
@@ -393,6 +505,44 @@ export default function OperationQaLogs() {
                 </button>
             </div>
 
+            <div className="operation-qa-logs__bulk-actions">
+                <button
+                    type="button"
+                    className="operation-qa-logs__action-btn"
+                    onClick={handleToggleSelectAllDisplayed}
+                    disabled={isBusy || displayedIds.length === 0}
+                >
+                    {allDisplayedSelected ? '表示中の選択を解除' : '表示中を全選択'}
+                </button>
+                <button
+                    type="button"
+                    className="operation-qa-logs__action-btn"
+                    onClick={handleClearSelection}
+                    disabled={isBusy || selectedCount === 0}
+                >
+                    選択解除
+                </button>
+                <button
+                    type="button"
+                    className="operation-qa-logs__action-btn operation-qa-logs__action-btn--danger"
+                    onClick={handleDeleteSelected}
+                    disabled={isBusy || selectedCount === 0}
+                >
+                    {deletingType === 'selected' ? '削除中...' : `選択を削除 (${selectedCount})`}
+                </button>
+                <button
+                    type="button"
+                    className="operation-qa-logs__action-btn operation-qa-logs__action-btn--danger-soft"
+                    onClick={handleDeleteAllFiltered}
+                    disabled={isBusy}
+                >
+                    {deletingType === 'all' ? '全削除中...' : '条件一致を全削除'}
+                </button>
+            </div>
+            <div className="operation-qa-logs__bulk-note">
+                表示中 {displayedLogs.length} 件 / 選択 {selectedCount} 件
+            </div>
+
             {loading ? (
                 <div className="operation-qa-logs__loading">読み込み中...</div>
             ) : (
@@ -400,6 +550,15 @@ export default function OperationQaLogs() {
                     <table className="operation-qa-logs__table">
                         <thead>
                             <tr>
+                                <th className="operation-qa-logs__select-col">
+                                    <input
+                                        type="checkbox"
+                                        aria-label="表示中ログを全選択"
+                                        checked={allDisplayedSelected}
+                                        onChange={handleToggleSelectAllDisplayed}
+                                        disabled={isBusy || displayedIds.length === 0}
+                                    />
+                                </th>
                                 <th>日時</th>
                                 <th>ユーザー</th>
                                 <th>画面</th>
@@ -415,6 +574,15 @@ export default function OperationQaLogs() {
                                 const badge = getSourceBadge(log);
                                 return (
                                     <tr key={log.id}>
+                                        <td className="operation-qa-logs__select-col">
+                                            <input
+                                                type="checkbox"
+                                                aria-label="ログを選択"
+                                                checked={selectedIds.has(log.id)}
+                                                onChange={() => handleToggleSelectOne(log.id)}
+                                                disabled={isBusy}
+                                            />
+                                        </td>
                                         <td>{formatDate(log.created_at)}</td>
                                         <td>{log.user_email || (log.user_id ? String(log.user_id).slice(0, 8) : '-')}</td>
                                         <td>{log.current_view || '-'}</td>
