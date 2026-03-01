@@ -1,4 +1,5 @@
 import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts";
+import { buildGeminiGenerateContentEndpointCandidates } from "../_shared/gemini-model.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -79,39 +80,60 @@ async function callGemini(prompt: string, pdfBase64: string) {
   const apiKey = Deno.env.get("GOOGLE_API_KEY") || "";
   if (!apiKey) throw new Error("GOOGLE_API_KEY が設定されていません");
 
-  const endpoint =
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent";
+  const candidates = buildGeminiGenerateContentEndpointCandidates("v1beta");
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 90_000);
 
-  let res: Response;
+  let res: Response | null = null;
+  let lastError: { status: number; statusText: string; body: string; model: string } | null = null;
   try {
-    res = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [
-              // Put the PDF first, then the instruction prompt.
-              { inline_data: { mime_type: "application/pdf", data: pdfBase64 } },
-              { text: prompt },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 4096,
-          topP: 1,
+    for (let i = 0; i < candidates.length; i += 1) {
+      const candidate = candidates[i];
+      const endpoint = candidate.url;
+      const current = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
         },
-      }),
-      signal: controller.signal,
-    });
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [
+                // Put the PDF first, then the instruction prompt.
+                { inline_data: { mime_type: "application/pdf", data: pdfBase64 } },
+                { text: prompt },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 4096,
+            topP: 1,
+          },
+        }),
+        signal: controller.signal,
+      });
+
+      if (current.ok) {
+        res = current;
+        break;
+      }
+
+      const body = await current.text();
+      lastError = { status: current.status, statusText: current.statusText, body, model: candidate.model };
+
+      const lowered = body.toLowerCase();
+      const modelUnavailable = current.status === 404
+        || (current.status === 400 && (lowered.includes("not found") || (lowered.includes("model") && lowered.includes("supported"))));
+      if (i < candidates.length - 1 && modelUnavailable) {
+        console.warn(`⚠️ Primary model unavailable. Retry fallback model: ${candidates[i + 1].model}`);
+        continue;
+      }
+      throw new Error(`Gemini API error: ${current.status} ${body}`);
+    }
   } catch (e) {
     if ((e as Error)?.name === "AbortError") {
       throw new Error("Gemini API がタイムアウトしました");
@@ -119,6 +141,11 @@ async function callGemini(prompt: string, pdfBase64: string) {
     throw e;
   } finally {
     clearTimeout(timeoutId);
+  }
+
+  if (!res) {
+    const t = lastError ? `${lastError.status} ${lastError.statusText} ${lastError.body}` : "Unknown error";
+    throw new Error(`Gemini API error: ${t}`);
   }
 
   if (!res.ok) {

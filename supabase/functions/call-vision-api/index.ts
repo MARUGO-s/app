@@ -1,9 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts";
+import { buildGeminiGenerateContentEndpointCandidates } from "../_shared/gemini-model.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+const isGeminiModelUnavailable = (status: number, errorText: string) => {
+  const body = String(errorText || '').toLowerCase()
+  if (status === 404) return true
+  if (status === 400 && (body.includes('not found') || (body.includes('model') && body.includes('supported')))) return true
+  return false
 }
 
 serve(async (req) => {
@@ -62,37 +70,60 @@ serve(async (req) => {
       firstContentParts: processedContents[0]?.parts?.length || 0
     })
 
-    // Google Gemini Vision API を呼び出し
-    console.log('🔄 Calling Gemini API with endpoint:', `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-lite:generateContent`)
+    // Google Gemini Vision API を呼び出し（最安モデル→第二候補）
+    const candidates = buildGeminiGenerateContentEndpointCandidates('v1')
+    let result: any = null
+    let lastError: { status: number; statusText: string; errorText: string; model: string } | null = null
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-lite:generateContent?key=${googleApiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: processedContents
-      })
-    })
+    for (let i = 0; i < candidates.length; i += 1) {
+      const candidate = candidates[i]
+      const endpoint = `${candidate.url}?key=${googleApiKey}`
+      console.log('🔄 Calling Gemini API with endpoint:', endpoint)
 
-    console.log('📡 Gemini API Response status:', response.status, response.statusText)
-
-    if (!response.ok) {
-      const errorData = await response.text()
-      console.error('❌ Gemini API エラー詳細:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorData: errorData,
-        apiKeyExists: !!googleApiKey,
-        apiKeyLength: googleApiKey ? googleApiKey.length : 0,
-        requestBody: JSON.stringify({
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           contents: processedContents
-        }, null, 2)
+        })
       })
-      throw new Error(`Gemini API エラー: ${response.status} ${response.statusText} - ${errorData}`)
+
+      console.log('📡 Gemini API Response status:', response.status, response.statusText, `model=${candidate.model}`)
+
+      if (!response.ok) {
+        const errorData = await response.text()
+        lastError = { status: response.status, statusText: response.statusText, errorText: errorData, model: candidate.model }
+        console.error('❌ Gemini API エラー詳細:', {
+          model: candidate.model,
+          status: response.status,
+          statusText: response.statusText,
+          errorData: errorData,
+          apiKeyExists: !!googleApiKey,
+          apiKeyLength: googleApiKey ? googleApiKey.length : 0,
+          requestBody: JSON.stringify({
+            contents: processedContents
+          }, null, 2)
+        })
+
+        if (i < candidates.length - 1 && isGeminiModelUnavailable(response.status, errorData)) {
+          console.warn(`⚠️ Primary model unavailable. Retry fallback model: ${candidates[i + 1].model}`)
+          continue
+        }
+
+        throw new Error(`Gemini API エラー: ${response.status} ${response.statusText} - ${errorData}`)
+      }
+
+      result = await response.json()
+      break
     }
 
-    const result = await response.json()
+    if (!result) {
+      const e = lastError
+      throw new Error(`Gemini API エラー: ${e?.status ?? 500} ${e?.statusText ?? 'Unknown'} - ${e?.errorText ?? 'Unknown error'}`)
+    }
+
     console.log('📸 Google Vision API レスポンス:', result)
 
     // Gemini API の応答をそのまま返す

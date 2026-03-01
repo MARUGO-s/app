@@ -5,6 +5,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { RateLimiter } from "../_shared/rate-limiter.ts";
 import { estimateGeminiCost, estimateGroqCost, getGeminiCostBreakdown } from "../_shared/api-logger.ts";
 import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts";
+import { resolveGeminiModelCandidates } from "../_shared/gemini-model.ts";
 
 const corsHeaders: Record<string, string> = {
     'Access-Control-Allow-Origin': '*',
@@ -51,6 +52,15 @@ const formatGeminiError = (status: number, errText: string) => {
     return `Gemini API Error: ${status} ${snippet || 'Unknown error'}`;
 };
 
+const isGeminiModelUnavailable = (status: number, errText: string) => {
+    const body = String(errText || '').toLowerCase();
+    if (status === 404) return true;
+    if (status === 400 && (body.includes('not found') || (body.includes('model') && body.includes('supported')))) {
+        return true;
+    }
+    return false;
+};
+
 function normalizeImageMimeType(file: File) {
     const type = String(file?.type || '').toLowerCase();
     if (type.startsWith('image/')) return type;
@@ -76,26 +86,9 @@ function normalizeGeminiModelForEstimation(modelName: string) {
 }
 
 const PRO_MODEL_SEGMENT_RE = /(^|[-_])pro($|[-_])/i;
-const LITE_MODEL_SEGMENT_RE = /(^|[-_])flash[-_]?lite($|[-_])/i;
-const FORCED_GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-lite';
 
 function isBlockedGeminiModel(modelName: string) {
     return PRO_MODEL_SEGMENT_RE.test(String(modelName || '').trim());
-}
-
-function resolveGeminiImageOverrideModel(modelName: string) {
-    const m = String(modelName || '').trim();
-    if (!m) return '';
-    if (isBlockedGeminiModel(m)) {
-        console.warn(`Gemini image model override blocked (pro family): ${m}`);
-        return '';
-    }
-    // Cost safety: keep Gemini image path on Flash-Lite by default.
-    if (!LITE_MODEL_SEGMENT_RE.test(m)) {
-        console.warn(`Gemini image model override ignored (lite enforced): ${m} -> ${FORCED_GEMINI_IMAGE_MODEL}`);
-        return FORCED_GEMINI_IMAGE_MODEL;
-    }
-    return m;
 }
 
 // --------------------------------------------------------------------------
@@ -165,17 +158,7 @@ async function analyzeImageWithGemini(file: File, supabaseClient: any, ctx: Requ
         return null;
     }
 
-    const overrideModel = resolveGeminiImageOverrideModel(Deno.env.get('GEMINI_IMAGE_MODEL') || '');
-    const modelCandidates = Array.from(new Set([
-        // Cost safety: always try the Lite stable model first.
-        FORCED_GEMINI_IMAGE_MODEL,
-        // Allow explicit Lite override (including preview) while still enforcing no-Pro.
-        overrideModel,
-        // Fallback candidates when the key/project does not have Lite access.
-        'gemini-2.5-flash-lite-preview-09-2025',
-        'gemini-2.0-flash-lite',
-        'gemini-2.0-flash',
-    ].filter(Boolean))).filter((m) => !isBlockedGeminiModel(m));
+    const modelCandidates = resolveGeminiModelCandidates().filter((m) => !isBlockedGeminiModel(m));
 
     try {
         const MAX_GEMINI_IMAGE_BYTES = 4_000_000;
@@ -276,8 +259,8 @@ async function analyzeImageWithGemini(file: File, supabaseClient: any, ctx: Requ
 	                        lastStatus = response.status;
 	                        console.error("Gemini API Error:", { apiVersion, modelId, status: response.status, errText });
 
-	                        // If the model isn't available for this API key/API version, try the next option.
-	                        if (response.status === 404) continue;
+	                        // 最安モデルが未提供ならフォールバックモデルへ。
+	                        if (isGeminiModelUnavailable(response.status, errText)) continue;
 
 	                        // Other errors (quota/auth) won't be fixed by switching models.
 	                        const formatted = formatGeminiError(response.status, errText);
@@ -404,7 +387,7 @@ async function analyzeImageWithGemini(file: File, supabaseClient: any, ctx: Requ
             logApiUsage(supabaseClient, {
                 apiName: 'gemini',
                 endpoint: 'analyze-image',
-                modelName: overrideModel || null,
+                modelName: modelCandidates[0] || null,
                 userId: ctx.userId,
                 userEmail: ctx.userEmail,
                 requestSizeBytes: file.size,

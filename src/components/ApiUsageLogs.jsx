@@ -37,12 +37,12 @@ const GEMINI_RATES_JPY_PER_1M = {
 
 const normalizeGeminiModelNameForCost = (modelName) => {
     const normalized = String(modelName || '').trim().toLowerCase()
-    if (!normalized) return 'gemini-1.5-flash'
+    if (!normalized) return 'gemini-2.5-flash-lite'
     if (normalized.includes('flash-lite')) return 'gemini-2.5-flash-lite'
     if (normalized.includes('2.5-pro') || normalized.includes('pro')) return 'gemini-2.5-pro'
     if (normalized.includes('2.0-flash')) return 'gemini-2.0-flash'
     if (normalized.includes('1.5-flash') || normalized.includes('flash')) return 'gemini-1.5-flash'
-    return 'gemini-1.5-flash'
+    return 'gemini-2.5-flash-lite'
 }
 
 const buildGeminiBillingBreakdown = ({ modelName, inputTokens, outputTokens, estimatedCostJpy = null }) => {
@@ -51,7 +51,7 @@ const buildGeminiBillingBreakdown = ({ modelName, inputTokens, outputTokens, est
     if (inTok === 0 && outTok === 0) return null
 
     const normalizedModel = normalizeGeminiModelNameForCost(modelName)
-    const rate = GEMINI_RATES_JPY_PER_1M[normalizedModel] || GEMINI_RATES_JPY_PER_1M['gemini-1.5-flash']
+    const rate = GEMINI_RATES_JPY_PER_1M[normalizedModel] || GEMINI_RATES_JPY_PER_1M['gemini-2.5-flash-lite']
     const inputCostRaw = (inTok / 1_000_000) * rate.input
     const outputCostRaw = (outTok / 1_000_000) * rate.output
     const totalRaw = inputCostRaw + outputCostRaw
@@ -100,7 +100,7 @@ const getBillingBreakdown = (log) => {
         if (breakdown && typeof breakdown === 'object') {
             const model = String(breakdown.model || log?.model_name || '')
             const fallbackRate = GEMINI_RATES_JPY_PER_1M[normalizeGeminiModelNameForCost(model)]
-                || GEMINI_RATES_JPY_PER_1M['gemini-1.5-flash']
+                || GEMINI_RATES_JPY_PER_1M['gemini-2.5-flash-lite']
             const inputTokens = toSafeNumber(breakdown.input_tokens, toSafeNumber(log?.input_tokens, 0))
             const outputTokens = toSafeNumber(breakdown.output_tokens, toSafeNumber(log?.output_tokens, 0))
             const inputRatePer1M = toSafeNumber(breakdown.rate_per_1m_jpy?.input, fallbackRate.input)

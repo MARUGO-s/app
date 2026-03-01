@@ -155,17 +155,17 @@ const GEMINI_RATES_JPY_PER_1M: Record<string, GeminiRate> = {
 
 function normalizeGeminiModelName(modelName: string): string {
     const normalized = String(modelName || '').trim().toLowerCase()
-    if (!normalized) return 'gemini-1.5-flash'
+    if (!normalized) return 'gemini-2.5-flash-lite'
     if (normalized.includes('flash-lite')) return 'gemini-2.5-flash-lite'
     if (normalized.includes('2.5-pro') || normalized.includes('pro')) return 'gemini-2.5-pro'
     if (normalized.includes('2.0-flash')) return 'gemini-2.0-flash'
     if (normalized.includes('1.5-flash') || normalized.includes('flash')) return 'gemini-1.5-flash'
-    return 'gemini-1.5-flash'
+    return 'gemini-2.5-flash-lite'
 }
 
 export function getGeminiRatePerMillion(modelName: string): GeminiRate {
     const key = normalizeGeminiModelName(modelName)
-    return GEMINI_RATES_JPY_PER_1M[key] || GEMINI_RATES_JPY_PER_1M['gemini-1.5-flash']
+    return GEMINI_RATES_JPY_PER_1M[key] || GEMINI_RATES_JPY_PER_1M['gemini-2.5-flash-lite']
 }
 
 export function getGeminiCostBreakdown(

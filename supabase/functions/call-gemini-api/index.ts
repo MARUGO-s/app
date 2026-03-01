@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts";
 import { APILogger, getGeminiCostBreakdown } from "../_shared/api-logger.ts";
+import { buildGeminiGenerateContentEndpointCandidates } from "../_shared/gemini-model.ts";
 
 type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -35,23 +36,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const FORCED_LITE_MODEL = "gemini-2.5-flash-lite";
-const PRO_MODEL_SEGMENT_RE = /(^|[-_])pro($|[-_])/i;
-const LITE_MODEL_SEGMENT_RE = /(^|[-_])flash[-_]?lite($|[-_])/i;
-
-function resolveGeminiModel(requestedModel?: string): string {
-  const m = String(requestedModel || "").trim();
-  if (!m) return FORCED_LITE_MODEL;
-  // Cost safety: never allow Pro-family models from this endpoint.
-  if (PRO_MODEL_SEGMENT_RE.test(m)) {
-    throw new Error(`高額課金になりやすいProモデルは使用できません: ${m}`);
-  }
-  // Force Lite-family models for predictable and low cost.
-  if (!LITE_MODEL_SEGMENT_RE.test(m)) {
-    console.warn(`⚠️ Lite固定のためモデルを上書きします: ${m} -> ${FORCED_LITE_MODEL}`);
-    return FORCED_LITE_MODEL;
-  }
-  return m;
+function isModelUnavailableError(status: number, errorText: string) {
+  const body = String(errorText || "").toLowerCase();
+  if (status === 404) return true;
+  if (status === 400 && (body.includes("not found") || body.includes("model") && body.includes("supported"))) return true;
+  return false;
 }
 
 function buildMessagesFromPayload(payload: RequestPayload): ChatMessage[] {
@@ -181,13 +170,18 @@ serve(async (req) => {
       });
     }
 
-    const modelId = resolveGeminiModel(body.model);
-    apiLogger = new APILogger("gemini", "call-gemini-api", modelId);
+    const endpointCandidates = buildGeminiGenerateContentEndpointCandidates("v1beta");
+    const requestedModel = String(body.model || "").trim();
+    if (requestedModel && requestedModel !== endpointCandidates[0]?.model) {
+      console.warn(`⚠️ 最安モデル優先のため指定モデルを上書きします: ${requestedModel} -> ${endpointCandidates[0]?.model}`);
+    }
+
+    const firstModelId = endpointCandidates[0]?.model || "gemini-2.5-flash-lite";
+    apiLogger = new APILogger("gemini", "call-gemini-api", firstModelId);
     apiLogger.setUser(
       readString(authPayload.sub) || null,
       readString(authPayload.email) || null,
     );
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
 
     // Gemini API用のリクエスト形式に変換
     // Gemini APIはsystem roleをサポートしていないため、system roleをuser roleに統合
@@ -217,45 +211,90 @@ serve(async (req) => {
     };
     requestSizeBytes = new TextEncoder().encode(JSON.stringify(geminiRequest)).length;
 
-    console.log("🚀 Gemini API呼び出し開始:", { model: modelId, messages: messages.length });
+    let selectedModelId = firstModelId;
+    let rawResponseText = "";
+    let fallbackUsed = false;
+    const attemptedModels: string[] = [];
+    let lastFailure: { status: number; statusText: string; errorText: string; modelId: string } | null = null;
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify(geminiRequest),
-    });
+    for (let i = 0; i < endpointCandidates.length; i += 1) {
+      const candidate = endpointCandidates[i];
+      const modelId = candidate?.model || firstModelId;
+      const endpoint = candidate?.url || `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
+      attemptedModels.push(modelId);
+      if (apiLogger) apiLogger.setModel(modelId);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("❌ Gemini API error:", response.status, response.statusText, errorText);
-      const errorMessage = buildErrorMessage(response.status, response.statusText, errorText);
+      console.log("🚀 Gemini API呼び出し開始:", { model: modelId, messages: messages.length, attempt: i + 1 });
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify(geminiRequest),
+      });
 
-      if (apiLogger) {
-        const errorMetadata = {
-          model: modelId,
-          http_status: response.status,
-          http_status_text: response.statusText,
+      if (!response.ok) {
+        const errorText = await response.text();
+        lastFailure = { status: response.status, statusText: response.statusText, errorText, modelId };
+        console.error("❌ Gemini API error:", response.status, response.statusText, errorText);
+
+        // 最安モデルが利用不可のときだけ第二候補へフォールバック。
+        if (i < endpointCandidates.length - 1 && isModelUnavailableError(response.status, errorText)) {
+          fallbackUsed = true;
+          console.warn(`⚠️ Primary model unavailable, retry with fallback model: ${endpointCandidates[i + 1]?.model || 'unknown'}`);
+          continue;
+        }
+
+        const errorMessage = buildErrorMessage(response.status, response.statusText, errorText);
+        if (apiLogger) {
+          const errorMetadata = {
+            model: modelId,
+            attempted_models: attemptedModels,
+            fallback_used: fallbackUsed,
+            http_status: response.status,
+            http_status_text: response.statusText,
+            mode: body.mode || null,
+            feature: readString(body.logFeature) || readString(body.logContext?.feature) || null,
+            source: readString(body.logContext?.source) || null,
+            current_view: readString(body.logContext?.currentView) || null,
+            assistant_mode: readString(body.logContext?.assistantMode) || null,
+          };
+          if (response.status === 429) {
+            await apiLogger.logRateLimit(errorMetadata);
+          } else {
+            await apiLogger.logError(errorMessage, errorMetadata);
+          }
+          logWritten = true;
+        }
+        throw new Error(errorMessage);
+      }
+
+      rawResponseText = await response.text();
+      selectedModelId = modelId;
+      break;
+    }
+
+    if (!rawResponseText) {
+      const failed = lastFailure || { status: 500, statusText: 'Unknown', errorText: 'Unknown error', modelId: firstModelId };
+      const errorMessage = buildErrorMessage(failed.status, failed.statusText, failed.errorText);
+      if (apiLogger && !logWritten) {
+        await apiLogger.logError(errorMessage, {
+          model: failed.modelId,
+          attempted_models: attemptedModels,
+          fallback_used: fallbackUsed,
           mode: body.mode || null,
           feature: readString(body.logFeature) || readString(body.logContext?.feature) || null,
           source: readString(body.logContext?.source) || null,
           current_view: readString(body.logContext?.currentView) || null,
           assistant_mode: readString(body.logContext?.assistantMode) || null,
-        };
-        if (response.status === 429) {
-          await apiLogger.logRateLimit(errorMetadata);
-        } else {
-          await apiLogger.logError(errorMessage, errorMetadata);
-        }
+        });
         logWritten = true;
       }
-
       throw new Error(errorMessage);
     }
 
-    const rawResponseText = await response.text();
+    if (apiLogger) apiLogger.setModel(selectedModelId);
     const responseSizeBytes = new TextEncoder().encode(rawResponseText).length;
 
     let result: any;
@@ -264,7 +303,9 @@ serve(async (req) => {
     } catch (parseErr) {
       if (apiLogger) {
         await apiLogger.logError(`GeminiレスポンスJSON解析に失敗: ${String(parseErr)}`, {
-          model: modelId,
+          model: selectedModelId,
+          attempted_models: attemptedModels,
+          fallback_used: fallbackUsed,
           mode: body.mode || null,
           feature: readString(body.logFeature) || readString(body.logContext?.feature) || null,
           source: readString(body.logContext?.source) || null,
@@ -328,7 +369,7 @@ serve(async (req) => {
     const usage = result?.usageMetadata || {};
     const inputTokens = toFiniteNonNegativeInt(usage?.promptTokenCount);
     const outputTokens = toFiniteNonNegativeInt(usage?.candidatesTokenCount);
-    const billing = getGeminiCostBreakdown(modelId, inputTokens, outputTokens);
+    const billing = getGeminiCostBreakdown(selectedModelId, inputTokens, outputTokens);
 
     if (apiLogger) {
       await apiLogger.logSuccess({
@@ -343,6 +384,9 @@ serve(async (req) => {
           source: readString(body.logContext?.source) || null,
           current_view: readString(body.logContext?.currentView) || null,
           assistant_mode: readString(body.logContext?.assistantMode) || null,
+          attempted_models: attemptedModels,
+          fallback_used: fallbackUsed,
+          selected_model: selectedModelId,
           message_count: Array.isArray(messages) ? messages.length : 0,
           usage_metadata: usage,
           billing_type: "token_weighted",
