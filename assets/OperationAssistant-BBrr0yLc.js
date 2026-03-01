@@ -40,6 +40,68 @@ const n=`.operation-assistant-fab {
     padding: 8px 10px;
 }
 
+.operation-assistant-mode-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.operation-assistant-mode-btn {
+    border: 1px solid #fcd9b6;
+    background: #fff7ed;
+    color: #9a3412;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+}
+
+.operation-assistant-mode-btn:hover {
+    background: #ffedd5;
+    border-color: #fdba74;
+}
+
+.operation-assistant-mode-btn.is-active {
+    background: linear-gradient(135deg, #ea580c, #c2410c);
+    border-color: #c2410c;
+    color: #ffffff;
+}
+
+.operation-assistant-mode-btn:disabled,
+.operation-assistant-mode-refresh:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.operation-assistant-mode-refresh {
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    color: #374151;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.operation-assistant-mode-refresh:hover {
+    background: #f9fafb;
+    border-color: #9ca3af;
+}
+
+.operation-assistant-snapshot-note {
+    font-size: 0.75rem;
+    color: #6b7280;
+    border: 1px dashed #e5e7eb;
+    border-radius: 8px;
+    padding: 6px 9px;
+    background: #fff;
+}
+
 .operation-assistant-prompt-toggle-wrap {
     display: flex;
     justify-content: flex-start;

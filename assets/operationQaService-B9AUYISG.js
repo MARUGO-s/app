@@ -118,6 +118,72 @@ const DETAILED_STYLE_HINT_PATTERNS = [
 ];
 
 const CHOICE_PROMPT_MARKER = '番号だけ返信してください。';
+const ASSISTANT_ANSWER_MODE = {
+    QUESTION_FIRST: 'question-first',
+    PAGE_FIRST: 'page-first',
+};
+
+const normalizeAnswerMode = (mode) => (
+    mode === ASSISTANT_ANSWER_MODE.PAGE_FIRST
+        ? ASSISTANT_ANSWER_MODE.PAGE_FIRST
+        : ASSISTANT_ANSWER_MODE.QUESTION_FIRST
+);
+
+const uniqueTrimmedLines = (items, limit = 30, maxLength = 80) => {
+    const list = Array.isArray(items) ? items : [];
+    const out = [];
+    const seen = new Set();
+    list.forEach((item) => {
+        const text = String(item || '').replace(/\\s+/g, ' ').trim();
+        if (!text || text.length > maxLength) return;
+        if (seen.has(text)) return;
+        seen.add(text);
+        out.push(text);
+    });
+    return out.slice(0, limit);
+};
+
+const normalizePageContext = (pageContext) => {
+    if (!pageContext || typeof pageContext !== 'object') return null;
+    const view = String(pageContext.view || '').trim();
+    const capturedAt = String(pageContext.capturedAt || '').trim();
+    const headings = uniqueTrimmedLines(pageContext.headingLines, 20, 80);
+    const tabs = uniqueTrimmedLines(pageContext.tabLabels, 20, 64);
+    const buttons = uniqueTrimmedLines(pageContext.buttonLabels, 24, 48);
+    const excerpt = String(pageContext.excerpt || '').replace(/\\s+/g, ' ').trim().slice(0, 600);
+    if (!view && headings.length === 0 && tabs.length === 0 && buttons.length === 0 && !excerpt) {
+        return null;
+    }
+    return {
+        view,
+        capturedAt,
+        headingLines: headings,
+        tabLabels: tabs,
+        buttonLabels: buttons,
+        excerpt,
+    };
+};
+
+const buildPageContextText = (pageContext) => {
+    const ctx = normalizePageContext(pageContext);
+    if (!ctx) return '';
+    const lines = [];
+    if (ctx.view) lines.push(\`view=\${ctx.view}\`);
+    if (ctx.capturedAt) lines.push(\`capturedAt=\${ctx.capturedAt}\`);
+    if (ctx.headingLines.length > 0) lines.push(\`headings=\${ctx.headingLines.join(' / ')}\`);
+    if (ctx.tabLabels.length > 0) lines.push(\`tabs=\${ctx.tabLabels.join(' / ')}\`);
+    if (ctx.buttonLabels.length > 0) lines.push(\`buttons=\${ctx.buttonLabels.join(' / ')}\`);
+    if (ctx.excerpt) lines.push(\`excerpt=\${ctx.excerpt}\`);
+    return lines.join('\\n');
+};
+
+const buildContextAwareQuestion = ({ question, answerMode, pageContextText }) => {
+    const base = String(question || '').trim();
+    if (!base) return base;
+    if (answerMode !== ASSISTANT_ANSWER_MODE.PAGE_FIRST) return base;
+    if (!pageContextText) return base;
+    return \`\${base}\\n\\n[現在ページスナップショット]\\n\${pageContextText}\`;
+};
 
 const decideResponseStyle = ({ question, knowledgeAssessment }) => {
     const q = String(question || '').trim();
@@ -258,6 +324,18 @@ const shouldOfferNumberedChoices = (question, knowledgeAssessment) => {
     const uncertain = knowledgeAssessment?.confidence !== 'high';
 
     return knowledgeAssessment?.shouldAskClarification || (isLikelyAbstract && lowSpecificity && (nearTie || uncertain));
+};
+
+const shouldForcePagePriorityDirectAnswer = ({ answerMode, currentView, knowledgeAssessment }) => {
+    if (answerMode !== ASSISTANT_ANSWER_MODE.PAGE_FIRST) return false;
+    const topEntry = knowledgeAssessment?.top?.entry;
+    if (!topEntry) return false;
+    const viewMatched = Array.isArray(topEntry.views) ? topEntry.views.includes(currentView) : false;
+    if (!viewMatched) return false;
+    const score = Number(knowledgeAssessment?.bestScore || 0);
+    const confidence = String(knowledgeAssessment?.confidence || '');
+    if (confidence === 'high') return true;
+    return confidence === 'medium' && score >= 8;
 };
 
 const truncateText = (text, max = 44) => {
@@ -456,6 +534,8 @@ const buildGeminiPrompt = ({
     history,
     codePromptText,
     codeReferences,
+    pageContextText = '',
+    answerMode = ASSISTANT_ANSWER_MODE.QUESTION_FIRST,
     responseStyle = 'balanced',
 }) => {
     const historyText = history.length > 0
@@ -467,6 +547,10 @@ const buildGeminiPrompt = ({
     const codeRefLine = codeReferences?.length
         ? codeReferences.slice(0, 5).join(', ')
         : 'なし';
+    const normalizedMode = normalizeAnswerMode(answerMode);
+    const modeInstruction = normalizedMode === ASSISTANT_ANSWER_MODE.PAGE_FIRST
+        ? '現在ページ優先モード: 質問が抽象的でも、まず現在画面で実行できる最有力手順を返す。'
+        : '質問優先モード: 質問文を最優先し、画面情報は補助情報として使う。';
     const answerStyleInstruction = responseStyle === 'concise'
         ? '回答スタイル: 短め。結論1行 + 手順は最大3件。補足は必要最小限。'
         : responseStyle === 'detailed'
@@ -480,9 +564,14 @@ const buildGeminiPrompt = ({
         '',
         \`現在画面: \${currentViewLabel}\`,
         \`ユーザーロール: \${roleLabel}\`,
+        \`回答モード: \${normalizedMode === ASSISTANT_ANSWER_MODE.PAGE_FIRST ? '現在ページ優先' : '質問優先'}\`,
+        modeInstruction,
         '',
         'ローカル操作ナレッジ:',
         knowledgeSnippet,
+        '',
+        'クリック時点のページスナップショット:',
+        pageContextText || 'なし',
         '',
         'コード検索で抽出した関連箇所:',
         codeSnippet,
@@ -519,11 +608,21 @@ const buildGeminiPrompt = ({
 };
 
 export const operationQaService = {
-    async askOperationQuestion({ question, currentView, userRole, history = [] }) {
+    async askOperationQuestion({
+        question,
+        currentView,
+        userRole,
+        history = [],
+        answerMode = ASSISTANT_ANSWER_MODE.QUESTION_FIRST,
+        pageContext = null,
+    }) {
         const normalizedQuestion = String(question || '').trim();
         if (!normalizedQuestion) {
             throw new Error('質問内容が空です');
         }
+        const normalizedAnswerMode = normalizeAnswerMode(answerMode);
+        const normalizedPageContext = normalizePageContext(pageContext);
+        const pageContextText = buildPageContextText(normalizedPageContext);
 
         const currentViewLabel = VIEW_LABEL_MAP[currentView] || String(currentView || '不明');
         const roleLabel = userRole === 'admin' ? 'admin' : 'user';
@@ -550,8 +649,13 @@ export const operationQaService = {
         }
 
         const augmentedQuestion = buildAugmentedQuestion(normalizedQuestion, normalizedHistory);
-        const knowledgeAssessment = assessOperationKnowledge({
+        const reasoningQuestion = buildContextAwareQuestion({
             question: augmentedQuestion,
+            answerMode: normalizedAnswerMode,
+            pageContextText,
+        });
+        const knowledgeAssessment = assessOperationKnowledge({
+            question: reasoningQuestion,
             currentView,
             limit: 3,
         });
@@ -560,10 +664,26 @@ export const operationQaService = {
             knowledgeAssessment,
         });
         const codeEvidence = await searchCodeEvidence({
-            question: augmentedQuestion,
+            question: reasoningQuestion,
             limit: 5,
             maxFiles: 5,
         });
+
+        const shouldPreferPageDirect = shouldForcePagePriorityDirectAnswer({
+            answerMode: normalizedAnswerMode,
+            currentView,
+            knowledgeAssessment,
+        });
+
+        if (shouldPreferPageDirect) {
+            const localPageDirect = formatLocalOperationAnswer({
+                question: reasoningQuestion,
+                currentView,
+                currentViewLabel,
+                responseStyle,
+            });
+            return appendCodeReferenceLines(localPageDirect, codeEvidence);
+        }
 
         if (shouldOfferNumberedChoices(normalizedQuestion, knowledgeAssessment)) {
             const choicePrompt = buildNumberedChoicePrompt({
@@ -575,7 +695,7 @@ export const operationQaService = {
 
         if (shouldPreferLocalDirectAnswer(normalizedQuestion, knowledgeAssessment)) {
             const localDirect = formatLocalOperationAnswer({
-                question: augmentedQuestion,
+                question: reasoningQuestion,
                 currentView,
                 currentViewLabel,
                 responseStyle,
@@ -589,13 +709,15 @@ export const operationQaService = {
                 { role: 'user', content: normalizedQuestion },
             ];
             const prompt = buildGeminiPrompt({
-                question: augmentedQuestion,
+                question: reasoningQuestion,
                 currentView,
                 currentViewLabel,
                 roleLabel,
                 history: conversationHistory,
                 codePromptText: codeEvidence.promptText,
                 codeReferences: codeEvidence.references,
+                pageContextText,
+                answerMode: normalizedAnswerMode,
                 responseStyle,
             });
 
@@ -610,6 +732,7 @@ export const operationQaService = {
                         source: 'operation_assistant',
                         feature: 'operation_qa',
                         currentView,
+                        assistantMode: normalizedAnswerMode,
                     },
                 },
             });

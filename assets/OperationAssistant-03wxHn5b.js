@@ -1,4 +1,4 @@
-const s=`import React, { useMemo, useRef, useState } from 'react';
+const t=`import React, { useMemo, useRef, useState } from 'react';
 import { Button } from './Button';
 import { Modal } from './Modal';
 import { operationQaService } from '../services/operationQaService';
@@ -150,6 +150,68 @@ const DEFAULT_QUICK_PROMPTS = [
     'ボタンが反応しない時の確認手順を教えて',
 ];
 
+const ANSWER_MODE = {
+    QUESTION_FIRST: 'question-first',
+    PAGE_FIRST: 'page-first',
+};
+
+const normalizeUiText = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
+
+const uniqTextList = (items, limit = 24, maxLength = 80) => {
+    const out = [];
+    const seen = new Set();
+    (Array.isArray(items) ? items : []).forEach((item) => {
+        const text = normalizeUiText(item);
+        if (!text || text.length > maxLength) return;
+        if (seen.has(text)) return;
+        seen.add(text);
+        out.push(text);
+    });
+    return out.slice(0, limit);
+};
+
+const collectPageSnapshot = (currentView) => {
+    if (typeof document === 'undefined') return null;
+    const root = document.querySelector('.app-main');
+    if (!root) return null;
+
+    const isInsideAssistant = (node) => (
+        !!node?.closest?.('.operation-assistant-fab')
+        || !!node?.closest?.('.operation-assistant-modal')
+        || !!node?.closest?.('.modal-overlay')
+    );
+
+    const collectTexts = (selector, limit, maxLength = 80) => {
+        const values = [];
+        root.querySelectorAll(selector).forEach((el) => {
+            if (isInsideAssistant(el)) return;
+            const text = normalizeUiText(el.textContent);
+            if (!text || text.length > maxLength) return;
+            values.push(text);
+        });
+        return uniqTextList(values, limit, maxLength);
+    };
+
+    const headingLines = collectTexts('h1, h2, h3, h4, [role="heading"]', 16, 80);
+    const tabLabels = collectTexts('[role="tab"], .tab-button, .tabs button, .view-mode-toggle button', 16, 60);
+    const buttonLabels = collectTexts('button', 24, 48).filter((label) => ![
+        '質問する',
+        '履歴クリア',
+        '質問例を表示',
+        '質問例を閉じる',
+    ].includes(label));
+    const excerpt = normalizeUiText(root.textContent).slice(0, 600);
+
+    return {
+        view: String(currentView || ''),
+        capturedAt: new Date().toISOString(),
+        headingLines,
+        tabLabels,
+        buttonLabels,
+        excerpt,
+    };
+};
+
 export const OperationAssistant = ({ currentView, userRole }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [question, setQuestion] = useState('');
@@ -157,8 +219,20 @@ export const OperationAssistant = ({ currentView, userRole }) => {
     const [messages, setMessages] = useState([INITIAL_MESSAGE]);
     const [lastError, setLastError] = useState('');
     const [showQuickPromptList, setShowQuickPromptList] = useState(false);
+    const [answerMode, setAnswerMode] = useState(ANSWER_MODE.PAGE_FIRST);
+    const [pageSnapshot, setPageSnapshot] = useState(null);
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
+
+    const pageSnapshotSummary = useMemo(() => {
+        if (!pageSnapshot) return '';
+        const hints = [
+            ...(pageSnapshot.headingLines || []),
+            ...(pageSnapshot.tabLabels || []),
+            ...(pageSnapshot.buttonLabels || []),
+        ];
+        return uniqTextList(hints, 3, 40).join(' / ');
+    }, [pageSnapshot]);
 
     const canSubmit = question.trim().length > 0 && !isSending;
     const quickPrompts = useMemo(
@@ -179,6 +253,7 @@ export const OperationAssistant = ({ currentView, userRole }) => {
     };
 
     const openModal = () => {
+        setPageSnapshot(collectPageSnapshot(currentView));
         setIsOpen(true);
         setShowQuickPromptList(false);
         setTimeout(() => {
@@ -231,6 +306,8 @@ export const OperationAssistant = ({ currentView, userRole }) => {
                 currentView,
                 userRole,
                 history: [...historyForApi, { role: 'user', content: trimmed }],
+                answerMode,
+                pageContext: answerMode === ANSWER_MODE.PAGE_FIRST ? pageSnapshot : null,
             });
             setMessages((prev) => [...prev, createMessage('assistant', answer)]);
         } catch (error) {
@@ -275,6 +352,40 @@ export const OperationAssistant = ({ currentView, userRole }) => {
                     <div className="operation-assistant-hint">
                         画面操作の質問専用です。今の画面に合わせて手順で回答します。うまくいかない時は「画面名 / ボタン名 / 実際の表示」を送ってください。
                     </div>
+
+                    <div className="operation-assistant-mode-wrap" role="group" aria-label="回答モード">
+                        <button
+                            type="button"
+                            className={\`operation-assistant-mode-btn \${answerMode === ANSWER_MODE.QUESTION_FIRST ? 'is-active' : ''}\`}
+                            disabled={isSending}
+                            onClick={() => setAnswerMode(ANSWER_MODE.QUESTION_FIRST)}
+                        >
+                            質問優先
+                        </button>
+                        <button
+                            type="button"
+                            className={\`operation-assistant-mode-btn \${answerMode === ANSWER_MODE.PAGE_FIRST ? 'is-active' : ''}\`}
+                            disabled={isSending}
+                            onClick={() => setAnswerMode(ANSWER_MODE.PAGE_FIRST)}
+                        >
+                            現在ページ優先
+                        </button>
+                        <button
+                            type="button"
+                            className="operation-assistant-mode-refresh"
+                            onClick={() => setPageSnapshot(collectPageSnapshot(currentView))}
+                            disabled={isSending}
+                            title="現在ページの情報を再取得"
+                        >
+                            再取得
+                        </button>
+                    </div>
+                    {answerMode === ANSWER_MODE.PAGE_FIRST && (
+                        <div className="operation-assistant-snapshot-note">
+                            現在地: {currentView || '不明'}
+                            {pageSnapshotSummary ? \` / 取得要素: \${pageSnapshotSummary}\` : ' / 取得要素: なし'}
+                        </div>
+                    )}
 
                     <div className="operation-assistant-prompt-toggle-wrap">
                         <button
@@ -362,4 +473,4 @@ export const OperationAssistant = ({ currentView, userRole }) => {
 };
 
 export default OperationAssistant;
-`;export{s as default};
+`;export{t as default};
