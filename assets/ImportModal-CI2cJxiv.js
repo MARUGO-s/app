@@ -31,6 +31,11 @@ const n=`.modal-overlay {
     max-width: 500px;
     padding: 1.5rem;
     animation: slideUp 0.3s ease-out;
+    color: #111827;
+}
+
+.import-modal-card p {
+    color: #111827;
 }
 
 @keyframes slideUp {
@@ -130,7 +135,7 @@ const n=`.modal-overlay {
     border-radius: 8px;
     cursor: pointer;
     background: #f9f9f9;
-    color: #666;
+    color: #111827;
     transition: all 0.2s ease;
 }
 
@@ -161,9 +166,9 @@ const n=`.modal-overlay {
 .image-engine-panel {
     margin: 0.75rem 0 0.5rem;
     padding: 0.65rem 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: 1px solid #d1d5db;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.05);
+    background: #f9fafb;
 }
 
 .image-engine-label {
@@ -173,22 +178,22 @@ const n=`.modal-overlay {
     gap: 4px;
     font-size: 0.9rem;
     font-weight: 600;
-    color: #e2e8f0;
+    color: #111827;
 }
 
 .image-engine-select {
     width: 100%;
     margin-top: 8px;
     padding: 0.6rem 0.55rem;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid #d1d5db;
     border-radius: 8px;
-    background: #333;
+    background: #ffffff;
     font-size: 0.95rem;
-    color: #e2e8f0;
+    color: #111827;
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;
-    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23e2e8f0%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23374151%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
     background-repeat: no-repeat;
     background-position: right 10px top 50%;
     background-size: 10px auto;
@@ -198,7 +203,7 @@ const n=`.modal-overlay {
     margin-top: 0.35rem;
     font-size: 0.78rem;
     line-height: 1.35;
-    color: rgba(255, 255, 255, 0.6);
+    color: #374151;
 }
 
 /* 解析中は全面白オーバーレイではなく、中央のポップアップのみ表示 */
@@ -356,4 +361,5 @@ const n=`.modal-overlay {
 
 .progress-log::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.3);
-}`;export{n as default};
+}
+`;export{n as default};

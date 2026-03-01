@@ -132,7 +132,7 @@ const getBillingBreakdown = (log) => {
         }
     }
 
-    if (String(log?.endpoint || '').toLowerCase() === 'call-gemini-api') {
+    if (String(log?.api_name || '').toLowerCase() === 'gemini') {
         return buildGeminiBillingBreakdown({
             modelName: log?.model_name,
             inputTokens: log?.input_tokens,
