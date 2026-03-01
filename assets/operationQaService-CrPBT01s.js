@@ -944,6 +944,24 @@ const fetchCurrentAuthUser = async () => {
     }
 };
 
+const resolveFunctionAuthHeaders = async () => {
+    try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+            console.warn('operationQaService: failed to resolve auth session for function invoke', error);
+            return {};
+        }
+        const accessToken = String(data?.session?.access_token || '').trim();
+        if (!accessToken) return {};
+        return {
+            Authorization: \`Bearer \${accessToken}\`,
+        };
+    } catch (error) {
+        console.warn('operationQaService: unexpected auth.getSession error', error);
+        return {};
+    }
+};
+
 const writeOperationQaLog = async ({
     authUser,
     userRole,
@@ -1287,7 +1305,9 @@ export const operationQaService = {
                 responseStyle,
             });
 
+            const functionAuthHeaders = await resolveFunctionAuthHeaders();
             const { data, error } = await supabase.functions.invoke('call-gemini-api', {
+                headers: functionAuthHeaders,
                 body: {
                     model: OPERATION_ASSISTANT_MODEL,
                     temperature: 0.2,
