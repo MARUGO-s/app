@@ -111,6 +111,23 @@ const buildGroqBillingBreakdown = ({ modelName, inputTokens, outputTokens, estim
     }
 }
 
+const buildGroqVoiceBillingBreakdown = ({ modelName, audioDurationSec, estimatedCostJpy = null }) => {
+    const sec = Math.max(0, toSafeNumber(audioDurationSec, 0))
+    if (sec === 0) return null
+    const ratePerSecondJpy = 0.0046
+    const rawCost = sec * ratePerSecondJpy
+    const totalCost = hasPositiveCost(estimatedCostJpy)
+        ? toSafeNumber(estimatedCostJpy, rawCost)
+        : rawCost
+    return {
+        model: String(modelName || 'whisper-large-v3-turbo'),
+        billingUnit: 'audio_second',
+        audioDurationSec: sec,
+        ratePerSecondJpy,
+        totalCostJpy: totalCost,
+    }
+}
+
 const isVoiceLog = (log) => {
     const modelName = String(log?.model_name || '').toLowerCase()
     const endpoint = String(log?.endpoint || '').toLowerCase()
@@ -138,6 +155,28 @@ const getBillingBreakdown = (log) => {
     if (metadata && typeof metadata === 'object') {
         const breakdown = metadata.billing_breakdown
         if (breakdown && typeof breakdown === 'object') {
+            const billingUnit = String(breakdown.billing_unit || '').toLowerCase()
+            if (billingUnit === 'audio_second') {
+                const audioDurationSec = toSafeNumber(
+                    breakdown.audio_duration_sec,
+                    toSafeNumber(log?.metadata?.audio_duration_sec, 0),
+                )
+                const ratePerSecondJpy = toSafeNumber(breakdown.rate_per_second_jpy, 0.0046)
+                const totalCostRaw = audioDurationSec * ratePerSecondJpy
+                const totalCost = hasPositiveCost(breakdown.total_cost_jpy)
+                    ? toSafeNumber(breakdown.total_cost_jpy, totalCostRaw)
+                    : (hasPositiveCost(log?.estimated_cost_jpy)
+                        ? toSafeNumber(log?.estimated_cost_jpy, totalCostRaw)
+                        : totalCostRaw)
+                return {
+                    model: String(breakdown.model || log?.model_name || 'whisper-large-v3-turbo'),
+                    billingUnit: 'audio_second',
+                    audioDurationSec,
+                    ratePerSecondJpy,
+                    totalCostJpy: totalCost,
+                }
+            }
+
             const model = String(breakdown.model || log?.model_name || '')
             const isGroq = String(log?.api_name || '').toLowerCase() === 'groq'
             const fallbackRate = isGroq
@@ -183,6 +222,14 @@ const getBillingBreakdown = (log) => {
         })
     }
     if (String(log?.api_name || '').toLowerCase() === 'groq') {
+        const isVoice = isVoiceLog(log) || String(log?.endpoint || '').toLowerCase().includes('voice')
+        if (isVoice) {
+            return buildGroqVoiceBillingBreakdown({
+                modelName: log?.model_name,
+                audioDurationSec: log?.metadata?.audio_duration_sec,
+                estimatedCostJpy: log?.estimated_cost_jpy,
+            })
+        }
         return buildGroqBillingBreakdown({
             modelName: log?.model_name,
             inputTokens: log?.input_tokens,
@@ -196,6 +243,9 @@ const getBillingBreakdown = (log) => {
 const formatBillingBreakdownText = (log) => {
     const b = getBillingBreakdown(log)
     if (!b) return '-'
+    if (b.billingUnit === 'audio_second') {
+        return `音声${Number(b.audioDurationSec || 0).toFixed(2)}秒 × ¥${formatCostJpy(b.ratePerSecondJpy, 4)}/秒 = ¥${formatCostJpy(b.totalCostJpy)}`
+    }
     return `入力${b.inputTokens.toLocaleString()}tok × ¥${b.inputRatePer1M}/100万 + 出力${b.outputTokens.toLocaleString()}tok × ¥${b.outputRatePer1M}/100万 = ¥${formatCostJpy(b.totalCostJpy)}`
 }
 
@@ -723,6 +773,14 @@ export default function ApiUsageLogs() {
                                         {(() => {
                                             const billing = getBillingBreakdown(log)
                                             if (!billing) return '-'
+                                            if (billing.billingUnit === 'audio_second') {
+                                                return (
+                                                    <div className="cost-breakdown" title={formatBillingBreakdownText(log)}>
+                                                        <div>音声: {Number(billing.audioDurationSec || 0).toFixed(2)}秒 × ¥{formatCostJpy(billing.ratePerSecondJpy, 4)}/秒</div>
+                                                        <div className="cost-breakdown-total">合計: ¥{formatCostJpy(billing.totalCostJpy)}</div>
+                                                    </div>
+                                                )
+                                            }
                                             return (
                                                 <div className="cost-breakdown" title={formatBillingBreakdownText(log)}>
                                                     <div>入力: {billing.inputTokens.toLocaleString()}tok × ¥{billing.inputRatePer1M}/100万 = ¥{formatCostJpy(billing.inputCostJpy)}</div>

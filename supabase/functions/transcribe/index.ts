@@ -105,10 +105,11 @@ serve(async (req) => {
         // Log API usage
         try {
             // Calculate estimated cost
-            // Model: whisper-large-v3 ($0.111 / hour)
+            // Model: whisper-large-v3-turbo ($0.111 / hour)
             // Approx 0.0046 JPY / sec (at 150 JPY/USD)
             const audioDurationSec = result.duration || (result.segments ? result.segments[result.segments.length - 1].end : 0);
-            const estimatedCost = audioDurationSec ? (audioDurationSec * 0.0046) : 0;
+            const ratePerSecondJpy = 0.0046;
+            const estimatedCost = audioDurationSec ? (audioDurationSec * ratePerSecondJpy) : 0;
 
             // Get User ID from token if available
             let userId = null;
@@ -125,14 +126,22 @@ serve(async (req) => {
             await supabaseAdmin.from('api_usage_logs').insert({
                 api_name: 'groq',
                 endpoint: 'voice-input-v3', // Distinct name
-                model_name: 'whisper-large-v3',
+                model_name: 'whisper-large-v3-turbo',
                 user_id: userId,
                 duration_ms: duration, // Processing time
                 estimated_cost_jpy: estimatedCost,
                 metadata: {
                     audio_duration_sec: audioDurationSec,
                     input_bytes: bytes.length,
-                    prompt_used: true
+                    prompt_used: true,
+                    billing_type: 'audio_duration',
+                    billing_breakdown: {
+                        billing_unit: 'audio_second',
+                        model: 'whisper-large-v3-turbo',
+                        audio_duration_sec: audioDurationSec,
+                        rate_per_second_jpy: ratePerSecondJpy,
+                        total_cost_jpy: Math.round(estimatedCost * 1_000_000) / 1_000_000,
+                    },
                 },
                 status: 'success'
             });
