@@ -1,4 +1,4 @@
-const e=`import { useState, useEffect, useMemo, useRef } from 'react';
+const e=`import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom'; // Import useSearchParams
 import { Layout } from './components/Layout';
 import { RecipeList } from './components/RecipeList';
@@ -17,7 +17,11 @@ import { IncomingStock } from './components/IncomingStock';
 import { Planner } from './components/Planner';
 import { OrderList } from './components/OrderList';
 import ApiUsageLogs from './components/ApiUsageLogs';
+import OperationQaLogs from './components/OperationQaLogs';
 import OperationAssistant from './components/OperationAssistant';
+import RequestAssistant from './components/RequestAssistant';
+import RequestLogs from './components/RequestLogs';
+import { supabase } from './supabase';
 import { recipeService } from './services/recipeService';
 import { formatDisplayId } from './utils/formatUtils';
 import { userService } from './services/userService';
@@ -125,6 +129,9 @@ function AppContent() {
   const [searchQuery, setSearchQuery] = useState(''); // New search state
   const [publicRecipeView, setPublicRecipeView] = useState('none'); // 'none' | 'mine' | 'others'
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isRequestAssistantOpen, setIsRequestAssistantOpen] = useState(false);
+  const [isOperationAssistantOpen, setIsOperationAssistantOpen] = useState(false);
+  const [requestUnreadCount, setRequestUnreadCount] = useState(0);
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedRecipeIds, setSelectedRecipeIds] = useState(new Set());
   const [displayMode, setDisplayMode] = useState('normal'); // 'normal' | 'all'
@@ -145,6 +152,55 @@ function AppContent() {
     users: 'ユーザー管理',
     'order-list': '発注リスト',
   };
+  const shouldHideAssistantFabs = isRequestAssistantOpen || isOperationAssistantOpen;
+
+  const loadRequestUnreadCount = useCallback(async () => {
+    if (user?.role !== 'admin' || !user?.id) {
+      setRequestUnreadCount(0);
+      return;
+    }
+    try {
+      const { data: stateRows, error: stateError } = await supabase
+        .from('user_request_view_states')
+        .select('last_seen_at')
+        .eq('user_id', user.id)
+        .limit(1);
+      if (stateError) throw stateError;
+
+      const lastSeenAt = stateRows?.[0]?.last_seen_at || null;
+      let query = supabase
+        .from('user_requests')
+        .select('id', { count: 'exact', head: true });
+      if (lastSeenAt) {
+        query = query.gt('created_at', lastSeenAt);
+      }
+
+      const { count, error } = await query;
+      if (error) throw error;
+      setRequestUnreadCount(Number.isFinite(Number(count)) ? Number(count) : 0);
+    } catch (error) {
+      console.error('要望の未確認件数取得に失敗:', error);
+      setRequestUnreadCount(0);
+    }
+  }, [user?.id, user?.role]);
+
+  const markRequestsAsSeen = useCallback(async () => {
+    if (user?.role !== 'admin' || !user?.id) return;
+    const nowIso = new Date().toISOString();
+    try {
+      const { error } = await supabase
+        .from('user_request_view_states')
+        .upsert({
+          user_id: user.id,
+          last_seen_at: nowIso,
+          updated_at: nowIso,
+        }, { onConflict: 'user_id' });
+      if (error) throw error;
+      setRequestUnreadCount(0);
+    } catch (error) {
+      console.error('要望既読更新に失敗:', error);
+    }
+  }, [user?.id, user?.role]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
@@ -179,6 +235,28 @@ function AppContent() {
   useEffect(() => {
     if (currentView !== 'list') setPublicRecipeView('none');
   }, [currentView]);
+
+  useEffect(() => {
+    loadRequestUnreadCount();
+  }, [loadRequestUnreadCount]);
+
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    if (user?.role !== 'admin') return;
+    loadRequestUnreadCount();
+  }, [isMenuOpen, user?.role, loadRequestUnreadCount]);
+
+  useEffect(() => {
+    if (currentView !== 'requests') return;
+    if (user?.role !== 'admin') return;
+    markRequestsAsSeen();
+  }, [currentView, user?.role, markRequestsAsSeen]);
+
+  useEffect(() => {
+    if (currentView !== 'requests') return;
+    if (user?.role === 'admin') return;
+    setSearchParams({ view: 'list' });
+  }, [currentView, user?.role, setSearchParams]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -1110,6 +1188,7 @@ function AppContent() {
                       >
                         <span style={{ marginRight: '8px' }}>📘</span> アプリガイド
                       </Button>
+
                       <div className="menu-divider"></div>
 
                       {currentView === 'list' && (
@@ -1154,6 +1233,17 @@ function AppContent() {
                               </Button>
                               <Button variant="secondary" onClick={() => { setSearchParams({ view: 'api-logs' }); setIsMenuOpen(false); }}>
                                 <span style={{ marginRight: '8px' }}>📊</span> API使用ログ
+                              </Button>
+                              <Button variant="secondary" onClick={() => { setSearchParams({ view: 'operation-logs' }); setIsMenuOpen(false); }}>
+                                <span style={{ marginRight: '8px' }}>🧾</span> 操作質問ログ
+                              </Button>
+                              <Button variant="secondary" onClick={() => { setSearchParams({ view: 'requests' }); setIsMenuOpen(false); }}>
+                                <span style={{ marginRight: '8px' }}>📨</span> 要望一覧
+                                {requestUnreadCount > 0 && (
+                                  <span className="request-badge">
+                                    {requestUnreadCount > 99 ? '99+' : requestUnreadCount}
+                                  </span>
+                                )}
                               </Button>
                             </>
                           )}
@@ -1499,7 +1589,49 @@ function AppContent() {
           </div>
         </>
       )}
-      <OperationAssistant currentView={currentView} userRole={user?.role} />
+
+      {currentView === 'operation-logs' && user?.role === 'admin' && (
+        <>
+          <div style={{ padding: '20px 20px 0', textAlign: 'left' }}>
+            <Button onClick={() => setSearchParams({ view: 'list' })}>
+              ← レシピリストに戻る
+            </Button>
+          </div>
+          <OperationQaLogs />
+          <div style={{ padding: '20px', textAlign: 'center' }}>
+            <Button onClick={() => setSearchParams({ view: 'list' })}>
+              ← レシピリストに戻る
+            </Button>
+          </div>
+        </>
+      )}
+      {currentView === 'requests' && user?.role === 'admin' && (
+        <>
+          <div style={{ padding: '20px 20px 0', textAlign: 'left' }}>
+            <Button onClick={() => setSearchParams({ view: 'list' })}>
+              ← レシピリストに戻る
+            </Button>
+          </div>
+          <RequestLogs userRole={user?.role} />
+          <div style={{ padding: '20px', textAlign: 'center' }}>
+            <Button onClick={() => setSearchParams({ view: 'list' })}>
+              ← レシピリストに戻る
+            </Button>
+          </div>
+        </>
+      )}
+      <RequestAssistant
+        currentView={currentView}
+        userRole={user?.role}
+        hideFab={shouldHideAssistantFabs}
+        onModalOpenChange={setIsRequestAssistantOpen}
+      />
+      <OperationAssistant
+        currentView={currentView}
+        userRole={user?.role}
+        hideFab={shouldHideAssistantFabs}
+        onModalOpenChange={setIsOperationAssistantOpen}
+      />
     </Layout>
   );
 }

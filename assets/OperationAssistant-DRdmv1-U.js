@@ -1,13 +1,22 @@
-const t=`import React, { useMemo, useRef, useState } from 'react';
+const e=`import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from './Button';
 import { Modal } from './Modal';
+import { VoiceInputButton } from './VoiceInputButton';
 import { operationQaService } from '../services/operationQaService';
 import './OperationAssistant.css';
 
-const createMessage = (role, content) => ({
+const createMessage = (role, content, meta = {}) => ({
     id: \`\${Date.now()}_\${Math.random().toString(16).slice(2)}\`,
     role,
     content: String(content || ''),
+    aiUsed: meta.aiUsed === true,
+    aiAttempted: meta.aiAttempted === true || meta.aiUsed === true,
+    answerSource: String(meta.answerSource || ''),
+    aiModel: meta.aiModel ? String(meta.aiModel) : '',
+    aiStatus: meta.aiStatus ? String(meta.aiStatus) : '',
+    logId: meta.logId ? String(meta.logId) : '',
+    ratingScore: Number.isInteger(Number(meta.ratingScore)) ? Number(meta.ratingScore) : null,
+    ratedAt: meta.ratedAt ? String(meta.ratedAt) : '',
 });
 
 const INITIAL_MESSAGE = createMessage(
@@ -60,6 +69,7 @@ const QUICK_PROMPTS_BY_VIEW = {
         'インフォマートから価格データを抽出して取り込む手順を教えて',
         'CSVをドラッグ&ドロップでアップロードする手順を教えて',
         'CSVを入れた後にCSV取込で未登録を処理する手順を教えて',
+        '歩留まり（ぶどまり）の入力方法と考え方を教えて',
         '未登録の区分（食材/アルコール等）を設定する理由を教えて',
         '容量と単位を設定する理由を教えて',
         '材料マスターを編集する手順を教えて',
@@ -72,6 +82,7 @@ const QUICK_PROMPTS_BY_VIEW = {
         'インフォマートから価格データを抽出して取り込む手順を教えて',
         'CSVをドラッグ&ドロップでアップロードする手順を教えて',
         'CSVを入れた後にCSV取込で未登録を処理する手順を教えて',
+        '歩留まり（ぶどまり）の入力方法と考え方を教えて',
         '未登録の区分（食材/アルコール等）を設定する理由を教えて',
         '容量と単位を設定する理由を教えて',
         '材料マスターを編集する手順を教えて',
@@ -155,6 +166,26 @@ const ANSWER_MODE = {
     PAGE_FIRST: 'page-first',
 };
 
+const RESPONSE_POLICY = {
+    HYBRID: 'hybrid',
+    AI_PRIMARY: 'ai-primary',
+};
+
+const RESPONSE_POLICY_STORAGE_KEY = 'operationAssistant.responsePolicy';
+
+const resolveInitialResponsePolicy = () => {
+    if (typeof window === 'undefined') return RESPONSE_POLICY.AI_PRIMARY;
+    try {
+        const saved = String(window.localStorage.getItem(RESPONSE_POLICY_STORAGE_KEY) || '').trim();
+        if (saved === RESPONSE_POLICY.HYBRID || saved === RESPONSE_POLICY.AI_PRIMARY) {
+            return saved;
+        }
+    } catch {
+        // ignore localStorage read errors
+    }
+    return RESPONSE_POLICY.AI_PRIMARY;
+};
+
 const normalizeUiText = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
 
 const uniqTextList = (items, limit = 24, maxLength = 80) => {
@@ -212,17 +243,39 @@ const collectPageSnapshot = (currentView) => {
     };
 };
 
-export const OperationAssistant = ({ currentView, userRole }) => {
+export const OperationAssistant = ({
+    currentView,
+    userRole,
+    hideFab = false,
+    onModalOpenChange,
+}) => {
     const [isOpen, setIsOpen] = useState(false);
     const [question, setQuestion] = useState('');
     const [isSending, setIsSending] = useState(false);
     const [messages, setMessages] = useState([INITIAL_MESSAGE]);
     const [lastError, setLastError] = useState('');
     const [showQuickPromptList, setShowQuickPromptList] = useState(false);
-    const [answerMode, setAnswerMode] = useState(ANSWER_MODE.PAGE_FIRST);
+    const [answerMode, setAnswerMode] = useState(ANSWER_MODE.QUESTION_FIRST);
+    const [responsePolicy, setResponsePolicy] = useState(resolveInitialResponsePolicy);
     const [pageSnapshot, setPageSnapshot] = useState(null);
+    const [ratingBusyByMessageId, setRatingBusyByMessageId] = useState({});
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
+
+    useEffect(() => {
+        if (typeof onModalOpenChange === 'function') {
+            onModalOpenChange(isOpen);
+        }
+    }, [isOpen, onModalOpenChange]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        try {
+            window.localStorage.setItem(RESPONSE_POLICY_STORAGE_KEY, responsePolicy);
+        } catch {
+            // ignore localStorage write errors
+        }
+    }, [responsePolicy]);
 
     const pageSnapshotSummary = useMemo(() => {
         if (!pageSnapshot) return '';
@@ -253,6 +306,7 @@ export const OperationAssistant = ({ currentView, userRole }) => {
     };
 
     const openModal = () => {
+        setAnswerMode(ANSWER_MODE.QUESTION_FIRST);
         setPageSnapshot(collectPageSnapshot(currentView));
         setIsOpen(true);
         setShowQuickPromptList(false);
@@ -307,9 +361,24 @@ export const OperationAssistant = ({ currentView, userRole }) => {
                 userRole,
                 history: [...historyForApi, { role: 'user', content: trimmed }],
                 answerMode,
+                responsePolicy,
                 pageContext: answerMode === ANSWER_MODE.PAGE_FIRST ? pageSnapshot : null,
             });
-            setMessages((prev) => [...prev, createMessage('assistant', answer)]);
+            const answerText = typeof answer === 'string'
+                ? answer
+                : String(answer?.content || '').trim();
+            setMessages((prev) => [
+                ...prev,
+                createMessage('assistant', answerText, {
+                    aiUsed: answer?.aiUsed === true,
+                    aiAttempted: answer?.aiAttempted === true,
+                    answerSource: answer?.answerSource || '',
+                    aiModel: answer?.aiModel || '',
+                    aiStatus: answer?.aiStatus || '',
+                    logId: answer?.logId || '',
+                    ratingScore: answer?.ratingScore ?? null,
+                }),
+            ]);
         } catch (error) {
             const message = error instanceof Error ? error.message : 'AI回答の取得に失敗しました';
             setLastError(message);
@@ -329,17 +398,109 @@ export const OperationAssistant = ({ currentView, userRole }) => {
         }
     };
 
+    const renderAssistantBadge = (msg) => {
+        if (msg.role !== 'assistant') return null;
+        if (msg.aiUsed) {
+            return (
+                <span className="operation-assistant-source-badge operation-assistant-source-badge--ai">
+                    AI使用
+                </span>
+            );
+        }
+        if (msg.aiAttempted) {
+            return (
+                <span className="operation-assistant-source-badge operation-assistant-source-badge--fallback">
+                    AI試行→ローカル
+                </span>
+            );
+        }
+        if (msg.answerSource) {
+            return (
+                <span className="operation-assistant-source-badge operation-assistant-source-badge--local">
+                    ローカル回答
+                </span>
+            );
+        }
+        return null;
+    };
+
+    const handleRateAnswer = async (messageId, logId, ratingScore) => {
+        if (!messageId || !logId || isSending) return;
+        if (!Number.isInteger(Number(ratingScore)) || ratingScore < 1 || ratingScore > 5) return;
+        if (ratingBusyByMessageId[messageId]) return;
+
+        setRatingBusyByMessageId((prev) => ({ ...prev, [messageId]: true }));
+        try {
+            const rated = await operationQaService.rateOperationAnswer({
+                logId,
+                ratingScore,
+            });
+            setMessages((prev) => prev.map((msg) => (
+                msg.id === messageId
+                    ? { ...msg, ratingScore: rated?.ratingScore ?? ratingScore, ratedAt: rated?.ratedAt || '' }
+                    : msg
+            )));
+        } catch (error) {
+            console.error('評価保存に失敗:', error);
+            const message = error instanceof Error ? error.message : '評価の保存に失敗しました';
+            alert(message);
+        } finally {
+            setRatingBusyByMessageId((prev) => ({ ...prev, [messageId]: false }));
+        }
+    };
+
+    const renderRatingControls = (msg) => {
+        if (msg.role !== 'assistant') return null;
+        if (!msg.logId) return null;
+        const busy = ratingBusyByMessageId[msg.id] === true;
+        const currentScore = Number.isInteger(Number(msg.ratingScore)) ? Number(msg.ratingScore) : null;
+
+        return (
+            <div className="operation-assistant-rating-wrap">
+                <div className="operation-assistant-rating-label">
+                    この回答の評価:
+                </div>
+                <div className="operation-assistant-rating-buttons">
+                    {[1, 2, 3, 4, 5].map((score) => (
+                        <button
+                            key={\`\${msg.id}_rate_\${score}\`}
+                            type="button"
+                            className={\`operation-assistant-rating-btn \${currentScore === score ? 'is-active' : ''}\`}
+                            disabled={busy || isSending}
+                            onClick={() => handleRateAnswer(msg.id, msg.logId, score)}
+                            aria-label={\`評価 \${score}\`}
+                            title={\`\${score} / 5\`}
+                        >
+                            {score}
+                        </button>
+                    ))}
+                </div>
+                {currentScore ? (
+                    <div className="operation-assistant-rating-status">
+                        保存済み: {currentScore}/5
+                    </div>
+                ) : (
+                    <div className="operation-assistant-rating-status operation-assistant-rating-status--hint">
+                        1（低い）〜5（高い）
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     return (
         <>
-            <button
-                type="button"
-                className="operation-assistant-fab"
-                onClick={openModal}
-                title="操作をAIに質問"
-                aria-label="操作をAIに質問"
-            >
-                ❓ 操作質問
-            </button>
+            {!hideFab && (
+                <button
+                    type="button"
+                    className="operation-assistant-fab"
+                    onClick={openModal}
+                    title="操作をAIに質問"
+                    aria-label="操作をAIに質問"
+                >
+                    ❓ 操作質問
+                </button>
+            )}
 
             <Modal
                 isOpen={isOpen}
@@ -379,6 +540,31 @@ export const OperationAssistant = ({ currentView, userRole }) => {
                         >
                             再取得
                         </button>
+                    </div>
+                    <div className="operation-assistant-mode-wrap" role="group" aria-label="回答エンジン">
+                        <button
+                            type="button"
+                            className={\`operation-assistant-mode-btn \${responsePolicy === RESPONSE_POLICY.AI_PRIMARY ? 'is-active' : ''}\`}
+                            disabled={isSending}
+                            onClick={() => setResponsePolicy(RESPONSE_POLICY.AI_PRIMARY)}
+                            title="まずAIで回答し、失敗時のみローカルで補完"
+                        >
+                            AI中心(実験)
+                        </button>
+                        <button
+                            type="button"
+                            className={\`operation-assistant-mode-btn \${responsePolicy === RESPONSE_POLICY.HYBRID ? 'is-active' : ''}\`}
+                            disabled={isSending}
+                            onClick={() => setResponsePolicy(RESPONSE_POLICY.HYBRID)}
+                            title="現在のローカル併用ロジック"
+                        >
+                            現行(ローカル併用)
+                        </button>
+                    </div>
+                    <div className="operation-assistant-snapshot-note">
+                        回答エンジン: {responsePolicy === RESPONSE_POLICY.AI_PRIMARY
+                            ? 'AI中心(実験) - まずAI回答を優先'
+                            : '現行(ローカル併用) - 候補提示/ローカル直答を含む'}
                     </div>
                     {answerMode === ANSWER_MODE.PAGE_FIRST && (
                         <div className="operation-assistant-snapshot-note">
@@ -425,8 +611,10 @@ export const OperationAssistant = ({ currentView, userRole }) => {
                             >
                                 <div className="operation-assistant-message-role">
                                     {msg.role === 'user' ? 'あなた' : 'AI'}
+                                    {renderAssistantBadge(msg)}
                                 </div>
                                 <div className="operation-assistant-message-content">{msg.content}</div>
+                                {renderRatingControls(msg)}
                             </div>
                         ))}
                         {isSending && (
@@ -452,6 +640,19 @@ export const OperationAssistant = ({ currentView, userRole }) => {
                             rows={3}
                             disabled={isSending}
                         />
+                        <div className="operation-assistant-input-tools">
+                            <VoiceInputButton
+                                label="質問を音声入力"
+                                size="sm"
+                                disabled={isSending}
+                                language="ja"
+                                getCurrentValue={() => question}
+                                onTranscript={(mergedText) => {
+                                    setQuestion(String(mergedText || '').trim());
+                                    setLastError('');
+                                }}
+                            />
+                        </div>
                         <div className="operation-assistant-actions">
                             <Button
                                 type="button"
@@ -473,4 +674,4 @@ export const OperationAssistant = ({ currentView, userRole }) => {
 };
 
 export default OperationAssistant;
-`;export{t as default};
+`;export{e as default};

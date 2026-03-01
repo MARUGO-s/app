@@ -207,6 +207,38 @@ const n=`.operation-assistant-fab {
     font-weight: 700;
     color: #6b7280;
     margin-bottom: 3px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.operation-assistant-source-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    line-height: 1.3;
+    border: 1px solid transparent;
+    font-weight: 700;
+}
+
+.operation-assistant-source-badge--ai {
+    color: #065f46;
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+}
+
+.operation-assistant-source-badge--fallback {
+    color: #7c2d12;
+    background: #fff7ed;
+    border-color: #fdba74;
+}
+
+.operation-assistant-source-badge--local {
+    color: #1f2937;
+    background: #f3f4f6;
+    border-color: #d1d5db;
 }
 
 .operation-assistant-message-content {
@@ -215,6 +247,67 @@ const n=`.operation-assistant-fab {
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+.operation-assistant-rating-wrap {
+    margin-top: 8px;
+    border-top: 1px dashed #e5e7eb;
+    padding-top: 7px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.operation-assistant-rating-label {
+    font-size: 0.74rem;
+    color: #6b7280;
+    font-weight: 700;
+}
+
+.operation-assistant-rating-buttons {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.operation-assistant-rating-btn {
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    color: #374151;
+    border-radius: 6px;
+    min-width: 26px;
+    height: 24px;
+    padding: 0 7px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.operation-assistant-rating-btn:hover {
+    background: #f9fafb;
+}
+
+.operation-assistant-rating-btn.is-active {
+    border-color: #f59e0b;
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.operation-assistant-rating-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.operation-assistant-rating-status {
+    font-size: 0.72rem;
+    color: #374151;
+    font-weight: 600;
+}
+
+.operation-assistant-rating-status--hint {
+    color: #9ca3af;
+    font-weight: 500;
 }
 
 .operation-assistant-error {
@@ -229,6 +322,12 @@ const n=`.operation-assistant-fab {
 .operation-assistant-form {
     display: flex;
     flex-direction: column;
+    gap: 8px;
+}
+
+.operation-assistant-input-tools {
+    display: flex;
+    justify-content: flex-start;
     gap: 8px;
 }
 

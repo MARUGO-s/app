@@ -636,6 +636,34 @@ const CORE_OPERATION_KB = [
         notes: '区分は税率計算、内容量・単位は単価換算、歩留まりは可食率補正に直結するため、ここが最重要基準データです。'
     },
     {
+        id: 'data_ingredient_master_yield_input_detail',
+        title: '歩留まり（ぶどまり）入力を正しく設定する',
+        keywords: [
+            '歩留まり',
+            '歩留り',
+            'ぶどまり',
+            'ぶどうまり',
+            '可食率',
+            'yield',
+            'yieldpercent',
+            '入力',
+            '設定',
+            '100',
+            '何パーセント',
+            '原価が高い',
+            '原価が合わない'
+        ],
+        views: ['data', 'data-management', 'ingredients', 'create', 'edit'],
+        steps: [
+            'データ管理 → 材料マスターで対象材料を開き、食材カテゴリで「歩留まり（%）」を入力します。',
+            '入力範囲は 1〜100 です。100% は補正なし、90% は可食率90%（原価は ÷0.9 で約1.11倍）として計算されます。',
+            '例: 1000円の材料で歩留まり50%なら、実効原価は約2倍（可食部が半分）になります。',
+            '入力後は保存し、レシピ入力/編集画面で「歩留まり: xx%」表示が出るか確認します。',
+            '原価が急に高くなりすぎた場合は、歩留まり10%や1%などの誤入力がないかを先に確認します。'
+        ],
+        notes: '歩留まりは可食率です。非食材カテゴリでは歩留まり欄は実質対象外です。迷ったときは一旦100%で運用し、実測が取れた材料だけ段階的に補正すると安全です。'
+    },
+    {
         id: 'data_management_tab_csv_import_non_admin',
         title: 'CSV取込タブの詳細（非管理者向け）',
         keywords: [
@@ -932,8 +960,8 @@ const CORE_OPERATION_KB = [
         views: ['list', 'detail', 'create', 'edit', 'data', 'inventory', 'incoming-deliveries', 'incoming-stock', 'planner', 'order-list', 'trash'],
         steps: [
             '右上の「☰」でメニューを開き、「✕」または背景タップで閉じます。',
-            '「Q&A」: 別タブで \`recipe.html\` を開きます。',
-            '「アプリガイド」: 別タブで \`recipe_management.pdf\` を開きます。',
+            '「Q&A」: 操作質問AI内に蓄積されたQ&Aナレッジを使って、その場で回答できます。',
+            '「アプリガイド」: 操作質問AI内に蓄積されたガイドナレッジを使って、その場で回答できます。',
             '「Webから追加」: URL取り込みモーダルを開きます（一覧画面で表示）。',
             '「画像から追加」: 画像取り込みモーダルを開きます（一覧画面で表示）。',
             '「在庫管理 / 入荷PDF / 入荷在庫 / 仕込みカレンダー / 発注リスト」: 各画面へ遷移します。',
@@ -944,7 +972,7 @@ const CORE_OPERATION_KB = [
             '「一覧に戻る」: レシピ一覧画面へ戻ります。',
             '「ログアウト」: サインアウトします。'
         ],
-        notes: '一部ボタンは一覧画面でのみ表示されます。管理者専用ボタンは管理者ログイン時のみ表示されます。'
+        notes: 'Q&A / アプリガイドの内容は操作質問AIにナレッジ化済みです。タブを開かなくても手順回答できます。一部ボタンは一覧画面でのみ表示されます。管理者専用ボタンは管理者ログイン時のみ表示されます。'
     },
     {
         id: 'general_button_not_working',
@@ -984,6 +1012,7 @@ const SYNONYM_GROUPS = [
     ['原価計算アシスト', '電卓', '🧮', '仕入れ', '内容量', 'この容量を保存', '換算', 'kg', 'g'],
     ['インフォマート', 'informart', 'btoBプラットフォーム', '受発注', '外部データ接続', 'ダウンロード依頼', '受信', 'fim標準', '取引明細'],
     ['容量', '単位', '換算', 'kg', 'キロ', 'g', 'グラム', '参考価格', '未登録', '登録済み'],
+    ['歩留まり', '歩留り', 'ぶどまり', 'ぶどうまり', '可食率', 'yield', 'yieldpercent'],
     ['区分', 'カテゴリー', '備品', 'アルコール', 'ソフトドリンク', '食材', '税率', '8%', '10%'],
     ['月初', '月末', '期間', 'ダブる', '重複', '毎月', '積み重ね'],
     ['重複アイテム', '価格履歴', '入荷履歴', '価格変動', '最終納品', '最新価格', '自動反映'],
@@ -1032,6 +1061,7 @@ const ENTRY_INTENT_BOOSTS = {
     data_management_tabs_overview_non_admin: ['データ管理', '各タブ', '価格データ', '材料マスター', 'csv取込', '重複アイテム', 'ゴミ箱', '使い分け', '重要'],
     data_management_tab_price_data_non_admin: ['価格データ', 'csvアップロード', 'ファイル操作', '登録データ一覧', '保存済みファイル', 'ゴミ箱へ移動'],
     data_management_tab_ingredient_master_non_admin: ['材料マスター', '内容量', '単位', '歩留まり', '区分', '元の単位', '換算単価'],
+    data_ingredient_master_yield_input_detail: ['歩留まり', '歩留り', 'ぶどまり', 'ぶどうまり', '可食率', 'yield', '入力', '設定', '100', '原価が高い', '原価が合わない'],
     data_management_tab_csv_import_non_admin: ['csv取込', '未登録', '登録済み', '区分', '容量', '単位', '一括登録'],
     data_management_tab_duplicates_non_admin: ['重複アイテム', '価格履歴', '入荷履歴', '前回比', '全期間', '月フィルタ'],
     data_management_tab_trash_non_admin: ['ゴミ箱', '復元', '完全削除', '価格データcsv', '材料マスター', '削除日時'],
@@ -1039,7 +1069,7 @@ const ENTRY_INTENT_BOOSTS = {
     planner_to_orderlist_effect_non_admin: ['仕込みカレンダーの効果', '発注リスト', '必要量', '残在庫', '不足', '在庫差し引き'],
     planner_inventory_prerequisite_non_admin: ['在庫数', '初期在庫', '上限', '精度', '過剰発注', '在庫を先に'],
     order_list_calculation_rule_non_admin: ['発注リスト', '算出ルール', '20%', '規格', 'パック', '発注単位', '計算ロジック'],
-    menu_slider_button_guide: ['メニュー', 'スライダー', 'スライドメニュー', 'ハンバーガー', 'q&a', 'アプリガイド', 'webから追加', '画像から追加', '一括削除', 'ゴミ箱', '一覧に戻る', 'ログアウト'],
+    menu_slider_button_guide: ['メニュー', 'スライダー', 'スライドメニュー', 'ハンバーガー', 'q&a', 'アプリガイド', '要望', 'webから追加', '画像から追加', '操作質問ログ', '一括削除', 'ゴミ箱', '一覧に戻る', 'ログアウト'],
     recipe_list_reorder: ['並び替え', '順番', 'ドラッグ', 'ドロップ', '移動', 'ソート'],
     recipe_list_recent_recipes: ['最近見た', '履歴', 'recent', '開き直す'],
     voice_input_recipe_form: ['音声', 'マイク', 'voice', 'avalon'],
@@ -1067,6 +1097,44 @@ const expandWithSynonyms = (normalizedWords) => {
         aliases.forEach((alias) => expanded.add(alias));
     }
     return Array.from(expanded);
+};
+
+const GUIDE_SOURCE_SET = new Set(['recipe_html', 'recipe_management_pdf']);
+const GUIDE_INTENT_MARKERS = [
+    'q&a',
+    'qa',
+    'アプリガイド',
+    'ガイド',
+    'マニュアル',
+    '質問集',
+    '操作資料',
+    '操作手順書',
+];
+const GUIDE_CATALOG_MARKERS = [
+    'すべて',
+    '全部',
+    '一覧',
+    '全体',
+    '網羅',
+    '漏れ',
+    'カテゴリ',
+    '内容',
+];
+
+const isGuideIntentQuestion = (normalizedQuestion, questionWords = []) => {
+    const words = Array.isArray(questionWords) ? questionWords : [];
+    const normalizedMarkers = GUIDE_INTENT_MARKERS.map((marker) => normalize(marker)).filter(Boolean);
+    return normalizedMarkers.some((marker) => (
+        normalizedQuestion.includes(marker) || words.includes(marker)
+    ));
+};
+
+const isGuideCatalogQuestion = (normalizedQuestion, questionWords = []) => {
+    const words = Array.isArray(questionWords) ? questionWords : [];
+    const normalizedMarkers = GUIDE_CATALOG_MARKERS.map((marker) => normalize(marker)).filter(Boolean);
+    return normalizedMarkers.some((marker) => (
+        normalizedQuestion.includes(marker) || words.includes(marker)
+    ));
 };
 
 const buildGuideOperationKb = () => {
@@ -1131,7 +1199,7 @@ const similarityByBigrams = (left, right) => {
     return intersection / union;
 };
 
-const scoreEntry = (entry, normalizedQuestion, questionWords, currentView) => {
+const scoreEntry = (entry, normalizedQuestion, questionWords, currentView, guideIntent = false) => {
     let score = 0;
     const matchedKeywords = [];
 
@@ -1184,9 +1252,9 @@ const scoreEntry = (entry, normalizedQuestion, questionWords, currentView) => {
         score = 0;
     }
 
-    if (entry?.source === 'recipe_html' && score > 0) {
-        // Keep first-party curated knowledge slightly prioritized.
-        score -= 1;
+    if (GUIDE_SOURCE_SET.has(entry?.source) && score > 0) {
+        // Guide knowledge is first-party content. Prefer it, and prioritize more when user explicitly asks for Q&A/Guide content.
+        score += guideIntent ? 4 : 1;
     }
 
     return {
@@ -1205,10 +1273,11 @@ const rankOperationKnowledge = ({ question, currentView, limit = 3 }) => {
     const questionWords = expandWithSynonyms(uniqueWords(question)
         .map((word) => normalize(word))
         .filter(Boolean));
+    const guideIntent = isGuideIntentQuestion(normalizedQuestion, questionWords);
 
     return OPERATION_KB
         .map((entry) => {
-            const scored = scoreEntry(entry, normalizedQuestion, questionWords, currentView);
+            const scored = scoreEntry(entry, normalizedQuestion, questionWords, currentView, guideIntent);
             return {
                 entry,
                 ...scored,
@@ -1404,16 +1473,23 @@ const MENU_BUTTON_DETAIL_RULES = [
     {
         label: 'Q&A',
         patterns: ['q&a', 'qa', 'q and a', '質問回答'],
-        can: '別タブで \`recipe.html\` を開き、質問と回答を確認できます。',
-        caution: '現在の画面はそのまま残り、Q&Aは別タブで開きます。',
-        pitfall: 'ポップアップ/新規タブがブラウザ設定でブロックされると開けません。'
+        can: '操作質問AI内でQ&Aナレッジを直接参照して回答できます。別タブを開かず、そのまま手順確認できます。',
+        caution: '質問は「目的 + 画面名 + どこで止まったか」を入れると、回答精度が上がります。',
+        pitfall: '質問が短すぎると候補確認が先に返ることがあります。番号選択か、具体語を1つ追加すると最短で回答に到達します。'
     },
     {
         label: 'アプリガイド',
         patterns: ['アプリガイド', 'マニュアル', '操作ガイド'],
-        can: '別タブで \`recipe_management.pdf\` を開き、操作資料を閲覧できます。',
-        caution: 'PDFは表示まで少し時間がかかることがあります。',
-        pitfall: '通信状況が悪いとPDFが白画面のままになることがあります。再読み込みしてください。'
+        can: '操作質問AI内でアプリガイド由来ナレッジを直接参照して回答できます。別タブを開かずに要点手順を確認できます。',
+        caution: '同じテーマでも画面によって手順が変わるため、現在画面が違う場合は画面名を添えて質問してください。',
+        pitfall: '「手順を全部」とだけ送ると広すぎて分岐が増えます。対象機能（例: CSV取込 / 仕込みカレンダー）を先頭に入れると速く正確です。'
+    },
+    {
+        label: '要望一覧',
+        patterns: ['要望一覧', '要望', '機能要望', '改善要望', '不具合報告', 'バグ報告'],
+        can: 'スライドメニューの「要望一覧」から、送信済みの機能要望・不具合報告を確認できます（管理者のみ表示）。',
+        caution: '要望の送信は右下の「要望」ボタンからポップアップで入力します。',
+        pitfall: 'タイトルや再現手順が短すぎると、原因切り分けに時間がかかることがあります。'
     },
     {
         label: 'Webから追加',
@@ -1438,7 +1514,7 @@ const MENU_BUTTON_DETAIL_RULES = [
     },
     {
         label: '入荷PDF',
-        patterns: ['入荷pdf', '入荷 pdf'],
+        patterns: ['入荷pdf', '入荷 pdf', 'pdf入荷', 'pdf 入荷', 'pdf', '納品pdf'],
         can: '入荷PDF画面へ移動し、PDFを解析して保存できます。',
         caution: '解析後に保存を押さないと在庫反映に使えません。',
         pitfall: '対応外フォーマットのPDFは解析に失敗することがあります。'
@@ -1486,6 +1562,13 @@ const MENU_BUTTON_DETAIL_RULES = [
         pitfall: '期間フィルタ未設定のままだと必要なログが見つけづらくなります。'
     },
     {
+        label: '操作質問ログ',
+        patterns: ['操作質問ログ', '操作ログ', '質問ログ', 'qaログ', 'q&aログ'],
+        can: '管理者のみ表示され、操作質問の質問内容・回答内容・回答種別（AI使用/ローカル）を確認できます。',
+        caution: '一般ユーザーには表示されません。',
+        pitfall: '期間や検索条件を絞らないと、目的ログを見逃しやすくなります。'
+    },
+    {
         label: '一括削除 / 一括操作',
         patterns: ['一括削除', '一括操作', '選択モード', '複数削除', 'まとめて削除', '一括で消す'],
         can: '選択モードを開始し、複数レシピをまとめて削除/復元できます。',
@@ -1522,6 +1605,100 @@ const MENU_BUTTON_DETAIL_RULES = [
     },
 ];
 
+const EXTRA_BUTTON_DETAIL_RULES = [
+    {
+        label: '減損する',
+        patterns: ['減損する', '減損', 'ロス計上', '廃棄', '在庫減算', '在庫を減らす'],
+        can: '在庫の減損（ロス）を登録し、在庫数量を減算します。',
+        caution: '対象材料・数量・単位を確認してから実行してください。',
+        pitfall: '単位違い（kg/g, L/ml）で登録すると在庫・発注が大きくずれます。',
+        effect: '現在在庫が減るため、不足判定が厳しくなります。',
+        outcome: '発注リストの必要発注量が増える場合があります。'
+    },
+];
+
+const ALL_BUTTON_DETAIL_RULES = [
+    ...MENU_BUTTON_DETAIL_RULES,
+    ...EXTRA_BUTTON_DETAIL_RULES,
+];
+
+const BUTTON_INTENT_MARKERS = [
+    'ボタン',
+    'タブ',
+    '何をする',
+    '何する',
+    'どんな効果',
+    'どういう効果',
+    'どうなる',
+    '何がなされる',
+    '用途',
+    '意味',
+    'どこですか',
+];
+
+const BUTTON_EXPLANATION_OVERRIDES = {
+    'Q&A': {
+        effect: '操作質問AIの回答精度を上げるための質問パターン確認に使えます。',
+        outcome: '質問の書き方が整い、目的手順へ最短で到達しやすくなります。',
+    },
+    'アプリガイド': {
+        effect: '画面横断の運用手順（作成→原価→在庫→発注）を体系的に確認できます。',
+        outcome: '属人化を減らし、同じ手順で再現しやすい運用になります。',
+    },
+    'Webから追加': {
+        effect: 'URL先のレシピ本文からタイトル/材料/手順を自動抽出できます。',
+        outcome: '手入力時間を削減し、作成初期の入力を短時間で完了できます。',
+    },
+    '画像から追加': {
+        effect: '写真/スキャン/手書きからテキスト抽出して下書きを作成できます。',
+        outcome: '紙運用のレシピをデータ化し、検索・編集・原価計算に繋げられます。',
+    },
+    '在庫管理': {
+        effect: '棚卸し・在庫履歴管理・在庫差分の確認ができます。',
+        outcome: '発注過不足の抑制と、仕込み/発注精度の改善に繋がります。',
+    },
+    '入荷PDF': {
+        effect: '納品書PDFの解析結果を保存し、在庫反映前の下準備ができます。',
+        outcome: '入荷在庫画面で反映可能なデータが作成されます。',
+    },
+    '入荷在庫': {
+        effect: '入荷PDFの保存データを実在庫へ反映できます。',
+        outcome: '在庫数が更新され、発注不足/過剰判定が最新化されます。',
+    },
+    '仕込みカレンダー': {
+        effect: '日付ごとの仕込み予定を登録し、必要材料を時系列で管理できます。',
+        outcome: '発注リストの算出元が整い、必要量計算が安定します。',
+    },
+    '発注リスト': {
+        effect: '期間内の必要量と残在庫差し引きで発注量を算出できます。',
+        outcome: 'コピー/印刷可能な発注指示データを作成できます。',
+    },
+    'データ管理': {
+        effect: '価格CSV・材料マスター・CSV取込整備で原価基盤を管理できます。',
+        outcome: '材料候補表示と原価計算の精度が安定します。',
+    },
+    '操作質問ログ': {
+        effect: '質問と回答を時系列で分析し、回答品質の改善ポイントを把握できます。',
+        outcome: 'よく失敗する回答パターンを特定して、ナレッジ改善へ繋げられます。',
+    },
+    '一括削除 / 一括操作': {
+        effect: '複数件を同時に削除/復元/完全削除できます。',
+        outcome: '大量データの整理を短時間で実行できます。',
+    },
+    'ゴミ箱': {
+        effect: '削除済みデータの復元と完全削除を管理できます。',
+        outcome: '誤削除時の復旧と、不要データの最終整理ができます。',
+    },
+    '一覧に戻る': {
+        effect: 'どの画面からでもレシピ一覧へ戻れます。',
+        outcome: '対象レシピの再検索・再選択にすぐ戻れます。',
+    },
+    'ログアウト': {
+        effect: '現在セッションを終了して再認証状態に戻します。',
+        outcome: '共有端末運用時の誤操作・不正利用リスクを下げられます。',
+    },
+};
+
 const findMenuButtonDetailRule = (question) => {
     const text = String(question || '').toLowerCase();
     if (!text) return null;
@@ -1530,7 +1707,203 @@ const findMenuButtonDetailRule = (question) => {
     )) || null;
 };
 
+const isButtonIntentQuestion = (question) => {
+    const text = String(question || '');
+    if (!text) return false;
+    return BUTTON_INTENT_MARKERS.some((marker) => text.includes(marker));
+};
+
+const extractLikelyButtonTerm = (question) => {
+    const text = String(question || '').trim();
+    if (!text) return '';
+
+    const quoted = text.match(/[「『"“]([^」』"”]{2,40})[」』"”]/);
+    if (quoted?.[1]) return quoted[1].trim();
+
+    const buttonLike = text.match(/([^\\s、。,.!?！？]{2,30})(?:ボタン|タブ)/);
+    if (buttonLike?.[1]) return buttonLike[1].trim();
+
+    return '';
+};
+
+const scoreButtonRule = ({ question, likelyTerm, rule }) => {
+    const normalizedQuestion = normalize(question);
+    const normalizedTerm = normalize(likelyTerm);
+    const candidates = [rule.label, ...(rule.patterns || [])]
+        .map((v) => String(v || '').trim())
+        .filter(Boolean);
+
+    let score = 0;
+    let bestSimilarity = 0;
+    for (const candidate of candidates) {
+        const normalizedCandidate = normalize(candidate);
+        if (!normalizedCandidate) continue;
+
+        if (normalizedQuestion.includes(normalizedCandidate)) score += 10;
+        if (normalizedTerm && (normalizedTerm.includes(normalizedCandidate) || normalizedCandidate.includes(normalizedTerm))) {
+            score += 8;
+        }
+
+        const simFromQuestion = similarityByBigrams(normalizedQuestion, normalizedCandidate);
+        const simFromTerm = normalizedTerm ? similarityByBigrams(normalizedTerm, normalizedCandidate) : 0;
+        const sim = Math.max(simFromQuestion, simFromTerm);
+        bestSimilarity = Math.max(bestSimilarity, sim);
+    }
+
+    score += Math.round(bestSimilarity * 10);
+    return {
+        score,
+        similarity: bestSimilarity,
+    };
+};
+
+const findBestButtonDetailRule = (question) => {
+    const likelyTerm = extractLikelyButtonTerm(question);
+    const ranked = ALL_BUTTON_DETAIL_RULES
+        .map((rule) => {
+            const scored = scoreButtonRule({ question, likelyTerm, rule });
+            return { rule, ...scored };
+        })
+        .sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            return b.similarity - a.similarity;
+        });
+
+    const top = ranked[0] || null;
+    if (!top) return { kind: 'none', top: null, alternatives: [] };
+
+    const alternatives = ranked.slice(1, 4).map((item) => item.rule);
+    const strongMatch = top.score >= 12 || top.similarity >= 0.45;
+    const weakButLikely = top.score >= 9 || top.similarity >= 0.34;
+    if (strongMatch) {
+        return { kind: 'matched', top: top.rule, alternatives };
+    }
+    if (isButtonIntentQuestion(question) && weakButLikely) {
+        return { kind: 'matched', top: top.rule, alternatives };
+    }
+    if (isButtonIntentQuestion(question)) {
+        return { kind: 'ambiguous', top: top.rule, alternatives: [top.rule, ...alternatives].slice(0, 3) };
+    }
+    return { kind: 'none', top: null, alternatives: [] };
+};
+
+const buildButtonDetailAnswer = ({ rule, responseStyle = 'balanced' }) => {
+    if (!rule) return '';
+    const isConcise = responseStyle === 'concise';
+    const isDetailed = responseStyle === 'detailed';
+    const lines = [];
+    const override = BUTTON_EXPLANATION_OVERRIDES[rule.label] || {};
+
+    lines.push(\`「\${rule.label}」\`);
+    lines.push(\`何をするか: \${rule.can}\`);
+    if (!isConcise) {
+        if (override.effect || rule.effect) lines.push(\`効果: \${override.effect || rule.effect}\`);
+        if (override.outcome || rule.outcome) lines.push(\`結果: \${override.outcome || rule.outcome}\`);
+        if (rule.caution) lines.push(\`注意点: \${rule.caution}\`);
+    }
+    if (isDetailed && rule.pitfall) {
+        lines.push(\`よくある失敗: \${rule.pitfall}\`);
+    }
+    if (Array.isArray(rule.steps) && rule.steps.length > 0) {
+        lines.push('操作手順:');
+        const stepLimit = isConcise ? 3 : rule.steps.length;
+        rule.steps.slice(0, stepLimit).forEach((step, index) => {
+            lines.push(\`\${index + 1}. \${step}\`);
+        });
+    }
+    return lines.join('\\n');
+};
+
+const buildButtonAmbiguousAnswer = (alternatives = []) => {
+    const list = Array.isArray(alternatives) ? alternatives.filter(Boolean) : [];
+    if (list.length === 0) return '';
+    const lines = [];
+    lines.push('ボタン名が曖昧なので候補を出します。');
+    lines.push('番号だけ返信してください。');
+    list.forEach((rule, index) => {
+        lines.push(\`\${index + 1}. \${rule.label}\`);
+    });
+    lines.push('返信例: 1');
+    return lines.join('\\n');
+};
+
+const rankGuideKnowledge = ({ question, currentView, limit = 5 }) => (
+    rankOperationKnowledge({ question, currentView, limit: Math.max(limit, 3) })
+        .filter((item) => GUIDE_SOURCE_SET.has(item?.entry?.source))
+        .slice(0, limit)
+);
+
+const buildGuideCatalogAnswer = ({ guideHits, responseStyle = 'balanced' }) => {
+    if (!Array.isArray(guideHits) || guideHits.length === 0) return '';
+    const isConcise = responseStyle === 'concise';
+    const isDetailed = responseStyle === 'detailed';
+    const limit = isDetailed ? 10 : isConcise ? 4 : 7;
+    const lines = [];
+    lines.push('Q&A/アプリガイドの蓄積ナレッジから、関連度順で案内します。');
+    guideHits.slice(0, limit).forEach((hit, index) => {
+        lines.push(\`\${index + 1}. \${hit.entry.title}\`);
+    });
+    lines.push('番号を返信すると、その項目の手順を詳細で返します（例: 2）。');
+    return lines.join('\\n');
+};
+
+const buildGuideDirectAnswer = ({ question, currentView, responseStyle = 'balanced' }) => {
+    const guideHits = rankGuideKnowledge({ question, currentView, limit: 8 });
+    if (guideHits.length === 0) return '';
+
+    const normalizedQuestion = normalize(question);
+    const questionWords = expandWithSynonyms(uniqueWords(question)
+        .map((word) => normalize(word))
+        .filter(Boolean));
+    const catalogMode = isGuideCatalogQuestion(normalizedQuestion, questionWords);
+    if (catalogMode || guideHits.length >= 4) {
+        return buildGuideCatalogAnswer({ guideHits, responseStyle });
+    }
+
+    const top = guideHits[0].entry;
+    const isConcise = responseStyle === 'concise';
+    const isDetailed = responseStyle === 'detailed';
+    const lines = [];
+    lines.push(\`ガイド回答（\${top.title}）:\`);
+    top.steps.slice(0, isConcise ? 3 : 6).forEach((step, index) => {
+        lines.push(\`\${index + 1}. \${step}\`);
+    });
+    if (top.notes && !isConcise) {
+        lines.push(\`補足: \${top.notes}\`);
+    }
+    const related = guideHits.slice(1, isDetailed ? 4 : 3).map((hit) => hit.entry.title);
+    if (related.length > 0 && !isConcise) {
+        lines.push(\`関連ガイド: \${related.join(' / ')}\`);
+    }
+    return lines.join('\\n');
+};
+
 export const formatLocalOperationAnswer = ({ question, currentView, currentViewLabel = '', responseStyle = 'balanced' }) => {
+    const buttonRuleMatch = findBestButtonDetailRule(question);
+    if (buttonRuleMatch.kind === 'matched' && buttonRuleMatch.top) {
+        return buildButtonDetailAnswer({
+            rule: buttonRuleMatch.top,
+            responseStyle,
+        });
+    }
+    if (buttonRuleMatch.kind === 'ambiguous') {
+        const answer = buildButtonAmbiguousAnswer(buttonRuleMatch.alternatives);
+        if (answer) return answer;
+    }
+
+    const normalizedQuestion = normalize(question);
+    const questionWords = expandWithSynonyms(uniqueWords(question)
+        .map((word) => normalize(word))
+        .filter(Boolean));
+    if (isGuideIntentQuestion(normalizedQuestion, questionWords)) {
+        const guideAnswer = buildGuideDirectAnswer({
+            question,
+            currentView,
+            responseStyle,
+        });
+        if (guideAnswer) return guideAnswer;
+    }
+
     const assessment = assessOperationKnowledge({ question, currentView, limit: 2 });
     if (assessment.shouldAskClarification) {
         return formatOperationClarificationAnswer({
