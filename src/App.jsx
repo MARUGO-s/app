@@ -17,6 +17,7 @@ import { IncomingStock } from './components/IncomingStock';
 import { Planner } from './components/Planner';
 import { OrderList } from './components/OrderList';
 import ApiUsageLogs from './components/ApiUsageLogs';
+import OperationQaLogs from './components/OperationQaLogs';
 import OperationAssistant from './components/OperationAssistant';
 import { recipeService } from './services/recipeService';
 import { formatDisplayId } from './utils/formatUtils';
@@ -1155,6 +1156,9 @@ function AppContent() {
                               <Button variant="secondary" onClick={() => { setSearchParams({ view: 'api-logs' }); setIsMenuOpen(false); }}>
                                 <span style={{ marginRight: '8px' }}>📊</span> API使用ログ
                               </Button>
+                              <Button variant="secondary" onClick={() => { setSearchParams({ view: 'operation-logs' }); setIsMenuOpen(false); }}>
+                                <span style={{ marginRight: '8px' }}>🧾</span> 操作質問ログ
+                              </Button>
                             </>
                           )}
 
@@ -1492,6 +1496,22 @@ function AppContent() {
             </Button>
           </div>
           <ApiUsageLogs />
+          <div style={{ padding: '20px', textAlign: 'center' }}>
+            <Button onClick={() => setSearchParams({ view: 'list' })}>
+              ← レシピリストに戻る
+            </Button>
+          </div>
+        </>
+      )}
+
+      {currentView === 'operation-logs' && user?.role === 'admin' && (
+        <>
+          <div style={{ padding: '20px 20px 0', textAlign: 'left' }}>
+            <Button onClick={() => setSearchParams({ view: 'list' })}>
+              ← レシピリストに戻る
+            </Button>
+          </div>
+          <OperationQaLogs />
           <div style={{ padding: '20px', textAlign: 'center' }}>
             <Button onClick={() => setSearchParams({ view: 'list' })}>
               ← レシピリストに戻る

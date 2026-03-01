@@ -23,6 +23,7 @@ const VIEW_LABEL_MAP = {
     'order-list': '発注リスト',
     users: 'ユーザー管理',
     'api-logs': 'API使用ログ',
+    'operation-logs': '操作質問ログ',
     trash: 'ゴミ箱',
 };
 
@@ -233,11 +234,11 @@ const isNumberSelectionText = (question) => {
     if (!text) return null;
 
     const cleaned = text
-        .replace(/[。．\.!！?？、,，]+$/g, '')
+        .replace(/[。．.!！?？、,，]+$/g, '')
         .trim();
     if (!cleaned) return null;
 
-    const directNumber = cleaned.match(/^[\(（\[]?\s*([1-9]\d*)\s*[\)）\]]?\s*(?:番|ばん)?$/);
+    const directNumber = cleaned.match(/^[(（[]?\s*([1-9]\d*)\s*[)）\]]?\s*(?:番|ばん)?$/);
     if (directNumber) {
         const num = Number(directNumber[1]);
         return Number.isInteger(num) && num > 0 ? num : null;
@@ -607,6 +608,119 @@ const buildGeminiPrompt = ({
     ].join('\n');
 };
 
+const toNullableInt = (value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.trunc(n);
+};
+
+const toNullableNumber = (value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    return n;
+};
+
+const trimForLog = (value, max = 12000) => {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    if (text.length <= max) return text;
+    return text.slice(0, max);
+};
+
+const extractGeminiUsage = (raw) => {
+    const usage = raw?.usageMetadata || {};
+    return {
+        inputTokens: toNullableInt(usage?.promptTokenCount),
+        outputTokens: toNullableInt(usage?.candidatesTokenCount),
+    };
+};
+
+const fetchCurrentAuthUser = async () => {
+    try {
+        const { data, error } = await supabase.auth.getUser();
+        if (error) {
+            console.warn('operationQaService: failed to resolve auth user for logging', error);
+            return null;
+        }
+        return data?.user || null;
+    } catch (error) {
+        console.warn('operationQaService: unexpected auth.getUser error', error);
+        return null;
+    }
+};
+
+const writeOperationQaLog = async ({
+    authUser,
+    userRole,
+    currentView,
+    answerMode,
+    question,
+    answer,
+    aiUsed = false,
+    aiAttempted = false,
+    answerSource = 'local',
+    aiModel = null,
+    aiStatus = null,
+    inputTokens = null,
+    outputTokens = null,
+    estimatedCostJpy = null,
+    metadata = {},
+}) => {
+    if (!authUser?.id) return;
+
+    const payload = {
+        user_id: authUser.id,
+        user_email: authUser.email || null,
+        user_role: userRole === 'admin' ? 'admin' : 'user',
+        current_view: String(currentView || '').trim() || null,
+        answer_mode: normalizeAnswerMode(answerMode),
+        question: trimForLog(question, 8000),
+        answer: trimForLog(answer, 20000),
+        ai_used: aiUsed === true,
+        ai_attempted: aiAttempted === true || aiUsed === true,
+        answer_source: String(answerSource || 'local'),
+        ai_model: aiModel ? String(aiModel) : null,
+        ai_status: aiStatus ? String(aiStatus) : null,
+        input_tokens: toNullableInt(inputTokens),
+        output_tokens: toNullableInt(outputTokens),
+        estimated_cost_jpy: toNullableNumber(estimatedCostJpy),
+        metadata: (metadata && typeof metadata === 'object') ? metadata : {},
+    };
+
+    try {
+        const { error } = await supabase
+            .from('operation_qa_logs')
+            .insert(payload);
+        if (error) {
+            console.warn('operationQaService: failed to write operation_qa_logs', error);
+        }
+    } catch (error) {
+        console.warn('operationQaService: unexpected log insert error', error);
+    }
+};
+
+const buildOperationAnswerResult = ({
+    content,
+    aiUsed = false,
+    aiAttempted = false,
+    answerSource = 'local',
+    aiModel = null,
+    aiStatus = null,
+    inputTokens = null,
+    outputTokens = null,
+    estimatedCostJpy = null,
+}) => ({
+    content: String(content || '').trim(),
+    aiUsed: aiUsed === true,
+    aiAttempted: aiAttempted === true || aiUsed === true,
+    answerSource: String(answerSource || 'local'),
+    aiModel: aiModel ? String(aiModel) : null,
+    aiStatus: aiStatus ? String(aiStatus) : null,
+    inputTokens: toNullableInt(inputTokens),
+    outputTokens: toNullableInt(outputTokens),
+    estimatedCostJpy: toNullableNumber(estimatedCostJpy),
+});
+
 export const operationQaService = {
     async askOperationQuestion({
         question,
@@ -627,16 +741,76 @@ export const operationQaService = {
         const currentViewLabel = VIEW_LABEL_MAP[currentView] || String(currentView || '不明');
         const roleLabel = userRole === 'admin' ? 'admin' : 'user';
         const normalizedHistory = normalizeHistory(history);
+        const authUser = await fetchCurrentAuthUser();
+
+        const finalizeAnswer = async ({
+            content,
+            aiUsed = false,
+            aiAttempted = false,
+            answerSource = 'local',
+            aiModel = null,
+            aiStatus = null,
+            inputTokens = null,
+            outputTokens = null,
+            estimatedCostJpy = null,
+            metadata = {},
+        }) => {
+            const result = buildOperationAnswerResult({
+                content,
+                aiUsed,
+                aiAttempted,
+                answerSource,
+                aiModel,
+                aiStatus,
+                inputTokens,
+                outputTokens,
+                estimatedCostJpy,
+            });
+
+            await writeOperationQaLog({
+                authUser,
+                userRole,
+                currentView,
+                answerMode: normalizedAnswerMode,
+                question: normalizedQuestion,
+                answer: result.content,
+                aiUsed: result.aiUsed,
+                aiAttempted: result.aiAttempted,
+                answerSource: result.answerSource,
+                aiModel: result.aiModel,
+                aiStatus: result.aiStatus,
+                inputTokens: result.inputTokens,
+                outputTokens: result.outputTokens,
+                estimatedCostJpy: result.estimatedCostJpy,
+                metadata: {
+                    current_view_label: currentViewLabel,
+                    page_context: normalizedPageContext || null,
+                    ...(metadata && typeof metadata === 'object' ? metadata : {}),
+                },
+            });
+
+            return result;
+        };
 
         const numberSelection = resolveNumberSelectionFromHistory({
             question: normalizedQuestion,
             history: normalizedHistory,
         });
         if (numberSelection?.kind === 'selected') {
-            return formatLocalOperationAnswer({
+            const selectedAnswer = formatLocalOperationAnswer({
                 question: numberSelection.selectedTitle,
                 currentView,
                 currentViewLabel,
+            });
+            return finalizeAnswer({
+                content: selectedAnswer,
+                answerSource: 'local_number_selection',
+                aiStatus: 'not_used',
+                metadata: {
+                    selection_kind: 'selected',
+                    selected_index: numberSelection.selectedIndex,
+                    selected_title: numberSelection.selectedTitle,
+                },
             });
         }
         if (numberSelection?.kind === 'out_of_range') {
@@ -645,7 +819,16 @@ export const operationQaService = {
             numberSelection.options.forEach((opt) => {
                 lines.push(`${opt.index}. ${opt.title}`);
             });
-            return lines.join('\n');
+            return finalizeAnswer({
+                content: lines.join('\n'),
+                answerSource: 'local_number_out_of_range',
+                aiStatus: 'not_used',
+                metadata: {
+                    selection_kind: 'out_of_range',
+                    selected_index: numberSelection.selectedIndex,
+                    option_count: max,
+                },
+            });
         }
 
         const augmentedQuestion = buildAugmentedQuestion(normalizedQuestion, normalizedHistory);
@@ -682,7 +865,17 @@ export const operationQaService = {
                 currentViewLabel,
                 responseStyle,
             });
-            return appendCodeReferenceLines(localPageDirect, codeEvidence);
+            return finalizeAnswer({
+                content: appendCodeReferenceLines(localPageDirect, codeEvidence),
+                answerSource: 'local_page_priority',
+                aiStatus: 'not_used',
+                metadata: {
+                    response_style: responseStyle,
+                    reason: 'page_priority_direct',
+                    knowledge_confidence: knowledgeAssessment?.confidence || null,
+                    knowledge_best_score: knowledgeAssessment?.bestScore ?? null,
+                },
+            });
         }
 
         if (shouldOfferNumberedChoices(normalizedQuestion, knowledgeAssessment)) {
@@ -690,7 +883,19 @@ export const operationQaService = {
                 knowledgeAssessment,
                 currentViewLabel,
             });
-            if (choicePrompt) return choicePrompt;
+            if (choicePrompt) {
+                return finalizeAnswer({
+                    content: choicePrompt,
+                    answerSource: 'local_choice_prompt',
+                    aiStatus: 'not_used',
+                    metadata: {
+                        response_style: responseStyle,
+                        reason: 'numbered_choices',
+                        knowledge_confidence: knowledgeAssessment?.confidence || null,
+                        knowledge_best_score: knowledgeAssessment?.bestScore ?? null,
+                    },
+                });
+            }
         }
 
         if (shouldPreferLocalDirectAnswer(normalizedQuestion, knowledgeAssessment)) {
@@ -700,7 +905,17 @@ export const operationQaService = {
                 currentViewLabel,
                 responseStyle,
             });
-            return appendCodeReferenceLines(localDirect, codeEvidence);
+            return finalizeAnswer({
+                content: appendCodeReferenceLines(localDirect, codeEvidence),
+                answerSource: 'local_direct',
+                aiStatus: 'not_used',
+                metadata: {
+                    response_style: responseStyle,
+                    reason: 'high_confidence_local',
+                    knowledge_confidence: knowledgeAssessment?.confidence || null,
+                    knowledge_best_score: knowledgeAssessment?.bestScore ?? null,
+                },
+            });
         }
 
         try {
@@ -765,13 +980,14 @@ export const operationQaService = {
             const rawStructuredContent = tryBuildAnswerFromRawText(rawText, responseStyle);
 
             const content = structured.content || rawStructuredContent;
+            const usage = extractGeminiUsage(data?.raw);
             const invalidStructured = (
                 !content
                 || (structured.stepCount === 0 && !rawStructuredContent)
                 || shouldTreatAsGenericReask(content)
             );
             if (invalidStructured) {
-                return buildFallbackAnswer({
+                const fallback = buildFallbackAnswer({
                     question: normalizedQuestion,
                     currentView,
                     currentViewLabel,
@@ -779,18 +995,61 @@ export const operationQaService = {
                     codeEvidence,
                     responseStyle,
                 });
+                return finalizeAnswer({
+                    content: fallback,
+                    aiUsed: false,
+                    aiAttempted: true,
+                    answerSource: 'local_fallback_after_ai_invalid',
+                    aiModel: OPERATION_ASSISTANT_MODEL,
+                    aiStatus: 'invalid_structured_fallback',
+                    inputTokens: usage.inputTokens,
+                    outputTokens: usage.outputTokens,
+                    metadata: {
+                        response_style: responseStyle,
+                        knowledge_confidence: knowledgeAssessment?.confidence || null,
+                        knowledge_best_score: knowledgeAssessment?.bestScore ?? null,
+                    },
+                });
             }
 
-            return appendCodeReferenceLines(content, codeEvidence);
+            return finalizeAnswer({
+                content: appendCodeReferenceLines(content, codeEvidence),
+                aiUsed: true,
+                aiAttempted: true,
+                answerSource: 'ai_direct',
+                aiModel: OPERATION_ASSISTANT_MODEL,
+                aiStatus: 'success',
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+                metadata: {
+                    response_style: responseStyle,
+                    knowledge_confidence: knowledgeAssessment?.confidence || null,
+                    knowledge_best_score: knowledgeAssessment?.bestScore ?? null,
+                },
+            });
         } catch (e) {
             console.warn('operationQaService fallback:', e);
-            return buildFallbackAnswer({
+            const fallback = buildFallbackAnswer({
                 question: normalizedQuestion,
                 currentView,
                 currentViewLabel,
                 knowledgeAssessment,
                 codeEvidence,
                 responseStyle,
+            });
+            return finalizeAnswer({
+                content: fallback,
+                aiUsed: false,
+                aiAttempted: true,
+                answerSource: 'local_fallback_after_ai_error',
+                aiModel: OPERATION_ASSISTANT_MODEL,
+                aiStatus: 'error_fallback',
+                metadata: {
+                    response_style: responseStyle,
+                    ai_error: e instanceof Error ? e.message : String(e || ''),
+                    knowledge_confidence: knowledgeAssessment?.confidence || null,
+                    knowledge_best_score: knowledgeAssessment?.bestScore ?? null,
+                },
             });
         }
     },

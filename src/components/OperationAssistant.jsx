@@ -5,10 +5,15 @@ import { VoiceInputButton } from './VoiceInputButton';
 import { operationQaService } from '../services/operationQaService';
 import './OperationAssistant.css';
 
-const createMessage = (role, content) => ({
+const createMessage = (role, content, meta = {}) => ({
     id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
     role,
     content: String(content || ''),
+    aiUsed: meta.aiUsed === true,
+    aiAttempted: meta.aiAttempted === true || meta.aiUsed === true,
+    answerSource: String(meta.answerSource || ''),
+    aiModel: meta.aiModel ? String(meta.aiModel) : '',
+    aiStatus: meta.aiStatus ? String(meta.aiStatus) : '',
 });
 
 const INITIAL_MESSAGE = createMessage(
@@ -311,7 +316,19 @@ export const OperationAssistant = ({ currentView, userRole }) => {
                 answerMode,
                 pageContext: answerMode === ANSWER_MODE.PAGE_FIRST ? pageSnapshot : null,
             });
-            setMessages((prev) => [...prev, createMessage('assistant', answer)]);
+            const answerText = typeof answer === 'string'
+                ? answer
+                : String(answer?.content || '').trim();
+            setMessages((prev) => [
+                ...prev,
+                createMessage('assistant', answerText, {
+                    aiUsed: answer?.aiUsed === true,
+                    aiAttempted: answer?.aiAttempted === true,
+                    answerSource: answer?.answerSource || '',
+                    aiModel: answer?.aiModel || '',
+                    aiStatus: answer?.aiStatus || '',
+                }),
+            ]);
         } catch (error) {
             const message = error instanceof Error ? error.message : 'AI回答の取得に失敗しました';
             setLastError(message);
@@ -329,6 +346,32 @@ export const OperationAssistant = ({ currentView, userRole }) => {
                 inputRef.current?.focus();
             }, 0);
         }
+    };
+
+    const renderAssistantBadge = (msg) => {
+        if (msg.role !== 'assistant') return null;
+        if (msg.aiUsed) {
+            return (
+                <span className="operation-assistant-source-badge operation-assistant-source-badge--ai">
+                    AI使用
+                </span>
+            );
+        }
+        if (msg.aiAttempted) {
+            return (
+                <span className="operation-assistant-source-badge operation-assistant-source-badge--fallback">
+                    AI試行→ローカル
+                </span>
+            );
+        }
+        if (msg.answerSource) {
+            return (
+                <span className="operation-assistant-source-badge operation-assistant-source-badge--local">
+                    ローカル回答
+                </span>
+            );
+        }
+        return null;
     };
 
     return (
@@ -427,6 +470,7 @@ export const OperationAssistant = ({ currentView, userRole }) => {
                             >
                                 <div className="operation-assistant-message-role">
                                     {msg.role === 'user' ? 'あなた' : 'AI'}
+                                    {renderAssistantBadge(msg)}
                                 </div>
                                 <div className="operation-assistant-message-content">{msg.content}</div>
                             </div>

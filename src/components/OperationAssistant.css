@@ -207,6 +207,38 @@
     font-weight: 700;
     color: #6b7280;
     margin-bottom: 3px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.operation-assistant-source-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    line-height: 1.3;
+    border: 1px solid transparent;
+    font-weight: 700;
+}
+
+.operation-assistant-source-badge--ai {
+    color: #065f46;
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+}
+
+.operation-assistant-source-badge--fallback {
+    color: #7c2d12;
+    background: #fff7ed;
+    border-color: #fdba74;
+}
+
+.operation-assistant-source-badge--local {
+    color: #1f2937;
+    background: #f3f4f6;
+    border-color: #d1d5db;
 }
 
 .operation-assistant-message-content {
