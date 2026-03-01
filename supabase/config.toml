@@ -361,7 +361,8 @@ entrypoint = "./functions/scrape-recipe/index.ts"
 
 [functions.analyze-image]
 enabled = true
-verify_jwt = true
+# 関数内で JWT を検証するため、ゲートウェイ側検証は無効化
+verify_jwt = false
 import_map = "./functions/analyze-image/deno.json"
 entrypoint = "./functions/analyze-image/index.ts"
 
