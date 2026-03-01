@@ -8,6 +8,14 @@ const toSafeNumber = (value, fallback = 0) => {
     return Number.isFinite(n) ? n : fallback
 }
 
+const formatCostJpy = (value, digits = 3) => {
+    const n = toSafeNumber(value, 0)
+    return n.toLocaleString('ja-JP', {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+    })
+}
+
 const GEMINI_RATES_JPY_PER_1M = {
     'gemini-2.5-flash-lite': { input: 2, output: 6 },
     'gemini-1.5-flash': { input: 5, output: 15 },
@@ -109,7 +117,7 @@ const getBillingBreakdown = (log) => {
 const formatBillingBreakdownText = (log) => {
     const b = getBillingBreakdown(log)
     if (!b) return '-'
-    return \`入力\${b.inputTokens.toLocaleString()}tok × ¥\${b.inputRatePer1M}/100万 + 出力\${b.outputTokens.toLocaleString()}tok × ¥\${b.outputRatePer1M}/100万 = ¥\${b.totalCostJpy}\`
+    return \`入力\${b.inputTokens.toLocaleString()}tok × ¥\${b.inputRatePer1M}/100万 + 出力\${b.outputTokens.toLocaleString()}tok × ¥\${b.outputRatePer1M}/100万 = ¥\${formatCostJpy(b.totalCostJpy)}\`
 }
 
 export default function ApiUsageLogs() {
@@ -367,12 +375,12 @@ export default function ApiUsageLogs() {
         setStats({
             totalCalls,
             successRate: totalCalls > 0 ? (successCalls / totalCalls * 100).toFixed(1) : 0,
-            totalCost: totalCost.toFixed(2),
+            totalCost: Number(totalCost.toFixed(6)),
             totalAudioSec: totalAudioSec.toFixed(1),
             totalInputTokens,
             totalOutputTokens,
-            totalInputCost: Number(totalInputCost.toFixed(4)),
-            totalOutputCost: Number(totalOutputCost.toFixed(4)),
+            totalInputCost: Number(totalInputCost.toFixed(6)),
+            totalOutputCost: Number(totalOutputCost.toFixed(6)),
             byApi: {}
         })
     }
@@ -472,7 +480,7 @@ export default function ApiUsageLogs() {
                         </div>
                         <div className="stat-card">
                             <div className="stat-label">推定コスト</div>
-                            <div className="stat-value">¥{parseFloat(stats.totalCost).toLocaleString()}</div>
+                            <div className="stat-value">¥{formatCostJpy(stats.totalCost)}</div>
                             <div className="secondary-stat">Whisper large-v3 turbo</div>
                         </div>
                         <div className="stat-card">
@@ -489,7 +497,7 @@ export default function ApiUsageLogs() {
                         </div>
                         <div className="stat-card">
                             <div className="stat-label">推定コスト</div>
-                            <div className="stat-value">¥{toSafeNumber(stats.totalCost, 0).toLocaleString()}</div>
+                            <div className="stat-value">¥{formatCostJpy(stats.totalCost)}</div>
                         </div>
                         <div className="stat-card">
                             <div className="stat-label">成功率</div>
@@ -510,8 +518,8 @@ export default function ApiUsageLogs() {
                         </div>
                         <div className="stat-card">
                             <div className="stat-label">推定コスト（従量）</div>
-                            <div className="stat-value">¥{toSafeNumber(stats.totalCost, 0).toLocaleString()}</div>
-                            <div className="secondary-stat">入力 ¥{toSafeNumber(stats.totalInputCost, 0).toLocaleString()} / 出力 ¥{toSafeNumber(stats.totalOutputCost, 0).toLocaleString()}</div>
+                            <div className="stat-value">¥{formatCostJpy(stats.totalCost)}</div>
+                            <div className="secondary-stat">入力 ¥{formatCostJpy(stats.totalInputCost)} / 出力 ¥{formatCostJpy(stats.totalOutputCost)}</div>
                         </div>
                     </>
                 ) : (
@@ -527,7 +535,7 @@ export default function ApiUsageLogs() {
                         </div>
                         <div className="stat-card">
                             <div className="stat-label">推定総コスト</div>
-                            <div className="stat-value">¥{toSafeNumber(stats.totalCost, 0).toLocaleString()}</div>
+                            <div className="stat-value">¥{formatCostJpy(stats.totalCost)}</div>
                         </div>
                     </>
                 )}
@@ -617,7 +625,7 @@ export default function ApiUsageLogs() {
                                     </td>
                                     <td>
                                         {(log.estimated_cost_jpy != null && log.estimated_cost_jpy !== '') ? (
-                                            <span className="cost">¥{Number(log.estimated_cost_jpy)}</span>
+                                            <span className="cost">¥{formatCostJpy(log.estimated_cost_jpy)}</span>
                                         ) : '-'}
                                     </td>
                                     <td>
@@ -626,9 +634,9 @@ export default function ApiUsageLogs() {
                                             if (!billing) return '-'
                                             return (
                                                 <div className="cost-breakdown" title={formatBillingBreakdownText(log)}>
-                                                    <div>入力: {billing.inputTokens.toLocaleString()}tok × ¥{billing.inputRatePer1M}/100万 = ¥{billing.inputCostJpy}</div>
-                                                    <div>出力: {billing.outputTokens.toLocaleString()}tok × ¥{billing.outputRatePer1M}/100万 = ¥{billing.outputCostJpy}</div>
-                                                    <div className="cost-breakdown-total">合計: ¥{billing.totalCostJpy}</div>
+                                                    <div>入力: {billing.inputTokens.toLocaleString()}tok × ¥{billing.inputRatePer1M}/100万 = ¥{formatCostJpy(billing.inputCostJpy)}</div>
+                                                    <div>出力: {billing.outputTokens.toLocaleString()}tok × ¥{billing.outputRatePer1M}/100万 = ¥{formatCostJpy(billing.outputCostJpy)}</div>
+                                                    <div className="cost-breakdown-total">合計: ¥{formatCostJpy(billing.totalCostJpy)}</div>
                                                 </div>
                                             )
                                         })()}
