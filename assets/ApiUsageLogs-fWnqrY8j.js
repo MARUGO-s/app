@@ -35,6 +35,12 @@ const GEMINI_RATES_JPY_PER_1M = {
     'gemini-pro': { input: 75, output: 200 },
 }
 
+const GROQ_RATES_JPY_PER_1M = {
+    'meta-llama/llama-4-scout-17b-16e-instruct': { input: 16.5, output: 51 },
+    'llama-3.3-70b-versatile': { input: 16.5, output: 51 },
+    'default': { input: 16.5, output: 51 },
+}
+
 const normalizeGeminiModelNameForCost = (modelName) => {
     const normalized = String(modelName || '').trim().toLowerCase()
     if (!normalized) return 'gemini-2.5-flash-lite'
@@ -52,6 +58,40 @@ const buildGeminiBillingBreakdown = ({ modelName, inputTokens, outputTokens, est
 
     const normalizedModel = normalizeGeminiModelNameForCost(modelName)
     const rate = GEMINI_RATES_JPY_PER_1M[normalizedModel] || GEMINI_RATES_JPY_PER_1M['gemini-2.5-flash-lite']
+    const inputCostRaw = (inTok / 1_000_000) * rate.input
+    const outputCostRaw = (outTok / 1_000_000) * rate.output
+    const totalRaw = inputCostRaw + outputCostRaw
+    const totalCost = hasPositiveCost(estimatedCostJpy)
+        ? toSafeNumber(estimatedCostJpy, totalRaw)
+        : totalRaw
+
+    return {
+        model: normalizedModel,
+        inputTokens: inTok,
+        outputTokens: outTok,
+        inputCostJpy: Math.round(inputCostRaw * 10000) / 10000,
+        outputCostJpy: Math.round(outputCostRaw * 10000) / 10000,
+        totalCostJpy: totalCost,
+        inputRatePer1M: rate.input,
+        outputRatePer1M: rate.output,
+    }
+}
+
+const normalizeGroqModelNameForCost = (modelName) => {
+    const normalized = String(modelName || '').trim().toLowerCase()
+    if (!normalized) return 'default'
+    if (normalized.includes('llama-4-scout-17b-16e-instruct')) return 'meta-llama/llama-4-scout-17b-16e-instruct'
+    if (normalized.includes('llama-3.3-70b-versatile')) return 'llama-3.3-70b-versatile'
+    return 'default'
+}
+
+const buildGroqBillingBreakdown = ({ modelName, inputTokens, outputTokens, estimatedCostJpy = null }) => {
+    const inTok = Math.max(0, toSafeNumber(inputTokens, 0))
+    const outTok = Math.max(0, toSafeNumber(outputTokens, 0))
+    if (inTok === 0 && outTok === 0) return null
+
+    const normalizedModel = normalizeGroqModelNameForCost(modelName)
+    const rate = GROQ_RATES_JPY_PER_1M[normalizedModel] || GROQ_RATES_JPY_PER_1M.default
     const inputCostRaw = (inTok / 1_000_000) * rate.input
     const outputCostRaw = (outTok / 1_000_000) * rate.output
     const totalRaw = inputCostRaw + outputCostRaw
@@ -99,8 +139,10 @@ const getBillingBreakdown = (log) => {
         const breakdown = metadata.billing_breakdown
         if (breakdown && typeof breakdown === 'object') {
             const model = String(breakdown.model || log?.model_name || '')
-            const fallbackRate = GEMINI_RATES_JPY_PER_1M[normalizeGeminiModelNameForCost(model)]
-                || GEMINI_RATES_JPY_PER_1M['gemini-2.5-flash-lite']
+            const isGroq = String(log?.api_name || '').toLowerCase() === 'groq'
+            const fallbackRate = isGroq
+                ? (GROQ_RATES_JPY_PER_1M[normalizeGroqModelNameForCost(model)] || GROQ_RATES_JPY_PER_1M.default)
+                : (GEMINI_RATES_JPY_PER_1M[normalizeGeminiModelNameForCost(model)] || GEMINI_RATES_JPY_PER_1M['gemini-2.5-flash-lite'])
             const inputTokens = toSafeNumber(breakdown.input_tokens, toSafeNumber(log?.input_tokens, 0))
             const outputTokens = toSafeNumber(breakdown.output_tokens, toSafeNumber(log?.output_tokens, 0))
             const inputRatePer1M = toSafeNumber(breakdown.rate_per_1m_jpy?.input, fallbackRate.input)
@@ -134,6 +176,14 @@ const getBillingBreakdown = (log) => {
 
     if (String(log?.api_name || '').toLowerCase() === 'gemini') {
         return buildGeminiBillingBreakdown({
+            modelName: log?.model_name,
+            inputTokens: log?.input_tokens,
+            outputTokens: log?.output_tokens,
+            estimatedCostJpy: log?.estimated_cost_jpy,
+        })
+    }
+    if (String(log?.api_name || '').toLowerCase() === 'groq') {
+        return buildGroqBillingBreakdown({
             modelName: log?.model_name,
             inputTokens: log?.input_tokens,
             outputTokens: log?.output_tokens,
