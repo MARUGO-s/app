@@ -927,7 +927,7 @@ const estimateGeminiCostJpy = ({
     const inTokens = Number.isFinite(Number(inputTokens)) ? Math.max(0, Number(inputTokens)) : 0;
     const outTokens = Number.isFinite(Number(outputTokens)) ? Math.max(0, Number(outputTokens)) : 0;
     const total = ((inTokens / 1_000_000) * rate.input) + ((outTokens / 1_000_000) * rate.output);
-    return Math.round(total * 100) / 100;
+    return Math.round(total * 1_000_000) / 1_000_000;
 };
 
 const fetchCurrentAuthUser = async () => {

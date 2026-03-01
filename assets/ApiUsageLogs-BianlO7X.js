@@ -16,6 +16,17 @@ const formatCostJpy = (value, digits = 3) => {
     })
 }
 
+const hasPositiveCost = (value) => {
+    const n = Number(value)
+    return Number.isFinite(n) && n > 0
+}
+
+const calcTokenCost = (tokens, ratePer1M) => {
+    const safeTokens = Number.isFinite(Number(tokens)) ? Math.max(0, Number(tokens)) : 0
+    const safeRate = Number.isFinite(Number(ratePer1M)) ? Math.max(0, Number(ratePer1M)) : 0
+    return (safeTokens / 1_000_000) * safeRate
+}
+
 const GEMINI_RATES_JPY_PER_1M = {
     'gemini-2.5-flash-lite': { input: 2, output: 6 },
     'gemini-1.5-flash': { input: 5, output: 15 },
@@ -44,9 +55,9 @@ const buildGeminiBillingBreakdown = ({ modelName, inputTokens, outputTokens, est
     const inputCostRaw = (inTok / 1_000_000) * rate.input
     const outputCostRaw = (outTok / 1_000_000) * rate.output
     const totalRaw = inputCostRaw + outputCostRaw
-    const totalCost = (estimatedCostJpy != null && estimatedCostJpy !== '')
-        ? toSafeNumber(estimatedCostJpy, Math.round(totalRaw * 100) / 100)
-        : Math.round(totalRaw * 100) / 100
+    const totalCost = hasPositiveCost(estimatedCostJpy)
+        ? toSafeNumber(estimatedCostJpy, totalRaw)
+        : totalRaw
 
     return {
         model: normalizedModel,
@@ -87,18 +98,36 @@ const getBillingBreakdown = (log) => {
     if (metadata && typeof metadata === 'object') {
         const breakdown = metadata.billing_breakdown
         if (breakdown && typeof breakdown === 'object') {
+            const model = String(breakdown.model || log?.model_name || '')
+            const fallbackRate = GEMINI_RATES_JPY_PER_1M[normalizeGeminiModelNameForCost(model)]
+                || GEMINI_RATES_JPY_PER_1M['gemini-1.5-flash']
+            const inputTokens = toSafeNumber(breakdown.input_tokens, toSafeNumber(log?.input_tokens, 0))
+            const outputTokens = toSafeNumber(breakdown.output_tokens, toSafeNumber(log?.output_tokens, 0))
+            const inputRatePer1M = toSafeNumber(breakdown.rate_per_1m_jpy?.input, fallbackRate.input)
+            const outputRatePer1M = toSafeNumber(breakdown.rate_per_1m_jpy?.output, fallbackRate.output)
+            const recomputedInputCost = calcTokenCost(inputTokens, inputRatePer1M)
+            const recomputedOutputCost = calcTokenCost(outputTokens, outputRatePer1M)
+            const inputCost = hasPositiveCost(breakdown.input_cost_jpy)
+                ? toSafeNumber(breakdown.input_cost_jpy, recomputedInputCost)
+                : recomputedInputCost
+            const outputCost = hasPositiveCost(breakdown.output_cost_jpy)
+                ? toSafeNumber(breakdown.output_cost_jpy, recomputedOutputCost)
+                : recomputedOutputCost
+            const recomputedTotalCost = inputCost + outputCost
+            const totalCost = hasPositiveCost(breakdown.total_cost_jpy)
+                ? toSafeNumber(breakdown.total_cost_jpy, recomputedTotalCost)
+                : (hasPositiveCost(log?.estimated_cost_jpy)
+                    ? toSafeNumber(log?.estimated_cost_jpy, recomputedTotalCost)
+                    : recomputedTotalCost)
             return {
-                model: String(breakdown.model || log?.model_name || ''),
-                inputTokens: toSafeNumber(breakdown.input_tokens, toSafeNumber(log?.input_tokens, 0)),
-                outputTokens: toSafeNumber(breakdown.output_tokens, toSafeNumber(log?.output_tokens, 0)),
-                inputCostJpy: toSafeNumber(breakdown.input_cost_jpy, 0),
-                outputCostJpy: toSafeNumber(breakdown.output_cost_jpy, 0),
-                totalCostJpy: toSafeNumber(
-                    breakdown.total_cost_jpy,
-                    toSafeNumber(log?.estimated_cost_jpy, 0)
-                ),
-                inputRatePer1M: toSafeNumber(breakdown.rate_per_1m_jpy?.input, 0),
-                outputRatePer1M: toSafeNumber(breakdown.rate_per_1m_jpy?.output, 0),
+                model,
+                inputTokens,
+                outputTokens,
+                inputCostJpy: inputCost,
+                outputCostJpy: outputCost,
+                totalCostJpy: totalCost,
+                inputRatePer1M,
+                outputRatePer1M,
             }
         }
     }
@@ -118,6 +147,17 @@ const formatBillingBreakdownText = (log) => {
     const b = getBillingBreakdown(log)
     if (!b) return '-'
     return \`入力\${b.inputTokens.toLocaleString()}tok × ¥\${b.inputRatePer1M}/100万 + 出力\${b.outputTokens.toLocaleString()}tok × ¥\${b.outputRatePer1M}/100万 = ¥\${formatCostJpy(b.totalCostJpy)}\`
+}
+
+const resolveEstimatedCostJpy = (log, precomputedBilling = null) => {
+    if (hasPositiveCost(log?.estimated_cost_jpy)) {
+        return toSafeNumber(log?.estimated_cost_jpy, 0)
+    }
+    const billing = precomputedBilling || getBillingBreakdown(log)
+    if (billing && Number.isFinite(Number(billing.totalCostJpy))) {
+        return Math.max(0, Number(billing.totalCostJpy))
+    }
+    return 0
 }
 
 export default function ApiUsageLogs() {
@@ -198,6 +238,9 @@ export default function ApiUsageLogs() {
                     outputTokens: row?.output_tokens,
                     estimatedCostJpy: row?.estimated_cost_jpy,
                 })
+                const resolvedEstimatedCost = hasPositiveCost(row?.estimated_cost_jpy)
+                    ? toSafeNumber(row?.estimated_cost_jpy, 0)
+                    : (billing ? Math.max(0, Number(billing.totalCostJpy)) : null)
                 return {
                     id: \`opqa_\${row.id}\`,
                     created_at: row.created_at,
@@ -213,7 +256,7 @@ export default function ApiUsageLogs() {
                     duration_ms: null,
                     input_tokens: row.input_tokens ?? null,
                     output_tokens: row.output_tokens ?? null,
-                    estimated_cost_jpy: row.estimated_cost_jpy ?? billing?.totalCostJpy ?? null,
+                    estimated_cost_jpy: resolvedEstimatedCost,
                     metadata: {
                         ...(row.metadata && typeof row.metadata === 'object' ? row.metadata : {}),
                         source: 'operation_assistant',
@@ -353,7 +396,7 @@ export default function ApiUsageLogs() {
     function calculateStats(logsData) {
         const totalCalls = logsData.length
         const successCalls = logsData.filter(log => log.status === 'success').length
-        const totalCost = logsData.reduce((sum, log) => sum + toSafeNumber(log.estimated_cost_jpy, 0), 0)
+        const totalCost = logsData.reduce((sum, log) => sum + resolveEstimatedCostJpy(log), 0)
 
         // 音声秒数は、表示されているログの中の音声ログのみ集計
         // (Visionタブを選択中に音声秒数が出るのはおかしいので、logsDataから計算)
@@ -432,7 +475,7 @@ export default function ApiUsageLogs() {
                 details,
                 log.input_tokens || '',
                 log.output_tokens || '',
-                log.estimated_cost_jpy || '',
+                resolveEstimatedCostJpy(log),
                 breakdownText.replace(/,/g, '、'),
                 (log.error_message || '').replace(/,/g, '、')
             ].join(','))
@@ -624,9 +667,7 @@ export default function ApiUsageLogs() {
                                         )}
                                     </td>
                                     <td>
-                                        {(log.estimated_cost_jpy != null && log.estimated_cost_jpy !== '') ? (
-                                            <span className="cost">¥{formatCostJpy(log.estimated_cost_jpy)}</span>
-                                        ) : '-'}
+                                        <span className="cost">¥{formatCostJpy(resolveEstimatedCostJpy(log))}</span>
                                     </td>
                                     <td>
                                         {(() => {
