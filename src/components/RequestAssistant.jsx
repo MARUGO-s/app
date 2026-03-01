@@ -48,8 +48,8 @@ export default function RequestAssistant({ currentView, userRole }) {
     );
 
     const canSubmit = useMemo(() => (
-        normalizeText(title, 200).length >= 4
-        && normalizeText(description, 20000).length >= 10
+        normalizeText(title, 200).length >= 1
+        && normalizeText(description, 20000).length >= 1
         && !isSubmitting
     ), [title, description, isSubmitting]);
 
@@ -86,7 +86,10 @@ export default function RequestAssistant({ currentView, userRole }) {
         const safeType = REQUEST_TYPES[requestType] ? requestType : 'other';
         const safeTitle = normalizeText(title, 200);
         const safeDescription = normalizeText(description, 20000);
-        if (safeTitle.length < 4 || safeDescription.length < 10) return;
+        if (safeTitle.length < 1 || safeDescription.length < 1) {
+            setSubmitError('タイトルと内容を入力してください。');
+            return;
+        }
 
         setIsSubmitting(true);
         setSubmitMessage('');
@@ -179,7 +182,7 @@ export default function RequestAssistant({ currentView, userRole }) {
                         </label>
 
                         <label className="request-assistant-label">
-                            タイトル（4文字以上）
+                            タイトル
                             <input
                                 ref={titleRef}
                                 type="text"
@@ -192,7 +195,7 @@ export default function RequestAssistant({ currentView, userRole }) {
                         </label>
 
                         <label className="request-assistant-label">
-                            内容（10文字以上）
+                            内容
                             <textarea
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
