@@ -376,6 +376,14 @@
   font-weight: bold;
 }
 
+.request-badge {
+  margin-left: 6px;
+  color: #ef4444;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .secondary-actions {
   display: contents;
   /* On desktop, act as if this container doesn't exist to keep layout */
