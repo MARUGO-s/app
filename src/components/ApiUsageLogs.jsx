@@ -8,6 +8,50 @@ const toSafeNumber = (value, fallback = 0) => {
     return Number.isFinite(n) ? n : fallback
 }
 
+const GEMINI_RATES_JPY_PER_1M = {
+    'gemini-2.5-flash-lite': { input: 2, output: 6 },
+    'gemini-1.5-flash': { input: 5, output: 15 },
+    'gemini-2.0-flash': { input: 10, output: 30 },
+    'gemini-2.5-pro': { input: 150, output: 400 },
+    'gemini-pro': { input: 75, output: 200 },
+}
+
+const normalizeGeminiModelNameForCost = (modelName) => {
+    const normalized = String(modelName || '').trim().toLowerCase()
+    if (!normalized) return 'gemini-1.5-flash'
+    if (normalized.includes('flash-lite')) return 'gemini-2.5-flash-lite'
+    if (normalized.includes('2.5-pro') || normalized.includes('pro')) return 'gemini-2.5-pro'
+    if (normalized.includes('2.0-flash')) return 'gemini-2.0-flash'
+    if (normalized.includes('1.5-flash') || normalized.includes('flash')) return 'gemini-1.5-flash'
+    return 'gemini-1.5-flash'
+}
+
+const buildGeminiBillingBreakdown = ({ modelName, inputTokens, outputTokens, estimatedCostJpy = null }) => {
+    const inTok = Math.max(0, toSafeNumber(inputTokens, 0))
+    const outTok = Math.max(0, toSafeNumber(outputTokens, 0))
+    if (inTok === 0 && outTok === 0) return null
+
+    const normalizedModel = normalizeGeminiModelNameForCost(modelName)
+    const rate = GEMINI_RATES_JPY_PER_1M[normalizedModel] || GEMINI_RATES_JPY_PER_1M['gemini-1.5-flash']
+    const inputCostRaw = (inTok / 1_000_000) * rate.input
+    const outputCostRaw = (outTok / 1_000_000) * rate.output
+    const totalRaw = inputCostRaw + outputCostRaw
+    const totalCost = (estimatedCostJpy != null && estimatedCostJpy !== '')
+        ? toSafeNumber(estimatedCostJpy, Math.round(totalRaw * 100) / 100)
+        : Math.round(totalRaw * 100) / 100
+
+    return {
+        model: normalizedModel,
+        inputTokens: inTok,
+        outputTokens: outTok,
+        inputCostJpy: Math.round(inputCostRaw * 10000) / 10000,
+        outputCostJpy: Math.round(outputCostRaw * 10000) / 10000,
+        totalCostJpy: totalCost,
+        inputRatePer1M: rate.input,
+        outputRatePer1M: rate.output,
+    }
+}
+
 const isVoiceLog = (log) => {
     const modelName = String(log?.model_name || '').toLowerCase()
     const endpoint = String(log?.endpoint || '').toLowerCase()
@@ -32,23 +76,34 @@ const isOperationQaLog = (log) => {
 
 const getBillingBreakdown = (log) => {
     const metadata = log?.metadata
-    if (!metadata || typeof metadata !== 'object') return null
-    const breakdown = metadata.billing_breakdown
-    if (!breakdown || typeof breakdown !== 'object') return null
-
-    return {
-        model: String(breakdown.model || log?.model_name || ''),
-        inputTokens: toSafeNumber(breakdown.input_tokens, toSafeNumber(log?.input_tokens, 0)),
-        outputTokens: toSafeNumber(breakdown.output_tokens, toSafeNumber(log?.output_tokens, 0)),
-        inputCostJpy: toSafeNumber(breakdown.input_cost_jpy, 0),
-        outputCostJpy: toSafeNumber(breakdown.output_cost_jpy, 0),
-        totalCostJpy: toSafeNumber(
-            breakdown.total_cost_jpy,
-            toSafeNumber(log?.estimated_cost_jpy, 0)
-        ),
-        inputRatePer1M: toSafeNumber(breakdown.rate_per_1m_jpy?.input, 0),
-        outputRatePer1M: toSafeNumber(breakdown.rate_per_1m_jpy?.output, 0),
+    if (metadata && typeof metadata === 'object') {
+        const breakdown = metadata.billing_breakdown
+        if (breakdown && typeof breakdown === 'object') {
+            return {
+                model: String(breakdown.model || log?.model_name || ''),
+                inputTokens: toSafeNumber(breakdown.input_tokens, toSafeNumber(log?.input_tokens, 0)),
+                outputTokens: toSafeNumber(breakdown.output_tokens, toSafeNumber(log?.output_tokens, 0)),
+                inputCostJpy: toSafeNumber(breakdown.input_cost_jpy, 0),
+                outputCostJpy: toSafeNumber(breakdown.output_cost_jpy, 0),
+                totalCostJpy: toSafeNumber(
+                    breakdown.total_cost_jpy,
+                    toSafeNumber(log?.estimated_cost_jpy, 0)
+                ),
+                inputRatePer1M: toSafeNumber(breakdown.rate_per_1m_jpy?.input, 0),
+                outputRatePer1M: toSafeNumber(breakdown.rate_per_1m_jpy?.output, 0),
+            }
+        }
     }
+
+    if (String(log?.endpoint || '').toLowerCase() === 'call-gemini-api') {
+        return buildGeminiBillingBreakdown({
+            modelName: log?.model_name,
+            inputTokens: log?.input_tokens,
+            outputTokens: log?.output_tokens,
+            estimatedCostJpy: log?.estimated_cost_jpy,
+        })
+    }
+    return null
 }
 
 const formatBillingBreakdownText = (log) => {
@@ -59,6 +114,7 @@ const formatBillingBreakdownText = (log) => {
 
 export default function ApiUsageLogs() {
     const [logs, setLogs] = useState([])
+    const [operationQaLogs, setOperationQaLogs] = useState([])
     const [userMap, setUserMap] = useState({})
     const [loading, setLoading] = useState(true)
     const [activeTab, setActiveTab] = useState('all') // 'all', 'voice', 'vision', 'operation'
@@ -96,8 +152,102 @@ export default function ApiUsageLogs() {
     }, [filter]) // activeTabが変わってもfetchし直さない（クライアントフィルタするから）
 
     // クライアントサイドフィルタリング
+    const mergedLogs = useMemo(() => {
+        const apiLogs = Array.isArray(logs) ? logs : []
+        const opqaRows = Array.isArray(operationQaLogs) ? operationQaLogs : []
+        if (opqaRows.length === 0) return apiLogs
+
+        const operationApiFingerprints = new Set(
+            apiLogs
+                .filter((log) => isOperationQaLog(log))
+                .map((log) => {
+                    const bucket = Math.floor(new Date(log.created_at || 0).getTime() / 10000)
+                    const model = normalizeGeminiModelNameForCost(log.model_name)
+                    return [
+                        log.user_id || '',
+                        model,
+                        toSafeNumber(log.input_tokens, 0),
+                        toSafeNumber(log.output_tokens, 0),
+                        bucket,
+                    ].join('|')
+                })
+        )
+
+        const opqaAsApiLogs = opqaRows
+            .filter((row) => row?.ai_attempted === true)
+            .map((row) => {
+                const aiError = String(row?.metadata?.ai_error || '')
+                const aiStatus = String(row?.ai_status || '').toLowerCase()
+                let status = 'success'
+                if (aiStatus.includes('error_fallback')) {
+                    status = aiError.includes('429') ? 'rate_limited' : 'error'
+                } else if (!row?.ai_used && aiError) {
+                    status = aiError.includes('429') ? 'rate_limited' : 'error'
+                }
+                const billing = buildGeminiBillingBreakdown({
+                    modelName: row?.ai_model || 'gemini-2.5-flash-lite',
+                    inputTokens: row?.input_tokens,
+                    outputTokens: row?.output_tokens,
+                    estimatedCostJpy: row?.estimated_cost_jpy,
+                })
+                return {
+                    id: `opqa_${row.id}`,
+                    created_at: row.created_at,
+                    api_name: 'gemini',
+                    endpoint: 'call-gemini-api',
+                    model_name: row.ai_model || 'gemini-2.5-flash-lite',
+                    user_id: row.user_id || null,
+                    user_email: row.user_email || null,
+                    status,
+                    error_message: status === 'success'
+                        ? ''
+                        : (aiError || 'AI呼び出し後にローカル回答へフォールバック'),
+                    duration_ms: null,
+                    input_tokens: row.input_tokens ?? null,
+                    output_tokens: row.output_tokens ?? null,
+                    estimated_cost_jpy: row.estimated_cost_jpy ?? billing?.totalCostJpy ?? null,
+                    metadata: {
+                        ...(row.metadata && typeof row.metadata === 'object' ? row.metadata : {}),
+                        source: 'operation_assistant',
+                        feature: 'operation_qa',
+                        source_table: 'operation_qa_logs',
+                        billing_breakdown: billing
+                            ? {
+                                model: billing.model,
+                                rate_per_1m_jpy: {
+                                    input: billing.inputRatePer1M,
+                                    output: billing.outputRatePer1M,
+                                },
+                                input_tokens: billing.inputTokens,
+                                output_tokens: billing.outputTokens,
+                                input_cost_jpy: billing.inputCostJpy,
+                                output_cost_jpy: billing.outputCostJpy,
+                                total_cost_jpy: billing.totalCostJpy,
+                            }
+                            : null,
+                    },
+                }
+            })
+            .filter((log) => {
+                const bucket = Math.floor(new Date(log.created_at || 0).getTime() / 10000)
+                const model = normalizeGeminiModelNameForCost(log.model_name)
+                const fingerprint = [
+                    log.user_id || '',
+                    model,
+                    toSafeNumber(log.input_tokens, 0),
+                    toSafeNumber(log.output_tokens, 0),
+                    bucket,
+                ].join('|')
+                return !operationApiFingerprints.has(fingerprint)
+            })
+
+        return [...opqaAsApiLogs, ...apiLogs].sort(
+            (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        )
+    }, [logs, operationQaLogs])
+
     const displayedLogs = useMemo(() => {
-        return logs.filter(log => {
+        const tabFiltered = mergedLogs.filter(log => {
             if (activeTab === 'all') return true
 
             if (activeTab === 'voice') {
@@ -114,7 +264,9 @@ export default function ApiUsageLogs() {
 
             return true
         })
-    }, [logs, activeTab])
+        if (filter.status === 'all') return tabFiltered
+        return tabFiltered.filter((log) => String(log?.status || '') === String(filter.status))
+    }, [mergedLogs, activeTab, filter.status])
 
     // 統計再計算
     useEffect(() => {
@@ -132,10 +284,6 @@ export default function ApiUsageLogs() {
                 .limit(500)
 
             // API名フィルタは除外（タブフィルタに任せるため）
-
-            if (filter.status !== 'all') {
-                query = query.eq('status', filter.status)
-            }
             if (filter.dateFrom) {
                 query = query.gte('created_at', filter.dateFrom)
             }
@@ -148,6 +296,28 @@ export default function ApiUsageLogs() {
             if (error) throw error
 
             setLogs(data || [])
+
+            let opQuery = supabase
+                .from('operation_qa_logs')
+                .select('id, created_at, user_id, user_email, ai_used, ai_attempted, ai_model, ai_status, input_tokens, output_tokens, estimated_cost_jpy, metadata')
+                .eq('ai_attempted', true)
+                .order('created_at', { ascending: false })
+                .limit(500)
+
+            if (filter.dateFrom) {
+                opQuery = opQuery.gte('created_at', filter.dateFrom)
+            }
+            if (filter.dateTo) {
+                opQuery = opQuery.lte('created_at', filter.dateTo + 'T23:59:59')
+            }
+
+            const { data: opData, error: opError } = await opQuery
+            if (opError) {
+                console.warn('operation_qa_logs 取得エラー（APIログ表示には継続）:', opError)
+                setOperationQaLogs([])
+            } else {
+                setOperationQaLogs(opData || [])
+            }
             fetchUserInfos()
         } catch (error) {
             console.error('ログ取得エラー:', error)

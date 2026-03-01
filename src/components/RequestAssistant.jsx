@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from './Button';
 import { Modal } from './Modal';
 import { supabase } from '../supabase';
@@ -32,7 +32,12 @@ const VIEW_LABEL_MAP = {
 
 const normalizeText = (value, max = 20000) => String(value || '').trim().slice(0, max);
 
-export default function RequestAssistant({ currentView, userRole }) {
+export default function RequestAssistant({
+    currentView,
+    userRole,
+    hideFab = false,
+    onModalOpenChange,
+}) {
     const [isOpen, setIsOpen] = useState(false);
     const [requestType, setRequestType] = useState('feature');
     const [title, setTitle] = useState('');
@@ -48,6 +53,12 @@ export default function RequestAssistant({ currentView, userRole }) {
     );
 
     const canSubmit = !isSubmitting;
+
+    useEffect(() => {
+        if (typeof onModalOpenChange === 'function') {
+            onModalOpenChange(isOpen);
+        }
+    }, [isOpen, onModalOpenChange]);
 
     const openModal = () => {
         setSubmitMessage('');
@@ -137,15 +148,17 @@ export default function RequestAssistant({ currentView, userRole }) {
 
     return (
         <>
-            <button
-                type="button"
-                className="request-assistant-fab"
-                onClick={openModal}
-                title="要望を送る"
-                aria-label="要望を送る"
-            >
-                📨 要望
-            </button>
+            {!hideFab && (
+                <button
+                    type="button"
+                    className="request-assistant-fab"
+                    onClick={openModal}
+                    title="要望を送る"
+                    aria-label="要望を送る"
+                >
+                    📨 要望
+                </button>
+            )}
 
             <Modal
                 isOpen={isOpen}

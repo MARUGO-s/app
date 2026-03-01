@@ -224,6 +224,17 @@ const normalizeAnswerMode = (mode) => (
         : ASSISTANT_ANSWER_MODE.QUESTION_FIRST
 );
 
+const ASSISTANT_RESPONSE_POLICY = {
+    HYBRID: 'hybrid',
+    AI_PRIMARY: 'ai-primary',
+};
+
+const normalizeResponsePolicy = (policy) => (
+    policy === ASSISTANT_RESPONSE_POLICY.AI_PRIMARY
+        ? ASSISTANT_RESPONSE_POLICY.AI_PRIMARY
+        : ASSISTANT_RESPONSE_POLICY.HYBRID
+);
+
 const uniqueTrimmedLines = (items, limit = 30, maxLength = 80) => {
     const list = Array.isArray(items) ? items : [];
     const out = [];
@@ -876,12 +887,47 @@ const trimForLog = (value, max = 12000) => {
     return text.slice(0, max);
 };
 
-const extractGeminiUsage = (raw) => {
-    const usage = raw?.usageMetadata || {};
+const extractGeminiUsage = (responseData) => {
+    const usage = responseData?.raw?.usageMetadata || {};
+    const inputTokensFromBody = toNullableInt(responseData?.usage?.inputTokens);
+    const outputTokensFromBody = toNullableInt(responseData?.usage?.outputTokens);
+    const estimatedCostFromBody = toNullableNumber(responseData?.usage?.estimatedCostJpy);
     return {
-        inputTokens: toNullableInt(usage?.promptTokenCount),
-        outputTokens: toNullableInt(usage?.candidatesTokenCount),
+        inputTokens: inputTokensFromBody ?? toNullableInt(usage?.promptTokenCount),
+        outputTokens: outputTokensFromBody ?? toNullableInt(usage?.candidatesTokenCount),
+        estimatedCostJpy: estimatedCostFromBody,
     };
+};
+
+const GEMINI_RATES_JPY_PER_1M = {
+    'gemini-2.5-flash-lite': { input: 2, output: 6 },
+    'gemini-1.5-flash': { input: 5, output: 15 },
+    'gemini-2.0-flash': { input: 10, output: 30 },
+    'gemini-2.5-pro': { input: 150, output: 400 },
+    'gemini-pro': { input: 75, output: 200 },
+};
+
+const normalizeGeminiModelNameForCost = (modelName) => {
+    const normalized = String(modelName || '').trim().toLowerCase();
+    if (!normalized) return 'gemini-1.5-flash';
+    if (normalized.includes('flash-lite')) return 'gemini-2.5-flash-lite';
+    if (normalized.includes('2.5-pro') || normalized.includes('pro')) return 'gemini-2.5-pro';
+    if (normalized.includes('2.0-flash')) return 'gemini-2.0-flash';
+    if (normalized.includes('1.5-flash') || normalized.includes('flash')) return 'gemini-1.5-flash';
+    return 'gemini-1.5-flash';
+};
+
+const estimateGeminiCostJpy = ({
+    modelName,
+    inputTokens,
+    outputTokens,
+}) => {
+    const normalizedModel = normalizeGeminiModelNameForCost(modelName);
+    const rate = GEMINI_RATES_JPY_PER_1M[normalizedModel] || GEMINI_RATES_JPY_PER_1M['gemini-1.5-flash'];
+    const inTokens = Number.isFinite(Number(inputTokens)) ? Math.max(0, Number(inputTokens)) : 0;
+    const outTokens = Number.isFinite(Number(outputTokens)) ? Math.max(0, Number(outputTokens)) : 0;
+    const total = ((inTokens / 1_000_000) * rate.input) + ((outTokens / 1_000_000) * rate.output);
+    return Math.round(total * 100) / 100;
 };
 
 const fetchCurrentAuthUser = async () => {
@@ -986,6 +1032,7 @@ export const operationQaService = {
         userRole,
         history = [],
         answerMode = ASSISTANT_ANSWER_MODE.QUESTION_FIRST,
+        responsePolicy = ASSISTANT_RESPONSE_POLICY.HYBRID,
         pageContext = null,
     }) {
         const normalizedQuestion = String(question || '').trim();
@@ -993,6 +1040,7 @@ export const operationQaService = {
             throw new Error('質問内容が空です');
         }
         const normalizedAnswerMode = normalizeAnswerMode(answerMode);
+        const normalizedResponsePolicy = normalizeResponsePolicy(responsePolicy);
         const normalizedPageContext = normalizePageContext(pageContext);
         const pageContextText = buildPageContextText(normalizedPageContext);
 
@@ -1031,6 +1079,7 @@ export const operationQaService = {
                 metadata: {
                     current_view_label: currentViewLabel,
                     page_context: normalizedPageContext || null,
+                    response_policy: normalizedResponsePolicy,
                     ...(metadata && typeof metadata === 'object' ? metadata : {}),
                 },
             });
@@ -1150,7 +1199,10 @@ export const operationQaService = {
             knowledgeAssessment,
         });
 
-        if (shouldPreferPageDirect) {
+        if (
+            normalizedResponsePolicy !== ASSISTANT_RESPONSE_POLICY.AI_PRIMARY
+            && shouldPreferPageDirect
+        ) {
             const localPageDirect = formatLocalOperationAnswer({
                 question: reasoningQuestion,
                 currentView,
@@ -1170,7 +1222,10 @@ export const operationQaService = {
             });
         }
 
-        if (shouldOfferNumberedChoices(normalizedQuestion, knowledgeAssessment)) {
+        if (
+            normalizedResponsePolicy !== ASSISTANT_RESPONSE_POLICY.AI_PRIMARY
+            && shouldOfferNumberedChoices(normalizedQuestion, knowledgeAssessment)
+        ) {
             const choicePrompt = buildNumberedChoicePrompt({
                 question: normalizedQuestion,
                 knowledgeAssessment,
@@ -1191,7 +1246,10 @@ export const operationQaService = {
             }
         }
 
-        if (shouldPreferLocalDirectAnswer(normalizedQuestion, knowledgeAssessment)) {
+        if (
+            normalizedResponsePolicy !== ASSISTANT_RESPONSE_POLICY.AI_PRIMARY
+            && shouldPreferLocalDirectAnswer(normalizedQuestion, knowledgeAssessment)
+        ) {
             const localDirect = formatLocalOperationAnswer({
                 question: reasoningQuestion,
                 currentView,
@@ -1233,7 +1291,7 @@ export const operationQaService = {
                 body: {
                     model: OPERATION_ASSISTANT_MODEL,
                     temperature: 0.2,
-                    maxTokens: 900,
+                    maxTokens: responseStyle === 'concise' ? 500 : responseStyle === 'detailed' ? 900 : 700,
                     prompt,
                     logFeature: 'operation_qa',
                     logContext: {
@@ -1241,6 +1299,7 @@ export const operationQaService = {
                         feature: 'operation_qa',
                         currentView,
                         assistantMode: normalizedAnswerMode,
+                        responsePolicy: normalizedResponsePolicy,
                     },
                 },
             });
@@ -1273,7 +1332,12 @@ export const operationQaService = {
             const rawStructuredContent = tryBuildAnswerFromRawText(rawText, responseStyle);
 
             const content = structured.content || rawStructuredContent;
-            const usage = extractGeminiUsage(data?.raw);
+            const usage = extractGeminiUsage(data);
+            const estimatedCostJpy = usage.estimatedCostJpy ?? estimateGeminiCostJpy({
+                modelName: OPERATION_ASSISTANT_MODEL,
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+            });
             const invalidStructured = (
                 !content
                 || (structured.stepCount === 0 && !rawStructuredContent)
@@ -1292,11 +1356,14 @@ export const operationQaService = {
                     content: fallback,
                     aiUsed: false,
                     aiAttempted: true,
-                    answerSource: 'local_fallback_after_ai_invalid',
+                    answerSource: normalizedResponsePolicy === ASSISTANT_RESPONSE_POLICY.AI_PRIMARY
+                        ? 'local_fallback_after_ai_invalid_ai_primary'
+                        : 'local_fallback_after_ai_invalid',
                     aiModel: OPERATION_ASSISTANT_MODEL,
                     aiStatus: 'invalid_structured_fallback',
                     inputTokens: usage.inputTokens,
                     outputTokens: usage.outputTokens,
+                    estimatedCostJpy,
                     metadata: {
                         response_style: responseStyle,
                         knowledge_confidence: knowledgeAssessment?.confidence || null,
@@ -1309,11 +1376,14 @@ export const operationQaService = {
                 content: appendCodeReferenceLines(content, codeEvidence),
                 aiUsed: true,
                 aiAttempted: true,
-                answerSource: 'ai_direct',
+                answerSource: normalizedResponsePolicy === ASSISTANT_RESPONSE_POLICY.AI_PRIMARY
+                    ? 'ai_primary'
+                    : 'ai_direct',
                 aiModel: OPERATION_ASSISTANT_MODEL,
                 aiStatus: 'success',
                 inputTokens: usage.inputTokens,
                 outputTokens: usage.outputTokens,
+                estimatedCostJpy,
                 metadata: {
                     response_style: responseStyle,
                     knowledge_confidence: knowledgeAssessment?.confidence || null,
@@ -1334,7 +1404,9 @@ export const operationQaService = {
                 content: fallback,
                 aiUsed: false,
                 aiAttempted: true,
-                answerSource: 'local_fallback_after_ai_error',
+                answerSource: normalizedResponsePolicy === ASSISTANT_RESPONSE_POLICY.AI_PRIMARY
+                    ? 'local_fallback_after_ai_error_ai_primary'
+                    : 'local_fallback_after_ai_error',
                 aiModel: OPERATION_ASSISTANT_MODEL,
                 aiStatus: 'error_fallback',
                 metadata: {

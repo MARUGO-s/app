@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from './Button';
 import { Modal } from './Modal';
 import { VoiceInputButton } from './VoiceInputButton';
@@ -166,6 +166,26 @@ const ANSWER_MODE = {
     PAGE_FIRST: 'page-first',
 };
 
+const RESPONSE_POLICY = {
+    HYBRID: 'hybrid',
+    AI_PRIMARY: 'ai-primary',
+};
+
+const RESPONSE_POLICY_STORAGE_KEY = 'operationAssistant.responsePolicy';
+
+const resolveInitialResponsePolicy = () => {
+    if (typeof window === 'undefined') return RESPONSE_POLICY.AI_PRIMARY;
+    try {
+        const saved = String(window.localStorage.getItem(RESPONSE_POLICY_STORAGE_KEY) || '').trim();
+        if (saved === RESPONSE_POLICY.HYBRID || saved === RESPONSE_POLICY.AI_PRIMARY) {
+            return saved;
+        }
+    } catch {
+        // ignore localStorage read errors
+    }
+    return RESPONSE_POLICY.AI_PRIMARY;
+};
+
 const normalizeUiText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
 
 const uniqTextList = (items, limit = 24, maxLength = 80) => {
@@ -223,7 +243,12 @@ const collectPageSnapshot = (currentView) => {
     };
 };
 
-export const OperationAssistant = ({ currentView, userRole }) => {
+export const OperationAssistant = ({
+    currentView,
+    userRole,
+    hideFab = false,
+    onModalOpenChange,
+}) => {
     const [isOpen, setIsOpen] = useState(false);
     const [question, setQuestion] = useState('');
     const [isSending, setIsSending] = useState(false);
@@ -231,10 +256,26 @@ export const OperationAssistant = ({ currentView, userRole }) => {
     const [lastError, setLastError] = useState('');
     const [showQuickPromptList, setShowQuickPromptList] = useState(false);
     const [answerMode, setAnswerMode] = useState(ANSWER_MODE.QUESTION_FIRST);
+    const [responsePolicy, setResponsePolicy] = useState(resolveInitialResponsePolicy);
     const [pageSnapshot, setPageSnapshot] = useState(null);
     const [ratingBusyByMessageId, setRatingBusyByMessageId] = useState({});
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
+
+    useEffect(() => {
+        if (typeof onModalOpenChange === 'function') {
+            onModalOpenChange(isOpen);
+        }
+    }, [isOpen, onModalOpenChange]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        try {
+            window.localStorage.setItem(RESPONSE_POLICY_STORAGE_KEY, responsePolicy);
+        } catch {
+            // ignore localStorage write errors
+        }
+    }, [responsePolicy]);
 
     const pageSnapshotSummary = useMemo(() => {
         if (!pageSnapshot) return '';
@@ -320,6 +361,7 @@ export const OperationAssistant = ({ currentView, userRole }) => {
                 userRole,
                 history: [...historyForApi, { role: 'user', content: trimmed }],
                 answerMode,
+                responsePolicy,
                 pageContext: answerMode === ANSWER_MODE.PAGE_FIRST ? pageSnapshot : null,
             });
             const answerText = typeof answer === 'string'
@@ -448,15 +490,17 @@ export const OperationAssistant = ({ currentView, userRole }) => {
 
     return (
         <>
-            <button
-                type="button"
-                className="operation-assistant-fab"
-                onClick={openModal}
-                title="操作をAIに質問"
-                aria-label="操作をAIに質問"
-            >
-                ❓ 操作質問
-            </button>
+            {!hideFab && (
+                <button
+                    type="button"
+                    className="operation-assistant-fab"
+                    onClick={openModal}
+                    title="操作をAIに質問"
+                    aria-label="操作をAIに質問"
+                >
+                    ❓ 操作質問
+                </button>
+            )}
 
             <Modal
                 isOpen={isOpen}
@@ -496,6 +540,31 @@ export const OperationAssistant = ({ currentView, userRole }) => {
                         >
                             再取得
                         </button>
+                    </div>
+                    <div className="operation-assistant-mode-wrap" role="group" aria-label="回答エンジン">
+                        <button
+                            type="button"
+                            className={`operation-assistant-mode-btn ${responsePolicy === RESPONSE_POLICY.AI_PRIMARY ? 'is-active' : ''}`}
+                            disabled={isSending}
+                            onClick={() => setResponsePolicy(RESPONSE_POLICY.AI_PRIMARY)}
+                            title="まずAIで回答し、失敗時のみローカルで補完"
+                        >
+                            AI中心(実験)
+                        </button>
+                        <button
+                            type="button"
+                            className={`operation-assistant-mode-btn ${responsePolicy === RESPONSE_POLICY.HYBRID ? 'is-active' : ''}`}
+                            disabled={isSending}
+                            onClick={() => setResponsePolicy(RESPONSE_POLICY.HYBRID)}
+                            title="現在のローカル併用ロジック"
+                        >
+                            現行(ローカル併用)
+                        </button>
+                    </div>
+                    <div className="operation-assistant-snapshot-note">
+                        回答エンジン: {responsePolicy === RESPONSE_POLICY.AI_PRIMARY
+                            ? 'AI中心(実験) - まずAI回答を優先'
+                            : '現行(ローカル併用) - 候補提示/ローカル直答を含む'}
                     </div>
                     {answerMode === ANSWER_MODE.PAGE_FIRST && (
                         <div className="operation-assistant-snapshot-note">

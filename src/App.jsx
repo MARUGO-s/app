@@ -129,6 +129,8 @@ function AppContent() {
   const [searchQuery, setSearchQuery] = useState(''); // New search state
   const [publicRecipeView, setPublicRecipeView] = useState('none'); // 'none' | 'mine' | 'others'
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isRequestAssistantOpen, setIsRequestAssistantOpen] = useState(false);
+  const [isOperationAssistantOpen, setIsOperationAssistantOpen] = useState(false);
   const [requestUnreadCount, setRequestUnreadCount] = useState(0);
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedRecipeIds, setSelectedRecipeIds] = useState(new Set());
@@ -150,6 +152,7 @@ function AppContent() {
     users: 'ユーザー管理',
     'order-list': '発注リスト',
   };
+  const shouldHideAssistantFabs = isRequestAssistantOpen || isOperationAssistantOpen;
 
   const loadRequestUnreadCount = useCallback(async () => {
     if (user?.role !== 'admin' || !user?.id) {
@@ -1620,8 +1623,15 @@ function AppContent() {
       <RequestAssistant
         currentView={currentView}
         userRole={user?.role}
+        hideFab={shouldHideAssistantFabs}
+        onModalOpenChange={setIsRequestAssistantOpen}
       />
-      <OperationAssistant currentView={currentView} userRole={user?.role} />
+      <OperationAssistant
+        currentView={currentView}
+        userRole={user?.role}
+        hideFab={shouldHideAssistantFabs}
+        onModalOpenChange={setIsOperationAssistantOpen}
+      />
     </Layout>
   );
 }

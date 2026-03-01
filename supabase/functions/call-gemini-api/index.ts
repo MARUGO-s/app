@@ -365,6 +365,13 @@ serve(async (req) => {
         ok: true,
         recipeData: recipeData,
         raw: result,
+        usage: {
+          inputTokens: billing.inputTokens,
+          outputTokens: billing.outputTokens,
+          estimatedCostJpy: billing.totalCostJpy,
+          model: billing.normalizedModel,
+          ratePer1M: billing.ratePer1M,
+        },
       }),
       {
         status: 200,

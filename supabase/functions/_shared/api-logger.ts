@@ -58,7 +58,7 @@ export class APILogger {
         const durationMs = Date.now() - this.startTime
 
         try {
-            await this.supabase
+            const { error } = await this.supabase
                 .from('api_usage_logs')
                 .insert({
                     api_name: this.apiName,
@@ -75,6 +75,9 @@ export class APILogger {
                     estimated_cost_jpy: options.estimatedCostJpy,
                     metadata: options.metadata
                 })
+            if (error) {
+                console.error('Failed to log API usage (insert error):', error)
+            }
         } catch (error) {
             console.error('Failed to log API usage:', error)
         }
@@ -87,7 +90,7 @@ export class APILogger {
         const durationMs = Date.now() - this.startTime
 
         try {
-            await this.supabase
+            const { error } = await this.supabase
                 .from('api_usage_logs')
                 .insert({
                     api_name: this.apiName,
@@ -100,6 +103,9 @@ export class APILogger {
                     duration_ms: durationMs,
                     metadata
                 })
+            if (error) {
+                console.error('Failed to log API error (insert error):', error)
+            }
         } catch (error) {
             console.error('Failed to log API error:', error)
         }
@@ -112,7 +118,7 @@ export class APILogger {
         const durationMs = Date.now() - this.startTime
 
         try {
-            await this.supabase
+            const { error } = await this.supabase
                 .from('api_usage_logs')
                 .insert({
                     api_name: this.apiName,
@@ -124,6 +130,9 @@ export class APILogger {
                     duration_ms: durationMs,
                     metadata
                 })
+            if (error) {
+                console.error('Failed to log rate limit (insert error):', error)
+            }
         } catch (error) {
             console.error('Failed to log rate limit:', error)
         }
