@@ -752,22 +752,63 @@ Deno.serve(async (req) => {
         const ingredients: any[] = [];
         const steps: string[] = [];
 
+        const isDateLike = (line: string) => /^\w{3}\s+\d{1,2},\s+\d{4}$/i.test(line);
+        const isNoiseLine = (line: string) => {
+          const l = line.toLowerCase();
+          if (/^[-=]{3,}$/.test(line)) return true;
+          if (/^\d+\s*min\b/i.test(line)) return true;
+          if (isDateLike(line)) return true;
+          if (/^(recent posts?|see all|comments?|share|search)$/i.test(line)) return true;
+          if (l.includes('cookie') && l.includes('policy')) return true;
+          return false;
+        };
+
+        const stepLineRegex = /^\d+\s*[\.\)]\s+(.+)$/;
+        const ingredientNumberRegex = /(?:\d+(?:[.,]\d+)?(?:\/\d+)?|\.\d+|[¼½¾⅓⅔⅛⅜⅝⅞])/;
+        const ingredientUnitRegex = /\b(g|kg|mg|ml|cl|l|oz|lb|lbs|tbsp|tsp|cup|cups|egg|eggs|pinch|dash|pcs?|piece|pieces)\b|(?:個|本|枚|束|かけ|片|つ|cc)\b/i;
+        const isIngredientLike = (line: string) => {
+          if (line.length > 140) return false;
+          if (!ingredientNumberRegex.test(line)) return false;
+          if (ingredientUnitRegex.test(line)) return true;
+          // Fallback: short numeric line in ingredient context
+          return line.length <= 70;
+        };
+        const isLikelyInstructionText = (line: string) => {
+          if (line.length < 18) return false;
+          if (isIngredientLike(line)) return false;
+          // Sentences in instructions often contain verbs and punctuation.
+          return /[,.;:]/.test(line) || /\b(mix|heat|cook|whisk|add|stir|bake|place|remove|chill|fold|pour|set)\b/i.test(line);
+        };
+
         for (const line of compactLines) {
           if (/^ingredients?[:：]?$/i.test(line)) {
             mode = 'ingredients';
             continue;
           }
-          if (/^(process|method|instruction|instructions|directions?)[:：]?$/i.test(line)) {
+          if (/^(process|method|instruction|instructions|directions?|procedure|assembly)[:：]?$/i.test(line)) {
             mode = 'steps';
             continue;
           }
           if (/^(recent posts?|see all|comments?)[:：]?$/i.test(line)) {
             break;
           }
-          if (/^[-=]{3,}$/.test(line)) continue;
+          if (isNoiseLine(line)) continue;
 
           if (mode === 'none') {
-            if (!/^\d+\s*min\b/i.test(line) && !/^\w{3}\s+\d{1,2},\s+\d{4}$/i.test(line) && line.length > 30) {
+            const stepMatch = line.match(stepLineRegex);
+            if (stepMatch && stepMatch[1]) {
+              mode = 'steps';
+              steps.push(stepMatch[1].trim());
+              continue;
+            }
+            if (isIngredientLike(line)) {
+              mode = 'ingredients';
+              let candidate = trimIngredientNote(line.replace(/^[-*•]+\s*/, '').trim());
+              if (candidate) ingredients.push(parseIngredient(candidate));
+              continue;
+            }
+
+            if (line.length > 30) {
               intro.push(line);
             }
             continue;
@@ -775,7 +816,7 @@ Deno.serve(async (req) => {
 
           if (mode === 'ingredients') {
             // Sometimes steps start without heading. Switch mode if we detect numbered lines.
-            const stepMatch = line.match(/^\d+\.\s+(.+)$/);
+            const stepMatch = line.match(stepLineRegex);
             if (stepMatch) {
               mode = 'steps';
               const stepText = stepMatch[1].trim();
@@ -785,25 +826,39 @@ Deno.serve(async (req) => {
 
             let candidate = line.replace(/^[-*•]+\s*/, '').trim();
             if (!candidate) continue;
-            if (/^\d+\s*min\b/i.test(candidate) || /^\w{3}\s+\d{1,2},\s+\d{4}$/i.test(candidate)) continue;
+            if (isNoiseLine(candidate)) continue;
 
-            const quantityLike = /(?:\d+(?:\.\d+)?(?:\/\d+)?|\.\d+|[¼½¾⅓⅔⅛⅜⅝⅞])/.test(candidate);
+            const quantityLike = isIngredientLike(candidate);
             if (quantityLike) {
               candidate = trimIngredientNote(candidate);
               if (candidate) ingredients.push(parseIngredient(candidate));
+            } else if (isLikelyInstructionText(candidate) && ingredients.length > 0) {
+              // If lines become sentence-like after we already parsed ingredients, switch to steps.
+              mode = 'steps';
+              steps.push(candidate);
             }
             continue;
           }
 
           if (mode === 'steps') {
-            const stepMatch = line.match(/^\d+\.\s+(.+)$/);
+            const stepMatch = line.match(stepLineRegex);
             if (stepMatch && stepMatch[1]) {
               steps.push(stepMatch[1].trim());
               continue;
             }
-            if (steps.length > 0 && line.length > 20) {
-              // Continue previous step text when renderer splits one step into multiple lines.
-              steps[steps.length - 1] = `${steps[steps.length - 1]} ${line}`.trim();
+            const bulletStep = line.match(/^[-*•]\s+(.+)$/)?.[1]?.trim();
+            if (bulletStep && isLikelyInstructionText(bulletStep)) {
+              steps.push(bulletStep);
+              continue;
+            }
+            if (steps.length > 0 && line.length > 12 && !isNoiseLine(line)) {
+              if (isLikelyInstructionText(line)) {
+                // Unnumbered sentence in steps section: keep as standalone step.
+                steps.push(line);
+              } else {
+                // Continue previous step text when renderer splits one step into multiple lines.
+                steps[steps.length - 1] = `${steps[steps.length - 1]} ${line}`.trim();
+              }
             }
           }
         }
