@@ -5,9 +5,7 @@ const PRO_MODEL_SEGMENT_RE = /(^|[-_])pro($|[-_])/i;
 
 function readModelFromEnv() {
     const envValue = String(
-        Deno.env.get('GEMINI_CHEAPEST_MODEL')
-        || Deno.env.get('GEMINI_MODEL')
-        || '',
+        Deno.env.get('GEMINI_CHEAPEST_MODEL') || '',
     ).trim();
     return envValue;
 }
