@@ -1,4 +1,4 @@
-const n=`import { supabase } from '../supabase';
+const n=`import { supabase, SUPABASE_ANON_KEY, SUPABASE_URL } from '../supabase';
 import {
     assessOperationKnowledge,
     buildKnowledgeSnippet,
@@ -944,22 +944,79 @@ const fetchCurrentAuthUser = async () => {
     }
 };
 
-const resolveFunctionAuthHeaders = async () => {
+const resolveFunctionAccessToken = async ({ forceRefresh = false } = {}) => {
     try {
+        if (forceRefresh) {
+            const { data, error } = await supabase.auth.refreshSession();
+            if (error) {
+                console.warn('operationQaService: failed to refresh auth session for function invoke', error);
+            }
+            const refreshed = String(data?.session?.access_token || '').trim();
+            if (refreshed) return refreshed;
+        }
+
         const { data, error } = await supabase.auth.getSession();
         if (error) {
             console.warn('operationQaService: failed to resolve auth session for function invoke', error);
-            return {};
+            return '';
         }
-        const accessToken = String(data?.session?.access_token || '').trim();
-        if (!accessToken) return {};
-        return {
-            Authorization: \`Bearer \${accessToken}\`,
-        };
+        return String(data?.session?.access_token || '').trim();
     } catch (error) {
         console.warn('operationQaService: unexpected auth.getSession error', error);
-        return {};
+        return '';
     }
+};
+
+const invokeGeminiFunction = async ({ payload, accessToken = '' }) => {
+    const endpoint = \`\${String(SUPABASE_URL || '').replace(/\\/$/, '')}/functions/v1/call-gemini-api\`;
+    const headers = {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_ANON_KEY,
+    };
+    const token = String(accessToken || '').trim();
+    if (token) {
+        headers.Authorization = \`Bearer \${token}\`;
+        headers['x-user-jwt'] = token;
+    }
+
+    let response;
+    try {
+        response = await fetch(endpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload),
+        });
+    } catch (error) {
+        return {
+            data: null,
+            error: {
+                message: error instanceof Error ? error.message : String(error || 'request failed'),
+            },
+        };
+    }
+
+    let body = null;
+    try {
+        body = await response.json();
+    } catch {
+        body = null;
+    }
+
+    if (!response.ok) {
+        return {
+            data: null,
+            error: {
+                message: String(body?.error || body?.message || \`\${response.status} \${response.statusText}\`),
+                status: response.status,
+                body,
+            },
+        };
+    }
+
+    return {
+        data: body,
+        error: null,
+    };
 };
 
 const writeOperationQaLog = async ({
@@ -1305,34 +1362,44 @@ export const operationQaService = {
                 responseStyle,
             });
 
-            const functionAuthHeaders = await resolveFunctionAuthHeaders();
-            const { data, error } = await supabase.functions.invoke('call-gemini-api', {
-                headers: functionAuthHeaders,
-                body: {
-                    model: OPERATION_ASSISTANT_MODEL,
-                    temperature: 0.2,
-                    maxTokens: responseStyle === 'concise' ? 500 : responseStyle === 'detailed' ? 900 : 700,
-                    prompt,
-                    logFeature: 'operation_qa',
-                    logContext: {
-                        source: 'operation_assistant',
-                        feature: 'operation_qa',
-                        currentView,
-                        assistantMode: normalizedAnswerMode,
-                        responsePolicy: normalizedResponsePolicy,
-                    },
+            const requestPayload = {
+                model: OPERATION_ASSISTANT_MODEL,
+                temperature: 0.2,
+                maxTokens: responseStyle === 'concise' ? 500 : responseStyle === 'detailed' ? 900 : 700,
+                prompt,
+                logFeature: 'operation_qa',
+                logContext: {
+                    source: 'operation_assistant',
+                    feature: 'operation_qa',
+                    currentView,
+                    assistantMode: normalizedAnswerMode,
+                    responsePolicy: normalizedResponsePolicy,
                 },
+            };
+
+            let accessToken = await resolveFunctionAccessToken();
+            let { data, error } = await invokeGeminiFunction({
+                payload: requestPayload,
+                accessToken,
             });
+
+            if (error && /invalid jwt/i.test(String(error.message || ''))) {
+                const refreshedToken = await resolveFunctionAccessToken({ forceRefresh: true });
+                if (refreshedToken && refreshedToken !== accessToken) {
+                    accessToken = refreshedToken;
+                    const retried = await invokeGeminiFunction({
+                        payload: requestPayload,
+                        accessToken,
+                    });
+                    data = retried.data;
+                    error = retried.error;
+                }
+            }
 
             if (error) {
                 let detail = error.message || 'AI回答の取得に失敗しました';
-                if (error?.context && typeof error.context.json === 'function') {
-                    try {
-                        const body = await error.context.json();
-                        detail = body?.error || body?.message || detail;
-                    } catch {
-                        // Keep original message when JSON parse fails.
-                    }
+                if (error?.body && typeof error.body === 'object') {
+                    detail = error.body?.error || error.body?.message || detail;
                 }
                 throw new Error(detail);
             }
