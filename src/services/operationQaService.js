@@ -119,6 +119,83 @@ const DETAILED_STYLE_HINT_PATTERNS = [
 ];
 
 const CHOICE_PROMPT_MARKER = '番号だけ返信してください。';
+const CHOICE_STAGE_1_MARKER = '【1段階目/2】';
+const CHOICE_STAGE_2_MARKER = '【2段階目/2】';
+const CHOICE_STAGE = {
+    BROAD: 'broad',
+    DETAIL: 'detail',
+    LEGACY: 'legacy',
+};
+
+const BROAD_CHOICE_GROUPS = [
+    {
+        id: 'recipe',
+        title: 'レシピを入力・編集したい',
+        seedKeywords: ['レシピ', '作成', '編集', '材料', '手順', '保存'],
+        matchKeywords: ['レシピ', '作成', '編集', '材料', '手順', '保存', '複製'],
+        fallbackOptions: [
+            'レシピを手入力で新規作成する',
+            '既存レシピを編集する',
+            '新規/編集で入力が期待される項目',
+        ],
+    },
+    {
+        id: 'cost',
+        title: '原価・価格データを管理したい',
+        seedKeywords: ['原価', '価格', 'CSV', '仕入れ', '単位', '容量', '歩留まり'],
+        matchKeywords: ['原価', '価格', 'CSV', '歩留まり', '仕入れ', '単位', '容量', '区分', '未登録'],
+        fallbackOptions: [
+            'インフォマートから価格データを抽出して取り込む',
+            'CSV取込で未登録データを登録する',
+            '歩留まり（ぶどまり）の入力方法と考え方',
+        ],
+    },
+    {
+        id: 'inventory',
+        title: '在庫・仕込み・発注を管理したい',
+        seedKeywords: ['在庫', '仕込み', '発注', '入荷', 'カレンダー'],
+        matchKeywords: ['在庫', '仕込み', '発注', '入荷', 'カレンダー', '要発注', '反映'],
+        fallbackOptions: [
+            '在庫管理の基本操作',
+            '仕込みカレンダーの使い方',
+            '発注リストを作成する',
+        ],
+    },
+    {
+        id: 'import',
+        title: 'データを取り込みたい（CSV/URL/画像/PDF）',
+        seedKeywords: ['取り込み', '取込', 'インポート', 'CSV', 'URL', '画像', 'PDF'],
+        matchKeywords: ['取り込み', '取込', 'インポート', 'CSV', 'URL', 'Web', '画像', 'PDF', '抽出'],
+        fallbackOptions: [
+            'CSVをドラッグ&ドロップでアップロードする',
+            'Web URLからレシピを取り込む',
+            '画像からレシピを取り込む',
+        ],
+    },
+    {
+        id: 'share',
+        title: '共有・公開・翻訳・印刷をしたい',
+        seedKeywords: ['共有', '公開', '非公開', '翻訳', '印刷', 'プレビュー'],
+        matchKeywords: ['共有', '公開', '非公開', '翻訳', '印刷', 'プレビュー', 'PDF', '原文'],
+        fallbackOptions: [
+            '自分のレシピを共有・公開/非公開する',
+            'レシピ詳細をフランス語などに翻訳する',
+            'レシピ詳細を印刷・プレビューする',
+        ],
+    },
+    {
+        id: 'navigation',
+        title: 'どの画面・ボタンを使うか知りたい',
+        seedKeywords: ['画面', 'ボタン', 'どこ', '移動', 'メニュー'],
+        matchKeywords: ['画面', 'ボタン', 'メニュー', '移動', 'どこ', 'タブ', '使い方'],
+        fallbackOptions: [
+            'スライドメニュー各ボタンの操作内容',
+            'データ管理の各タブの使い分け',
+            '目的の画面へ移動する方法',
+        ],
+    },
+];
+
 const ASSISTANT_ANSWER_MODE = {
     QUESTION_FIRST: 'question-first',
     PAGE_FIRST: 'page-first',
@@ -265,6 +342,20 @@ const isNumberSelectionText = (question) => {
     return null;
 };
 
+const normalizeChoiceText = (value) => {
+    return String(value || '')
+        .normalize('NFKC')
+        .replace(/\s+/g, ' ')
+        .trim();
+};
+
+const detectChoiceStageFromMessage = (content) => {
+    const text = String(content || '');
+    if (text.includes(CHOICE_STAGE_2_MARKER)) return CHOICE_STAGE.DETAIL;
+    if (text.includes(CHOICE_STAGE_1_MARKER)) return CHOICE_STAGE.BROAD;
+    return CHOICE_STAGE.LEGACY;
+};
+
 const extractChoiceOptionsFromAssistantMessage = (content) => {
     const text = String(content || '');
     if (!text.includes(CHOICE_PROMPT_MARKER)) return [];
@@ -295,10 +386,12 @@ const resolveNumberSelectionFromHistory = ({ question, history }) => {
     const options = extractChoiceOptionsFromAssistantMessage(lastChoiceMessage.content);
     if (options.length === 0) return null;
 
+    const stage = detectChoiceStageFromMessage(lastChoiceMessage.content);
     const selected = options.find((option) => option.index === selectedIndex) || null;
     if (!selected) {
         return {
             kind: 'out_of_range',
+            stage,
             selectedIndex,
             options,
         };
@@ -306,6 +399,7 @@ const resolveNumberSelectionFromHistory = ({ question, history }) => {
 
     return {
         kind: 'selected',
+        stage,
         selectedIndex,
         selectedTitle: selected.title,
         options,
@@ -314,7 +408,7 @@ const resolveNumberSelectionFromHistory = ({ question, history }) => {
 
 const shouldOfferNumberedChoices = (question, knowledgeAssessment) => {
     const hits = Array.isArray(knowledgeAssessment?.hits) ? knowledgeAssessment.hits : [];
-    if (hits.length < 2) return false;
+    if (hits.length === 0) return false;
 
     const q = String(question || '').trim();
     if (!q) return false;
@@ -322,9 +416,9 @@ const shouldOfferNumberedChoices = (question, knowledgeAssessment) => {
     const isLikelyAbstract = q.length <= 30 || ABSTRACT_HINT_PATTERNS.some((token) => q.includes(token));
     const lowSpecificity = (knowledgeAssessment?.top?.matchedKeywords?.length || 0) <= 2;
     const nearTie = (knowledgeAssessment?.scoreGap || 0) <= 3;
-    const uncertain = knowledgeAssessment?.confidence !== 'high';
+    const uncertain = knowledgeAssessment?.confidence !== 'high' || (knowledgeAssessment?.bestScore || 0) < 10;
 
-    return knowledgeAssessment?.shouldAskClarification || (isLikelyAbstract && lowSpecificity && (nearTie || uncertain));
+    return knowledgeAssessment?.shouldAskClarification || (isLikelyAbstract && (lowSpecificity || nearTie || uncertain));
 };
 
 const shouldForcePagePriorityDirectAnswer = ({ answerMode, currentView, knowledgeAssessment }) => {
@@ -346,33 +440,147 @@ const truncateText = (text, max = 44) => {
     return `${value.slice(0, max - 1)}…`;
 };
 
-const buildNumberedChoicePrompt = ({ knowledgeAssessment, currentViewLabel = '' }) => {
-    const hits = (knowledgeAssessment?.hits || []).slice(0, 3);
-    if (hits.length === 0) return '';
+const getBroadChoiceGroupByTitle = (title) => {
+    const normalized = normalizeChoiceText(title);
+    if (!normalized) return null;
+    return BROAD_CHOICE_GROUPS.find((group) => normalizeChoiceText(group.title) === normalized) || null;
+};
 
-    const isCsvFocused = hits.every((hit) => {
-        const title = String(hit?.entry?.title || '');
-        const kw = Array.isArray(hit?.entry?.keywords) ? hit.entry.keywords.join(' ') : '';
-        return /csv|価格データ|取込/i.test(`${title} ${kw}`);
+const matchEntryAgainstBroadGroup = (entry, group) => {
+    if (!entry || !group) return false;
+    const combined = [
+        entry.id,
+        entry.title,
+        Array.isArray(entry.keywords) ? entry.keywords.join(' ') : '',
+        Array.isArray(entry.views) ? entry.views.join(' ') : '',
+    ]
+        .map((part) => String(part || '').toLowerCase())
+        .join(' ');
+    return (group.matchKeywords || []).some((keyword) => (
+        combined.includes(String(keyword || '').toLowerCase())
+    ));
+};
+
+const rankBroadChoiceGroups = ({ question, knowledgeAssessment }) => {
+    const q = String(question || '').toLowerCase();
+    const hits = Array.isArray(knowledgeAssessment?.hits) ? knowledgeAssessment.hits : [];
+    return BROAD_CHOICE_GROUPS
+        .map((group, order) => {
+            let score = 0;
+            (group.seedKeywords || []).forEach((keyword) => {
+                if (q.includes(String(keyword || '').toLowerCase())) score += 2;
+            });
+            hits.forEach((hit, idx) => {
+                if (matchEntryAgainstBroadGroup(hit?.entry, group)) {
+                    score += idx === 0 ? 3 : 2;
+                }
+            });
+            return { group, score, order };
+        })
+        .sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            return a.order - b.order;
+        })
+        .map((item) => item.group);
+};
+
+const findLatestNonSelectionUserQuestion = (history) => {
+    const items = Array.isArray(history) ? history : [];
+    const userMessages = items
+        .filter((item) => item?.role === 'user')
+        .map((item) => String(item?.content || '').trim())
+        .filter(Boolean)
+        .reverse();
+    return userMessages.find((text) => !isNumberSelectionText(text)) || '';
+};
+
+const buildDetailedChoiceOptions = ({ selectedGroup, intentQuestion, currentView }) => {
+    if (!selectedGroup) return [];
+
+    const seed = [intentQuestion, ...(selectedGroup.seedKeywords || [])]
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+        .join(' ');
+    const scopedAssessment = assessOperationKnowledge({
+        question: seed,
+        currentView,
+        limit: 12,
+    });
+    const scopedHits = Array.isArray(scopedAssessment?.hits) ? scopedAssessment.hits : [];
+
+    const options = [];
+    const seen = new Set();
+    scopedHits.forEach((hit) => {
+        const entry = hit?.entry;
+        if (!entry || !matchEntryAgainstBroadGroup(entry, selectedGroup)) return;
+        const title = String(entry.title || '').trim();
+        if (!title || seen.has(title)) return;
+        seen.add(title);
+        options.push({
+            title,
+            preview: truncateText(entry?.steps?.[0] || '', 52),
+        });
     });
 
+    if (options.length < 3) {
+        (selectedGroup.fallbackOptions || []).forEach((title) => {
+            const normalized = normalizeChoiceText(title);
+            if (!normalized || seen.has(normalized)) return;
+            seen.add(normalized);
+            options.push({
+                title: normalized,
+                preview: '',
+            });
+        });
+    }
+
+    return options.slice(0, 5);
+};
+
+const buildNumberedChoicePrompt = ({ question, knowledgeAssessment, currentViewLabel = '' }) => {
+    const groups = rankBroadChoiceGroups({ question, knowledgeAssessment }).slice(0, 6);
+    if (groups.length === 0) return '';
+
     const lines = [];
-    lines.push('質問が抽象的なので、先に候補を絞ります。');
-    lines.push(isCsvFocused ? '以下のどのCSVですか？' : '以下のどの操作ですか？');
+    lines.push('質問が抽象的なので、2段階で候補を絞ります。');
+    lines.push(CHOICE_STAGE_1_MARKER);
+    lines.push('まず、目的に近いものを選んでください。');
     if (currentViewLabel) {
         lines.push(`現在画面として認識: ${currentViewLabel}`);
     }
     lines.push(CHOICE_PROMPT_MARKER);
 
-    hits.forEach((hit, idx) => {
-        const entry = hit?.entry;
-        const title = String(entry?.title || `候補${idx + 1}`);
-        const preview = truncateText(entry?.steps?.[0] || '');
-        lines.push(`${idx + 1}. ${title}`);
-        if (preview) lines.push(`   例: ${preview}`);
+    groups.forEach((group, idx) => {
+        lines.push(`${idx + 1}. ${group.title}`);
     });
+    lines.push(`返信例: ${Math.min(2, groups.length)}`);
+    return lines.join('\n');
+};
 
-    lines.push(`返信例: ${Math.min(2, hits.length)}`);
+const buildSecondStageChoicePrompt = ({
+    selectedGroup,
+    intentQuestion,
+    currentView,
+    currentViewLabel = '',
+}) => {
+    if (!selectedGroup) return '';
+    const options = buildDetailedChoiceOptions({ selectedGroup, intentQuestion, currentView });
+    if (options.length === 0) return '';
+
+    const lines = [];
+    lines.push('ありがとうございます。続けて候補を絞ります。');
+    lines.push(CHOICE_STAGE_2_MARKER);
+    lines.push(`「${selectedGroup.title}」の中で、近い項目を選んでください。`);
+    if (currentViewLabel) {
+        lines.push(`現在画面として認識: ${currentViewLabel}`);
+    }
+    lines.push(CHOICE_PROMPT_MARKER);
+
+    options.forEach((option, idx) => {
+        lines.push(`${idx + 1}. ${option.title}`);
+        if (option.preview) lines.push(`   例: ${option.preview}`);
+    });
+    lines.push(`返信例: ${Math.min(2, options.length)}`);
     return lines.join('\n');
 };
 
@@ -808,6 +1016,31 @@ export const operationQaService = {
             history: normalizedHistory,
         });
         if (numberSelection?.kind === 'selected') {
+            if (numberSelection.stage === CHOICE_STAGE.BROAD) {
+                const selectedGroup = getBroadChoiceGroupByTitle(numberSelection.selectedTitle);
+                const intentQuestion = findLatestNonSelectionUserQuestion(normalizedHistory);
+                const secondStagePrompt = buildSecondStageChoicePrompt({
+                    selectedGroup,
+                    intentQuestion,
+                    currentView,
+                    currentViewLabel,
+                });
+                if (secondStagePrompt) {
+                    return finalizeAnswer({
+                        content: secondStagePrompt,
+                        answerSource: 'local_choice_prompt_stage2',
+                        aiStatus: 'not_used',
+                        metadata: {
+                            selection_kind: 'selected',
+                            selection_stage: CHOICE_STAGE.BROAD,
+                            selected_index: numberSelection.selectedIndex,
+                            selected_title: numberSelection.selectedTitle,
+                            intent_question: intentQuestion || null,
+                        },
+                    });
+                }
+            }
+
             const selectedAnswer = formatLocalOperationAnswer({
                 question: numberSelection.selectedTitle,
                 currentView,
@@ -819,6 +1052,7 @@ export const operationQaService = {
                 aiStatus: 'not_used',
                 metadata: {
                     selection_kind: 'selected',
+                    selection_stage: numberSelection.stage || CHOICE_STAGE.LEGACY,
                     selected_index: numberSelection.selectedIndex,
                     selected_title: numberSelection.selectedTitle,
                 },
@@ -826,7 +1060,12 @@ export const operationQaService = {
         }
         if (numberSelection?.kind === 'out_of_range') {
             const max = numberSelection.options.length;
-            const lines = [`候補は 1〜${max} です。番号だけ返信してください。`];
+            const stageHint = numberSelection.stage === CHOICE_STAGE.BROAD
+                ? '1段階目'
+                : numberSelection.stage === CHOICE_STAGE.DETAIL
+                    ? '2段階目'
+                    : '候補';
+            const lines = [`${stageHint}の候補は 1〜${max} です。${CHOICE_PROMPT_MARKER}`];
             numberSelection.options.forEach((opt) => {
                 lines.push(`${opt.index}. ${opt.title}`);
             });
@@ -836,6 +1075,7 @@ export const operationQaService = {
                 aiStatus: 'not_used',
                 metadata: {
                     selection_kind: 'out_of_range',
+                    selection_stage: numberSelection.stage || CHOICE_STAGE.LEGACY,
                     selected_index: numberSelection.selectedIndex,
                     option_count: max,
                 },
@@ -891,6 +1131,7 @@ export const operationQaService = {
 
         if (shouldOfferNumberedChoices(normalizedQuestion, knowledgeAssessment)) {
             const choicePrompt = buildNumberedChoicePrompt({
+                question: normalizedQuestion,
                 knowledgeAssessment,
                 currentViewLabel,
             });
@@ -901,7 +1142,7 @@ export const operationQaService = {
                     aiStatus: 'not_used',
                     metadata: {
                         response_style: responseStyle,
-                        reason: 'numbered_choices',
+                        reason: 'numbered_choices_stage1',
                         knowledge_confidence: knowledgeAssessment?.confidence || null,
                         knowledge_best_score: knowledgeAssessment?.bestScore ?? null,
                     },
