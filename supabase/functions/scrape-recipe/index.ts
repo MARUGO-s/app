@@ -696,138 +696,174 @@ Deno.serve(async (req) => {
     // Site-Specific Logic: Andrea Home Pastry (Wix / JS-heavy page fallback)
     // ---------------------------------------------------------
     if (!recipeData && url.includes('andreahomepastry.com')) {
-      console.log("Detecting Andrea Home Pastry URL, using markdown-reader fallback...");
+      console.log("Detecting Andrea Home Pastry URL, trying DOM-first parser...");
 
-      const sourceUrl = url.replace(/^https?:\/\//i, '');
-      const readerUrl = `https://r.jina.ai/http://${sourceUrl}`;
+      const stripMd = (s: string) => String(s || '')
+        .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/[*_`~>#]+/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
 
-      try {
-        const readerRes = await fetch(readerUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/plain,text/markdown;q=0.9,*/*;q=0.8',
-          },
-        });
+      const trimIngredientNote = (line: string) => {
+        return String(line || '')
+          .replace(/\s+(If|In case|While|High-quality|Granulated|Rice starch|Vanilla extract)\b[\s\S]*$/i, '')
+          .replace(/\s+\(important is[\s\S]*$/i, '')
+          .trim();
+      };
 
-        if (readerRes.ok) {
-          const md = await readerRes.text();
+      const parseAndreaLines = (rawLines: string[], markdownMode = false) => {
+        const lines = rawLines
+          .map((line) => {
+            if (markdownMode) return stripMd(line);
+            return String(line || '').replace(/\s+/g, ' ').trim();
+          })
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0);
 
-          const stripMd = (s: string) => String(s || '')
-            .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
-            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-            .replace(/[*_`~>#]+/g, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-
-          const title =
-            (md.match(/^Title:\s*(.+)$/m)?.[1] || '').trim() ||
-            $('meta[property="og:title"]').attr('content')?.trim() ||
-            $('h1').first().text().trim();
-
-          const image =
-            (md.match(/!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/)?.[1] || '').trim() ||
-            $('meta[property="og:image"]').attr('content') ||
-            '';
-
-          const contentStart = md.match(/Markdown Content:\s*([\s\S]*)$/i)?.[1] || md;
-          const lines = contentStart
-            .split('\n')
-            .map((line) => line.trim())
-            .filter((line) => line.length > 0);
-
-          const findHeadingIndex = (pattern: RegExp) => {
-            return lines.findIndex((line) => pattern.test(stripMd(line)));
-          };
-
-          const ingredientsHeaderIndex = findHeadingIndex(/^ingredients?$/i);
-          const stepsHeaderIndex = findHeadingIndex(/^(process|method|instruction|instructions|directions?)$/i);
-          const firstStepLineIndex = lines.findIndex((line) => /^\d+\.\s+/.test(line));
-          const sectionSplitIndex =
-            stepsHeaderIndex >= 0
-              ? stepsHeaderIndex
-              : (firstStepLineIndex >= 0 ? firstStepLineIndex : lines.length);
-
-          let description = '';
-          const introSliceEnd = ingredientsHeaderIndex >= 0 ? ingredientsHeaderIndex : sectionSplitIndex;
-          if (introSliceEnd > 0) {
-            const introLines = lines
-              .slice(0, introSliceEnd)
-              .map((line) => stripMd(line))
-              .filter((line) => line && !/^(?:\w{3}\s+\d{1,2},\s+\d{4}|\d+\s*min\b)/i.test(line));
-            description = introLines
-              .filter((line) => !/^https?:\/\//i.test(line))
-              .slice(0, 3)
-              .join(' ')
-              .trim();
-          }
-          if (!description) {
-            description = $('meta[name="description"]').attr('content')
-              || $('meta[property="og:description"]').attr('content')
-              || '';
-          }
-
-          const ingredients: any[] = [];
-          const ingredientStart =
-            ingredientsHeaderIndex >= 0 ? ingredientsHeaderIndex + 1 : 0;
-          const ingredientLines = lines.slice(ingredientStart, sectionSplitIndex);
-          ingredientLines.forEach((line) => {
-            // Skip markdown heading separators such as "-----"
-            if (/^[-=]{3,}$/.test(line)) return;
-
-            // Prefer bullet entries, but also accept quantity-like plain lines.
-            const bulletCore = line.match(/^\*\s+(.+)$/)?.[1]?.trim();
-            let core = bulletCore ?? line;
-
-            if (!core) return;
-
-            // If italic notes are appended, keep the first highlighted phrase as ingredient core.
-            const firstItalic = core.match(/_([^_]+)_/);
-            if (firstItalic && firstItalic[1]) {
-              core = firstItalic[1].trim();
-            }
-
-            core = stripMd(core);
-            if (!core) return;
-
-            // Skip obvious metadata lines
-            if (/^\d+\s*min\b/i.test(core)) return;
-            if (/^\w{3}\s+\d{1,2},\s+\d{4}$/i.test(core)) return;
-
-            // Accept if bullet, or if line starts with quantity and has ingredient-ish text
-            if (bulletCore || /^(?:\d+(?:\.\d+)?(?:\/\d+)?|[¼½¾⅓⅔⅛⅜⅝⅞])\s*\w*/.test(core)) {
-              ingredients.push(parseIngredient(core));
-            }
-          });
-
-          const steps: string[] = [];
-          const stepStart =
-            stepsHeaderIndex >= 0 ? stepsHeaderIndex + 1 : (firstStepLineIndex >= 0 ? firstStepLineIndex : -1);
-          if (stepStart >= 0) {
-            lines.slice(stepStart).forEach((line) => {
-              if (/^[-=]{3,}$/.test(line)) return;
-              const m = line.match(/^(\d+)\.\s+(.+)$/);
-              if (m && m[2]) {
-                const cleaned = stripMd(m[2]);
-                if (cleaned) steps.push(cleaned);
-              }
-            });
-          }
-
-          console.log(`Andrea fallback parsed: ingredients=${ingredients.length}, steps=${steps.length}`);
-
-          if (title && (ingredients.length > 0 || steps.length > 0)) {
-            recipeData = {
-              name: title,
-              description,
-              image,
-              recipeIngredient: ingredients,
-              recipeInstructions: steps,
-              recipeYield: '',
-            };
+        const compactLines: string[] = [];
+        for (const line of lines) {
+          if (compactLines.length === 0 || compactLines[compactLines.length - 1] !== line) {
+            compactLines.push(line);
           }
         }
-      } catch (e) {
-        console.warn('Andrea Home Pastry fallback parsing failed', e);
+
+        let mode: 'none' | 'ingredients' | 'steps' = 'none';
+        const intro: string[] = [];
+        const ingredients: any[] = [];
+        const steps: string[] = [];
+
+        for (const line of compactLines) {
+          if (/^ingredients?[:：]?$/i.test(line)) {
+            mode = 'ingredients';
+            continue;
+          }
+          if (/^(process|method|instruction|instructions|directions?)[:：]?$/i.test(line)) {
+            mode = 'steps';
+            continue;
+          }
+          if (/^(recent posts?|see all|comments?)[:：]?$/i.test(line)) {
+            break;
+          }
+          if (/^[-=]{3,}$/.test(line)) continue;
+
+          if (mode === 'none') {
+            if (!/^\d+\s*min\b/i.test(line) && !/^\w{3}\s+\d{1,2},\s+\d{4}$/i.test(line) && line.length > 30) {
+              intro.push(line);
+            }
+            continue;
+          }
+
+          if (mode === 'ingredients') {
+            // Sometimes steps start without heading. Switch mode if we detect numbered lines.
+            const stepMatch = line.match(/^\d+\.\s+(.+)$/);
+            if (stepMatch) {
+              mode = 'steps';
+              const stepText = stepMatch[1].trim();
+              if (stepText) steps.push(stepText);
+              continue;
+            }
+
+            let candidate = line.replace(/^[-*•]+\s*/, '').trim();
+            if (!candidate) continue;
+            if (/^\d+\s*min\b/i.test(candidate) || /^\w{3}\s+\d{1,2},\s+\d{4}$/i.test(candidate)) continue;
+
+            const quantityLike = /^(?:\d+(?:\.\d+)?(?:\/\d+)?|\.\d+|[¼½¾⅓⅔⅛⅜⅝⅞])/.test(candidate);
+            if (quantityLike) {
+              candidate = trimIngredientNote(candidate);
+              if (candidate) ingredients.push(parseIngredient(candidate));
+            }
+            continue;
+          }
+
+          if (mode === 'steps') {
+            const stepMatch = line.match(/^\d+\.\s+(.+)$/);
+            if (stepMatch && stepMatch[1]) {
+              steps.push(stepMatch[1].trim());
+              continue;
+            }
+            if (steps.length > 0 && line.length > 20) {
+              // Continue previous step text when renderer splits one step into multiple lines.
+              steps[steps.length - 1] = `${steps[steps.length - 1]} ${line}`.trim();
+            }
+          }
+        }
+
+        const dedupKey = new Set<string>();
+        const dedupIngredients = ingredients.filter((ing) => {
+          const key = `${ing?.name || ''}|${ing?.quantity || ''}|${ing?.unit || ''}`;
+          if (!key || dedupKey.has(key)) return false;
+          dedupKey.add(key);
+          return true;
+        });
+
+        const dedupSteps = steps.filter((step, i) => step && steps.indexOf(step) === i);
+
+        return {
+          ingredients: dedupIngredients,
+          steps: dedupSteps,
+          description: intro.slice(0, 3).join(' ').trim(),
+        };
+      };
+
+      const title =
+        $('meta[property="og:title"]').attr('content')?.trim() ||
+        $('h1').first().text().trim() ||
+        '';
+      const image =
+        $('meta[property="og:image"]').attr('content') ||
+        $('article img, main img').first().attr('src') ||
+        '';
+
+      const bodyRaw = $('body').text().replace(/\u00a0/g, ' ');
+      const bodyLines = bodyRaw
+        .split('\n')
+        .flatMap((line) => line.split(/\s{2,}/));
+      const domParsed = parseAndreaLines(bodyLines, false);
+
+      let ingredients = domParsed.ingredients;
+      let steps = domParsed.steps;
+      let description = domParsed.description
+        || $('meta[name="description"]').attr('content')
+        || $('meta[property="og:description"]').attr('content')
+        || '';
+
+      console.log(`Andrea DOM parse: ingredients=${ingredients.length}, steps=${steps.length}`);
+
+      // Fallback: markdown-reader for heavily JS-rendered cases.
+      if (ingredients.length === 0 || steps.length === 0) {
+        const sourceUrl = url.replace(/^https?:\/\//i, '');
+        const readerUrl = `https://r.jina.ai/http://${sourceUrl}`;
+        try {
+          const readerRes = await fetch(readerUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/plain,text/markdown;q=0.9,*/*;q=0.8',
+            },
+          });
+          if (readerRes.ok) {
+            const md = await readerRes.text();
+            const contentStart = md.match(/Markdown Content:\s*([\s\S]*)$/i)?.[1] || md;
+            const mdParsed = parseAndreaLines(contentStart.split('\n'), true);
+            if (ingredients.length === 0 && mdParsed.ingredients.length > 0) ingredients = mdParsed.ingredients;
+            if (steps.length === 0 && mdParsed.steps.length > 0) steps = mdParsed.steps;
+            if (!description && mdParsed.description) description = mdParsed.description;
+            console.log(`Andrea markdown parse: ingredients=${mdParsed.ingredients.length}, steps=${mdParsed.steps.length}`);
+          }
+        } catch (e) {
+          console.warn('Andrea markdown fallback failed', e);
+        }
+      }
+
+      if (title && (ingredients.length > 0 || steps.length > 0)) {
+        recipeData = {
+          name: title,
+          description,
+          image,
+          recipeIngredient: ingredients,
+          recipeInstructions: steps,
+          recipeYield: '',
+        };
       }
     }
 
