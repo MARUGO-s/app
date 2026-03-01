@@ -43,23 +43,39 @@ Deno.serve(async (req) => {
     }
 
     console.log(`Fetching URL: ${url}`);
+    const isAndreaDomain = url.includes('andreahomepastry.com');
 
     // Use Chrome User-Agent to bypass consent walls and anti-bot checks (e.g. The Spruce Eats)
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
+    let response: Response | null = null;
+    let html = '';
+    try {
+      response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
+        }
+      });
+    } catch (e) {
+      const errorMsg = `Failed to fetch URL: ${e instanceof Error ? e.message : String(e)}`;
+      if (!isAndreaDomain) {
+        console.error(errorMsg);
+        throw new Error(errorMsg);
       }
-    });
-
-    if (!response.ok) {
-      const errorMsg = `Failed to fetch URL: ${response.status} ${response.statusText}`;
-      console.error(errorMsg);
-      throw new Error(errorMsg);
+      console.warn(`${errorMsg} (continue with Andrea fallback)`);
     }
 
-    const html = await response.text();
-    const $ = cheerio.load(html);
+    if (response && !response.ok) {
+      const errorMsg = `Failed to fetch URL: ${response.status} ${response.statusText}`;
+      if (!isAndreaDomain) {
+        console.error(errorMsg);
+        throw new Error(errorMsg);
+      }
+      console.warn(`${errorMsg} (continue with Andrea fallback)`);
+    } else if (response && response.ok) {
+      html = await response.text();
+    }
+
+    const $ = cheerio.load(html || '<html></html>');
 
     let recipeData: any = null;
 
@@ -826,10 +842,17 @@ Deno.serve(async (req) => {
         }
       };
 
-      const title =
+      const normalizedSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, '');
+      let title =
         $('meta[property="og:title"]').attr('content')?.trim() ||
         $('h1').first().text().trim() ||
         '';
+      if (!title && normalizedSlug.startsWith('custard---pastr')) {
+        title = 'Custard / Pastry cream';
+      }
+      if (!title && slug) {
+        title = slug.replace(/---/g, ' / ').replace(/-/g, ' ').trim();
+      }
       const image =
         $('meta[property="og:image"]').attr('content') ||
         $('article img, main img').first().attr('src') ||
@@ -993,7 +1016,7 @@ Deno.serve(async (req) => {
       }
 
       // Fallback 5 (last resort for known broken URL): curated data.
-      if ((ingredients.length === 0 || steps.length === 0) && slug === 'custard---pastry-cream') {
+      if ((ingredients.length === 0 || steps.length === 0) && normalizedSlug.startsWith('custard---pastr')) {
         if (ingredients.length === 0) {
           ingredients = [
             parseIngredient('250g Whole milk'),
