@@ -220,7 +220,7 @@ export const OperationAssistant = ({ currentView, userRole }) => {
     const [messages, setMessages] = useState([INITIAL_MESSAGE]);
     const [lastError, setLastError] = useState('');
     const [showQuickPromptList, setShowQuickPromptList] = useState(false);
-    const [answerMode, setAnswerMode] = useState(ANSWER_MODE.PAGE_FIRST);
+    const [answerMode, setAnswerMode] = useState(ANSWER_MODE.QUESTION_FIRST);
     const [pageSnapshot, setPageSnapshot] = useState(null);
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
@@ -254,6 +254,7 @@ export const OperationAssistant = ({ currentView, userRole }) => {
     };
 
     const openModal = () => {
+        setAnswerMode(ANSWER_MODE.QUESTION_FIRST);
         setPageSnapshot(collectPageSnapshot(currentView));
         setIsOpen(true);
         setShowQuickPromptList(false);
