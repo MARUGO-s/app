@@ -976,7 +976,6 @@ const invokeGeminiFunction = async ({ payload, accessToken = '' }) => {
     const token = String(accessToken || '').trim();
     if (token) {
         headers.Authorization = `Bearer ${token}`;
-        headers['x-user-jwt'] = token;
     }
 
     let response;
