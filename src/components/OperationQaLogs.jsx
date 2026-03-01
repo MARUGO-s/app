@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase';
 import './OperationQaLogs.css';
 
+const FETCH_PAGE_SIZE = 1000;
+const MAX_EXPORT_ROWS = 50000;
+
 const SOURCE_FILTERS = {
     all: 'すべて',
     ai: 'AI使用',
@@ -54,9 +57,67 @@ const buildCsvCell = (value) => {
     return `"${text}"`;
 };
 
+const filterLogsBySearch = (items, search) => {
+    const keyword = normalizeSearchText(search);
+    if (!keyword) return Array.isArray(items) ? items : [];
+    return (Array.isArray(items) ? items : []).filter((log) => {
+        const target = [
+            log.user_email,
+            log.current_view,
+            log.question,
+            log.answer,
+            log.ai_model,
+            log.answer_source,
+        ]
+            .map((value) => String(value || '').toLowerCase())
+            .join(' ');
+        return target.includes(keyword);
+    });
+};
+
+const applySourceFilter = (query, source) => {
+    if (source === 'ai') {
+        return query.eq('ai_used', true);
+    }
+    if (source === 'fallback') {
+        return query.eq('ai_used', false).eq('ai_attempted', true);
+    }
+    if (source === 'local') {
+        return query.eq('ai_used', false).eq('ai_attempted', false);
+    }
+    return query;
+};
+
+const normalizeExportRecord = (log) => {
+    const badge = getSourceBadge(log).label;
+    return {
+        id: log.id,
+        created_at: log.created_at || null,
+        created_at_jst: formatDate(log.created_at),
+        user_id: log.user_id || null,
+        user_email: log.user_email || null,
+        user_role: log.user_role || null,
+        current_view: log.current_view || null,
+        answer_mode: log.answer_mode || null,
+        question: log.question || '',
+        answer: log.answer || '',
+        source_label: badge,
+        ai_used: log.ai_used === true,
+        ai_attempted: log.ai_attempted === true,
+        answer_source: log.answer_source || null,
+        ai_model: log.ai_model || null,
+        ai_status: log.ai_status || null,
+        input_tokens: log.input_tokens ?? null,
+        output_tokens: log.output_tokens ?? null,
+        estimated_cost_jpy: log.estimated_cost_jpy ?? null,
+        metadata: log.metadata && typeof log.metadata === 'object' ? log.metadata : {},
+    };
+};
+
 export default function OperationQaLogs() {
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [exportingType, setExportingType] = useState('');
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState({
         source: 'all',
@@ -79,13 +140,7 @@ export default function OperationQaLogs() {
             if (filter.dateTo) {
                 query = query.lte('created_at', `${filter.dateTo}T23:59:59`);
             }
-            if (filter.source === 'ai') {
-                query = query.eq('ai_used', true);
-            } else if (filter.source === 'fallback') {
-                query = query.eq('ai_used', false).eq('ai_attempted', true);
-            } else if (filter.source === 'local') {
-                query = query.eq('ai_used', false).eq('ai_attempted', false);
-            }
+            query = applySourceFilter(query, filter.source);
 
             const { data, error } = await query;
             if (error) throw error;
@@ -103,21 +158,7 @@ export default function OperationQaLogs() {
     }, [fetchLogs]);
 
     const displayedLogs = useMemo(() => {
-        const keyword = normalizeSearchText(search);
-        if (!keyword) return logs;
-        return logs.filter((log) => {
-            const target = [
-                log.user_email,
-                log.current_view,
-                log.question,
-                log.answer,
-                log.ai_model,
-                log.answer_source,
-            ]
-                .map((value) => String(value || '').toLowerCase())
-                .join(' ');
-            return target.includes(keyword);
-        });
+        return filterLogsBySearch(logs, search);
     }, [logs, search]);
 
     const stats = useMemo(() => {
@@ -137,36 +178,93 @@ export default function OperationQaLogs() {
         };
     }, [displayedLogs]);
 
-    const exportCsv = () => {
+    const fetchAllLogsForExport = useCallback(async () => {
+        const all = [];
+        for (let from = 0; from < MAX_EXPORT_ROWS; from += FETCH_PAGE_SIZE) {
+            let query = supabase
+                .from('operation_qa_logs')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .range(from, from + FETCH_PAGE_SIZE - 1);
+
+            if (filter.dateFrom) {
+                query = query.gte('created_at', filter.dateFrom);
+            }
+            if (filter.dateTo) {
+                query = query.lte('created_at', `${filter.dateTo}T23:59:59`);
+            }
+            query = applySourceFilter(query, filter.source);
+
+            const { data, error } = await query;
+            if (error) throw error;
+
+            const page = Array.isArray(data) ? data : [];
+            all.push(...page);
+            if (page.length < FETCH_PAGE_SIZE) break;
+        }
+        return filterLogsBySearch(all, search);
+    }, [filter.dateFrom, filter.dateTo, filter.source, search]);
+
+    const exportCsv = async () => {
+        setExportingType('csv');
+        let logsForExport = [];
+        try {
+            logsForExport = await fetchAllLogsForExport();
+        } catch (error) {
+            console.error('CSVエクスポート用ログ取得失敗:', error);
+            alert('CSV出力用ログの取得に失敗しました');
+            setExportingType('');
+            return;
+        }
+
         const rows = [
             [
+                'id',
+                'created_at',
                 '日時',
+                'ユーザーID',
                 'ユーザー',
+                'ユーザーロール',
                 '画面',
                 '回答モード',
                 '質問',
                 '回答',
                 '回答種別',
+                'AI使用',
+                'AI試行',
+                '回答ソース',
                 'AIモデル',
                 'AIステータス',
                 '入力トークン',
                 '出力トークン',
+                '推定コスト(円)',
+                'metadata_json',
             ].join(','),
         ];
 
-        displayedLogs.forEach((log) => {
+        logsForExport.forEach((rawLog) => {
+            const log = normalizeExportRecord(rawLog);
             rows.push([
-                buildCsvCell(formatDate(log.created_at)),
-                buildCsvCell(log.user_email || log.user_id || '-'),
-                buildCsvCell(log.current_view || '-'),
-                buildCsvCell(log.answer_mode || '-'),
+                buildCsvCell(log.id || ''),
+                buildCsvCell(log.created_at || ''),
+                buildCsvCell(log.created_at_jst || ''),
+                buildCsvCell(log.user_id || ''),
+                buildCsvCell(log.user_email || ''),
+                buildCsvCell(log.user_role || ''),
+                buildCsvCell(log.current_view || ''),
+                buildCsvCell(log.answer_mode || ''),
                 buildCsvCell(log.question || ''),
                 buildCsvCell(log.answer || ''),
-                buildCsvCell(getSourceBadge(log).label),
-                buildCsvCell(log.ai_model || '-'),
-                buildCsvCell(log.ai_status || '-'),
+                buildCsvCell(log.source_label || ''),
+                buildCsvCell(log.ai_used ? 'true' : 'false'),
+                buildCsvCell(log.ai_attempted ? 'true' : 'false'),
+                buildCsvCell(log.answer_source || ''),
+                buildCsvCell(log.ai_model || ''),
+                buildCsvCell(log.ai_status || ''),
                 buildCsvCell(log.input_tokens ?? ''),
                 buildCsvCell(log.output_tokens ?? ''),
+                buildCsvCell(log.estimated_cost_jpy ?? ''),
+                buildCsvCell(JSON.stringify(log.metadata || {})),
             ].join(','));
         });
 
@@ -178,15 +276,65 @@ export default function OperationQaLogs() {
         link.download = `operation_qa_logs_${new Date().toISOString().slice(0, 10)}.csv`;
         link.click();
         URL.revokeObjectURL(url);
+        setExportingType('');
+    };
+
+    const exportJson = async () => {
+        setExportingType('json');
+        let logsForExport = [];
+        try {
+            logsForExport = await fetchAllLogsForExport();
+        } catch (error) {
+            console.error('JSONエクスポート用ログ取得失敗:', error);
+            alert('JSON出力用ログの取得に失敗しました');
+            setExportingType('');
+            return;
+        }
+
+        const payload = {
+            exported_at: new Date().toISOString(),
+            total_rows: logsForExport.length,
+            filters: {
+                source: filter.source,
+                date_from: filter.dateFrom || null,
+                date_to: filter.dateTo || null,
+                search: search || null,
+            },
+            rows: logsForExport.map((log) => normalizeExportRecord(log)),
+        };
+        const text = JSON.stringify(payload, null, 2);
+        const blob = new Blob([text], { type: 'application/json;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `operation_qa_logs_${new Date().toISOString().slice(0, 10)}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+        setExportingType('');
     };
 
     return (
         <div className="operation-qa-logs">
             <div className="operation-qa-logs__header">
                 <h1>🧾 操作質問ログ</h1>
-                <button type="button" className="operation-qa-logs__export" onClick={exportCsv}>
-                    📥 CSVエクスポート
-                </button>
+                <div className="operation-qa-logs__header-actions">
+                    <button
+                        type="button"
+                        className="operation-qa-logs__export"
+                        onClick={exportCsv}
+                        disabled={Boolean(exportingType)}
+                    >
+                        {exportingType === 'csv' ? '出力中...' : '📥 CSV一括エクスポート'}
+                    </button>
+                    <button
+                        type="button"
+                        className="operation-qa-logs__export operation-qa-logs__export--json"
+                        onClick={exportJson}
+                        disabled={Boolean(exportingType)}
+                    >
+                        {exportingType === 'json' ? '出力中...' : '🧩 JSON一括エクスポート'}
+                    </button>
+                </div>
             </div>
 
             <div className="operation-qa-logs__stats">

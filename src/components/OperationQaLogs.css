@@ -16,6 +16,13 @@
     font-size: 1.5rem;
 }
 
+.operation-qa-logs__header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
 .operation-qa-logs__export {
     border: 1px solid #cbd5e1;
     background: #ffffff;
@@ -29,6 +36,21 @@
 
 .operation-qa-logs__export:hover {
     background: #f8fafc;
+}
+
+.operation-qa-logs__export:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.operation-qa-logs__export--json {
+    border-color: #c7d2fe;
+    background: #eef2ff;
+    color: #3730a3;
+}
+
+.operation-qa-logs__export--json:hover {
+    background: #e0e7ff;
 }
 
 .operation-qa-logs__stats {
