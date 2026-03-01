@@ -658,6 +658,23 @@ const appendCodeReferenceLines = (content) => {
     return base;
 };
 
+const isInternalReferenceLine = (line) => {
+    const text = String(line || '').trim();
+    if (!text) return false;
+    const normalized = text.replace(/^[-*•]\\s*/, '');
+    if (/^(根拠コード|コード参照候補)\\s*[:：]/.test(normalized)) return true;
+    return /^\\.?\\/?[\\w./-]+\\.(?:js|jsx|ts|tsx|css|sql|json|md|mjs|cjs):\\d+(?::\\d+)?$/.test(normalized);
+};
+
+const sanitizeOperationAnswerContent = (content) => {
+    const text = String(content || '').replace(/\\r\\n/g, '\\n').trim();
+    if (!text) return '';
+    const filtered = text
+        .split('\\n')
+        .filter((line) => !isInternalReferenceLine(line));
+    return filtered.join('\\n').replace(/\\n{3,}/g, '\\n\\n').trim();
+};
+
 const buildAnswerText = ({ description, steps, notes, responseStyle = 'balanced' }) => {
     const lines = [];
     const isConcise = responseStyle === 'concise';
@@ -667,7 +684,7 @@ const buildAnswerText = ({ description, steps, notes, responseStyle = 'balanced'
         .map((text) => text.replace(/^\\d+\\.\\s*/, '').trim())
         .filter(Boolean)
         .slice(0, isConcise ? 3 : 6);
-    const normalizedNotes = String(notes || '').trim();
+    const normalizedNotes = sanitizeOperationAnswerContent(String(notes || '').trim());
 
     if (normalizedDescription) lines.push(normalizedDescription);
     if (normalizedSteps.length > 0) {
@@ -678,7 +695,7 @@ const buildAnswerText = ({ description, steps, notes, responseStyle = 'balanced'
     if (normalizedNotes && !isConcise) lines.push(\`補足: \${normalizedNotes}\`);
 
     return {
-        content: lines.join('\\n').trim(),
+        content: sanitizeOperationAnswerContent(lines.join('\\n').trim()),
         stepCount: normalizedSteps.length,
     };
 };
@@ -719,7 +736,7 @@ const tryBuildAnswerFromRawText = (rawText, responseStyle = 'balanced') => {
             notes: parsed?.notes,
             responseStyle,
         });
-        return formatted.content;
+        return sanitizeOperationAnswerContent(formatted.content);
     } catch {
         return '';
     }
@@ -864,7 +881,6 @@ const buildGeminiPrompt = ({
         '- 不明点でも回答を止めず、まず最有力の推定手順を返す。',
         '- 確認質問が必要なら1〜2件だけ返す。',
         '- 翻訳や表示切替の質問は、対象画面とボタン名を含めて案内する。',
-        '- notes に根拠コードを path:line 形式で1〜3件書く。',
     ].join('\\n');
 };
 
@@ -1135,13 +1151,14 @@ export const operationQaService = {
             estimatedCostJpy = null,
             metadata = {},
         }) => {
+            const sanitizedContent = sanitizeOperationAnswerContent(content);
             const logRow = await writeOperationQaLog({
                 authUser,
                 userRole,
                 currentView,
                 answerMode: normalizedAnswerMode,
                 question: normalizedQuestion,
-                answer: content,
+                answer: sanitizedContent,
                 aiUsed,
                 aiAttempted,
                 answerSource,
@@ -1159,7 +1176,7 @@ export const operationQaService = {
             });
 
             const result = buildOperationAnswerResult({
-                content,
+                content: sanitizedContent,
                 aiUsed,
                 aiAttempted,
                 answerSource,
