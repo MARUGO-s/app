@@ -666,7 +666,7 @@ const writeOperationQaLog = async ({
     estimatedCostJpy = null,
     metadata = {},
 }) => {
-    if (!authUser?.id) return;
+    if (!authUser?.id) return null;
 
     const payload = {
         user_id: authUser.id,
@@ -688,14 +688,19 @@ const writeOperationQaLog = async ({
     };
 
     try {
-        const { error } = await supabase
+        const { data, error } = await supabase
             .from('operation_qa_logs')
-            .insert(payload);
+            .insert(payload)
+            .select('id, rating_score')
+            .single();
         if (error) {
             console.warn('operationQaService: failed to write operation_qa_logs', error);
+            return null;
         }
+        return data || null;
     } catch (error) {
         console.warn('operationQaService: unexpected log insert error', error);
+        return null;
     }
 };
 
@@ -709,6 +714,8 @@ const buildOperationAnswerResult = ({
     inputTokens = null,
     outputTokens = null,
     estimatedCostJpy = null,
+    logId = null,
+    ratingScore = null,
 }) => ({
     content: String(content || '').trim(),
     aiUsed: aiUsed === true,
@@ -719,6 +726,8 @@ const buildOperationAnswerResult = ({
     inputTokens: toNullableInt(inputTokens),
     outputTokens: toNullableInt(outputTokens),
     estimatedCostJpy: toNullableNumber(estimatedCostJpy),
+    logId: logId ? String(logId) : null,
+    ratingScore: toNullableInt(ratingScore),
 });
 
 export const operationQaService = {
@@ -755,6 +764,28 @@ export const operationQaService = {
             estimatedCostJpy = null,
             metadata = {},
         }) => {
+            const logRow = await writeOperationQaLog({
+                authUser,
+                userRole,
+                currentView,
+                answerMode: normalizedAnswerMode,
+                question: normalizedQuestion,
+                answer: content,
+                aiUsed,
+                aiAttempted,
+                answerSource,
+                aiModel,
+                aiStatus,
+                inputTokens,
+                outputTokens,
+                estimatedCostJpy,
+                metadata: {
+                    current_view_label: currentViewLabel,
+                    page_context: normalizedPageContext || null,
+                    ...(metadata && typeof metadata === 'object' ? metadata : {}),
+                },
+            });
+
             const result = buildOperationAnswerResult({
                 content,
                 aiUsed,
@@ -765,28 +796,8 @@ export const operationQaService = {
                 inputTokens,
                 outputTokens,
                 estimatedCostJpy,
-            });
-
-            await writeOperationQaLog({
-                authUser,
-                userRole,
-                currentView,
-                answerMode: normalizedAnswerMode,
-                question: normalizedQuestion,
-                answer: result.content,
-                aiUsed: result.aiUsed,
-                aiAttempted: result.aiAttempted,
-                answerSource: result.answerSource,
-                aiModel: result.aiModel,
-                aiStatus: result.aiStatus,
-                inputTokens: result.inputTokens,
-                outputTokens: result.outputTokens,
-                estimatedCostJpy: result.estimatedCostJpy,
-                metadata: {
-                    current_view_label: currentViewLabel,
-                    page_context: normalizedPageContext || null,
-                    ...(metadata && typeof metadata === 'object' ? metadata : {}),
-                },
+                logId: logRow?.id || null,
+                ratingScore: logRow?.rating_score ?? null,
             });
 
             return result;
@@ -1052,5 +1063,26 @@ export const operationQaService = {
                 },
             });
         }
+    },
+    async rateOperationAnswer({ logId, ratingScore }) {
+        const id = String(logId || '').trim();
+        const score = Number(ratingScore);
+        if (!id) throw new Error('評価対象のログIDがありません');
+        if (!Number.isInteger(score) || score < 1 || score > 5) {
+            throw new Error('評価は1〜5で指定してください');
+        }
+
+        const { data, error } = await supabase.rpc('rate_operation_qa_log', {
+            p_log_id: id,
+            p_rating: score,
+        });
+        if (error) throw error;
+
+        const row = Array.isArray(data) ? data[0] : data;
+        return {
+            id: row?.id || id,
+            ratingScore: toNullableInt(row?.rating_score ?? score),
+            ratedAt: row?.rated_at || null,
+        };
     },
 };

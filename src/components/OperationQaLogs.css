@@ -79,6 +79,12 @@
     margin-top: 4px;
 }
 
+.secondary-stat {
+    margin-top: 4px;
+    font-size: 0.74rem;
+    color: #6b7280;
+}
+
 .operation-qa-logs__filters {
     display: flex;
     flex-wrap: wrap;
@@ -189,7 +195,7 @@
 .operation-qa-logs__table {
     width: 100%;
     border-collapse: collapse;
-    min-width: 980px;
+    min-width: 1060px;
 }
 
 .operation-qa-logs__table th,
@@ -240,6 +246,25 @@
 
 .operation-qa-logs__badge--local {
     color: #1f2937;
+    background: #f3f4f6;
+    border-color: #d1d5db;
+}
+
+.operation-qa-logs__rating {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-weight: 700;
+    color: #92400e;
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+}
+
+.operation-qa-logs__rating--none {
+    color: #6b7280;
     background: #f3f4f6;
     border-color: #d1d5db;
 }

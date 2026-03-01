@@ -13,6 +13,22 @@ const SOURCE_FILTERS = {
     local: 'ローカル回答',
 };
 
+const RATING_FILTERS = {
+    all: '評価: すべて',
+    unrated: '評価: 未評価',
+    low: '評価: 低評価(1-2)',
+    1: '評価: 1',
+    2: '評価: 2',
+    3: '評価: 3',
+    4: '評価: 4',
+    5: '評価: 5',
+};
+
+const SORT_MODES = {
+    newest: '新しい順',
+    low_first: '低評価優先',
+};
+
 const formatDate = (value) => {
     if (!value) return '-';
     const date = new Date(value);
@@ -30,6 +46,13 @@ const formatDate = (value) => {
 const toSafeNumber = (value, fallback = 0) => {
     const n = Number(value);
     return Number.isFinite(n) ? n : fallback;
+};
+
+const toRatingScore = (value) => {
+    const n = Number(value);
+    if (!Number.isInteger(n)) return null;
+    if (n < 1 || n > 5) return null;
+    return n;
 };
 
 const clipText = (value, max = 130) => {
@@ -89,12 +112,26 @@ const applySourceFilter = (query, source) => {
     return query;
 };
 
+const applyRatingFilter = (query, rating) => {
+    const key = String(rating || 'all');
+    if (key === 'all') return query;
+    if (key === 'unrated') return query.is('rating_score', null);
+    if (key === 'low') return query.lte('rating_score', 2);
+    const n = Number(key);
+    if (Number.isInteger(n) && n >= 1 && n <= 5) return query.eq('rating_score', n);
+    return query;
+};
+
 const normalizeExportRecord = (log) => {
     const badge = getSourceBadge(log).label;
+    const ratingScore = toRatingScore(log.rating_score);
     return {
         id: log.id,
         created_at: log.created_at || null,
         created_at_jst: formatDate(log.created_at),
+        rated_at: log.rated_at || null,
+        rated_at_jst: formatDate(log.rated_at),
+        rating_score: ratingScore,
         user_id: log.user_id || null,
         user_email: log.user_email || null,
         user_role: log.user_role || null,
@@ -124,6 +161,8 @@ export default function OperationQaLogs() {
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState({
         source: 'all',
+        rating: 'all',
+        sort: 'newest',
         dateFrom: '',
         dateTo: '',
     });
@@ -144,6 +183,7 @@ export default function OperationQaLogs() {
                 query = query.lte('created_at', `${filter.dateTo}T23:59:59`);
             }
             query = applySourceFilter(query, filter.source);
+            query = applyRatingFilter(query, filter.rating);
 
             const { data, error } = await query;
             if (error) throw error;
@@ -154,15 +194,29 @@ export default function OperationQaLogs() {
         } finally {
             setLoading(false);
         }
-    }, [filter.dateFrom, filter.dateTo, filter.source]);
+    }, [filter.dateFrom, filter.dateTo, filter.source, filter.rating]);
 
     useEffect(() => {
         fetchLogs();
     }, [fetchLogs]);
 
     const displayedLogs = useMemo(() => {
-        return filterLogsBySearch(logs, search);
-    }, [logs, search]);
+        const filtered = filterLogsBySearch(logs, search);
+        const sorted = [...filtered];
+        if (filter.sort === 'low_first') {
+            sorted.sort((a, b) => {
+                const scoreA = toRatingScore(a.rating_score) ?? 6;
+                const scoreB = toRatingScore(b.rating_score) ?? 6;
+                if (scoreA !== scoreB) return scoreA - scoreB;
+                return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+            });
+            return sorted;
+        }
+        sorted.sort((a, b) => (
+            new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        ));
+        return sorted;
+    }, [logs, search, filter.sort]);
     const displayedIds = useMemo(() => (
         displayedLogs.map((log) => log.id).filter(Boolean)
     ), [displayedLogs]);
@@ -178,6 +232,13 @@ export default function OperationQaLogs() {
         const localCount = displayedLogs.filter((log) => !log.ai_used && !log.ai_attempted).length;
         const tokenIn = displayedLogs.reduce((sum, log) => sum + toSafeNumber(log.input_tokens, 0), 0);
         const tokenOut = displayedLogs.reduce((sum, log) => sum + toSafeNumber(log.output_tokens, 0), 0);
+        const ratedScores = displayedLogs
+            .map((log) => toRatingScore(log.rating_score))
+            .filter((n) => Number.isInteger(n));
+        const lowRatedCount = ratedScores.filter((n) => n <= 2).length;
+        const avgRating = ratedScores.length > 0
+            ? (ratedScores.reduce((sum, n) => sum + n, 0) / ratedScores.length)
+            : 0;
         return {
             total,
             aiCount,
@@ -185,6 +246,9 @@ export default function OperationQaLogs() {
             localCount,
             tokenIn,
             tokenOut,
+            ratedCount: ratedScores.length,
+            lowRatedCount,
+            avgRating,
         };
     }, [displayedLogs]);
 
@@ -204,6 +268,7 @@ export default function OperationQaLogs() {
                 query = query.lte('created_at', `${filter.dateTo}T23:59:59`);
             }
             query = applySourceFilter(query, filter.source);
+            query = applyRatingFilter(query, filter.rating);
 
             const { data, error } = await query;
             if (error) throw error;
@@ -213,7 +278,7 @@ export default function OperationQaLogs() {
             if (page.length < FETCH_PAGE_SIZE) break;
         }
         return filterLogsBySearch(all, search);
-    }, [filter.dateFrom, filter.dateTo, filter.source, search]);
+    }, [filter.dateFrom, filter.dateTo, filter.source, filter.rating, search]);
 
     const deleteLogsByIds = useCallback(async (ids) => {
         const targets = Array.isArray(ids) ? ids.filter(Boolean) : [];
@@ -331,6 +396,8 @@ export default function OperationQaLogs() {
                     'id',
                     'created_at',
                     '日時',
+                    'rating_score',
+                    'rated_at',
                     'ユーザーID',
                     'ユーザー',
                     'ユーザーロール',
@@ -357,6 +424,8 @@ export default function OperationQaLogs() {
                     buildCsvCell(log.id || ''),
                     buildCsvCell(log.created_at || ''),
                     buildCsvCell(log.created_at_jst || ''),
+                    buildCsvCell(log.rating_score ?? ''),
+                    buildCsvCell(log.rated_at || ''),
                     buildCsvCell(log.user_id || ''),
                     buildCsvCell(log.user_email || ''),
                     buildCsvCell(log.user_role || ''),
@@ -403,6 +472,8 @@ export default function OperationQaLogs() {
                 total_rows: logsForExport.length,
                 filters: {
                     source: filter.source,
+                    rating: filter.rating,
+                    sort: filter.sort,
                     date_from: filter.dateFrom || null,
                     date_to: filter.dateTo || null,
                     search: search || null,
@@ -472,6 +543,17 @@ export default function OperationQaLogs() {
                         ↓{stats.tokenIn.toLocaleString()} / ↑{stats.tokenOut.toLocaleString()}
                     </div>
                 </div>
+                <div className="operation-qa-logs__stat">
+                    <div className="operation-qa-logs__stat-label">評価平均</div>
+                    <div className="operation-qa-logs__stat-value">
+                        {stats.ratedCount > 0 ? `${stats.avgRating.toFixed(2)} / 5` : '-'}
+                    </div>
+                    <div className="secondary-stat">評価件数: {stats.ratedCount}件</div>
+                </div>
+                <div className="operation-qa-logs__stat">
+                    <div className="operation-qa-logs__stat-label">低評価(1-2)</div>
+                    <div className="operation-qa-logs__stat-value">{stats.lowRatedCount.toLocaleString()}件</div>
+                </div>
             </div>
 
             <div className="operation-qa-logs__filters">
@@ -480,6 +562,22 @@ export default function OperationQaLogs() {
                     onChange={(e) => setFilter((prev) => ({ ...prev, source: e.target.value }))}
                 >
                     {Object.entries(SOURCE_FILTERS).map(([id, label]) => (
+                        <option key={id} value={id}>{label}</option>
+                    ))}
+                </select>
+                <select
+                    value={filter.rating}
+                    onChange={(e) => setFilter((prev) => ({ ...prev, rating: e.target.value }))}
+                >
+                    {Object.entries(RATING_FILTERS).map(([id, label]) => (
+                        <option key={id} value={id}>{label}</option>
+                    ))}
+                </select>
+                <select
+                    value={filter.sort}
+                    onChange={(e) => setFilter((prev) => ({ ...prev, sort: e.target.value }))}
+                >
+                    {Object.entries(SORT_MODES).map(([id, label]) => (
                         <option key={id} value={id}>{label}</option>
                     ))}
                 </select>
@@ -560,6 +658,7 @@ export default function OperationQaLogs() {
                                     />
                                 </th>
                                 <th>日時</th>
+                                <th>評価</th>
                                 <th>ユーザー</th>
                                 <th>画面</th>
                                 <th>質問</th>
@@ -584,6 +683,13 @@ export default function OperationQaLogs() {
                                             />
                                         </td>
                                         <td>{formatDate(log.created_at)}</td>
+                                        <td>
+                                            {toRatingScore(log.rating_score) ? (
+                                                <span className="operation-qa-logs__rating">{toRatingScore(log.rating_score)}/5</span>
+                                            ) : (
+                                                <span className="operation-qa-logs__rating operation-qa-logs__rating--none">未評価</span>
+                                            )}
+                                        </td>
                                         <td>{log.user_email || (log.user_id ? String(log.user_id).slice(0, 8) : '-')}</td>
                                         <td>{log.current_view || '-'}</td>
                                         <td title={log.question || ''}>{clipText(log.question, 120)}</td>

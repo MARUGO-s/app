@@ -14,6 +14,9 @@ const createMessage = (role, content, meta = {}) => ({
     answerSource: String(meta.answerSource || ''),
     aiModel: meta.aiModel ? String(meta.aiModel) : '',
     aiStatus: meta.aiStatus ? String(meta.aiStatus) : '',
+    logId: meta.logId ? String(meta.logId) : '',
+    ratingScore: Number.isInteger(Number(meta.ratingScore)) ? Number(meta.ratingScore) : null,
+    ratedAt: meta.ratedAt ? String(meta.ratedAt) : '',
 });
 
 const INITIAL_MESSAGE = createMessage(
@@ -229,6 +232,7 @@ export const OperationAssistant = ({ currentView, userRole }) => {
     const [showQuickPromptList, setShowQuickPromptList] = useState(false);
     const [answerMode, setAnswerMode] = useState(ANSWER_MODE.QUESTION_FIRST);
     const [pageSnapshot, setPageSnapshot] = useState(null);
+    const [ratingBusyByMessageId, setRatingBusyByMessageId] = useState({});
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
 
@@ -329,6 +333,8 @@ export const OperationAssistant = ({ currentView, userRole }) => {
                     answerSource: answer?.answerSource || '',
                     aiModel: answer?.aiModel || '',
                     aiStatus: answer?.aiStatus || '',
+                    logId: answer?.logId || '',
+                    ratingScore: answer?.ratingScore ?? null,
                 }),
             ]);
         } catch (error) {
@@ -374,6 +380,70 @@ export const OperationAssistant = ({ currentView, userRole }) => {
             );
         }
         return null;
+    };
+
+    const handleRateAnswer = async (messageId, logId, ratingScore) => {
+        if (!messageId || !logId || isSending) return;
+        if (!Number.isInteger(Number(ratingScore)) || ratingScore < 1 || ratingScore > 5) return;
+        if (ratingBusyByMessageId[messageId]) return;
+
+        setRatingBusyByMessageId((prev) => ({ ...prev, [messageId]: true }));
+        try {
+            const rated = await operationQaService.rateOperationAnswer({
+                logId,
+                ratingScore,
+            });
+            setMessages((prev) => prev.map((msg) => (
+                msg.id === messageId
+                    ? { ...msg, ratingScore: rated?.ratingScore ?? ratingScore, ratedAt: rated?.ratedAt || '' }
+                    : msg
+            )));
+        } catch (error) {
+            console.error('評価保存に失敗:', error);
+            const message = error instanceof Error ? error.message : '評価の保存に失敗しました';
+            alert(message);
+        } finally {
+            setRatingBusyByMessageId((prev) => ({ ...prev, [messageId]: false }));
+        }
+    };
+
+    const renderRatingControls = (msg) => {
+        if (msg.role !== 'assistant') return null;
+        if (!msg.logId) return null;
+        const busy = ratingBusyByMessageId[msg.id] === true;
+        const currentScore = Number.isInteger(Number(msg.ratingScore)) ? Number(msg.ratingScore) : null;
+
+        return (
+            <div className="operation-assistant-rating-wrap">
+                <div className="operation-assistant-rating-label">
+                    この回答の評価:
+                </div>
+                <div className="operation-assistant-rating-buttons">
+                    {[1, 2, 3, 4, 5].map((score) => (
+                        <button
+                            key={`${msg.id}_rate_${score}`}
+                            type="button"
+                            className={`operation-assistant-rating-btn ${currentScore === score ? 'is-active' : ''}`}
+                            disabled={busy || isSending}
+                            onClick={() => handleRateAnswer(msg.id, msg.logId, score)}
+                            aria-label={`評価 ${score}`}
+                            title={`${score} / 5`}
+                        >
+                            {score}
+                        </button>
+                    ))}
+                </div>
+                {currentScore ? (
+                    <div className="operation-assistant-rating-status">
+                        保存済み: {currentScore}/5
+                    </div>
+                ) : (
+                    <div className="operation-assistant-rating-status operation-assistant-rating-status--hint">
+                        1（低い）〜5（高い）
+                    </div>
+                )}
+            </div>
+        );
     };
 
     return (
@@ -475,6 +545,7 @@ export const OperationAssistant = ({ currentView, userRole }) => {
                                     {renderAssistantBadge(msg)}
                                 </div>
                                 <div className="operation-assistant-message-content">{msg.content}</div>
+                                {renderRatingControls(msg)}
                             </div>
                         ))}
                         {isSending && (
