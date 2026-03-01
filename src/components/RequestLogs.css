@@ -69,6 +69,49 @@
     margin-bottom: 12px;
 }
 
+.request-logs__bulk-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.request-logs__bulk-note {
+    margin-bottom: 12px;
+    font-size: 0.78rem;
+    color: #6b7280;
+}
+
+.request-logs__action-btn {
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    color: #111827;
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.request-logs__action-btn:hover {
+    background: #f9fafb;
+}
+
+.request-logs__action-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.request-logs__action-btn--danger {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #991b1b;
+}
+
+.request-logs__action-btn--danger:hover {
+    background: #fee2e2;
+}
+
 .request-logs__filters select,
 .request-logs__filters input {
     border: 1px solid #d1d5db;
@@ -125,6 +168,12 @@
     color: #374151;
 }
 
+.request-logs__select-col {
+    width: 44px;
+    min-width: 44px;
+    text-align: center !important;
+}
+
 .request-logs__badge {
     display: inline-flex;
     align-items: center;
@@ -178,6 +227,26 @@
     color: #374151;
     font-size: 0.7rem;
     font-weight: 700;
+}
+
+.request-logs__delete-btn {
+    border: 1px solid #fecaca;
+    background: #fef2f2;
+    color: #991b1b;
+    border-radius: 7px;
+    padding: 4px 8px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.request-logs__delete-btn:hover {
+    background: #fee2e2;
+}
+
+.request-logs__delete-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
 }
 
 @media (max-width: 800px) {
