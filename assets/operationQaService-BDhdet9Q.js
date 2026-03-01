@@ -160,12 +160,42 @@ const shouldPreferLocalDirectAnswer = (question, knowledgeAssessment) => {
 };
 
 const isNumberSelectionText = (question) => {
-    const text = String(question || '').trim();
+    const text = String(question || '')
+        .normalize('NFKC')
+        .replace(/\\u3000/g, ' ')
+        .trim();
     if (!text) return null;
-    const matched = text.match(/^([1-9]\\d*)\\s*(?:番|ばん)?$/);
-    if (!matched) return null;
-    const num = Number(matched[1]);
-    return Number.isInteger(num) && num > 0 ? num : null;
+
+    const cleaned = text
+        .replace(/[。．\\.!！?？、,，]+$/g, '')
+        .trim();
+    if (!cleaned) return null;
+
+    const directNumber = cleaned.match(/^[\\(（\\[]?\\s*([1-9]\\d*)\\s*[\\)）\\]]?\\s*(?:番|ばん)?$/);
+    if (directNumber) {
+        const num = Number(directNumber[1]);
+        return Number.isInteger(num) && num > 0 ? num : null;
+    }
+
+    const circledMap = {
+        '①': 1, '②': 2, '③': 3, '④': 4, '⑤': 5,
+        '⑥': 6, '⑦': 7, '⑧': 8, '⑨': 9, '⑩': 10,
+        '⑪': 11, '⑫': 12, '⑬': 13, '⑭': 14, '⑮': 15,
+        '⑯': 16, '⑰': 17, '⑱': 18, '⑲': 19, '⑳': 20,
+    };
+    if (circledMap[cleaned]) return circledMap[cleaned];
+
+    const withoutBan = cleaned.replace(/(?:番|ばん)$/, '').trim();
+    const jpNumberMap = {
+        '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+        '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
+        'いち': 1, 'に': 2, 'さん': 3, 'し': 4, 'よん': 4,
+        'ご': 5, 'ろく': 6, 'なな': 7, 'しち': 7, 'はち': 8,
+        'きゅう': 9, 'く': 9, 'じゅう': 10,
+    };
+    if (jpNumberMap[withoutBan]) return jpNumberMap[withoutBan];
+
+    return null;
 };
 
 const extractChoiceOptionsFromAssistantMessage = (content) => {
