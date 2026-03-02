@@ -156,22 +156,42 @@ export const UserManagement = ({ onBack }) => {
         }
     };
 
-    const getLoginBadge = (lastSignInAt) => {
-        if (!lastSignInAt) {
-            return { text: '未ログイン', color: '#666666', bg: '#f0f0f0' }; // Gray for never logged in
-        }
-        const diffHours = (Date.now() - new Date(lastSignInAt).getTime()) / (1000 * 60 * 60);
+    const getLoginAgeInfo = (lastSignInAt) => {
+        if (!lastSignInAt) return null;
 
-        if (diffHours < 24) {
-            return { text: '24h', color: '#ff2d55', bg: '#ffe5e9' }; // Highlight Red
-        } else if (diffHours < 24 * 3) {
-            return { text: '3日以内', color: '#ff9500', bg: '#fff0d4' }; // Orange
-        } else if (diffHours < 24 * 7) {
-            return { text: '1週間', color: '#34c759', bg: '#e5f9e7' }; // Green
-        } else if (diffHours < 24 * 30) {
-            return { text: '1ヶ月', color: '#007aff', bg: '#e5f1ff' }; // Blue
+        const ts = new Date(lastSignInAt).getTime();
+        if (!Number.isFinite(ts)) return null;
+
+        const diffMs = Date.now() - ts;
+        const rawDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const days = Math.max(0, rawDays);
+
+        if (days >= 30) {
+            return { days, text: '1ヶ月以上' };
         }
-        return null; // older than 30 days
+        return { days, text: `${days}日前` };
+    };
+
+    const getLoginBadge = (lastSignInAt) => {
+        const info = getLoginAgeInfo(lastSignInAt);
+        if (!info) {
+            return { text: '未ログイン', color: '#666666', bg: '#f0f0f0' };
+        }
+
+        const days = info.days;
+        if (days <= 1) {
+            return { text: info.text, color: '#ff2d55', bg: '#ffe5e9' };
+        }
+        if (days <= 3) {
+            return { text: info.text, color: '#ff9500', bg: '#fff0d4' };
+        }
+        if (days <= 7) {
+            return { text: info.text, color: '#34c759', bg: '#e5f9e7' };
+        }
+        if (days < 30) {
+            return { text: info.text, color: '#007aff', bg: '#e5f1ff' };
+        }
+        return { text: info.text, color: '#6b7280', bg: '#eef0f3' };
     };
 
     const UserCard = ({
@@ -191,6 +211,7 @@ export const UserManagement = ({ onBack }) => {
         setDeleteTarget
     }) => {
         const badge = getLoginBadge(user.last_sign_in_at);
+        const loginAge = getLoginAgeInfo(user.last_sign_in_at);
         const isEditableRoleTarget = !isSuperAdmin(user) && currentUser?.id !== user.id;
 
         return (
@@ -221,7 +242,7 @@ export const UserManagement = ({ onBack }) => {
                         更新: {user.updated_at ? new Date(user.updated_at).toLocaleString() : '---'}
                     </div>
                     <div className="user-management__meta">
-                        最終ログイン: {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : '記録なし'}
+                        最終ログイン: {loginAge ? loginAge.text : '記録なし'}
                     </div>
                 </div>
 
