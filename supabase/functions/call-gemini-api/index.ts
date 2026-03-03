@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts";
 import { APILogger, getGeminiCostBreakdown } from "../_shared/api-logger.ts";
 import { buildGeminiGenerateContentEndpointCandidates } from "../_shared/gemini-model.ts";
@@ -28,6 +29,12 @@ type RequestPayload = {
     feature?: string;
     currentView?: string;
     assistantMode?: string;
+    userRole?: string;
+    question?: string;
+    currentViewLabel?: string;
+    responsePolicy?: string;
+    answerSource?: string;
+    pageContext?: Record<string, unknown> | null;
   };
 };
 
@@ -35,6 +42,12 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const supabaseAdmin = supabaseUrl && supabaseServiceRoleKey
+  ? createClient(supabaseUrl, supabaseServiceRoleKey)
+  : null;
 
 function isModelUnavailableError(status: number, errorText: string) {
   const body = String(errorText || "").toLowerCase();
@@ -115,6 +128,93 @@ function toFiniteNonNegativeInt(value: unknown): number {
 
 function buildErrorMessage(status: number, statusText: string, errorText: string): string {
   return `Gemini API error: ${status} ${statusText} - ${errorText}`;
+}
+
+function trimForLog(value: unknown, maxLength: number): string {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  return text.length > maxLength ? text.slice(0, maxLength) : text;
+}
+
+function extractFeature(body: RequestPayload | null): string | null {
+  return readString(body?.logFeature) || readString(body?.logContext?.feature) || null;
+}
+
+function normalizeOperationQaMetadata(body: RequestPayload, extra: Record<string, unknown>) {
+  const pageContext = body?.logContext?.pageContext;
+  return {
+    source: readString(body.logContext?.source) || null,
+    feature: extractFeature(body) || "operation_qa",
+    current_view_label: readString(body.logContext?.currentViewLabel) || null,
+    response_policy: readString(body.logContext?.responsePolicy) || null,
+    page_context: pageContext && typeof pageContext === "object" ? pageContext : null,
+    ...extra,
+  };
+}
+
+async function tryWriteOperationQaLog(options: {
+  authPayload: Record<string, unknown>;
+  body: RequestPayload;
+  answerText: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostJpy: number;
+  attemptedModels: string[];
+  fallbackUsed: boolean;
+}) {
+  const { authPayload, body, answerText, model, inputTokens, outputTokens, estimatedCostJpy, attemptedModels, fallbackUsed } = options;
+  if (!supabaseAdmin) return null;
+  if (extractFeature(body) !== "operation_qa") return null;
+
+  const userId = readString(authPayload?.sub);
+  if (!userId) return null;
+
+  const question = trimForLog(body.logContext?.question || body.prompt, 8000);
+  const answer = trimForLog(answerText, 20000);
+  if (!question || !answer) return null;
+
+  const userRoleRaw = readString(body.logContext?.userRole);
+  const answerSource = readString(body.logContext?.answerSource) || "ai_direct";
+  const payload = {
+    user_id: userId,
+    user_email: readString(authPayload?.email) || null,
+    user_role: userRoleRaw === "admin" ? "admin" : "user",
+    current_view: readString(body.logContext?.currentView) || null,
+    answer_mode: readString(body.logContext?.assistantMode) || null,
+    question,
+    answer,
+    ai_used: true,
+    ai_attempted: true,
+    answer_source: answerSource,
+    ai_model: model,
+    ai_status: "success",
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    estimated_cost_jpy: estimatedCostJpy,
+    metadata: normalizeOperationQaMetadata(body, {
+      attempted_models: attemptedModels,
+      fallback_used: fallbackUsed,
+      selected_model: model,
+      logged_by: "call-gemini-api",
+    }),
+  };
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("operation_qa_logs")
+      .insert(payload)
+      .select("id")
+      .single();
+    if (error) {
+      console.error("⚠️ operation_qa_logs server insert failed:", error);
+      return null;
+    }
+    return { id: String(data?.id || "").trim() || null };
+  } catch (error) {
+    console.error("⚠️ operation_qa_logs server insert exception:", error);
+    return null;
+  }
 }
 
 serve(async (req) => {
@@ -370,6 +470,17 @@ serve(async (req) => {
     const inputTokens = toFiniteNonNegativeInt(usage?.promptTokenCount);
     const outputTokens = toFiniteNonNegativeInt(usage?.candidatesTokenCount);
     const billing = getGeminiCostBreakdown(selectedModelId, inputTokens, outputTokens);
+    const operationQaLog = await tryWriteOperationQaLog({
+      authPayload,
+      body,
+      answerText: content,
+      model: selectedModelId,
+      inputTokens,
+      outputTokens,
+      estimatedCostJpy: billing.totalCostJpy,
+      attemptedModels,
+      fallbackUsed,
+    });
 
     if (apiLogger) {
       await apiLogger.logSuccess({
@@ -416,6 +527,7 @@ serve(async (req) => {
           model: billing.normalizedModel,
           ratePer1M: billing.ratePer1M,
         },
+        operationQaLog,
       }),
       {
         status: 200,

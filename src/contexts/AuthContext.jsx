@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase';
 import { AuthContext } from './authContext';
 
+const PRESENCE_HEARTBEAT_MS = 60_000;
+
 const withTimeout = async (promise, ms, label) => {
     let t = null;
     try {
@@ -24,6 +26,27 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null); // { id, email, displayId, role, showMasterRecipes }
     const [loading, setLoading] = useState(true);
     const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+
+    const upsertPresence = useCallback(async ({ userId, isOnline }) => {
+        const uid = String(userId || '').trim();
+        if (!uid) return;
+        try {
+            const { error } = await supabase
+                .from('user_presence')
+                .upsert({
+                    user_id: uid,
+                    is_online: isOnline === true,
+                    last_seen_at: new Date().toISOString(),
+                }, {
+                    onConflict: 'user_id',
+                });
+            if (error) {
+                console.warn('Failed to upsert user presence:', error);
+            }
+        } catch (error) {
+            console.warn('Unexpected error during user presence upsert:', error);
+        }
+    }, []);
 
     const loadProfileAndSetUser = useCallback(async (sessionUser) => {
         if (!sessionUser) {
@@ -239,6 +262,34 @@ export const AuthProvider = ({ children }) => {
         };
     }, [loadProfileAndSetUser]);
 
+    useEffect(() => {
+        const uid = String(user?.id || '').trim();
+        if (!uid) return undefined;
+
+        let intervalId = null;
+        const beat = () => {
+            upsertPresence({ userId: uid, isOnline: true });
+        };
+
+        beat();
+        intervalId = window.setInterval(beat, PRESENCE_HEARTBEAT_MS);
+
+        const handleFocus = () => beat();
+        const handleVisible = () => {
+            if (document.visibilityState === 'visible') beat();
+        };
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisible);
+
+        return () => {
+            if (intervalId !== null) {
+                window.clearInterval(intervalId);
+            }
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisible);
+        };
+    }, [user?.id, upsertPresence]);
+
     const login = useCallback(async (email, password) => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) {
@@ -301,6 +352,11 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const logout = useCallback(async () => {
+        const activeUserId = String(user?.id || '').trim();
+        if (activeUserId) {
+            await upsertPresence({ userId: activeUserId, isOnline: false });
+        }
+
         // Immediate local UI/session cache cleanup for reliable mobile logout UX.
         setUser(null);
         setIsPasswordRecovery(false);
@@ -318,7 +374,7 @@ export const AuthProvider = ({ children }) => {
         } catch (e) {
             console.warn('Logout (local scope) failed/timed out:', e);
         }
-    }, []);
+    }, [user?.id, upsertPresence]);
 
     const patchCurrentUserProfile = useCallback((patch) => {
         if (!patch || typeof patch !== 'object') return;
