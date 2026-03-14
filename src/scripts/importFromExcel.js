@@ -13,8 +13,8 @@ const PROJECT_ROOT = path.resolve(__dirname, '../../');
 
 dotenv.config({ path: path.resolve(PROJECT_ROOT, '.env') });
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://hocbnifuactbvmyjraxy.supabase.co';
-const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_CmEv4H4dXwtqm65i_jpsCQ_8BtDOucx';
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://hjhkccbktkscwtgzxjfq.supabase.co';
+const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_TY46n8sbGaESoL7RAzoYbg_i-d8Cwqr';
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
     console.error('Error: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set in .env or hardcoded');

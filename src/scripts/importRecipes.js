@@ -13,8 +13,8 @@ const PROJECT_ROOT = path.resolve(__dirname, '../../');
 const HTML_FILE = path.join(PROJECT_ROOT, '1/recipes.html');
 const BASE_IMG_DIR = path.join(PROJECT_ROOT, '1');
 // Hardcoded creds from src/supabase.js
-const SUPABASE_URL = 'https://hocbnifuactbvmyjraxy.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_CmEv4H4dXwtqm65i_jpsCQ_8BtDOucx';
+const SUPABASE_URL = 'https://hjhkccbktkscwtgzxjfq.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_TY46n8sbGaESoL7RAzoYbg_i-d8Cwqr';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 

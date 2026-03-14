@@ -11,8 +11,8 @@ const getEnv = (key) => {
 };
 
 // Use environment variables if available
-const supabaseUrl = getEnv('VITE_SUPABASE_URL') || 'https://hocbnifuactbvmyjraxy.supabase.co';
-const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY') || 'sb_publishable_CmEv4H4dXwtqm65i_jpsCQ_8BtDOucx';
+const supabaseUrl = getEnv('VITE_SUPABASE_URL') || 'https://hjhkccbktkscwtgzxjfq.supabase.co';
+const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY') || 'sb_publishable_TY46n8sbGaESoL7RAzoYbg_i-d8Cwqr';
 
 // Export URL for diagnostics in UI (safe to expose).
 export const SUPABASE_URL = supabaseUrl;

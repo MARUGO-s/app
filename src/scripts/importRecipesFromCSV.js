@@ -14,8 +14,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '../../');
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://hocbnifuactbvmyjraxy.supabase.co';
-const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_CmEv4H4dXwtqm65i_jpsCQ_8BtDOucx';
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://hjhkccbktkscwtgzxjfq.supabase.co';
+const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_TY46n8sbGaESoL7RAzoYbg_i-d8Cwqr';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
