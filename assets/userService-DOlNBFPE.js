@@ -123,6 +123,87 @@ export const userService = {
         return data || [];
     },
 
+    async adminGetApiActivityInRange({ fromIso, toIso }) {
+        const from = String(fromIso || '').trim();
+        const to = String(toIso || '').trim();
+        if (!from || !to) return [];
+
+        const PAGE_SIZE = 1000;
+        const latestByUser = new Map();
+
+        for (let offset = 0; ; offset += PAGE_SIZE) {
+            const { data, error } = await supabase
+                .from('api_usage_logs')
+                .select('user_id, created_at')
+                .not('user_id', 'is', null)
+                .gte('created_at', from)
+                .lt('created_at', to)
+                .order('created_at', { ascending: false })
+                .range(offset, offset + PAGE_SIZE - 1);
+            if (error) throw error;
+
+            const rows = Array.isArray(data) ? data : [];
+            rows.forEach((row) => {
+                const userId = String(row?.user_id || '').trim();
+                const createdAt = String(row?.created_at || '').trim();
+                if (!userId || !createdAt) return;
+                if (!latestByUser.has(userId)) {
+                    latestByUser.set(userId, createdAt);
+                }
+            });
+
+            if (rows.length < PAGE_SIZE) break;
+        }
+
+        return Array.from(latestByUser.entries()).map(([user_id, last_api_at]) => ({
+            user_id,
+            last_api_at,
+        }));
+    },
+
+    async adminGetUserApiLogsInRange({ userId, fromIso, toIso, limit = 300 }) {
+        const targetUserId = String(userId || '').trim();
+        const from = String(fromIso || '').trim();
+        const to = String(toIso || '').trim();
+        const maxRows = Math.max(1, Math.min(1000, Number(limit) || 300));
+        if (!targetUserId || !from || !to) return [];
+
+        const { data, error } = await supabase
+            .from('api_usage_logs')
+            .select('created_at, api_name, endpoint, model_name, status, input_tokens, output_tokens, duration_ms, estimated_cost_jpy, metadata, error_message')
+            .eq('user_id', targetUserId)
+            .gte('created_at', from)
+            .lt('created_at', to)
+            .order('created_at', { ascending: false })
+            .limit(maxRows);
+        if (error) throw error;
+        return Array.isArray(data) ? data : [];
+    },
+
+    async adminGetUserApiLogs({ userId, limit = 300 }) {
+        const targetUserId = String(userId || '').trim();
+        const maxRows = Math.max(1, Math.min(1000, Number(limit) || 300));
+        if (!targetUserId) return [];
+
+        const { data, error } = await supabase
+            .from('api_usage_logs')
+            .select('created_at, api_name, endpoint, model_name, status, input_tokens, output_tokens, duration_ms, estimated_cost_jpy, metadata, error_message')
+            .eq('user_id', targetUserId)
+            .order('created_at', { ascending: false })
+            .limit(maxRows);
+        if (error) throw error;
+        return Array.isArray(data) ? data : [];
+    },
+
+    async adminGetUserPresence() {
+        const { data, error } = await supabase
+            .from('user_presence')
+            .select('user_id, is_online, last_seen_at')
+            .order('last_seen_at', { ascending: false });
+        if (error) throw error;
+        return Array.isArray(data) ? data : [];
+    },
+
     async adminResetPassword(userId, newPassword) {
         const { data, error } = await supabase.functions.invoke('admin-reset-password', {
             body: { userId, newPassword }

@@ -915,6 +915,15 @@ const extractGeminiUsage = (responseData) => {
     };
 };
 
+const normalizeServerOperationQaLog = (logLike) => {
+    const id = String(logLike?.id || '').trim();
+    if (!id) return null;
+    return {
+        id,
+        rating_score: toNullableInt(logLike?.rating_score),
+    };
+};
+
 const GEMINI_RATES_JPY_PER_1M = {
     'gemini-2.5-flash-lite': { input: 2, output: 6 },
     'gemini-1.5-flash': { input: 5, output: 15 },
@@ -946,18 +955,108 @@ const estimateGeminiCostJpy = ({
     return Math.round(total * 1_000_000) / 1_000_000;
 };
 
+const normalizeAuthUser = (userLike) => {
+    const id = String(userLike?.id || '').trim();
+    if (!id) return null;
+    const email = String(userLike?.email || '').trim();
+    return {
+        id,
+        email: email || null,
+    };
+};
+
+const decodeJwtPayload = (token) => {
+    const raw = String(token || '').trim();
+    if (!raw) return null;
+    const parts = raw.split('.');
+    if (parts.length < 2) return null;
+    try {
+        const body = String(parts[1] || '')
+            .replace(/-/g, '+')
+            .replace(/_/g, '/');
+        const padded = body + '='.repeat((4 - (body.length % 4)) % 4);
+        const decoded = atob(padded);
+        const parsed = JSON.parse(decoded);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+        return null;
+    }
+};
+
+const resolveAuthUserFromSession = async ({ forceRefresh = false } = {}) => {
+    try {
+        let session = null;
+
+        if (forceRefresh) {
+            const { data, error } = await supabase.auth.refreshSession();
+            if (error) {
+                console.warn('operationQaService: failed to refresh auth session for logging', error);
+            }
+            session = data?.session || null;
+        }
+
+        if (!session) {
+            const { data, error } = await supabase.auth.getSession();
+            if (error) {
+                console.warn('operationQaService: failed to resolve auth session for logging', error);
+                return null;
+            }
+            session = data?.session || null;
+        }
+
+        const normalizedFromSession = normalizeAuthUser(session?.user || null);
+        if (normalizedFromSession?.id) return normalizedFromSession;
+
+        const jwtPayload = decodeJwtPayload(session?.access_token || '');
+        const normalizedFromJwt = normalizeAuthUser({
+            id: jwtPayload?.sub,
+            email: jwtPayload?.email,
+        });
+        return normalizedFromJwt;
+    } catch (error) {
+        console.warn('operationQaService: unexpected auth session resolve error', error);
+        return null;
+    }
+};
+
 const fetchCurrentAuthUser = async () => {
     try {
         const { data, error } = await supabase.auth.getUser();
         if (error) {
             console.warn('operationQaService: failed to resolve auth user for logging', error);
-            return null;
+            return resolveAuthUserFromSession();
         }
-        return data?.user || null;
+        const direct = normalizeAuthUser(data?.user || null);
+        if (direct?.id) return direct;
+        return resolveAuthUserFromSession();
     } catch (error) {
         console.warn('operationQaService: unexpected auth.getUser error', error);
-        return null;
+        return resolveAuthUserFromSession();
     }
+};
+
+const shouldRetryOperationQaInsert = (error) => {
+    const code = String(error?.code || '').toLowerCase();
+    if (code === '42501') return true;
+
+    const text = [
+        error?.message,
+        error?.details,
+        error?.hint,
+    ]
+        .map((v) => String(v || '').toLowerCase())
+        .join(' ');
+
+    if (!text) return false;
+    return [
+        'jwt',
+        'token',
+        'permission denied',
+        'row-level security',
+        'not authenticated',
+        'auth.uid()',
+        'rls',
+    ].some((needle) => text.includes(needle));
 };
 
 const resolveFunctionAccessToken = async ({ forceRefresh = false } = {}) => {
@@ -1051,11 +1150,19 @@ const writeOperationQaLog = async ({
     estimatedCostJpy = null,
     metadata = {},
 }) => {
-    if (!authUser?.id) return null;
+    const baseMetadata = (metadata && typeof metadata === 'object') ? metadata : {};
+    let effectiveAuthUser = normalizeAuthUser(authUser);
+    if (!effectiveAuthUser?.id) {
+        effectiveAuthUser = await resolveAuthUserFromSession();
+    }
+    if (!effectiveAuthUser?.id) {
+        console.warn('operationQaService: skip operation_qa_logs insert because auth user is unavailable');
+        return null;
+    }
 
-    const payload = {
-        user_id: authUser.id,
-        user_email: authUser.email || null,
+    const buildPayload = (resolvedAuthUser) => ({
+        user_id: resolvedAuthUser.id,
+        user_email: resolvedAuthUser.email || null,
         user_role: userRole === 'admin' ? 'admin' : 'user',
         current_view: String(currentView || '').trim() || null,
         answer_mode: normalizeAnswerMode(answerMode),
@@ -1069,24 +1176,47 @@ const writeOperationQaLog = async ({
         input_tokens: toNullableInt(inputTokens),
         output_tokens: toNullableInt(outputTokens),
         estimated_cost_jpy: toNullableNumber(estimatedCostJpy),
-        metadata: (metadata && typeof metadata === 'object') ? metadata : {},
+        metadata: baseMetadata,
+    });
+
+    const insertLogRow = async (payload) => {
+        try {
+            return await supabase
+                .from('operation_qa_logs')
+                .insert(payload)
+                .select('id, rating_score')
+                .single();
+        } catch (error) {
+            return {
+                data: null,
+                error,
+            };
+        }
     };
 
-    try {
-        const { data, error } = await supabase
-            .from('operation_qa_logs')
-            .insert(payload)
-            .select('id, rating_score')
-            .single();
-        if (error) {
-            console.warn('operationQaService: failed to write operation_qa_logs', error);
-            return null;
+    let payload = buildPayload(effectiveAuthUser);
+    const firstAttempt = await insertLogRow(payload);
+    if (!firstAttempt?.error) {
+        return firstAttempt?.data || null;
+    }
+
+    if (shouldRetryOperationQaInsert(firstAttempt.error)) {
+        console.warn('operationQaService: retrying operation_qa_logs insert after auth refresh');
+        const refreshedAuthUser = await resolveAuthUserFromSession({ forceRefresh: true });
+        if (refreshedAuthUser?.id) {
+            effectiveAuthUser = refreshedAuthUser;
+            payload = buildPayload(effectiveAuthUser);
         }
-        return data || null;
-    } catch (error) {
-        console.warn('operationQaService: unexpected log insert error', error);
+        const secondAttempt = await insertLogRow(payload);
+        if (!secondAttempt?.error) {
+            return secondAttempt?.data || null;
+        }
+        console.warn('operationQaService: failed to write operation_qa_logs after retry', secondAttempt.error);
         return null;
     }
+
+    console.warn('operationQaService: failed to write operation_qa_logs', firstAttempt.error);
+    return null;
 };
 
 const buildOperationAnswerResult = ({
@@ -1150,30 +1280,34 @@ export const operationQaService = {
             outputTokens = null,
             estimatedCostJpy = null,
             metadata = {},
+            serverLogRow = null,
         }) => {
             const sanitizedContent = sanitizeOperationAnswerContent(content);
-            const logRow = await writeOperationQaLog({
-                authUser,
-                userRole,
-                currentView,
-                answerMode: normalizedAnswerMode,
-                question: normalizedQuestion,
-                answer: sanitizedContent,
-                aiUsed,
-                aiAttempted,
-                answerSource,
-                aiModel,
-                aiStatus,
-                inputTokens,
-                outputTokens,
-                estimatedCostJpy,
-                metadata: {
-                    current_view_label: currentViewLabel,
-                    page_context: normalizedPageContext || null,
-                    response_policy: normalizedResponsePolicy,
-                    ...(metadata && typeof metadata === 'object' ? metadata : {}),
-                },
-            });
+            let logRow = normalizeServerOperationQaLog(serverLogRow);
+            if (!logRow) {
+                logRow = await writeOperationQaLog({
+                    authUser,
+                    userRole,
+                    currentView,
+                    answerMode: normalizedAnswerMode,
+                    question: normalizedQuestion,
+                    answer: sanitizedContent,
+                    aiUsed,
+                    aiAttempted,
+                    answerSource,
+                    aiModel,
+                    aiStatus,
+                    inputTokens,
+                    outputTokens,
+                    estimatedCostJpy,
+                    metadata: {
+                        current_view_label: currentViewLabel,
+                        page_context: normalizedPageContext || null,
+                        response_policy: normalizedResponsePolicy,
+                        ...(metadata && typeof metadata === 'object' ? metadata : {}),
+                    },
+                });
+            }
 
             const result = buildOperationAnswerResult({
                 content: sanitizedContent,
@@ -1390,6 +1524,13 @@ export const operationQaService = {
                     currentView,
                     assistantMode: normalizedAnswerMode,
                     responsePolicy: normalizedResponsePolicy,
+                    userRole: roleLabel,
+                    question: normalizedQuestion,
+                    currentViewLabel,
+                    answerSource: normalizedResponsePolicy === ASSISTANT_RESPONSE_POLICY.AI_PRIMARY
+                        ? 'ai_primary'
+                        : 'ai_direct',
+                    pageContext: normalizedPageContext || null,
                 },
             };
 
@@ -1436,6 +1577,7 @@ export const operationQaService = {
 
             const content = structured.content || rawStructuredContent;
             const usage = extractGeminiUsage(data);
+            const serverLogRow = normalizeServerOperationQaLog(data?.operationQaLog);
             const estimatedCostJpy = usage.estimatedCostJpy ?? estimateGeminiCostJpy({
                 modelName: OPERATION_ASSISTANT_MODEL,
                 inputTokens: usage.inputTokens,
@@ -1487,6 +1629,7 @@ export const operationQaService = {
                 inputTokens: usage.inputTokens,
                 outputTokens: usage.outputTokens,
                 estimatedCostJpy,
+                serverLogRow,
                 metadata: {
                     response_style: responseStyle,
                     knowledge_confidence: knowledgeAssessment?.confidence || null,

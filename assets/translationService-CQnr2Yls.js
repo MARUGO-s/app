@@ -1,4 +1,4 @@
-const n=`import { SUPABASE_ANON_KEY, SUPABASE_URL, supabase } from '../supabase';
+const e=`import { SUPABASE_ANON_KEY, SUPABASE_URL, supabase } from '../supabase';
 
 // API Key is now managed in Supabase Secrets (Edge Function)
 // const DEEPL_API_URL is handled in the Edge Function
@@ -218,14 +218,30 @@ export const translationService = {
 
         const functionUrl = \`\${SUPABASE_URL}/functions/v1/translate\`;
 
-        const doFetch = async (accessToken) => {
+        let accessToken = '';
+        try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            accessToken = sessionData?.session?.access_token || '';
+            if (!accessToken) {
+                const { data: refreshed } = await supabase.auth.refreshSession();
+                accessToken = refreshed?.session?.access_token || '';
+            }
+        } catch (e) {
+            console.warn("Could not retrieve session for translation:", e);
+        }
+
+        const doFetch = async (token) => {
+            const fetchHeaders = {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_ANON_KEY,
+            };
+            if (token) {
+                fetchHeaders['Authorization'] = \`Bearer \${token}\`;
+            }
+
             return await fetch(functionUrl, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': SUPABASE_ANON_KEY,
-                    'Authorization': \`Bearer \${accessToken}\`,
-                },
+                headers: fetchHeaders,
                 body: JSON.stringify({
                     text: normalizedTextArray,
                     target_lang: targetLang,
@@ -233,27 +249,14 @@ export const translationService = {
             });
         };
 
-        const getAccessToken = async () => {
-            const { data: sessionData } = await supabase.auth.getSession();
-            if (sessionData?.session?.access_token) return sessionData.session.access_token;
-            const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession();
-            if (refreshErr || !refreshed?.session?.access_token) {
-                const msg = refreshErr?.message || '';
-                const needReLogin = /refresh_token|session|expired|invalid|not found/i.test(msg);
-                throw new Error(needReLogin
-                    ? 'セッションの有効期限が切れています。一度ログアウトしてから再ログインしてください。'
-                    : (msg || 'ログイン情報が取得できませんでした。再ログインしてください。'));
-            }
-            return refreshed.session.access_token;
-        };
-
-        let accessToken = await getAccessToken();
         let res = await doFetch(accessToken);
 
-        // If token was stale, refresh and retry once.
         if (res.status === 401) {
-            accessToken = await getAccessToken();
-            res = await doFetch(accessToken);
+            const { data: refreshed } = await supabase.auth.refreshSession();
+            accessToken = refreshed?.session?.access_token || '';
+            if (accessToken) {
+                res = await doFetch(accessToken);
+            }
         }
 
         if (!res.ok) {
@@ -275,18 +278,19 @@ export const translationService = {
             throw new Error(detail || \`Translation Error (\${status})\`);
         }
 
-        const data = await res.json();
-        if (data && data.error) {
-            console.error("Edge Function returned error:", data.error);
-            throw new Error(\`Translation Error: \${data.error}\`);
+        const responseData = await res.json();
+        
+        if (responseData && responseData.error) {
+            console.error("Edge Function returned error:", responseData.error);
+            throw new Error(\`Translation Error: \${responseData.error}\`);
         }
 
-        if (!Array.isArray(data?.translations)) {
-            console.error("Edge Function returned invalid payload:", data);
+        if (!Array.isArray(responseData?.translations)) {
+            console.error("Edge Function returned invalid payload:", responseData);
             throw new Error('Translation Error: invalid response payload');
         }
 
-        return data.translations.map(t => t.text);
+        return responseData.translations.map(t => t.text);
     }
 };
-`;export{n as default};
+`;export{e as default};

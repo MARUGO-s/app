@@ -8,6 +8,95 @@ import { formatDisplayId } from '../utils/formatUtils';
 import './UserManagement.css';
 
 const NARROW_BREAKPOINT = 480;
+const PRESENCE_ONLINE_WINDOW_MS = 5 * 60 * 1000;
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const pad2 = (value) => String(value).padStart(2, '0');
+
+const getJstDayWindow = (baseDate = new Date()) => {
+    const safeBase = baseDate instanceof Date ? baseDate : new Date(baseDate);
+    const jst = new Date(safeBase.getTime() + JST_OFFSET_MS);
+    const year = jst.getUTCFullYear();
+    const month = jst.getUTCMonth();
+    const date = jst.getUTCDate();
+    const startMs = Date.UTC(year, month, date, 0, 0, 0, 0) - JST_OFFSET_MS;
+    const endMs = startMs + DAY_MS;
+    return {
+        startMs,
+        endMs,
+        startIso: new Date(startMs).toISOString(),
+        endIso: new Date(endMs).toISOString(),
+        label: \`\${year}/\${pad2(month + 1)}/\${pad2(date)}\`,
+    };
+};
+
+const getNextJstMidnightDelayMs = () => {
+    const now = Date.now();
+    const { endMs } = getJstDayWindow(new Date(now));
+    return Math.max(1000, endMs - now + 1000);
+};
+
+const toSafeTimestamp = (value) => {
+    const ts = new Date(value).getTime();
+    return Number.isFinite(ts) ? ts : null;
+};
+
+const formatDateTime = (value) => {
+    const ts = toSafeTimestamp(value);
+    if (ts === null) return '記録なし';
+    return new Date(ts).toLocaleString('ja-JP', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+    });
+};
+
+const formatApiLogDetail = (log) => {
+    const meta = (log?.metadata && typeof log.metadata === 'object') ? log.metadata : {};
+    const audioSec = Number(meta?.audio_duration_sec);
+    if (Number.isFinite(audioSec) && audioSec > 0) {
+        return \`🎤 \${audioSec.toFixed(2)}秒\`;
+    }
+    const inTok = Number(log?.input_tokens);
+    const outTok = Number(log?.output_tokens);
+    const hasIn = Number.isFinite(inTok) && inTok > 0;
+    const hasOut = Number.isFinite(outTok) && outTok > 0;
+    if (hasIn || hasOut) {
+        const inText = hasIn ? \`↓\${Math.trunc(inTok)}\` : '↓0';
+        const outText = hasOut ? \`↑\${Math.trunc(outTok)}\` : '↑0';
+        return \`\${inText} / \${outText}\`;
+    }
+    return '-';
+};
+
+const formatApiStatus = (value) => {
+    const key = String(value || '').toLowerCase();
+    if (key === 'success') return '成功';
+    if (key === 'error') return 'エラー';
+    if (key === 'rate_limited') return '制限';
+    return key || '-';
+};
+
+const isPresenceUnavailableError = (error) => {
+    const code = String(error?.code || '').toUpperCase();
+    const text = [
+        error?.message,
+        error?.details,
+        error?.hint,
+    ]
+        .map((v) => String(v || '').toLowerCase())
+        .join(' ');
+    if (code === '42P01' || code === 'PGRST205' || code === 'PGRST204') return true;
+    return text.includes('user_presence') && (
+        text.includes('does not exist')
+        || text.includes('relation')
+        || text.includes('could not find')
+    );
+};
 
 export const UserManagement = ({ onBack }) => {
     const { user: currentUser, patchCurrentUserProfile } = useAuth();
@@ -29,6 +118,18 @@ export const UserManagement = ({ onBack }) => {
     const [logTarget, setLogTarget] = useState(null); // { id, display_id, email }
     const [loginLogs, setLoginLogs] = useState([]);
     const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+    const [historyTab, setHistoryTab] = useState('login');
+    const [dailyApiLogs, setDailyApiLogs] = useState([]);
+    const [isLoadingDailyApiLogs, setIsLoadingDailyApiLogs] = useState(false);
+    const [dailyApiLogsError, setDailyApiLogsError] = useState('');
+    const [presenceMap, setPresenceMap] = useState({});
+    const [isLoadingPresence, setIsLoadingPresence] = useState(false);
+    const [isPresenceFeatureAvailable, setIsPresenceFeatureAvailable] = useState(true);
+    const [presenceError, setPresenceError] = useState('');
+    const [dailyActivityMap, setDailyActivityMap] = useState({});
+    const [dailyActivityWindow, setDailyActivityWindow] = useState(() => getJstDayWindow(new Date()));
+    const [isLoadingDailyActivity, setIsLoadingDailyActivity] = useState(false);
+    const [dailyActivityError, setDailyActivityError] = useState('');
 
     // Delete User state
     const [deleteTarget, setDeleteTarget] = useState(null);
@@ -49,9 +150,95 @@ export const UserManagement = ({ onBack }) => {
         }
     }, []);
 
+    const loadDailyActivity = React.useCallback(async () => {
+        const dayWindow = getJstDayWindow(new Date());
+        setDailyActivityWindow(dayWindow);
+        setIsLoadingDailyActivity(true);
+        setDailyActivityError('');
+        try {
+            const rows = await userService.adminGetApiActivityInRange({
+                fromIso: dayWindow.startIso,
+                toIso: dayWindow.endIso,
+            });
+            const nextMap = {};
+            (Array.isArray(rows) ? rows : []).forEach((row) => {
+                const userId = String(row?.user_id || '').trim();
+                if (!userId) return;
+                nextMap[userId] = {
+                    lastApiAt: row?.last_api_at || null,
+                };
+            });
+            setDailyActivityMap(nextMap);
+        } catch (err) {
+            console.error(err);
+            setDailyActivityMap({});
+            setDailyActivityError('今日のAPI利用状況の取得に失敗しました');
+        } finally {
+            setIsLoadingDailyActivity(false);
+        }
+    }, []);
+
+    const loadPresence = React.useCallback(async () => {
+        if (!isPresenceFeatureAvailable) return;
+        setIsLoadingPresence(true);
+        setPresenceError('');
+        try {
+            const rows = await userService.adminGetUserPresence();
+            const nextMap = {};
+            (Array.isArray(rows) ? rows : []).forEach((row) => {
+                const userId = String(row?.user_id || '').trim();
+                if (!userId) return;
+                nextMap[userId] = {
+                    isOnline: row?.is_online === true,
+                    lastSeenAt: row?.last_seen_at || null,
+                };
+            });
+            setPresenceMap(nextMap);
+            setIsPresenceFeatureAvailable(true);
+        } catch (error) {
+            console.error(error);
+            if (isPresenceUnavailableError(error)) {
+                setPresenceMap({});
+                setPresenceError('');
+                setIsPresenceFeatureAvailable(false);
+                return;
+            }
+            setPresenceMap({});
+            setPresenceError('ログイン中状態の取得に失敗しました');
+        } finally {
+            setIsLoadingPresence(false);
+        }
+    }, [isPresenceFeatureAvailable]);
+
     useEffect(() => {
         loadUsers();
-    }, [loadUsers]);
+        loadDailyActivity();
+        loadPresence();
+    }, [loadUsers, loadDailyActivity, loadPresence]);
+
+    useEffect(() => {
+        let timerId = null;
+        const scheduleNextRefresh = () => {
+            timerId = window.setTimeout(async () => {
+                await loadDailyActivity();
+                scheduleNextRefresh();
+            }, getNextJstMidnightDelayMs());
+        };
+        scheduleNextRefresh();
+        return () => {
+            if (timerId !== null) {
+                window.clearTimeout(timerId);
+            }
+        };
+    }, [loadDailyActivity]);
+
+    useEffect(() => {
+        if (!isPresenceFeatureAvailable) return undefined;
+        const id = window.setInterval(() => {
+            loadPresence();
+        }, 60_000);
+        return () => window.clearInterval(id);
+    }, [loadPresence, isPresenceFeatureAvailable]);
 
     useEffect(() => {
         const el = innerRef.current;
@@ -116,16 +303,41 @@ export const UserManagement = ({ onBack }) => {
 
     const handleOpenLoginLogs = async (user) => {
         setLogTarget(user);
+        setHistoryTab('login');
+        setDailyApiLogs([]);
+        setDailyApiLogsError('');
         setIsLoadingLogs(true);
+        setIsLoadingDailyApiLogs(true);
         setError('');
         try {
-            const logs = await userService.adminGetLoginLogs(user.id);
-            setLoginLogs(logs);
+            const [loginResult, apiResult] = await Promise.allSettled([
+                userService.adminGetLoginLogs(user.id),
+                userService.adminGetUserApiLogs({
+                    userId: user.id,
+                }),
+            ]);
+
+            if (loginResult.status === 'fulfilled') {
+                setLoginLogs(Array.isArray(loginResult.value) ? loginResult.value : []);
+            } else {
+                console.error(loginResult.reason);
+                setLoginLogs([]);
+                setError('ログイン履歴の取得に失敗しました');
+            }
+
+            if (apiResult.status === 'fulfilled') {
+                setDailyApiLogs(Array.isArray(apiResult.value) ? apiResult.value : []);
+            } else {
+                console.error(apiResult.reason);
+                setDailyApiLogs([]);
+                setDailyApiLogsError('API利用履歴の取得に失敗しました');
+            }
         } catch (err) {
             console.error(err);
             setError('ログイン履歴の取得に失敗しました');
         } finally {
             setIsLoadingLogs(false);
+            setIsLoadingDailyApiLogs(false);
         }
     };
 
@@ -208,11 +420,43 @@ export const UserManagement = ({ onBack }) => {
         setResetPw2,
         setResetError,
         setResetSuccess,
-        setDeleteTarget
+        setDeleteTarget,
+        dailyActivityMap,
+        dailyActivityWindow,
+        isLoadingDailyActivity,
+        presenceMap,
+        isLoadingPresence,
+        isPresenceFeatureAvailable,
     }) => {
         const badge = getLoginBadge(user.last_sign_in_at);
         const loginAge = getLoginAgeInfo(user.last_sign_in_at);
         const isEditableRoleTarget = !isSuperAdmin(user) && currentUser?.id !== user.id;
+        const presence = presenceMap?.[user.id] || null;
+        const presenceTs = toSafeTimestamp(presence?.lastSeenAt);
+        const isPresenceFresh = presenceTs !== null
+            && (Date.now() - presenceTs) <= PRESENCE_ONLINE_WINDOW_MS;
+        const onlineNow = presence?.isOnline === true && isPresenceFresh;
+        const presenceClass = onlineNow
+            ? 'user-management__presence-pill user-management__presence-pill--online'
+            : 'user-management__presence-pill user-management__presence-pill--offline';
+        const presenceText = !isPresenceFeatureAvailable
+            ? '未設定'
+            : (isLoadingPresence ? '判定中' : (onlineNow ? 'ログイン中' : 'オフライン'));
+        const loginAtTs = toSafeTimestamp(user.last_sign_in_at);
+        const loggedInToday = loginAtTs !== null
+            && loginAtTs >= dailyActivityWindow.startMs
+            && loginAtTs < dailyActivityWindow.endMs;
+        const apiToday = dailyActivityMap?.[user.id] || null;
+        const usedApiToday = Boolean(apiToday?.lastApiAt);
+        const todayActive = loggedInToday || usedApiToday;
+        const todayStateText = todayActive ? 'アクティブ' : '未アクティブ';
+        const todayStateClass = todayActive
+            ? 'user-management__activity-pill user-management__activity-pill--active'
+            : 'user-management__activity-pill user-management__activity-pill--inactive';
+        let todayReasonText = 'ログイン / API利用なし';
+        if (loggedInToday && usedApiToday) todayReasonText = 'ログイン + API利用';
+        else if (loggedInToday) todayReasonText = 'ログイン';
+        else if (usedApiToday) todayReasonText = 'API利用';
 
         return (
             <Card key={user.id} className="user-management__card">
@@ -243,6 +487,23 @@ export const UserManagement = ({ onBack }) => {
                     </div>
                     <div className="user-management__meta">
                         最終ログイン: {loginAge ? loginAge.text : '記録なし'}
+                    </div>
+                    <div className="user-management__meta">
+                        現在ステータス: <span className={presenceClass}>{presenceText}</span>
+                        <span className="user-management__activity-reason">
+                            {!isPresenceFeatureAvailable
+                                ? 'presence機能未適用'
+                                : (presenceTs !== null ? \`最終更新 \${formatDateTime(presenceTs)}\` : 'ハートビート未記録')}
+                        </span>
+                    </div>
+                    <div className="user-management__meta">
+                        今日の状態(JST): <span className={todayStateClass}>{todayStateText}</span>
+                        <span className="user-management__activity-reason">{todayReasonText}</span>
+                    </div>
+                    <div className="user-management__meta">
+                        今日の最終API利用: {usedApiToday ? formatDateTime(apiToday.lastApiAt) : (
+                            isLoadingDailyActivity ? '集計中...' : '記録なし'
+                        )}
                     </div>
                 </div>
 
@@ -328,6 +589,24 @@ export const UserManagement = ({ onBack }) => {
                     <Button variant="ghost" onClick={onBack}>戻る</Button>
                 </div>
 
+                <div className="user-management__daily-note">
+                    日次表示（JST {dailyActivityWindow.label}）: 毎日 0:00 に今日の状態をリセット / ログイン中は最終更新5分以内で判定
+                </div>
+
+                {!isPresenceFeatureAvailable && (
+                    <div className="user-management__daily-note">
+                        ログイン中表示はDBマイグレーション未適用のため無効化中です。
+                    </div>
+                )}
+
+                {presenceError && (
+                    <div className="user-management__daily-error">{presenceError}</div>
+                )}
+
+                {dailyActivityError && (
+                    <div className="user-management__daily-error">{dailyActivityError}</div>
+                )}
+
                 {error && (
                     <div style={{ padding: '10px', backgroundColor: '#ffebee', color: '#c62828', borderRadius: '4px', marginBottom: '20px' }}>{error}</div>
                 )}
@@ -357,6 +636,12 @@ export const UserManagement = ({ onBack }) => {
                                             setResetError={setResetError}
                                             setResetSuccess={setResetSuccess}
                                             setDeleteTarget={setDeleteTarget}
+                                            dailyActivityMap={dailyActivityMap}
+                                            dailyActivityWindow={dailyActivityWindow}
+                                            isLoadingDailyActivity={isLoadingDailyActivity}
+                                            presenceMap={presenceMap}
+                                            isLoadingPresence={isLoadingPresence}
+                                            isPresenceFeatureAvailable={isPresenceFeatureAvailable}
                                         />
                                     ))}
                                 </div>
@@ -384,6 +669,12 @@ export const UserManagement = ({ onBack }) => {
                                             setResetError={setResetError}
                                             setResetSuccess={setResetSuccess}
                                             setDeleteTarget={setDeleteTarget}
+                                            dailyActivityMap={dailyActivityMap}
+                                            dailyActivityWindow={dailyActivityWindow}
+                                            isLoadingDailyActivity={isLoadingDailyActivity}
+                                            presenceMap={presenceMap}
+                                            isLoadingPresence={isLoadingPresence}
+                                            isPresenceFeatureAvailable={isPresenceFeatureAvailable}
                                         />
                                     ))
                                 ) : (
@@ -535,8 +826,12 @@ export const UserManagement = ({ onBack }) => {
 
                 <Modal
                     isOpen={!!logTarget}
-                    onClose={() => setLogTarget(null)}
-                    title="ログイン履歴"
+                    onClose={() => {
+                        setLogTarget(null);
+                        setHistoryTab('login');
+                        setDailyApiLogsError('');
+                    }}
+                    title="利用履歴"
                     size="medium"
                 >
                     <div style={{ color: 'var(--text-color)', lineHeight: 1.5, minHeight: '300px', display: 'flex', flexDirection: 'column' }}>
@@ -544,39 +839,111 @@ export const UserManagement = ({ onBack }) => {
                             対象: {formatDisplayId(logTarget?.display_id || logTarget?.email || logTarget?.id)}
                         </div>
 
-                        {isLoadingLogs ? (
-                            <div style={{ textAlign: 'center', padding: '40px 0', color: '#666' }}>読み込み中...</div>
-                        ) : loginLogs.length > 0 ? (
-                            <div style={{ flex: 1, overflowY: 'auto', maxHeight: '400px' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                    <thead>
-                                        <tr>
-                                            <th style={{ textAlign: 'left', padding: '8px', borderBottom: '2px solid #ddd', backgroundColor: '#f5f5f5' }}>日時</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {loginLogs.map((log, i) => (
-                                            <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-                                                <td style={{ padding: '8px' }}>
-                                                    {new Date(log.login_at).toLocaleString('ja-JP', {
-                                                        year: 'numeric', month: '2-digit', day: '2-digit',
-                                                        hour: '2-digit', minute: '2-digit', second: '2-digit'
-                                                    })}
-                                                </td>
+                        <div className="user-management__history-tabs">
+                            <button
+                                type="button"
+                                className={\`user-management__history-tab \${historyTab === 'login' ? 'is-active' : ''}\`}
+                                onClick={() => setHistoryTab('login')}
+                            >
+                                ログイン履歴
+                            </button>
+                            <button
+                                type="button"
+                                className={\`user-management__history-tab \${historyTab === 'api' ? 'is-active' : ''}\`}
+                                onClick={() => setHistoryTab('api')}
+                            >
+                                API利用履歴
+                            </button>
+                        </div>
+
+                        {historyTab === 'login' ? (
+                            isLoadingLogs ? (
+                                <div style={{ textAlign: 'center', padding: '40px 0', color: '#666' }}>読み込み中...</div>
+                            ) : loginLogs.length > 0 ? (
+                                <div style={{ flex: 1, overflowY: 'auto', maxHeight: '400px' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <thead>
+                                            <tr>
+                                                <th style={{ textAlign: 'left', padding: '8px', borderBottom: '2px solid #ddd', backgroundColor: '#f5f5f5' }}>日時</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                                        </thead>
+                                        <tbody>
+                                            {loginLogs.map((log, i) => (
+                                                <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
+                                                    <td style={{ padding: '8px' }}>
+                                                        {new Date(log.login_at).toLocaleString('ja-JP', {
+                                                            year: 'numeric', month: '2-digit', day: '2-digit',
+                                                            hour: '2-digit', minute: '2-digit', second: '2-digit'
+                                                        })}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <div style={{ textAlign: 'center', padding: '40px 0', color: '#666', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+                                    ログイン履歴はありません<br />
+                                    <span style={{ fontSize: '0.85rem' }}>※機能追加前の履歴、または一度もログインしていない場合は表示されません</span>
+                                </div>
+                            )
                         ) : (
-                            <div style={{ textAlign: 'center', padding: '40px 0', color: '#666', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
-                                ログイン履歴はありません<br />
-                                <span style={{ fontSize: '0.85rem' }}>※機能追加前の履歴、または一度もログインしていない場合は表示されません</span>
-                            </div>
+                            <>
+                                {dailyApiLogsError ? (
+                                    <div style={{ textAlign: 'center', padding: '30px 0', color: '#b91c1c', backgroundColor: '#fff1f2', borderRadius: '8px' }}>
+                                        {dailyApiLogsError}
+                                    </div>
+                                ) : isLoadingDailyApiLogs ? (
+                                    <div style={{ textAlign: 'center', padding: '40px 0', color: '#666' }}>読み込み中...</div>
+                                ) : dailyApiLogs.length > 0 ? (
+                                    <div style={{ flex: 1, overflowY: 'auto', maxHeight: '400px' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                            <thead>
+                                                <tr>
+                                                    <th style={{ textAlign: 'left', padding: '8px', borderBottom: '2px solid #ddd', backgroundColor: '#f5f5f5' }}>日時</th>
+                                                    <th style={{ textAlign: 'left', padding: '8px', borderBottom: '2px solid #ddd', backgroundColor: '#f5f5f5' }}>API</th>
+                                                    <th style={{ textAlign: 'left', padding: '8px', borderBottom: '2px solid #ddd', backgroundColor: '#f5f5f5' }}>エンドポイント</th>
+                                                    <th style={{ textAlign: 'left', padding: '8px', borderBottom: '2px solid #ddd', backgroundColor: '#f5f5f5' }}>ステータス</th>
+                                                    <th style={{ textAlign: 'left', padding: '8px', borderBottom: '2px solid #ddd', backgroundColor: '#f5f5f5' }}>詳細</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {dailyApiLogs.map((log, i) => (
+                                                    <tr key={\`\${log.created_at || i}_\${log.endpoint || ''}\`} style={{ borderBottom: '1px solid #eee' }}>
+                                                        <td style={{ padding: '8px', whiteSpace: 'nowrap' }}>
+                                                            {formatDateTime(log.created_at)}
+                                                        </td>
+                                                        <td style={{ padding: '8px', whiteSpace: 'nowrap' }}>
+                                                            {log.api_name || '-'}
+                                                        </td>
+                                                        <td style={{ padding: '8px' }}>
+                                                            {log.endpoint || '-'}
+                                                        </td>
+                                                        <td style={{ padding: '8px', whiteSpace: 'nowrap' }}>
+                                                            {formatApiStatus(log.status)}
+                                                        </td>
+                                                        <td style={{ padding: '8px', whiteSpace: 'nowrap' }}>
+                                                            {formatApiLogDetail(log)}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <div style={{ textAlign: 'center', padding: '40px 0', color: '#666', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+                                        API利用履歴はありません
+                                    </div>
+                                )}
+                            </>
                         )}
 
                         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
-                            <Button variant="secondary" onClick={() => setLogTarget(null)}>
+                            <Button variant="secondary" onClick={() => {
+                                setLogTarget(null);
+                                setHistoryTab('login');
+                                setDailyApiLogsError('');
+                            }}>
                                 閉じる
                             </Button>
                         </div>
