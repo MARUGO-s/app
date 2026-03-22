@@ -18,6 +18,7 @@ import { Planner } from './components/Planner';
 import { OrderList } from './components/OrderList';
 import ApiUsageLogs from './components/ApiUsageLogs';
 import OperationQaLogs from './components/OperationQaLogs';
+import { DeployLogs } from './components/DeployLogs';
 import OperationAssistant from './components/OperationAssistant';
 import RequestAssistant from './components/RequestAssistant';
 import RequestLogs from './components/RequestLogs';
@@ -1231,6 +1232,9 @@ function AppContent() {
                               <Button variant="secondary" onClick={() => { setSearchParams({ view: 'users' }); setIsMenuOpen(false); }}>
                                 <span style={{ marginRight: '8px' }}>👥</span> ユーザー管理
                               </Button>
+                              <Button variant="secondary" onClick={() => { setSearchParams({ view: 'deploy-logs' }); setIsMenuOpen(false); }}>
+                                <span style={{ marginRight: '8px' }}>🚀</span> デプロイ履歴
+                              </Button>
                               <Button variant="secondary" onClick={() => { setSearchParams({ view: 'api-logs' }); setIsMenuOpen(false); }}>
                                 <span style={{ marginRight: '8px' }}>📊</span> API使用ログ
                               </Button>
@@ -1572,6 +1576,10 @@ function AppContent() {
           onBack={() => setSearchParams({ view: 'list' })}
           onNavigateToPlanner={() => setSearchParams({ view: 'planner' })}
         />
+      )}
+
+      {currentView === 'deploy-logs' && user?.role === 'admin' && (
+        <DeployLogs onBack={() => setSearchParams({ view: 'list' })} />
       )}
 
       {currentView === 'api-logs' && user?.role === 'admin' && (
