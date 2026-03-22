@@ -1,5 +1,5 @@
-export const DEFAULT_GEMINI_CHEAPEST_MODEL = 'gemini-2.5-flash-lite';
-export const DEFAULT_GEMINI_FALLBACK_MODEL = 'gemini-1.5-flash';
+export const DEFAULT_GEMINI_CHEAPEST_MODEL = 'gemini-3.1-flash-lite';
+export const DEFAULT_GEMINI_FALLBACK_MODEL = 'gemini-3-flash';
 
 const PRO_MODEL_SEGMENT_RE = /(^|[-_])pro($|[-_])/i;
 

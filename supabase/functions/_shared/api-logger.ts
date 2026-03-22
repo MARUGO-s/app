@@ -145,7 +145,9 @@ export class APILogger {
 export type GeminiRate = { input: number; output: number }
 
 const GEMINI_RATES_JPY_PER_1M: Record<string, GeminiRate> = {
-    // 料金（1Mトークンあたりの円、2026年2月時点の概算）
+    // 料金（1Mトークンあたりの円、2026年3月時点の概算）
+    'gemini-3.1-flash-lite': { input: 37.5, output: 225 }, // $0.25 / $1.50 @ 150JPY
+    'gemini-3-flash': { input: 75, output: 450 }, // $0.50 / $3.00 @ 150JPY
     'gemini-2.5-flash-lite': { input: 2, output: 6 },
     'gemini-1.5-flash': { input: 5, output: 15 },
     'gemini-2.0-flash': { input: 10, output: 30 },
@@ -155,17 +157,19 @@ const GEMINI_RATES_JPY_PER_1M: Record<string, GeminiRate> = {
 
 function normalizeGeminiModelName(modelName: string): string {
     const normalized = String(modelName || '').trim().toLowerCase()
-    if (!normalized) return 'gemini-2.5-flash-lite'
+    if (!normalized) return 'gemini-3.1-flash-lite'
+    if (normalized.includes('3.1-flash-lite')) return 'gemini-3.1-flash-lite'
+    if (normalized.includes('3-flash')) return 'gemini-3-flash'
     if (normalized.includes('flash-lite')) return 'gemini-2.5-flash-lite'
     if (normalized.includes('2.5-pro') || normalized.includes('pro')) return 'gemini-2.5-pro'
     if (normalized.includes('2.0-flash')) return 'gemini-2.0-flash'
     if (normalized.includes('1.5-flash') || normalized.includes('flash')) return 'gemini-1.5-flash'
-    return 'gemini-2.5-flash-lite'
+    return 'gemini-3.1-flash-lite'
 }
 
 export function getGeminiRatePerMillion(modelName: string): GeminiRate {
     const key = normalizeGeminiModelName(modelName)
-    return GEMINI_RATES_JPY_PER_1M[key] || GEMINI_RATES_JPY_PER_1M['gemini-2.5-flash-lite']
+    return GEMINI_RATES_JPY_PER_1M[key] || GEMINI_RATES_JPY_PER_1M['gemini-3.1-flash-lite']
 }
 
 export function getGeminiCostBreakdown(

@@ -7,7 +7,7 @@ import {
 } from './operationKnowledgeBase';
 import { searchCodeEvidence } from './codeContextService';
 
-const OPERATION_ASSISTANT_MODEL = 'gemini-2.5-flash-lite';
+const OPERATION_ASSISTANT_MODEL = 'gemini-3.1-flash-lite';
 
 const VIEW_LABEL_MAP = {
     list: 'レシピ一覧',
