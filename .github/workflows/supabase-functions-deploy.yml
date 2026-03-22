@@ -45,6 +45,7 @@ jobs:
         run: npm install @supabase/supabase-js
 
       - name: Record deployment to Supabase
+        continue-on-error: true
         run: node scripts/record_deploy.js backend deploy "Edge Function (${{ inputs.function_name }}) のデプロイ完了" "${{ github.actor }}"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

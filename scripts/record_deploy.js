@@ -4,8 +4,8 @@ const url = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!url || !key) {
-  console.error('Error: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are required.');
-  process.exit(1);
+  console.warn('Warning: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are required. Skipping deployment logging.');
+  process.exit(0);
 }
 
 const supabase = createClient(url, key);
@@ -28,8 +28,8 @@ async function recordDeploy() {
   const { error } = await supabase.from('deploy_logs').insert([logData]);
 
   if (error) {
-    console.error('Failed to record deploy log:', error);
-    process.exit(1);
+    console.warn('Warning: Failed to record deploy log:', error);
+    process.exit(0);
   }
 
   console.log('Successfully recorded deploy log:', logData);

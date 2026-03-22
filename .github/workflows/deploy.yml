@@ -61,6 +61,7 @@ jobs:
         uses: actions/deploy-pages@v4
         
       - name: Record deployment to Supabase
+        continue-on-error: true
         run: node scripts/record_deploy.js frontend deploy "フロントエンド (GitHub Pages) の自動デプロイ完了 (${{ github.sha }})" "${{ github.actor }}"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
