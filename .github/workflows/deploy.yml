@@ -56,9 +56,15 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
+      - name: Checkout repository for deployment script
+        uses: actions/checkout@v4
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        
+      - name: Install dependencies for script
+        run: npm install @supabase/supabase-js
         
       - name: Record deployment to Supabase
         continue-on-error: true
