@@ -975,6 +975,43 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
 
     const printDescription = displayRecipe.description || sourceRecipe.description;
 
+    const breadBasisName = React.useMemo(() => {
+        if (displayRecipe.type !== 'bread' || !breadPrintContext) return null;
+        const { flours, others } = breadPrintContext;
+        if (baseItem === 'flourTotal') return '粉グループの総重量';
+        if (baseItem.startsWith('flour-')) {
+            const idx = parseInt(baseItem.split('-')[1], 10);
+            return (flours[idx]?.name || '材料');
+        }
+        if (baseItem.startsWith('other-')) {
+            const idx = parseInt(baseItem.split('-')[1], 10);
+            return (others[idx]?.name || '材料');
+        }
+        return null;
+    }, [displayRecipe.type, baseItem, breadPrintContext]);
+
+    const normalBasisName = React.useMemo(() => {
+        if (displayRecipe.type === 'bread' || normalBaseItem === 'multiplier') return null;
+        const match = normalBaseItem.match(/^ing-(\d+)$/);
+        if (match) {
+            const idx = parseInt(match[1]);
+            return ingredients[idx]?.name || '材料';
+        }
+        const groupMatch = normalBaseItem.match(/^ing-(.+)-(\d+)$/);
+        if (groupMatch) {
+            const groupId = groupMatch[1];
+            const idx = parseInt(groupMatch[2]);
+            const groups = displayRecipe?.ingredientGroups || [];
+            const group = groups.find(g => String(g.id) === groupId);
+            if (group) {
+                const groupIngs = ingredients.filter(i => i.groupId === group.id);
+                return groupIngs[idx]?.name || '材料';
+            }
+        }
+        return null;
+    }, [displayRecipe.type, normalBaseItem, ingredients, displayRecipe]);
+
+
     return (
         <>
             <div
@@ -1982,8 +2019,8 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                         <div className="preview-controls">
                             {displayRecipe.type === 'bread' ? (
                                 <div className="preview-control-row">
-                                    <label className="preview-control-label" htmlFor="preview-target-total">
-                                        仕上がり総重量(g)
+                                    <label className="preview-control-label" htmlFor="preview-target-total" style={{ display: 'block', marginBottom: '4px' }}>
+                                        {breadBasisName ? `${breadBasisName} の目標分量` : '仕上がり総重量(g)'}
                                     </label>
                                     <input
                                         id="preview-target-total"
@@ -2003,34 +2040,82 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                         </button>
                                     )}
                                     {breadPrintContext?.grandTotal ? (
-                                        <span className="preview-control-note">
-                                            現在: {breadPrintContext.grandTotal.toLocaleString()}g
-                                        </span>
+                                        <div style={{ marginTop: '4px', fontSize: '0.85rem' }}>
+                                            <span className="preview-control-note">
+                                                現在の{breadBasisName || '総重量'}: {
+                                                    (breadBasisName === '粉グループの総重量' 
+                                                        ? breadPrintContext.totalFlour 
+                                                        : (breadBasisName 
+                                                            ? (parseFloat(breadPrintContext.flours.find(f => f.name === breadBasisName)?.quantity || breadPrintContext.others.find(o => o.name === breadBasisName)?.quantity) || 0)
+                                                            : breadPrintContext.grandTotal)
+                                                    ).toLocaleString()
+                                                }g
+                                            </span>
+                                            {breadBasisName && (
+                                                <div style={{ color: 'var(--color-primary)', fontWeight: 'bold', marginTop: '2px' }}>
+                                                    再計算後の総重量: {(breadPrintContext.grandTotal * breadPrintContext.scaleFactor).toLocaleString()}g
+                                                </div>
+                                            )}
+                                        </div>
                                     ) : null}
                                 </div>
                             ) : (
                                 <div className="preview-control-row">
-                                    <label className="preview-control-label" htmlFor="preview-multiplier">
-                                        {tUi('scaleMultiplier')}
+                                    <label className="preview-control-label" htmlFor="preview-normal-input" style={{ display: 'block', marginBottom: '4px' }}>
+                                        {normalBasisName ? `${normalBasisName} の目標分量` : tUi('scaleMultiplier')}
                                     </label>
-                                    <span className="preview-control-mult">×</span>
-                                    <input
-                                        id="preview-multiplier"
-                                        className="preview-control-input"
-                                        type="number"
-                                        step="0.1"
-                                        value={multiplier}
-                                        onChange={(e) => setMultiplier(e.target.value)}
-                                        placeholder="1"
-                                    />
-                                    {String(multiplier) !== '1' && (
-                                        <button
-                                            type="button"
-                                            className="preview-control-reset"
-                                            onClick={() => setMultiplier('1')}
-                                        >
-                                            リセット
-                                        </button>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        {!normalBasisName && <span className="preview-control-mult">×</span>}
+                                        <input
+                                            id="preview-normal-input"
+                                            className="preview-control-input"
+                                            type="number"
+                                            step={normalBasisName ? "1" : "0.1"}
+                                            value={normalBasisName ? normalBaseTarget : multiplier}
+                                            onChange={(e) => normalBasisName ? setNormalBaseTarget(e.target.value) : setMultiplier(e.target.value)}
+                                            placeholder={normalBasisName ? "100" : "1"}
+                                            style={{ width: normalBasisName ? '100px' : '80px' }}
+                                        />
+                                        {normalBasisName && <span style={{ fontSize: '0.9rem' }}>g</span>}
+                                        {((normalBasisName && normalBaseTarget) || (!normalBasisName && String(multiplier) !== '1')) && (
+                                            <button
+                                                type="button"
+                                                className="preview-control-reset"
+                                                onClick={() => normalBasisName ? setNormalBaseTarget('') : setMultiplier('1')}
+                                            >
+                                                リセット
+                                            </button>
+                                        )}
+                                    </div>
+                                    {normalBasisName && (
+                                        <div style={{ marginTop: '4px', fontSize: '0.85rem' }}>
+                                            <span className="preview-control-note">
+                                                現在の{normalBasisName}: {
+                                                    (() => {
+                                                        const match = normalBaseItem.match(/^ing-(\d+)$/);
+                                                        if (match) {
+                                                            const idx = parseInt(match[1]);
+                                                            return parseFloat(ingredients[idx]?.quantity) || 0;
+                                                        }
+                                                        const groupMatch = normalBaseItem.match(/^ing-(.+)-(\d+)$/);
+                                                        if (groupMatch) {
+                                                            const groupId = groupMatch[1];
+                                                            const idx = parseInt(groupMatch[2]);
+                                                            const groups = displayRecipe?.ingredientGroups || [];
+                                                            const group = groups.find(g => String(g.id) === groupId);
+                                                            if (group) {
+                                                                const groupIngs = ingredients.filter(i => i.groupId === group.id);
+                                                                return parseFloat(groupIngs[idx]?.quantity) || 0;
+                                                            }
+                                                        }
+                                                        return 0;
+                                                    })().toLocaleString()
+                                                }g
+                                            </span>
+                                            <div style={{ color: 'var(--color-primary)', fontWeight: 'bold', marginTop: '2px' }}>
+                                                ← 倍率: ×{normalEffectiveMultiplier.toFixed(3)} で計算中
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
                             )}
