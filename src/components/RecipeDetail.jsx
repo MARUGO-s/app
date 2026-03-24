@@ -193,7 +193,8 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
     const [uiTextCache, setUiTextCache] = React.useState({});
 
     // Scaling State
-    const [targetTotal, setTargetTotal] = React.useState(''); // For Bread
+    const [baseItem, setBaseItem] = React.useState('total'); // 'total', 'flourTotal', 'flour-0', 'other-1', etc.
+    const [targetTotal, setTargetTotal] = React.useState(''); // For Bread (actually represents targetBaseAmount now)
     const [multiplier, setMultiplier] = React.useState(1);    // For Normal
 
     // Profit Calculator State
@@ -864,7 +865,24 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         const totalFlour = flours.reduce((sum, f) => sum + (parseFloat(f.quantity) || 0), 0);
         const grandTotal = totalFlour + others.reduce((sum, o) => sum + (parseFloat(o.quantity) || 0), 0);
         const target = parseFloat(targetTotal);
-        const scaleFactor = target && grandTotal ? (target / grandTotal) : 1;
+
+        let scaleFactor = 1;
+        const getBaseValue = () => {
+            if (baseItem === 'total') return grandTotal;
+            if (baseItem === 'flourTotal') return totalFlour;
+            if (baseItem.startsWith('flour-')) {
+                const idx = parseInt(baseItem.split('-')[1], 10);
+                return parseFloat(flours[idx]?.quantity) || 0;
+            }
+            if (baseItem.startsWith('other-')) {
+                const idx = parseInt(baseItem.split('-')[1], 10);
+                return parseFloat(others[idx]?.quantity) || 0;
+            }
+            return grandTotal;
+        };
+        const baseVal = getBaseValue();
+        scaleFactor = (target && baseVal) ? (target / baseVal) : 1;
+
         const calcPercent = (qty) => totalFlour ? ((parseFloat(qty) || 0) / totalFlour * 100).toFixed(1) : '0.0';
         const getScaledQtyValue = (qty) => {
             if (!target) return qty;
@@ -902,7 +920,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
             scaleFactor,
             totalTaxIncluded: calcTaxedCost(flours) + calcTaxedCost(others)
         };
-    }, [costAdjustedRecipe.breadIngredients, costAdjustedRecipe.flours, displayRecipe.type, targetTotal]);
+    }, [costAdjustedRecipe.breadIngredients, costAdjustedRecipe.flours, displayRecipe.type, targetTotal, baseItem]);
 
     const normalPrintTotal = React.useMemo(() => {
         if (displayRecipe.type === 'bread') return 0;
@@ -1172,7 +1190,37 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
 
                                             // Scaling logic
                                             const target = parseFloat(targetTotal);
-                                            const scaleFactor = (target && grandTotal) ? (target / grandTotal) : 1;
+                                            let scaleFactor = 1;
+                                            
+                                            const getBaseValue = () => {
+                                                if (baseItem === 'total') return grandTotal;
+                                                if (baseItem === 'flourTotal') return totalFlour;
+                                                if (baseItem.startsWith('flour-')) {
+                                                    const idx = parseInt(baseItem.split('-')[1], 10);
+                                                    return parseFloat(flours[idx]?.quantity) || 0;
+                                                }
+                                                if (baseItem.startsWith('other-')) {
+                                                    const idx = parseInt(baseItem.split('-')[1], 10);
+                                                    return parseFloat(others[idx]?.quantity) || 0;
+                                                }
+                                                return grandTotal;
+                                            };
+                                            const baseVal = getBaseValue();
+                                            scaleFactor = (target && baseVal) ? (target / baseVal) : 1;
+
+                                            const getBaseName = () => {
+                                                if (baseItem === 'total') return '仕上がり総重量';
+                                                if (baseItem === 'flourTotal') return '粉グループの総重量';
+                                                if (baseItem.startsWith('flour-')) {
+                                                    const idx = parseInt(baseItem.split('-')[1], 10);
+                                                    return (flours[idx]?.name || '材料') + ' の目標分量';
+                                                }
+                                                if (baseItem.startsWith('other-')) {
+                                                    const idx = parseInt(baseItem.split('-')[1], 10);
+                                                    return (others[idx]?.name || '材料') + ' の目標分量';
+                                                }
+                                                return '目標分量';
+                                            };
 
                                             const getScaledQty = (q) => {
                                                 if (!target) return q;
@@ -1194,24 +1242,29 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                     {/* Scaling Controls */}
                                                     <div className="screen-only" style={{
                                                         background: '#f1f3f5',
-                                                        padding: '0.4rem 0.8rem',
+                                                        padding: '0.5rem',
                                                         borderRadius: '6px',
                                                         marginBottom: '1rem',
                                                         display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '0.5rem 1rem', // Smaller row gap
-                                                        flexWrap: 'wrap',
+                                                        flexDirection: 'column',
+                                                        gap: '0.5rem',
                                                         border: '1px solid #dee2e6',
-                                                        lineHeight: 1.2
+                                                        lineHeight: 1.2,
+                                                        width: '100%',
+                                                        boxSizing: 'border-box'
                                                     }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                                                            <label className="base-item-control screen-only" title="総重量を基準に計算する" style={{marginRight:'2px'}}>
+                                                                <input type="radio" name="baseItem" className="base-item-radio" checked={baseItem === 'total'} onChange={() => setBaseItem('total')} />
+                                                                <span className="base-item-label">基準</span>
+                                                            </label>
                                                             <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#000' }}>現在の総重量:</span>
                                                             <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#000' }}>{grandTotal.toLocaleString()}g</span>
                                                             <span style={{ fontSize: '0.75rem', color: '#444' }}>({totalPercent}%)</span>
                                                         </div>
-                                                        <div style={{ height: '16px', width: '1px', background: '#adb5bd' }}></div>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                            <label htmlFor="target-total-input" style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#000' }}>仕上がり総重量:</label>
+                                                        <div style={{ height: '1px', width: '100%', background: '#dee2e6' }}></div>
+                                                        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                                                            <label htmlFor="target-total-input" style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#000' }}>{getBaseName()}:</label>
                                                             <div style={{ position: 'relative' }}>
                                                                 <input
                                                                     id="target-total-input"
@@ -1259,14 +1312,23 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                             marginBottom: '1rem',
                                                             marginTop: 0,
                                                             display: 'flex',
+                                                            flexWrap: 'wrap',
+                                                            gap: '0.5rem',
                                                             justifyContent: 'space-between',
                                                             alignItems: 'center',
                                                             color: 'var(--color-text-main)'
                                                         }}>
-                                                            <span>{tUi('flourGroup')}</span>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                <label className="base-item-control screen-only" title="粉グループ総重量を基準に計算する">
+                                                                    <input type="radio" name="baseItem" className="base-item-radio" checked={baseItem === 'flourTotal'} onChange={() => setBaseItem('flourTotal')} />
+                                                                    <span className="base-item-label">基準</span>
+                                                                </label>
+                                                                <span>{tUi('flourGroup')}</span>
+                                                            </div>
                                                             <span style={{ fontSize: '0.9rem', background: 'var(--color-primary)', color: 'white', padding: '4px 12px', borderRadius: '20px', fontWeight: 'bold' }}>Total: {targetTotal ? getScaledQty(totalFlour) : totalFlour}g (100%)</span>
                                                         </h3>
-                                                        <table className="ingredients-table">
+                                                        <div style={{ overflowX: 'auto', width: '100%' }}>
+                                                            <table className="ingredients-table">
                                                             <thead>
                                                                 <tr>
                                                                     <th>{tUi('ingredientName')}</th>
@@ -1283,8 +1345,11 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                         <tr key={i}>
                                                                             <td>
                                                                                 <div className="ingredient-name">
-                                                                                    <input type="checkbox" id={`flour-${i}`} />
-                                                                                    <label htmlFor={`flour-${i}`}>{renderText(item.name, originalItem?.name)}</label>
+                                                                                    <label className="base-item-control screen-only" title="この材料を基準に計算する">
+                                                                                        <input type="radio" name="baseItem" className="base-item-radio" checked={baseItem === `flour-${i}`} onChange={() => setBaseItem(`flour-${i}`)} />
+                                                                                        <span className="base-item-label">基準</span>
+                                                                                    </label>
+                                                                                    <span>{renderText(item.name, originalItem?.name)}</span>
                                                                                 </div>
                                                                             </td>
                                                                             <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
@@ -1305,7 +1370,8 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                     );
                                                                 })}
                                                             </tbody>
-                                                        </table>
+                                                            </table>
+                                                        </div>
                                                     </div>
 
                                                     <div className="bread-section" style={{ marginTop: '3rem' }}>
@@ -1318,7 +1384,8 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                         }}>
                                                             {tUi('otherIngredients')}
                                                         </h3>
-                                                        <table className="ingredients-table">
+                                                        <div style={{ overflowX: 'auto', width: '100%' }}>
+                                                            <table className="ingredients-table">
                                                             <thead>
                                                                 <tr>
                                                                     <th>{tUi('ingredientName')}</th>
@@ -1335,8 +1402,11 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                         <tr key={i}>
                                                                             <td>
                                                                                 <div className="ingredient-name">
-                                                                                    <input type="checkbox" id={`ingredient-${i}`} />
-                                                                                    <label htmlFor={`ingredient-${i}`}>{renderText(item.name, originalItem?.name)}</label>
+                                                                                    <label className="base-item-control screen-only" title="この材料を基準に計算する">
+                                                                                        <input type="radio" name="baseItem" className="base-item-radio" checked={baseItem === `other-${i}`} onChange={() => setBaseItem(`other-${i}`)} />
+                                                                                        <span className="base-item-label">基準</span>
+                                                                                    </label>
+                                                                                    <span>{renderText(item.name, originalItem?.name)}</span>
                                                                                 </div>
                                                                             </td>
                                                                             <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
@@ -1358,8 +1428,9 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                 })}
                                                             </tbody>
                                                         </table>
+                                                    </div>
 
-                                                        <div className="cost-summary">
+                                                    <div className="cost-summary">
                                                             <span className="cost-summary__label">{tUi('totalCost')}:</span>
                                                             <span className="cost-summary__value">
                                                                 ¥{(() => {
