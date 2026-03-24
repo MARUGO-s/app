@@ -168,6 +168,11 @@ export const DataManagement = ({ onBack }) => {
 
     const [uploadedFiles, setUploadedFiles] = useState([]);
 
+    // Cost update result modal
+    const [summaryModalOpen, setSummaryModalOpen] = useState(false);
+    const [costUpdateResult, setCostUpdateResult] = useState(null);
+    const [activeSummaryTab, setActiveSummaryTab] = useState('ingredients'); // 'ingredients' | 'recipes'
+
     useEffect(() => {
         loadData();
     }, []);
@@ -433,9 +438,14 @@ export const DataManagement = ({ onBack }) => {
                 const { recipeService } = await import('../services/recipeService');
                 const priceMap = await purchasePriceService.fetchPriceList(); // Fetch latest merged data
 
-                const updatedCount = await recipeService.updateRecipeCosts(priceMap);
+                const result = await recipeService.updateRecipeCosts(priceMap);
 
-                setStatus({ type: 'success', message: \`アップロード完了。\${updatedCount} 件のレシピ原価を更新しました。\` });
+                setStatus({ type: 'success', message: \`アップロード完了。\${result.updatedCount || 0} 件のレシピ原価を更新しました。\` });
+                setCostUpdateResult(result);
+                if ((result.updatedCount || 0) > 0 || (result.changedIngredients?.length || 0) > 0) {
+                    setSummaryModalOpen(true);
+                    setActiveSummaryTab((result.changedIngredients?.length || 0) > 0 ? 'ingredients' : 'recipes');
+                }
             } catch (e) {
                 console.error("Cost update failed", e);
                 setStatus({ type: 'warning', message: 'アップロードは完了しましたが、原価の自動更新に失敗しました。' });

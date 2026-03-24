@@ -745,4 +745,99 @@ const n=`/* DataManagement.css */
     color: #666;
     background: #f2f2f2;
 }
+/* Summary Modal Styles */
+.summary-tabs {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.summary-tab {
+    padding: 10px 16px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-weight: 600;
+    color: #999;
+    transition: all 0.2s;
+}
+
+.summary-tab:hover {
+    color: #666;
+}
+
+.summary-tab.active {
+    color: var(--color-primary, #D2691E);
+    border-bottom-color: var(--color-primary, #D2691E);
+}
+
+.summary-list-container {
+    max-height: 450px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    color: #333;
+}
+
+.summary-table th {
+    position: sticky;
+    top: 0;
+    background: #f8f9fa;
+    padding: 12px;
+    text-align: left;
+    border-bottom: 2px solid #eee;
+    z-index: 1;
+    color: #444;
+}
+
+.summary-table td {
+    padding: 12px;
+    border-bottom: 1px solid #eee;
+}
+
+.summary-table tr:last-child td {
+    border-bottom: none;
+}
+
+.highlight-new {
+    font-weight: 700;
+    color: #000;
+}
+
+.price-up {
+    color: #d32f2f;
+    font-weight: 700;
+}
+
+.price-down {
+    color: #2e7d32;
+    font-weight: 700;
+}
+
+.recipe-title-cell {
+    font-weight: 600;
+    color: #000;
+}
+
+@media (max-width: 600px) {
+    .summary-tabs {
+        gap: 0.5rem;
+    }
+    .summary-tab {
+        padding: 8px 10px;
+        font-size: 0.85rem;
+    }
+    .summary-table {
+        font-size: 0.8rem;
+    }
+}
 `;export{n as default};
