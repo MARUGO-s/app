@@ -88,9 +88,28 @@
 
 .log-message {
     max-width: 400px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    padding: 0;
+}
+
+.log-message-content {
+    max-width: 100%;
+    overflow-x: auto;
     white-space: nowrap;
+    padding: 12px 16px;
+    /* Custom scrollbar for better appearance */
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+}
+
+.log-message-content::-webkit-scrollbar {
+    height: 6px;
+}
+.log-message-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+.log-message-content::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 3px;
 }
 
 .add-log-modal {

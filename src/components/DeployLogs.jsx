@@ -125,8 +125,10 @@ export const DeployLogs = ({ onBack }) => {
                                             </span>
                                         </td>
                                         <td>{log.actor}</td>
-                                        <td className="log-message" title={log.message}>
-                                            {log.message && log.message.length > 50 ? log.message.substring(0, 50) + '...' : log.message}
+                                        <td className="log-message" title={log.message || ''}>
+                                            <div className="log-message-content">
+                                                {log.message || '-'}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
