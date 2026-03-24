@@ -721,9 +721,13 @@ const n=`.recipe-detail {
     }
 
     .ingredient-name label {
-        flex: 1;
         cursor: pointer;
         padding: 4px 0;
+    }
+
+    .ingredient-name span {
+        flex: 1;
+        text-align: left;
     }
 
     .ingredient-row:last-child td {
