@@ -797,7 +797,7 @@ export default function ApiUsageLogs() {
                                     <td className="error-cell">
                                         {log.error_message ? (
                                             <span className="error-msg" title={log.error_message}>
-                                                {log.error_message.substring(0, 50)}...
+                                                {log.error_message}
                                             </span>
                                         ) : '-'}
                                     </td>

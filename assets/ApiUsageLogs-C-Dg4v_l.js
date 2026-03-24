@@ -237,6 +237,13 @@ const n=`/* Dark theme friendly styles */
 .error-msg {
   color: #ff6b6b;
   font-size: 12px;
+  display: block;
+  max-width: 400px;
+  max-height: 100px;
+  overflow-y: auto;
+  word-break: break-all;
+  white-space: pre-wrap;
+  line-height: 1.4;
 }
 
 .no-logs {
