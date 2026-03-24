@@ -88,6 +88,24 @@ export const DeployLogs = ({ onBack }) => {
                     </div>
                 </div>
 
+                <div className="screen-only no-print" style={{
+                    background: '#fff9db',
+                    border: '1px solid #ffe066',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    marginBottom: '20px',
+                    fontSize: '0.9rem',
+                    color: '#856404',
+                    lineHeight: '1.5'
+                }}>
+                    <strong>🤖 AI 作業コミットメント:</strong>
+                    <ul style={{ margin: '8px 0 0', paddingLeft: '20px' }}>
+                        <li><strong>規約の遵守:</strong> 今後の全てのAI作業者は、`.agents/workflows/deploy.md` に定められた手順とコミットメッセージ規約（Type: Description (Files) 形式）を厳守してください。</li>
+                        <li><strong>透明性の確保:</strong> 変更内容は常にこの履歴に記録し、どのファイルがどのように編集されたかを明記してください。</li>
+                        <li><strong>デプロイの実行:</strong> コードの変更後は必ず `npm run deploy` を実行し、GitHub Pages への反映を確認してください。</li>
+                    </ul>
+                </div>
+
                 {loading ? (
                     <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
                         読み込み中...
