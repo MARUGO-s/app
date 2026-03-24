@@ -196,6 +196,8 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
     const [baseItem, setBaseItem] = React.useState('total'); // 'total', 'flourTotal', 'flour-0', 'other-1', etc.
     const [targetTotal, setTargetTotal] = React.useState(''); // For Bread (actually represents targetBaseAmount now)
     const [multiplier, setMultiplier] = React.useState(1);    // For Normal
+    const [normalBaseItem, setNormalBaseItem] = React.useState('multiplier'); // 'multiplier', 'ing-0', 'ing-groupId-0', etc.
+    const [normalBaseTarget, setNormalBaseTarget] = React.useState(''); // For Normal base item target qty
 
     // Profit Calculator State
     const [salesPrice, setSalesPrice] = React.useState('');
@@ -205,6 +207,8 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         const parsed = parseFloat(multiplier);
         return isNaN(parsed) ? 1 : parsed;
     }, [multiplier]);
+
+
 
     // Helper for Normal Recipe Scaling
     const getScaledQty = (qty, mult) => {
@@ -783,6 +787,39 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
 
     // Safety check for array rendering
     const ingredients = costAdjustedRecipe.ingredients || [];
+
+    // 通常レシピ用：基準材料からの実効倍率
+    const normalEffectiveMultiplier = React.useMemo(() => {
+        if (normalBaseItem === 'multiplier') {
+            return parseFloat(multiplier) || 1;
+        }
+        // 基準材料の元の分量を取得
+        const getBaseQty = () => {
+            const match = normalBaseItem.match(/^ing-(\\d+)$/);
+            if (match) {
+                const idx = parseInt(match[1]);
+                const ing = ingredients[idx];
+                if (ing) return parseFloat(ing.quantity) || 0;
+            }
+            const groupMatch = normalBaseItem.match(/^ing-(.+)-(\\d+)$/);
+            if (groupMatch) {
+                const groupId = groupMatch[1];
+                const idx = parseInt(groupMatch[2]);
+                const groups = displayRecipe?.ingredientGroups || [];
+                const group = groups.find(g => String(g.id) === groupId);
+                if (group) {
+                    const groupIngs = ingredients.filter(i => i.groupId === group.id);
+                    const ing = groupIngs[idx];
+                    if (ing) return parseFloat(ing.quantity) || 0;
+                }
+            }
+            return 0;
+        };
+        const baseQty = getBaseQty();
+        const target = parseFloat(normalBaseTarget);
+        if (!baseQty || !target) return 1;
+        return target / baseQty;
+    }, [normalBaseItem, normalBaseTarget, multiplier, ingredients, displayRecipe]);
     // Normalization: Check if steps are hidden in ingredient groups (common in this app's data)
     let normalizedSteps = displayRecipe.steps || [];
     const normalizeGroupName = (name) => String(name || '').trim().toLowerCase();
@@ -926,11 +963,11 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         if (displayRecipe.type === 'bread') return 0;
         return ingredients.reduce((sum, ing) => {
             const rawCost = parseFloat(ing.cost) || 0;
-            const scaledCost = rawCost * multiplierValue;
+            const scaledCost = rawCost * normalEffectiveMultiplier;
             const taxRate = getItemTaxRate(ing);
             return sum + (scaledCost * taxRate);
         }, 0);
-    }, [displayRecipe.type, ingredients, multiplierValue]);
+    }, [displayRecipe.type, ingredients, normalEffectiveMultiplier]);
 
     const printCostTotalDisplay = displayRecipe.type === 'bread'
         ? (breadPrintContext ? Math.round(breadPrintContext.totalTaxIncluded).toLocaleString() : '0')
@@ -1478,58 +1515,158 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                 ) : (
                                     <>
                                         {/* Normal Recipe Scaling UI */}
-                                        <div className="screen-only no-print" style={{
-                                            background: '#f8f9fa',
-                                            color: '#333',
-                                            padding: '0.8rem',
-                                            borderRadius: '6px',
-                                            marginBottom: '1rem',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '1rem',
-                                            border: '1px solid #e9ecef'
-                                        }}>
-                                            <label htmlFor="multiplier-input" style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#333' }}>{tUi('scaleMultiplier')}:</label>
-                                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                <span style={{ fontSize: '1.2rem', fontWeight: 'bold', marginRight: '4px', color: '#333' }}>×</span>
-                                                <input
-                                                    id="multiplier-input"
-                                                    type="number"
-                                                    min="0.1"
-                                                    step="0.1"
-                                                    value={multiplier}
-                                                    onChange={(e) => setMultiplier(e.target.value)}
-                                                    style={{
-                                                        width: '60px',
-                                                        padding: '4px',
-                                                        fontSize: '1rem',
-                                                        fontWeight: 'bold',
-                                                        textAlign: 'center',
-                                                        borderRadius: '4px',
-                                                        border: '1px solid #ced4da',
-                                                        background: '#fff',
-                                                        color: '#333'
-                                                    }}
-                                                />
-                                            </div>
-                                            {parseFloat(multiplier) !== 1 && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => setMultiplier('1')}
-                                                    style={{
-                                                        fontSize: '0.8rem',
-                                                        padding: '2px 8px',
-                                                        height: 'auto',
-                                                        color: '#555',
-                                                        borderColor: '#ccc',
-                                                        background: '#fff'
-                                                    }}
-                                                >
-                                                    リセット
-                                                </Button>
-                                            )}
-                                        </div>
+                                        {(() => {
+                                            // 通常レシピ用の基準材料名取得
+                                            const getNormalBaseName = () => {
+                                                if (normalBaseItem === 'multiplier') return tUi('scaleMultiplier');
+                                                const match = normalBaseItem.match(/^ing-(\\d+)$/);
+                                                if (match) {
+                                                    const idx = parseInt(match[1]);
+                                                    const ing = ingredients[idx];
+                                                    if (ing) return typeof ing === 'string' ? ing : ing.name;
+                                                }
+                                                // グループ内の材料
+                                                const groupMatch = normalBaseItem.match(/^ing-(.+)-(\\d+)$/);
+                                                if (groupMatch) {
+                                                    const groupId = groupMatch[1];
+                                                    const idx = parseInt(groupMatch[2]);
+                                                    const groups = displayRecipe.ingredientGroups || [];
+                                                    const group = groups.find(g => String(g.id) === groupId);
+                                                    if (group) {
+                                                        const groupIngs = ingredients.filter(i => i.groupId === group.id);
+                                                        const ing = groupIngs[idx];
+                                                        if (ing) return typeof ing === 'string' ? ing : ing.name;
+                                                    }
+                                                }
+                                                return tUi('scaleMultiplier');
+                                            };
+
+                                            // 基準材料の元の分量を取得
+                                            const getNormalBaseOriginalQty = () => {
+                                                if (normalBaseItem === 'multiplier') return null;
+                                                const match = normalBaseItem.match(/^ing-(\\d+)$/);
+                                                if (match) {
+                                                    const idx = parseInt(match[1]);
+                                                    const ing = ingredients[idx];
+                                                    if (ing) return parseFloat(ing.quantity) || 0;
+                                                }
+                                                const groupMatch = normalBaseItem.match(/^ing-(.+)-(\\d+)$/);
+                                                if (groupMatch) {
+                                                    const groupId = groupMatch[1];
+                                                    const idx = parseInt(groupMatch[2]);
+                                                    const groups = displayRecipe.ingredientGroups || [];
+                                                    const group = groups.find(g => String(g.id) === groupId);
+                                                    if (group) {
+                                                        const groupIngs = ingredients.filter(i => i.groupId === group.id);
+                                                        const ing = groupIngs[idx];
+                                                        if (ing) return parseFloat(ing.quantity) || 0;
+                                                    }
+                                                }
+                                                return null;
+                                            };
+
+                                            // 実効倍率の計算
+                                            const effectiveMultiplier = (() => {
+                                                if (normalBaseItem === 'multiplier') {
+                                                    return parseFloat(multiplier) || 1;
+                                                }
+                                                const baseQty = getNormalBaseOriginalQty();
+                                                const target = parseFloat(normalBaseTarget);
+                                                if (!baseQty || !target) return 1;
+                                                return target / baseQty;
+                                            })();
+
+                                            return (
+                                                <div className="screen-only no-print" style={{
+                                                    background: '#f1f3f5',
+                                                    padding: '0.5rem',
+                                                    borderRadius: '6px',
+                                                    marginBottom: '1rem',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    gap: '0.5rem',
+                                                    border: '1px solid #dee2e6',
+                                                    lineHeight: 1.2,
+                                                    width: '100%',
+                                                    boxSizing: 'border-box'
+                                                }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                                                        <label className="base-item-control screen-only" title="倍率を直接入力する" style={{marginRight:'2px'}}>
+                                                            <input type="radio" name="normalBaseItem" className="base-item-radio" checked={normalBaseItem === 'multiplier'} onChange={() => { setNormalBaseItem('multiplier'); setNormalBaseTarget(''); }} />
+                                                            <span className="base-item-label">基準</span>
+                                                        </label>
+                                                        <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#000' }}>{tUi('scaleMultiplier')}:</span>
+                                                        {normalBaseItem === 'multiplier' ? (
+                                                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                                                                <span style={{ fontSize: '1.2rem', fontWeight: 'bold', marginRight: '4px', color: '#333' }}>×</span>
+                                                                <input
+                                                                    id="multiplier-input"
+                                                                    type="number"
+                                                                    min="0.1"
+                                                                    step="0.1"
+                                                                    value={multiplier}
+                                                                    onChange={(e) => setMultiplier(e.target.value)}
+                                                                    style={{
+                                                                        width: '60px', padding: '2px 6px', fontSize: '0.9rem', fontWeight: 'bold',
+                                                                        textAlign: 'center', borderRadius: '4px', border: '1.5px solid #333',
+                                                                        background: '#fff', color: '#000'
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        ) : (
+                                                            <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#000' }}>×{effectiveMultiplier.toFixed(3)}</span>
+                                                        )}
+                                                    </div>
+                                                    {normalBaseItem !== 'multiplier' && (
+                                                        <>
+                                                            <div style={{ height: '1px', width: '100%', background: '#dee2e6' }}></div>
+                                                            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                                                                <label htmlFor="normal-base-target" style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#000' }}>{getNormalBaseName()} の目標分量:</label>
+                                                                <div style={{ position: 'relative' }}>
+                                                                    <input
+                                                                        id="normal-base-target"
+                                                                        type="number"
+                                                                        value={normalBaseTarget}
+                                                                        onChange={(e) => setNormalBaseTarget(e.target.value)}
+                                                                        placeholder={String(getNormalBaseOriginalQty() || '')}
+                                                                        style={{
+                                                                            padding: '2px 6px', width: '80px', borderRadius: '4px',
+                                                                            border: '1.5px solid #333', fontSize: '0.9rem', fontWeight: 'bold',
+                                                                            textAlign: 'right', color: '#000', backgroundColor: '#fff'
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                                {normalBaseTarget && (
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        onClick={() => { setNormalBaseTarget(''); setNormalBaseItem('multiplier'); }}
+                                                                        style={{ padding: '0 4px', fontSize: '0.7rem', color: '#555', height: '22px', border: '1px solid #dee2e6' }}
+                                                                    >
+                                                                        リセット
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                                {normalBaseTarget && (
+                                                                <div style={{ fontSize: '0.75rem', color: '#000', fontWeight: 'bold', marginLeft: 'auto' }}>
+                                                                    ← 倍率: ×{normalEffectiveMultiplier.toFixed(3)} で計算中
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                    {normalBaseItem === 'multiplier' && parseFloat(multiplier) !== 1 && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => setMultiplier('1')}
+                                                            style={{ fontSize: '0.7rem', padding: '0 4px', color: '#555', height: '22px', border: '1px solid #dee2e6', alignSelf: 'flex-start' }}
+                                                        >
+                                                            リセット
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
 
                                         {(() => {
                                             // Grouping Logic
@@ -1576,16 +1713,20 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                         const displayUnit = typeof ing === 'object' ? ing.unit : '';
                                                                         const originalUnit = originalIng && typeof originalIng === 'object' ? originalIng.unit : '';
 
-                                                                        const scaledQty = getScaledQty(ing.quantity, multiplier);
-                                                                        const scaledCost = getScaledCost(ing.cost, multiplier);
-                                                                        const isScaled = String(multiplier) !== '1';
+                                                                        const scaledQty = getScaledQty(ing.quantity, normalEffectiveMultiplier);
+                                                                        const scaledCost = getScaledCost(ing.cost, normalEffectiveMultiplier);
+                                                                        const isScaled = normalEffectiveMultiplier !== 1;
+                                                                        const baseId = \`ing-\${group.id}-\${i}\`;
 
                                                                         return (
                                                                             <tr key={i} className="ingredient-row">
                                                                                 <td>
                                                                                     <div className="ingredient-name">
-                                                                                        <input type="checkbox" id={\`ing-\${group.id}-\${i}\`} />
-                                                                                        <label htmlFor={\`ing-\${group.id}-\${i}\`}>{renderText(displayRef, originalRef)}</label>
+                                                                                        <label className="base-item-control screen-only" title="この材料を基準に計算する">
+                                                                                            <input type="radio" name="normalBaseItem" className="base-item-radio" checked={normalBaseItem === baseId} onChange={() => setNormalBaseItem(baseId)} />
+                                                                                            <span className="base-item-label">基準</span>
+                                                                                        </label>
+                                                                                        <span>{renderText(displayRef, originalRef)}</span>
                                                                                     </div>
                                                                                 </td>
                                                                                 <td style={{ textAlign: 'right', paddingRight: '0.5rem', fontWeight: isScaled ? 'bold' : 'normal', color: isScaled ? 'var(--color-primary)' : 'inherit' }}>
@@ -1628,16 +1769,20 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                 const displayUnit = typeof ing === 'object' ? ing.unit : '';
                                                                 const originalUnit = originalIng && typeof originalIng === 'object' ? originalIng.unit : '';
 
-                                                                const scaledQty = getScaledQty(ing.quantity, multiplier);
-                                                                const scaledCost = getScaledCost(ing.cost, multiplier);
-                                                                const isScaled = String(multiplier) !== '1';
+                                                                const scaledQty = getScaledQty(ing.quantity, normalEffectiveMultiplier);
+                                                                const scaledCost = getScaledCost(ing.cost, normalEffectiveMultiplier);
+                                                                const isScaled = normalEffectiveMultiplier !== 1;
+                                                                const baseId = \`ing-\${i}\`;
 
                                                                 return (
                                                                     <tr key={i} className="ingredient-row">
                                                                         <td>
                                                                             <div className="ingredient-name">
-                                                                                <input type="checkbox" id={\`ing-\${i}\`} />
-                                                                                <label htmlFor={\`ing-\${i}\`}>{renderText(displayRef, originalRef)}</label>
+                                                                                <label className="base-item-control screen-only" title="この材料を基準に計算する">
+                                                                                    <input type="radio" name="normalBaseItem" className="base-item-radio" checked={normalBaseItem === baseId} onChange={() => setNormalBaseItem(baseId)} />
+                                                                                    <span className="base-item-label">基準</span>
+                                                                                </label>
+                                                                                <span>{renderText(displayRef, originalRef)}</span>
                                                                             </div>
                                                                         </td>
                                                                         <td style={{ textAlign: 'right', paddingRight: '0.5rem', fontWeight: isScaled ? 'bold' : 'normal', color: isScaled ? 'var(--color-primary)' : 'inherit' }}>
@@ -1662,7 +1807,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                     return items.reduce((sum, item) => {
                                                                         const rawCost = parseFloat(item.cost) || 0;
                                                                         const taxRate = getItemTaxRate(item);
-                                                                        const scaledCost = getScaledCost(rawCost, multiplier);
+                                                                        const scaledCost = getScaledCost(rawCost, normalEffectiveMultiplier);
                                                                         const scCostVal = parseFloat(scaledCost) || 0;
                                                                         return sum + (scCostVal * taxRate);
                                                                     }, 0);
@@ -1684,7 +1829,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                             return items.reduce((sum, item) => {
                                                                 const rawCost = parseFloat(item.cost) || 0;
                                                                 const taxRate = getItemTaxRate(item);
-                                                                const scaledCost = getScaledCost(rawCost, multiplier);
+                                                                const scaledCost = getScaledCost(rawCost, normalEffectiveMultiplier);
                                                                 const scCostVal = parseFloat(scaledCost) || 0;
                                                                 return sum + (scCostVal * taxRate);
                                                             }, 0);
@@ -1702,7 +1847,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                 return items.reduce((sum, item) => {
                                                     const rawCost = parseFloat(item.cost) || 0;
                                                     const taxRate = getItemTaxRate(item);
-                                                    const scaledCost = parseFloat(getScaledCost(rawCost, multiplier)) || 0;
+                                                    const scaledCost = parseFloat(getScaledCost(rawCost, normalEffectiveMultiplier)) || 0;
                                                     return sum + (scaledCost * taxRate);
                                                 }, 0);
                                             }
@@ -1996,7 +2141,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                 {groupIngredients.map((ing, i) => {
                                                                     const itemId = \`\${group.id}-\${i}\`;
                                                                     const name = typeof ing === 'string' ? ing : ing.name;
-                                                                    const qty = typeof ing === 'object' ? getScaledQty(ing.quantity, multiplierValue) : '';
+                                                                    const qty = typeof ing === 'object' ? getScaledQty(ing.quantity, normalEffectiveMultiplier) : '';
                                                                     const unit = typeof ing === 'object' ? ing.unit : '';
                                                                     return (
                                                                         <tr
@@ -2037,7 +2182,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                         {ingredients.map((ing, i) => {
                                                             const itemId = \`ungrouped-\${i}\`;
                                                             const name = typeof ing === 'string' ? ing : ing.name;
-                                                            const qty = typeof ing === 'object' ? getScaledQty(ing.quantity, multiplierValue) : '';
+                                                            const qty = typeof ing === 'object' ? getScaledQty(ing.quantity, normalEffectiveMultiplier) : '';
                                                             const unit = typeof ing === 'object' ? ing.unit : '';
                                                             return (
                                                                 <tr
@@ -2291,14 +2436,14 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                     const purchase = typeof ing === 'object' ? ing.purchaseCost : null;
                                                     const costVal = typeof ing === 'object' ? ing.cost : null;
                                                     const name = typeof ing === 'string' ? ing : ing.name;
-                                                    const scaledQty = typeof ing === 'object' ? getScaledQty(ing.quantity, multiplierValue) : qty;
+                                                    const scaledQty = typeof ing === 'object' ? getScaledQty(ing.quantity, normalEffectiveMultiplier) : qty;
                                                     const originalIndex = ingredients.indexOf(ing);
                                                     const originalIng = sourceRecipe.ingredients?.[originalIndex];
                                                     const originalName = originalIng
                                                         ? (typeof originalIng === 'string' ? originalIng : originalIng.name)
                                                         : '';
                                                     const originalUnit = originalIng && typeof originalIng === 'object' ? originalIng.unit : '';
-                                                    const originalQty = String(multiplierValue) === '1'
+                                                    const originalQty = String(normalEffectiveMultiplier) === '1'
                                                         ? (originalIng && typeof originalIng === 'object' ? originalIng.quantity : '')
                                                         : '';
                                                     return (
