@@ -1842,6 +1842,93 @@ export const DataManagement = ({ onBack }) => {
                 progressStatus={adminCopyAllStatus}
                 copyResult={adminCopyAllResult}
             />
+
+            {/* 原価更新サマリーモーダル */}
+            <Modal
+                isOpen={summaryModalOpen}
+                onClose={() => setSummaryModalOpen(false)}
+                title="原価更新サマリー"
+                maxWidth="800px"
+            >
+                <div className="summary-tabs">
+                    <button 
+                        className={\`summary-tab \${activeSummaryTab === 'ingredients' ? 'active' : ''}\`}
+                        onClick={() => setActiveSummaryTab('ingredients')}
+                    >
+                        材料の価格変更 ({costUpdateResult?.changedIngredients?.length || 0})
+                    </button>
+                    <button 
+                        className={\`summary-tab \${activeSummaryTab === 'recipes' ? 'active' : ''}\`}
+                        onClick={() => setActiveSummaryTab('recipes')}
+                    >
+                        更新されたレシピ ({costUpdateResult?.updatedCount || 0})
+                    </button>
+                </div>
+
+                <div className="summary-content">
+                    {activeSummaryTab === 'ingredients' ? (
+                        <div className="summary-list-container">
+                            <table className="summary-table">
+                                <thead>
+                                    <tr>
+                                        <th>材料名</th>
+                                        <th className="right">旧単価</th>
+                                        <th className="right">新単価</th>
+                                        <th className="right">変動</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {costUpdateResult?.changedIngredients?.map((ing, i) => (
+                                        <tr key={i}>
+                                            <td>{ing.name}</td>
+                                            <td className="right">{ing.oldPrice.toLocaleString()}{ing.unit || '円'}</td>
+                                            <td className="right">{ing.newPrice.toLocaleString()}{ing.unit || '円'}</td>
+                                            <td className={\`right \${ing.diff > 0 ? 'price-up' : 'price-down'}\`}>
+                                                {ing.diff > 0 ? \`▲\${ing.diff.toLocaleString()}\` : \`▼\${Math.abs(ing.diff).toLocaleString()}\`}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {(!costUpdateResult?.changedIngredients || costUpdateResult.changedIngredients.length === 0) && (
+                                        <tr><td colSpan="4" className="center">変動があった材料はありません</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="summary-list-container">
+                            <table className="summary-table">
+                                <thead>
+                                    <tr>
+                                        <th>レシピ名</th>
+                                        <th className="right">旧原価</th>
+                                        <th className="right">新原価</th>
+                                        <th className="right">変動額</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {costUpdateResult?.updatedRecipes?.map((recipe, i) => (
+                                        <tr key={i}>
+                                            <td className="recipe-title-cell">{recipe.title}</td>
+                                            <td className="right">{Math.round(recipe.oldCost).toLocaleString()}円</td>
+                                            <td className="right">{Math.round(recipe.newCost).toLocaleString()}円</td>
+                                            <td className={\`right \${recipe.costDiff > 0 ? 'price-up' : 'price-down'}\`}>
+                                                {recipe.costDiff > 0 ? \`▲\${Math.round(recipe.costDiff).toLocaleString()}円\` : \`▼\${Math.round(Math.abs(recipe.costDiff)).toLocaleString()}円\`}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {(!costUpdateResult?.updatedRecipes || costUpdateResult.updatedRecipes.length === 0) && (
+                                        <tr><td colSpan="4" className="center">原価が更新されたレシピはありません</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+
+                <div className="modal-footer" style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button onClick={() => setSummaryModalOpen(false)}>閉じる</Button>
+                </div>
+            </Modal>
         </div>
     );
 };
