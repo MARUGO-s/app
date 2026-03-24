@@ -965,11 +965,11 @@ export const recipeService = {
                     : calcListCost(recipe.ingredients || []);
 
                 updatedRecipes.push({
-                    id: recipe.id,
-                    title: recipe.title,
+                    id: rawRecipe.id,
+                    title: rawRecipe.title,
                     oldCost: oldTotalCost,
                     newCost: newTotalCost,
-                    diff: newTotalCost - oldTotalCost,
+                    costDiff: newTotalCost - oldTotalCost,
                     changedIngs: Array.from(new Set(affectedIngredients))
                 });
 
@@ -988,7 +988,7 @@ export const recipeService = {
         return {
             updatedCount,
             changedIngredients: Array.from(changedIngredientsMap.values()),
-            updatedRecipes: updatedRecipes.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff)) // Sort by impact
+            updatedRecipes: updatedRecipes.sort((a, b) => Math.abs(b.costDiff) - Math.abs(a.costDiff)) // Sort by impact
         };
     }
 
