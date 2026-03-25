@@ -30,6 +30,8 @@ const calcTokenCost = (tokens, ratePer1M) => {
 const GEMINI_RATES_JPY_PER_1M = {
     'gemini-3.1-flash-lite': { input: 37.5, output: 225 },
     'gemini-3-flash': { input: 75, output: 450 },
+    'gemini-1.5-flash': { input: 5, output: 15 },
+    'gemini-3-flash': { input: 75, output: 450 },
     'gemini-2.5-flash-lite': { input: 2, output: 6 },
     'gemini-1.5-flash': { input: 5, output: 15 },
     'gemini-2.0-flash': { input: 10, output: 30 },
@@ -45,14 +47,14 @@ const GROQ_RATES_JPY_PER_1M = {
 
 const normalizeGeminiModelNameForCost = (modelName) => {
     const normalized = String(modelName || '').trim().toLowerCase()
-    if (!normalized) return 'gemini-3.1-flash-lite'
+    if (!normalized) return 'gemini-1.5-flash'
     if (normalized.includes('3.1-flash-lite')) return 'gemini-3.1-flash-lite'
-    if (normalized.includes('3-flash')) return 'gemini-3-flash'
+    if (normalized.includes('1.5-flash')) return 'gemini-1.5-flash'
     if (normalized.includes('flash-lite')) return 'gemini-2.5-flash-lite'
     if (normalized.includes('2.5-pro') || normalized.includes('pro')) return 'gemini-2.5-pro'
     if (normalized.includes('2.0-flash')) return 'gemini-2.0-flash'
     if (normalized.includes('1.5-flash') || normalized.includes('flash')) return 'gemini-1.5-flash'
-    return 'gemini-3.1-flash-lite'
+    return 'gemini-1.5-flash'
 }
 
 const buildGeminiBillingBreakdown = ({ modelName, inputTokens, outputTokens, estimatedCostJpy = null }) => {
@@ -797,7 +799,7 @@ export default function ApiUsageLogs() {
                                     <td className="error-cell">
                                         {log.error_message ? (
                                             <span className="error-msg" title={log.error_message}>
-                                                {log.error_message.substring(0, 50)}...
+                                                {log.error_message}
                                             </span>
                                         ) : '-'}
                                     </td>

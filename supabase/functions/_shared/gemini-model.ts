@@ -1,5 +1,5 @@
 export const DEFAULT_GEMINI_CHEAPEST_MODEL = 'gemini-3.1-flash-lite';
-export const DEFAULT_GEMINI_FALLBACK_MODEL = 'gemini-3-flash';
+export const DEFAULT_GEMINI_FALLBACK_MODEL = 'gemini-1.5-flash';
 
 const PRO_MODEL_SEGMENT_RE = /(^|[-_])pro($|[-_])/i;
 
@@ -30,7 +30,7 @@ function sanitizeModel(candidate: string, defaultModel: string) {
 
 /**
  * 全Gemini呼び出しで使う「最安モデル」を返す。
- * - 未設定時は gemini-2.5-flash-lite
+ * - 未設定時は gemini-3.1-flash-lite
  * - Pro 系は高コストなので拒否して既定に戻す
  */
 export function resolveCheapestGeminiModel() {

@@ -878,14 +878,6 @@ export const recipeService = {
     },
 
     async updateRecipeCosts(priceMap) {
-        // user: currentUser not strictly needed if we assume admin context in DataManagement,
-        // but ideally should be passed if we want to filter updates?
-        // For now, update ALL recipes since costs are global.
-
-        // 1. Fetch ALL recipes (bypass RLS filtering usually done in fetchRecipes by using raw query)
-        // Actually, we should probably only update recipes the user has access to, or all if admin?
-        // Let's rely on fetchRecipes logic but with admin-like context?
-        // Or just raw Select.
         const { data: allRecipes, error } = await supabase
             .from('recipes')
             .select('*');
@@ -894,10 +886,20 @@ export const recipeService = {
 
         let updatedCount = 0;
         const updates = [];
+        const changedIngredientsMap = new Map(); // name -> { old, new }
+        const updatedRecipes = []; // Array of { id, title, oldCost, newCost, changedIngs: [] }
 
         for (const rawRecipe of allRecipes) {
             const recipe = fromDbFormat(rawRecipe);
             let hasChanges = false;
+            const affectedIngredients = [];
+
+            // Helper to calc total cost of a list
+            const calcListCost = (list) => list.reduce((sum, ing) => sum + (parseFloat(ing.cost) || 0), 0);
+
+            const oldTotalCost = recipe.type === 'bread' 
+                ? calcListCost(recipe.flours || []) + calcListCost(recipe.breadIngredients || [])
+                : calcListCost(recipe.ingredients || []);
 
             // Helper to update an ingredient list
             const updateList = (list) => {
@@ -906,62 +908,34 @@ export const recipeService = {
                     const priceData = priceMap.get(normalizeIngredientKey(ing.name));
 
                     if (priceData) {
-                        // Found a matching price!
-                        // Calculate new Cost
-                        // Logic must match RecipeForm logic:
-                        // Normal: Cost = (usage / unit_size) * price ?? No, CSV price is usually "per unit" (e.g. per kg, per pack)
-                        // Actually, the app seems to expect unit conversion or direct calculation?
-                        // Let's look at Bread form logic: item.cost = (qty/1000 * purchaseCost) 
-                        // This implies purchaseCost is "Price per Kg" or similar unit.
-                        // And CSV import saves "price".
-
-                        // Let's assume the CSV price IS the "purchaseCost" (仕入れ単価).
-                        // And we update that.
-
                         if (ing.purchaseCost !== priceData.price) {
                             hasChanges = true;
+                            const oldPrice = parseFloat(ing.purchaseCost) || 0;
+                            const newPrice = parseFloat(priceData.price) || 0;
+                            
+                            // Track in global changed map
+                            const normName = normalizeIngredientKey(ing.name);
+                            if (!changedIngredientsMap.has(normName)) {
+                                changedIngredientsMap.set(normName, { 
+                                    name: ing.name, 
+                                    oldPrice, 
+                                    newPrice,
+                                    diff: newPrice - oldPrice
+                                });
+                            }
+                            affectedIngredients.push(ing.name);
 
                             // Update Purchase Cost
                             const newIng = { ...ing, purchaseCost: priceData.price };
 
-                            // Update Calculated Cost (Simple Proportional)
-                            // We need to know HOW cost was calculated initially.
-                            // If we don't have the formula, we can assume Bread Logic for Bread,
-                            // and "Qty * UnitPrice" for Normal?
-
-                            // Heuristic:
-                            // If it's Bread: cost = (qty / 1000) * price (assuming price is per kg, qty is g)
-                            // If it's Normal: cost = ??? 
-                            // In RecipeFormIngredients: cost = purchaseCost * (quantity / ???)
-                            // Actually, in the current simple implementation, many users input cost manually.
-                            // BUT if we are automating, we must calculate.
-
-                            // Re-calculation logic:
-                            // If we have a Quantity and a New Price.
-                            // Bread: Qty is grams. Price is likely per Kg (standard baking).
+                            // Re-calculation logic (Bread: g -> kg, Normal: ratio based)
                             if (recipe.type === 'bread') {
-                                // Bread logic: cost = (qty / 1000) * price
                                 const qty = parseFloat(newIng.quantity) || 0;
                                 newIng.cost = Math.round((qty / 1000) * newIng.purchaseCost);
                             } else {
-                                // Normal logic:
-                                // Very tricky without unit conversion.
-                                // However, if the user previously had `purchaseCost: 100, cost: 50`, and Qty: 50.
-                                // Then ratio was 0.5.
-                                // If new purchaseCost: 200 => cost: 100.
-                                // Let's try to preserve the ratio? 
-                                // cost = purchaseCost * (oldCost / oldPurchaseCost)
-
                                 if (ing.cost && ing.purchaseCost) {
                                     const ratio = ing.cost / ing.purchaseCost;
                                     newIng.cost = Math.round(newIng.purchaseCost * ratio);
-                                } else {
-                                    // Fallback: If no previous cost but we have price now.
-                                    // Can't reliably calculate without knowing units (e.g. 1 tbsp vs 1 litre bottle).
-                                    // So maybe just update purchaseCost and leave cost alone?
-                                    // No, user wants cost updated.
-                                    // Let's only update cost if we can deduce logic, otherwise specific instructions might be needed.
-                                    // For now, let's update purchaseCost. 
                                 }
                             }
                             return newIng;
@@ -974,7 +948,6 @@ export const recipeService = {
             if (recipe.type === 'bread') {
                 const newFlours = updateList(recipe.flours || []);
                 const newOthers = updateList(recipe.breadIngredients || []);
-
                 if (hasChanges) {
                     recipe.flours = newFlours;
                     recipe.breadIngredients = newOthers;
@@ -987,9 +960,20 @@ export const recipeService = {
             }
 
             if (hasChanges) {
-                // Prepare update payload
+                const newTotalCost = recipe.type === 'bread'
+                    ? calcListCost(recipe.flours || []) + calcListCost(recipe.breadIngredients || [])
+                    : calcListCost(recipe.ingredients || []);
+
+                updatedRecipes.push({
+                    id: rawRecipe.id,
+                    title: rawRecipe.title,
+                    oldCost: oldTotalCost,
+                    newCost: newTotalCost,
+                    costDiff: newTotalCost - oldTotalCost,
+                    changedIngs: Array.from(new Set(affectedIngredients))
+                });
+
                 const payload = toDbFormat(recipe);
-                // We need to call update.
                 updates.push(
                     supabase.from('recipes').update(payload).eq('id', recipe.id)
                 );
@@ -1001,8 +985,13 @@ export const recipeService = {
             await Promise.all(updates);
         }
 
-        return updatedCount;
+        return {
+            updatedCount,
+            changedIngredients: Array.from(changedIngredientsMap.values()),
+            updatedRecipes: updatedRecipes.sort((a, b) => Math.abs(b.costDiff) - Math.abs(a.costDiff)) // Sort by impact
+        };
     }
+
 }
 
 // Helpers to map between frontend (camelCase) and DB (snake_case)

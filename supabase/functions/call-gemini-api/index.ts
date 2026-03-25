@@ -51,7 +51,7 @@ const supabaseAdmin = supabaseUrl && supabaseServiceRoleKey
 
 function isModelUnavailableError(status: number, errorText: string) {
   const body = String(errorText || "").toLowerCase();
-  if (status === 404) return true;
+  if (status === 404 || status === 429) return true;
   if (status === 400 && (body.includes("not found") || body.includes("model") && body.includes("supported"))) return true;
   return false;
 }
@@ -247,10 +247,25 @@ serve(async (req) => {
 
     const body: RequestPayload = await req.json();
     requestBody = body;
-    const apiKey = Deno.env.get("GOOGLE_API_KEY");
+    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+    const googleApiKey = Deno.env.get("GOOGLE_API_KEY");
+    // ユーザーの「Vision APIではない」という指摘に基づき、GEMINI_API_KEYを最優先
+    const apiKey = geminiApiKey || googleApiKey;
+
     if (!apiKey) {
-      throw new Error("GOOGLE_API_KEY が設定されていません");
+      console.error("❌ APIキーが見つかりません (GEMINI_API_KEY or GOOGLE_API_KEY)");
+      return new Response(JSON.stringify({ error: "API key not found" }), { status: 500 });
     }
+
+    console.log(`[DEPLOY-CHECK-0640] APIキー使用中: ${geminiApiKey ? "GEMINI_API_KEY" : "GOOGLE_API_KEY"} (${apiKey.substring(0, 4)}...)`);
+    
+    const endpointCandidates = buildGeminiGenerateContentEndpointCandidates("v1beta");
+    const requestedModel = String(body.model || "").trim();
+    if (requestedModel && requestedModel !== endpointCandidates[0]?.model) {
+      console.warn(`最安モデル優先のため指定モデルを上書きします: ${requestedModel} -> ${endpointCandidates[0]?.model}`);
+    }
+
+    const firstModelId = endpointCandidates[0]?.model || "gemini-3.1-flash-lite";
 
     let messages = buildMessagesFromPayload(body);
     if (!messages.length) {
@@ -270,13 +285,6 @@ serve(async (req) => {
       });
     }
 
-    const endpointCandidates = buildGeminiGenerateContentEndpointCandidates("v1beta");
-    const requestedModel = String(body.model || "").trim();
-    if (requestedModel && requestedModel !== endpointCandidates[0]?.model) {
-      console.warn(`⚠️ 最安モデル優先のため指定モデルを上書きします: ${requestedModel} -> ${endpointCandidates[0]?.model}`);
-    }
-
-    const firstModelId = endpointCandidates[0]?.model || "gemini-2.5-flash-lite";
     apiLogger = new APILogger("gemini", "call-gemini-api", firstModelId);
     apiLogger.setUser(
       readString(authPayload.sub) || null,
@@ -320,7 +328,8 @@ serve(async (req) => {
     for (let i = 0; i < endpointCandidates.length; i += 1) {
       const candidate = endpointCandidates[i];
       const modelId = candidate?.model || firstModelId;
-      const endpoint = candidate?.url || `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
+      const baseUrl = candidate?.url || `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
+      const endpoint = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}key=${apiKey}`;
       attemptedModels.push(modelId);
       if (apiLogger) apiLogger.setModel(modelId);
 
@@ -329,7 +338,6 @@ serve(async (req) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
         },
         body: JSON.stringify(geminiRequest),
       });
