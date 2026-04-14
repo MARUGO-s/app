@@ -1,7 +1,7 @@
 const e=`import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase';
 import { AuthContext } from './authContext';
-import { getAuthRedirectUrl, isUsingLocalAuthRedirect } from '../utils/authRedirect';
+import { getAuthRedirectUrl, warnIfUsingLocalAuthRedirect } from '../utils/authRedirect';
 
 const PRESENCE_HEARTBEAT_MS = 60_000;
 
@@ -300,9 +300,7 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const register = useCallback(async (email, password, displayId) => {
-        if (isUsingLocalAuthRedirect()) {
-            console.warn('[Auth] signup email redirect is localhost. Set VITE_SUPABASE_AUTH_REDIRECT_URL for production.');
-        }
+        warnIfUsingLocalAuthRedirect('signup email');
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
@@ -389,9 +387,7 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const sendPasswordResetEmail = useCallback(async (email) => {
-        if (isUsingLocalAuthRedirect()) {
-            console.warn('[Auth] password-reset redirect is localhost. Set VITE_SUPABASE_AUTH_REDIRECT_URL for production.');
-        }
+        warnIfUsingLocalAuthRedirect('password-reset email');
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
             redirectTo: getAuthRedirectUrl()
         });
