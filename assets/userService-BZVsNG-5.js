@@ -1,4 +1,5 @@
 const r=`import { supabase } from '../supabase';
+import { getAuthRedirectUrl, isUsingLocalAuthRedirect } from '../utils/authRedirect';
 
 const normalizeProfileRow = (payload) => {
     if (!payload) return null;
@@ -214,8 +215,12 @@ export const userService = {
     },
 
     async sendPasswordResetEmail(email) {
+        if (isUsingLocalAuthRedirect()) {
+            console.warn('[Auth] password-reset redirect is localhost. Set VITE_SUPABASE_AUTH_REDIRECT_URL for production.');
+        }
+
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin + import.meta.env.BASE_URL
+            redirectTo: getAuthRedirectUrl()
         });
         if (error) throw error;
         return true;
