@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase';
 import { AuthContext } from './authContext';
+import { getAuthRedirectUrl, warnIfUsingLocalAuthRedirect } from '../utils/authRedirect';
 
 const PRESENCE_HEARTBEAT_MS = 60_000;
 
@@ -239,7 +240,7 @@ export const AuthProvider = ({ children }) => {
             try {
                 const { data } = await withTimeout(
                     supabase.auth.getSession(),
-                    5000,
+                    10000,
                     'auth.getSession'
                 );
                 // Only set user if we didn't already get it from onAuthStateChange (though safe to call twice)
@@ -299,12 +300,13 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const register = useCallback(async (email, password, displayId) => {
+        warnIfUsingLocalAuthRedirect('signup email');
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
             options: {
                 data: { display_id: displayId },
-                emailRedirectTo: window.location.origin + import.meta.env.BASE_URL
+                emailRedirectTo: getAuthRedirectUrl()
             }
         });
 
@@ -385,8 +387,9 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const sendPasswordResetEmail = useCallback(async (email) => {
+        warnIfUsingLocalAuthRedirect('password-reset email');
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin + import.meta.env.BASE_URL
+            redirectTo: getAuthRedirectUrl()
         });
         if (error) {
             console.error('Password reset email error:', error);
