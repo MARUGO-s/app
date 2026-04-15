@@ -426,6 +426,42 @@ function AppContent() {
     const requestId = recipeLoadRequestRef.current + 1;
     recipeLoadRequestRef.current = requestId;
     const isStaleRequest = () => recipeLoadRequestRef.current !== requestId;
+    const isTransientRecipeLoadError = (error) => recipeService.isTransientError(error);
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    const fetchChunkWithRetry = async (params) => {
+      const attempts = [
+        { timeoutMs: 12000, backoffMs: 0 },
+        { timeoutMs: 18000, backoffMs: 500 },
+      ];
+
+      let lastError = null;
+      for (let i = 0; i < attempts.length; i += 1) {
+        const { timeoutMs, backoffMs } = attempts[i];
+        if (backoffMs > 0) {
+          await sleep(backoffMs);
+        }
+
+        try {
+          return await recipeService.fetchRecipes(user, {
+            timeoutMs,
+            includeIngredients: false,
+            includeSources: false,
+            skipCacheSave: true,
+            returnMeta: true,
+            ...params,
+          });
+        } catch (error) {
+          lastError = error;
+          const isLastAttempt = i === attempts.length - 1;
+          if (!isTransientRecipeLoadError(error) || isLastAttempt) {
+            throw error;
+          }
+        }
+      }
+
+      throw lastError || new Error('recipe fetch failed');
+    };
 
     const initialLimit = isMobileScreen ? MOBILE_INITIAL_RECIPE_LIMIT : DESKTOP_INITIAL_RECIPE_LIMIT;
     const pageLimit = isMobileScreen ? MOBILE_RECIPE_PAGE_LIMIT : DESKTOP_RECIPE_PAGE_LIMIT;
@@ -435,14 +471,9 @@ function AppContent() {
         setLoading(true);
       }
 
-      const firstChunk = await recipeService.fetchRecipes(user, {
-        timeoutMs: 12000,
-        includeIngredients: false,
-        includeSources: false,
+      const firstChunk = await fetchChunkWithRetry({
         offset: 0,
         limit: initialLimit,
-        skipCacheSave: true,
-        returnMeta: true,
       });
       if (isStaleRequest()) return;
 
@@ -459,14 +490,9 @@ function AppContent() {
       }
 
       while (hasMoreRaw) {
-        const nextChunk = await recipeService.fetchRecipes(user, {
-          timeoutMs: 12000,
-          includeIngredients: false,
-          includeSources: false,
+        const nextChunk = await fetchChunkWithRetry({
           offset,
           limit: pageLimit,
-          skipCacheSave: true,
-          returnMeta: true,
         });
         if (isStaleRequest()) return;
 
@@ -494,7 +520,10 @@ function AppContent() {
     } catch (error) {
       if (isStaleRequest()) return;
       console.error("Failed to fetch recipes:", error);
-      toast.error(\`レシピの読み込みに時間がかかっています。\\nネットワークをご確認の上、再読み込みしてください。\\n(\${error?.message || 'unknown error'})\`);
+      const hasVisibleCachedList = isFromCache && recipes.length > 0;
+      if (!(hasVisibleCachedList && isTransientRecipeLoadError(error))) {
+        toast.error(\`レシピの読み込みに時間がかかっています。\\nネットワークをご確認の上、再読み込みしてください。\\n(\${error?.message || 'unknown error'})\`);
+      }
     } finally {
       if (!isStaleRequest()) {
         setLoading(false);

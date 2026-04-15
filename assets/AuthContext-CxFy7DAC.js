@@ -240,7 +240,7 @@ export const AuthProvider = ({ children }) => {
             try {
                 const { data } = await withTimeout(
                     supabase.auth.getSession(),
-                    5000,
+                    10000,
                     'auth.getSession'
                 );
                 // Only set user if we didn't already get it from onAuthStateChange (though safe to call twice)

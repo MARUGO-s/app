@@ -160,6 +160,10 @@ export const recipeService = {
         saveRecipeListCache(recipes, userId);
     },
 
+    isTransientError(error) {
+        return shouldUseLocalRecipeFallback(error);
+    },
+
     async _resolveShowMasterPreference(currentUser, timeoutMs = 15000) {
         const fallback = currentUser?.showMasterRecipes === true;
         const userId = currentUser?.id;
@@ -344,17 +348,27 @@ export const recipeService = {
         }
 
         if (allRecipes.length === 0 && lastError) {
-            // If Supabase failed and we have no local fallback data, propagate error so UI can show a message.
+            // Only allow local fallback for transient/offline/timeout style failures.
+            if (!shouldUseLocalRecipeFallback(lastError)) {
+                throw lastError;
+            }
+
             try {
-                const localData = localStorage.getItem('local_recipes');
-                if (localData) {
+                // Prefer fresh lightweight cache first (faster and already normalized for list view).
+                const cachedList = loadRecipeListCache(currentUser.id);
+                if (Array.isArray(cachedList) && cachedList.length > 0) {
+                    allRecipes = safeLimit != null
+                        ? cachedList.slice(safeOffset, safeOffset + safeLimit)
+                        : cachedList;
+                    rawFetchedCount = allRecipes.length;
+                } else {
+                    const localData = localStorage.getItem('local_recipes');
+                    if (!localData) throw lastError;
                     const localRecipes = JSON.parse(localData).map(r => typeof fromDbFormat === 'function' ? fromDbFormat(r) : r);
                     allRecipes = safeLimit != null
                         ? localRecipes.slice(safeOffset, safeOffset + safeLimit)
                         : localRecipes;
                     rawFetchedCount = allRecipes.length;
-                } else {
-                    throw lastError;
                 }
             } catch {
                 // Keep lastError to help callers show a useful message.
