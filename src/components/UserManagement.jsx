@@ -322,7 +322,7 @@ export const UserManagement = ({ onBack }) => {
             } else {
                 console.error(loginResult.reason);
                 setLoginLogs([]);
-                setError('ログイン履歴の取得に失敗しました');
+                setError('アクティブ履歴の取得に失敗しました');
             }
 
             if (apiResult.status === 'fulfilled') {
@@ -334,7 +334,7 @@ export const UserManagement = ({ onBack }) => {
             }
         } catch (err) {
             console.error(err);
-            setError('ログイン履歴の取得に失敗しました');
+            setError('アクティブ履歴の取得に失敗しました');
         } finally {
             setIsLoadingLogs(false);
             setIsLoadingDailyApiLogs(false);
@@ -554,7 +554,7 @@ export const UserManagement = ({ onBack }) => {
                             onClick={() => handleOpenLoginLogs(user)}
                             className="user-management__action-btn"
                         >
-                            ログイン履歴
+                            アクティブ履歴
                         </Button>
                         <Button
                             variant="secondary"
@@ -851,7 +851,7 @@ export const UserManagement = ({ onBack }) => {
                                 className={`user-management__history-tab ${historyTab === 'login' ? 'is-active' : ''}`}
                                 onClick={() => setHistoryTab('login')}
                             >
-                                ログイン履歴
+                                アクティブ履歴
                             </button>
                             <button
                                 type="button"
@@ -889,9 +889,9 @@ export const UserManagement = ({ onBack }) => {
                                 </div>
                             ) : (
                                 <div style={{ textAlign: 'center', padding: '40px 0', color: '#666', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
-                                    ログイン履歴はありません<br />
+                                    アクティブ履歴はありません<br />
                                     <span style={{ fontSize: '0.85rem' }}>
-                                        ※ここは認証イベント（パスワード/メールリンク等）だけを表示します。セッション継続による画面アクセスは表示されません
+                                        ※認証ログインと画面アクセス（セッション継続）の両方を記録します
                                     </span>
                                 </div>
                             )
