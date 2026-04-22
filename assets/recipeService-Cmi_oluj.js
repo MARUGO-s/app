@@ -68,6 +68,7 @@ const shouldUseLocalRecipeFallback = (error) => {
     if (!error) return false;
 
     const code = String(error.code || '').toUpperCase();
+    const status = Number(error.status || error.statusCode || error?.cause?.status || 0);
     const message = String(error.message || '').toLowerCase();
     const details = String(error.details || '').toLowerCase();
 
@@ -85,18 +86,45 @@ const shouldUseLocalRecipeFallback = (error) => {
         return false;
     }
 
+    // HTTP style transient failures
+    if ([408, 425, 429, 500, 502, 503, 504].includes(status)) {
+        return true;
+    }
+
     // Only fallback for transient/offline/timeout style failures.
     return (
         message.includes('failed to fetch') ||
         message.includes('network') ||
         message.includes('timeout') ||
         message.includes('timed out') ||
-        message.includes('load failed')
+        message.includes('load failed') ||
+        message.includes('abort') ||
+        message.includes('temporarily unavailable')
     );
 };
 
+const isAuthSessionError = (error) => {
+    if (!error) return false;
+    const status = Number(error.status || error.statusCode || error?.cause?.status || 0);
+    const code = String(error.code || '').toUpperCase();
+    const message = String(error.message || '').toLowerCase();
+    return (
+        status === 401 ||
+        code === 'PGRST301' ||
+        message.includes('jwt') ||
+        message.includes('token') ||
+        message.includes('session') ||
+        message.includes('expired') ||
+        message.includes('not authenticated')
+    );
+};
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 const RECIPE_LIST_CACHE_KEY = 'recipe_list_cache';
 const RECIPE_LIST_CACHE_MAX_AGE = 5 * 60 * 1000; // 5 minutes
+const RECENT_VIEWS_LOCAL_PREFIX = 'recent_views_by_user:';
+const RECENT_VIEWS_MAX_ITEMS = 20;
 
 const saveRecipeListCache = (recipes, userId) => {
     try {
@@ -141,6 +169,42 @@ const loadRecipeListCache = (userId) => {
     }
 };
 
+const getRecentViewsLocalKey = (userId) => \`\${RECENT_VIEWS_LOCAL_PREFIX}\${String(userId || '').trim()}\`;
+
+const loadRecentViewsLocal = (userId) => {
+    if (!userId) return [];
+    try {
+        const raw = localStorage.getItem(getRecentViewsLocalKey(userId));
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        const ids = Array.isArray(parsed) ? parsed : [];
+        const seen = new Set();
+        const normalized = [];
+        for (const id of ids) {
+            const key = String(id || '').trim();
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
+            normalized.push(key);
+            if (normalized.length >= RECENT_VIEWS_MAX_ITEMS) break;
+        }
+        return normalized;
+    } catch {
+        return [];
+    }
+};
+
+const saveRecentViewsLocal = (userId, ids) => {
+    if (!userId) return;
+    try {
+        localStorage.setItem(
+            getRecentViewsLocalKey(userId),
+            JSON.stringify((ids || []).slice(0, RECENT_VIEWS_MAX_ITEMS))
+        );
+    } catch {
+        // ignore local storage errors
+    }
+};
+
 export const recipeService = {
     // Cache for detected query pattern (avoid repeated fallback attempts)
     _queryPattern: null,
@@ -162,6 +226,57 @@ export const recipeService = {
 
     isTransientError(error) {
         return shouldUseLocalRecipeFallback(error);
+    },
+
+    async _ensureActiveSession() {
+        try {
+            const { data, error } = await withTimeout(
+                supabase.auth.getSession(),
+                6000,
+                'auth.getSession(write)'
+            );
+            if (error) throw error;
+            const session = data?.session;
+            if (!session) return;
+
+            const expiresAtMs = Number(session.expires_at || 0) * 1000;
+            const isNearExpiry = expiresAtMs > 0 && (expiresAtMs - Date.now()) < 90_000;
+            if (isNearExpiry) {
+                await withTimeout(
+                    supabase.auth.refreshSession(),
+                    8000,
+                    'auth.refreshSession(write)'
+                );
+            }
+        } catch (error) {
+            // Some writes are allowed without a session (e.g. local/offline fallback),
+            // so do not hard-fail here; write operations will surface real auth errors.
+            if (isAuthSessionError(error)) {
+                try {
+                    await withTimeout(
+                        supabase.auth.refreshSession(),
+                        8000,
+                        'auth.refreshSession(recover)'
+                    );
+                } catch {
+                    // ignore
+                }
+            }
+        }
+    },
+
+    async _getCurrentUserId() {
+        try {
+            const { data, error } = await withTimeout(
+                supabase.auth.getUser(),
+                6000,
+                'auth.getUser(recent_views)'
+            );
+            if (error) throw error;
+            return data?.user?.id || null;
+        } catch {
+            return null;
+        }
     },
 
     async _resolveShowMasterPreference(currentUser, timeoutMs = 15000) {
@@ -452,17 +567,45 @@ export const recipeService = {
         const fileName = \`\${Date.now()}-\${Math.random().toString(36).substring(7)}.\${fileExt}\`;
         const filePath = \`\${fileName}\`;
 
-        const { error } = await supabase.storage
-            .from('recipe-images')
-            .upload(filePath, file);
+        const maxAttempts = 2;
+        let lastError = null;
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+            try {
+                await this._ensureActiveSession();
+                const { error } = await withTimeout(
+                    supabase.storage
+                        .from('recipe-images')
+                        .upload(filePath, file, { upsert: true }),
+                    20000,
+                    'storage.upload(recipe-images)'
+                );
+                if (error) throw error;
 
-        if (error) throw error;
+                const { data } = supabase.storage
+                    .from('recipe-images')
+                    .getPublicUrl(filePath);
 
-        const { data } = supabase.storage
-            .from('recipe-images')
-            .getPublicUrl(filePath);
+                return data.publicUrl;
+            } catch (error) {
+                lastError = error;
+                if (isAuthSessionError(error)) {
+                    try {
+                        await withTimeout(
+                            supabase.auth.refreshSession(),
+                            8000,
+                            'auth.refreshSession(uploadImage)'
+                        );
+                    } catch {
+                        // ignore
+                    }
+                }
+                const canRetry = attempt < maxAttempts && (isAuthSessionError(error) || shouldUseLocalRecipeFallback(error));
+                if (!canRetry) break;
+                await sleep(300 * attempt);
+            }
+        }
 
-        return data.publicUrl;
+        throw lastError || new Error('image upload failed');
     },
 
     async getRecipe(id) {
@@ -495,11 +638,6 @@ export const recipeService = {
         console.log("createRecipe called with user:", currentUser);
         const { id: _ID, created_at: _CREATED_AT, sourceUrl, ...recipeData } = recipe
 
-        // Handle image upload if a File object is provided
-        if (recipeData.image instanceof File) {
-            recipeData.image = await this.uploadImage(recipeData.image);
-        }
-
         // Add Owner Tag
         if (currentUser) {
             const tags = recipeData.tags || [];
@@ -511,27 +649,55 @@ export const recipeService = {
             console.warn("createRecipe: No currentUser provided! Recipe will be public.");
         }
 
-        const payload = toDbFormat(recipeData)
-
         try {
-            const { data, error } = await supabase
-                .from('recipes')
-                .insert([payload])
-                .select()
-                .single()
+            await this._ensureActiveSession();
+
+            // Handle image upload if a File object is provided
+            if (recipeData.image instanceof File) {
+                try {
+                    recipeData.image = await this.uploadImage(recipeData.image);
+                } catch (imageError) {
+                    if (!shouldUseLocalRecipeFallback(imageError)) {
+                        throw imageError;
+                    }
+                    // Keep save path available even when image upload is unstable.
+                    console.warn('Image upload failed (transient), creating recipe without image:', imageError);
+                    recipeData.image = '';
+                }
+            }
+
+            const payload = toDbFormat(recipeData)
+            const { data, error } = await withTimeout(
+                supabase
+                    .from('recipes')
+                    .insert([payload])
+                    .select()
+                    .single(),
+                15000,
+                'recipes.insert'
+            );
 
             if (error) throw error
 
             // Handle Source URL
             if (sourceUrl) {
-                const { error: sourceError } = await supabase
-                    .from('recipe_sources')
-                    .insert([{
-                        recipe_id: data.id,
-                        url: sourceUrl
-                    }]);
+                try {
+                    const { error: sourceError } = await withTimeout(
+                        supabase
+                            .from('recipe_sources')
+                            .insert([{
+                                recipe_id: data.id,
+                                url: sourceUrl
+                            }]),
+                        10000,
+                        'recipe_sources.insert(create)'
+                    );
 
-                if (sourceError) console.error("Failed to save source URL:", sourceError);
+                    if (sourceError) throw sourceError;
+                } catch (sourceError) {
+                    // Source URL sync should not block the primary recipe save.
+                    console.warn("Failed to save source URL:", sourceError);
+                }
             }
 
             return fromDbFormat({ ...data, recipe_sources: sourceUrl ? [{ url: sourceUrl }] : [] })
@@ -559,6 +725,7 @@ export const recipeService = {
             const dbLike = toDbFormat(newRecipe);
             dbLike.id = newId; // toDbFormat might clean id? make sure it's there.
             dbLike.created_at = newRecipe.created_at;
+            dbLike.updated_at = newRecipe.updated_at;
 
             console.log("Saving to LocalStorage:", dbLike);
 
@@ -574,91 +741,149 @@ export const recipeService = {
                 throw error; // If both fail, throw original
             }
 
-            return fromDbFormat(dbLike);
+            return fromDbFormat({ ...dbLike, recipe_sources: sourceUrl ? [{ url: sourceUrl }] : [] });
         }
     },
 
-    async updateRecipe(recipe) {
+    async updateRecipe(recipe, currentUser = null) {
         // Update doesn't change owner usually, preserving existing tags including owner
         const { id: _ID, created_at: _CREATED_AT, sourceUrl, ...recipeData } = recipe
 
-        // Handle image upload if a File object is provided
-        if (recipeData.image instanceof File) {
-            recipeData.image = await this.uploadImage(recipeData.image);
-        }
-
-        const payload = toDbFormat(recipeData);
-
-        // IMPORTANT:
-        // List-view recipe objects often do NOT include steps (and sometimes other heavy fields).
-        // If we blindly send \`steps: []\`, we will overwrite the stored steps.
-        // Only update fields that are explicitly provided by the caller.
-        if (recipeData.steps === undefined) delete payload.steps;
-
-        // Avoid wiping tags when doing partial updates.
-        if (recipeData.tags === undefined) delete payload.tags;
-
-        // Avoid wiping ingredients/meta when doing partial updates.
-        const shouldUpdateIngredients =
-            recipeData.ingredients !== undefined ||
-            recipeData.type !== undefined ||
-            recipeData.ingredientGroups !== undefined ||
-            recipeData.flours !== undefined ||
-            recipeData.breadIngredients !== undefined ||
-            recipeData.stepGroups !== undefined;
-        if (!shouldUpdateIngredients) delete payload.ingredients;
+        let payload = null;
 
         try {
-            const { data, error } = await supabase
-                .from('recipes')
-                .update(payload)
-                .eq('id', recipe.id)
-                .select()
-                .single()
+            await this._ensureActiveSession();
+
+            // Handle image upload if a File object is provided
+            if (recipeData.image instanceof File) {
+                try {
+                    recipeData.image = await this.uploadImage(recipeData.image);
+                } catch (imageError) {
+                    if (!shouldUseLocalRecipeFallback(imageError)) {
+                        throw imageError;
+                    }
+                    // Keep existing image if new upload failed transiently.
+                    console.warn('Image upload failed (transient), keeping previous image on update:', imageError);
+                    delete recipeData.image;
+                }
+            }
+
+            payload = toDbFormat(recipeData);
+
+            // IMPORTANT:
+            // List-view recipe objects often do NOT include steps (and sometimes other heavy fields).
+            // If we blindly send \`steps: []\`, we will overwrite the stored steps.
+            // Only update fields that are explicitly provided by the caller.
+            if (recipeData.steps === undefined) delete payload.steps;
+
+            // Avoid wiping tags when doing partial updates.
+            if (recipeData.tags === undefined) delete payload.tags;
+
+            // Avoid wiping ingredients/meta when doing partial updates.
+            const shouldUpdateIngredients =
+                recipeData.ingredients !== undefined ||
+                recipeData.type !== undefined ||
+                recipeData.ingredientGroups !== undefined ||
+                recipeData.flours !== undefined ||
+                recipeData.breadIngredients !== undefined ||
+                recipeData.stepGroups !== undefined;
+            if (!shouldUpdateIngredients) delete payload.ingredients;
+
+            const { data, error } = await withTimeout(
+                supabase
+                    .from('recipes')
+                    .update(payload)
+                    .eq('id', recipe.id)
+                    .select()
+                    .single(),
+                15000,
+                'recipes.update'
+            );
 
             if (error) throw error
 
             // Handle Source URL Update
             if (sourceUrl !== undefined) {
-                await supabase.from('recipe_sources').delete().eq('recipe_id', recipe.id);
-                if (sourceUrl) {
-                    const { error: sourceError } = await supabase
-                        .from('recipe_sources')
-                        .insert([{
-                            recipe_id: recipe.id,
-                            url: sourceUrl
-                        }]);
-                    if (sourceError) console.error("Failed to update source URL:", sourceError);
+                try {
+                    const { error: deleteError } = await withTimeout(
+                        supabase.from('recipe_sources').delete().eq('recipe_id', recipe.id),
+                        10000,
+                        'recipe_sources.delete(update)'
+                    );
+                    if (deleteError) throw deleteError;
+
+                    if (sourceUrl) {
+                        const { error: sourceError } = await withTimeout(
+                            supabase
+                                .from('recipe_sources')
+                                .insert([{
+                                    recipe_id: recipe.id,
+                                    url: sourceUrl
+                                }]),
+                            10000,
+                            'recipe_sources.insert(update)'
+                        );
+                        if (sourceError) throw sourceError;
+                    }
+                } catch (sourceError) {
+                    // Source URL sync should not block the primary recipe save.
+                    console.warn("Failed to update source URL:", sourceError);
                 }
             }
 
             return fromDbFormat({ ...data, recipe_sources: sourceUrl ? [{ url: sourceUrl }] : [] })
 
         } catch (error) {
-            if (!shouldUseLocalRecipeFallback(error)) {
+            if (!shouldUseLocalRecipeFallback(error) && !isAuthSessionError(error)) {
                 throw error;
             }
 
             console.warn("Supabase update failed (network/transient), using LocalStorage fallback:", error);
 
-            const localData = localStorage.getItem('local_recipes');
-            if (localData) {
-                let recipes = JSON.parse(localData);
+            const fallbackPayload = payload || toDbFormat(recipeData);
+            const fallbackUpdated = {
+                ...(recipe || {}),
+                ...fallbackPayload,
+                id: recipe.id,
+                updated_at: new Date().toISOString(),
+            };
+            if (sourceUrl !== undefined) {
+                fallbackUpdated.recipe_sources = sourceUrl ? [{ url: sourceUrl }] : [];
+            }
+
+            try {
+                const localData = localStorage.getItem('local_recipes');
+                const recipes = localData ? JSON.parse(localData) : [];
                 const index = recipes.findIndex(r => r.id == recipe.id);
 
                 if (index !== -1) {
-                    // Update
-                    const updated = {
-                        ...recipes[index],
-                        ...payload,
-                        updated_at: new Date().toISOString()
-                    };
-                    recipes[index] = updated;
-                    localStorage.setItem('local_recipes', JSON.stringify(recipes));
-                    return fromDbFormat(updated);
+                    recipes[index] = { ...recipes[index], ...fallbackUpdated };
+                } else {
+                    recipes.unshift(fallbackUpdated);
                 }
+                localStorage.setItem('local_recipes', JSON.stringify(recipes));
+            } catch (localSaveError) {
+                console.error("Failed to persist update fallback to LocalStorage:", localSaveError);
             }
-            throw error;
+
+            // Best effort cache update (non-fatal if it fails)
+            try {
+                if (currentUser?.id) {
+                    const cached = loadRecipeListCache(currentUser.id) || [];
+                    const index = cached.findIndex(r => r.id == recipe.id);
+                    const minimal = fromDbFormat(fallbackUpdated);
+                    if (index !== -1) {
+                        cached[index] = { ...cached[index], ...minimal };
+                    } else {
+                        cached.unshift(minimal);
+                    }
+                    saveRecipeListCache(cached, currentUser.id);
+                }
+            } catch {
+                // ignore cache sync failure
+            }
+
+            return fromDbFormat(fallbackUpdated);
         }
     },
 
@@ -826,26 +1051,73 @@ export const recipeService = {
     },
 
     async fetchRecentRecipes() {
-        const { data, error } = await supabase
-            .from('recent_views')
-            .select('recipe_id')
-            .order('viewed_at', { ascending: false })
-            .limit(20);
+        const userId = await this._getCurrentUserId();
+        if (!userId) return [];
 
-        if (error) throw error;
-        return data.map(item => item.recipe_id);
+        const localIds = loadRecentViewsLocal(userId);
+
+        try {
+            const { data, error } = await withTimeout(
+                supabase
+                    .from('recent_views')
+                    .select('recipe_id, viewed_at')
+                    .eq('viewer_user_id', userId)
+                    .order('viewed_at', { ascending: false })
+                    .limit(RECENT_VIEWS_MAX_ITEMS),
+                10000,
+                'recent_views.select'
+            );
+            if (error) throw error;
+
+            const remoteIds = (data || []).map(item => String(item.recipe_id || '').trim()).filter(Boolean);
+            const merged = [...new Set([...remoteIds, ...localIds])].slice(0, RECENT_VIEWS_MAX_ITEMS);
+            saveRecentViewsLocal(userId, merged);
+            return merged;
+        } catch (error) {
+            const message = String(error?.message || '').toLowerCase();
+            const missingUserColumn =
+                message.includes('viewer_user_id') &&
+                (message.includes('column') || message.includes('does not exist'));
+            if (!missingUserColumn) {
+                console.warn('fetchRecentRecipes fallback to local cache:', error);
+            }
+            return localIds;
+        }
     },
 
     async addToHistory(recipeId) {
-        // Upsert logic: if recipe_id exists, update viewed_at
-        const { error } = await supabase
-            .from('recent_views')
-            .upsert({
-                recipe_id: recipeId,
-                viewed_at: new Date().toISOString()
-            }, { onConflict: 'recipe_id' });
+        const userId = await this._getCurrentUserId();
+        if (!userId || !recipeId) return false;
 
-        if (error) throw error;
+        // Keep per-user local history first so UI remains isolated even if network/DB fails.
+        const key = String(recipeId).trim();
+        const current = loadRecentViewsLocal(userId);
+        const updatedLocal = [key, ...current.filter(id => id !== key)].slice(0, RECENT_VIEWS_MAX_ITEMS);
+        saveRecentViewsLocal(userId, updatedLocal);
+
+        try {
+            const { error } = await withTimeout(
+                supabase
+                    .from('recent_views')
+                    .upsert({
+                        viewer_user_id: userId,
+                        recipe_id: recipeId,
+                        viewed_at: new Date().toISOString()
+                    }, { onConflict: 'viewer_user_id,recipe_id' }),
+                10000,
+                'recent_views.upsert'
+            );
+            if (error) throw error;
+        } catch (error) {
+            const message = String(error?.message || '').toLowerCase();
+            const missingUserColumn =
+                message.includes('viewer_user_id') &&
+                (message.includes('column') || message.includes('does not exist'));
+            if (!missingUserColumn) {
+                console.warn('addToHistory remote sync skipped:', error);
+            }
+        }
+
         return true;
     },
 
@@ -1010,7 +1282,7 @@ export const recipeService = {
 
 // Helpers to map between frontend (camelCase) and DB (snake_case)
 const toDbFormat = (recipe) => {
-    let ingredientsToSave = recipe.ingredients || [];
+    let ingredientsToSave = Array.isArray(recipe.ingredients) ? recipe.ingredients.filter(Boolean) : [];
 
     // Consolidate Meta
     const metaItem = {
@@ -1044,8 +1316,8 @@ const toDbFormat = (recipe) => {
 
     // PACKING INGREDIENTS
     if (recipe.type === 'bread') {
-        const packedFlours = (recipe.flours || []).map(f => ({ ...f, _group: 'flour' }));
-        const packedOthers = (recipe.breadIngredients || []).map(i => ({ ...i, _group: 'other' }));
+        const packedFlours = (recipe.flours || []).filter(Boolean).map(f => ({ ...f, _group: 'flour' }));
+        const packedOthers = (recipe.breadIngredients || []).filter(Boolean).map(i => ({ ...i, _group: 'other' }));
         ingredientsToSave = [metaItem, ...packedFlours, ...packedOthers];
     } else {
         // Normal
@@ -1057,20 +1329,27 @@ const toDbFormat = (recipe) => {
 
     // STEPS: Save as plain strings
     // If steps are objects (which they should be now), map to text.
-    const stepsToSave = (recipe.steps || []).map(s => (typeof s === 'string' ? s : s.text));
+    const stepsToSave = (recipe.steps || [])
+        .map(s => (typeof s === 'string' ? s : s?.text))
+        .map(s => (typeof s === 'string' ? s.trim() : ''))
+        .filter(Boolean);
+
+    const tagsToSave = normalizeRecipeTags(recipe.tags);
+    const imageToSave = typeof recipe.image === 'string' ? recipe.image : null;
+    const storeNameToSave = recipe.storeName ?? recipe.store_name ?? null;
 
     // Explicitly whitelist columns to avoid sending unknown fields
     return {
         title: recipe.title,
         description: recipe.description,
-        image: recipe.image,
+        image: imageToSave,
         servings: recipe.servings,
         course: recipe.course,
         category: recipe.category,
-        store_name: recipe.storeName, // Map camelCase to snake_case
+        store_name: storeNameToSave, // Map camelCase to snake_case
         ingredients: ingredientsToSave,
         steps: stepsToSave,
-        tags: recipe.tags || []
+        tags: tagsToSave
     }
 }
 

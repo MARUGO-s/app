@@ -446,9 +446,12 @@ export const UserManagement = ({ onBack }) => {
         const loggedInToday = loginAtTs !== null
             && loginAtTs >= dailyActivityWindow.startMs
             && loginAtTs < dailyActivityWindow.endMs;
+        const presenceSeenToday = presenceTs !== null
+            && presenceTs >= dailyActivityWindow.startMs
+            && presenceTs < dailyActivityWindow.endMs;
         const apiToday = dailyActivityMap?.[user.id] || null;
         const usedApiToday = Boolean(apiToday?.lastApiAt);
-        const todayActive = loggedInToday || usedApiToday;
+        const todayActive = loggedInToday || usedApiToday || presenceSeenToday;
         const todayStateText = todayActive ? 'アクティブ' : '未アクティブ';
         const todayStateClass = todayActive
             ? 'user-management__activity-pill user-management__activity-pill--active'
@@ -457,6 +460,7 @@ export const UserManagement = ({ onBack }) => {
         if (loggedInToday && usedApiToday) todayReasonText = 'ログイン + API利用';
         else if (loggedInToday) todayReasonText = 'ログイン';
         else if (usedApiToday) todayReasonText = 'API利用';
+        else if (presenceSeenToday) todayReasonText = '画面アクセス(セッション継続)';
 
         return (
             <Card key={user.id} className="user-management__card">
@@ -884,7 +888,9 @@ export const UserManagement = ({ onBack }) => {
                             ) : (
                                 <div style={{ textAlign: 'center', padding: '40px 0', color: '#666', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
                                     ログイン履歴はありません<br />
-                                    <span style={{ fontSize: '0.85rem' }}>※機能追加前の履歴、または一度もログインしていない場合は表示されません</span>
+                                    <span style={{ fontSize: '0.85rem' }}>
+                                        ※ここは認証イベント（パスワード/メールリンク等）だけを表示します。セッション継続による画面アクセスは表示されません
+                                    </span>
                                 </div>
                             )
                         ) : (

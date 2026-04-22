@@ -1,9 +1,6 @@
 const e=`import React, { useState } from 'react';
 import { Card } from './Card';
-import { Button } from './Button';
 import './RecipeList.css';
-import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 
 const isMobileViewport = () => {
     if (typeof window === 'undefined') return false;
@@ -48,20 +45,12 @@ const normalizeTags = (rawTags) => {
     return [];
 };
 
-const SortableRecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggleSelection, disableDrag, showOwner, ownerLabelFn, index = 0, mobileView = false }) => {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-        id: recipe.id,
-        disabled: disableDrag
-    });
-
+const RecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggleSelection, showOwner, ownerLabelFn, index = 0, mobileView = false }) => {
     const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.5 : 1,
         touchAction: 'pan-y',
         height: '100%',
         outline: 'none',
-        cursor: disableDrag ? 'default' : 'grab'
+        cursor: 'default'
     };
 
     const eagerThreshold = mobileView ? 4 : 8;
@@ -70,7 +59,7 @@ const SortableRecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, 
     const imageSrc = toOptimizedImageSrc(recipe.image, { mobile: mobileView });
 
     return (
-        <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+        <div style={style}>
             <Card
                 hoverable
                 className={\`recipe-card \${isSelected ? 'selected' : ''} \${recipe.type === 'bread' ? 'recipe-card--bread' : ''} \${(/デザート|Dessert/i.test(recipe.category || '') || (recipe.tags && recipe.tags.some(t => /デザート|Dessert/i.test(t)))) ? 'recipe-card--dessert' : ''} \${recipe.category === 'URL取り込み' || recipe.sourceUrl ? 'recipe-card--url' : ''}\`}
@@ -204,7 +193,7 @@ const splitRecipesBySection = (list) => {
     };
 };
 
-export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds, onToggleSelection, disableDrag, displayMode = 'normal', publicRecipeView = 'none', showOwner = false, ownerLabelFn, currentUser = null }) => {
+export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds, onToggleSelection, displayMode = 'normal', publicRecipeView = 'none', showOwner = false, ownerLabelFn, currentUser = null }) => {
     const [expandedSections, setExpandedSections] = useState({});
     const [isMobileView, setIsMobileView] = useState(() => isMobileViewport());
 
@@ -334,26 +323,23 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                     )}
                 </h3>
                 <div className="recipe-grid">
-                    <SortableContext items={displayItems.map(r => r.id)} strategy={rectSortingStrategy}>
-                        {displayItems.map((recipe, index) => {
-                            const isSelected = selectedIds && selectedIds.has(recipe.id);
-                            return (
-                                <SortableRecipeCard
-                                    key={recipe.id}
-                                    recipe={recipe}
-                                    isSelected={isSelected}
-                                    isSelectMode={isSelectMode}
-                                    onSelectRecipe={onSelectRecipe}
-                                    onToggleSelection={onToggleSelection}
-                                    disableDrag={disableDrag}
-                                    showOwner={showOwner}
-                                    ownerLabelFn={ownerLabelFn}
-                                    index={index}
-                                    mobileView={isMobileView}
-                                />
-                            );
-                        })}
-                    </SortableContext>
+                    {displayItems.map((recipe, index) => {
+                        const isSelected = selectedIds && selectedIds.has(recipe.id);
+                        return (
+                            <RecipeCard
+                                key={recipe.id}
+                                recipe={recipe}
+                                isSelected={isSelected}
+                                isSelectMode={isSelectMode}
+                                onSelectRecipe={onSelectRecipe}
+                                onToggleSelection={onToggleSelection}
+                                showOwner={showOwner}
+                                ownerLabelFn={ownerLabelFn}
+                                index={index}
+                                mobileView={isMobileView}
+                            />
+                        );
+                    })}
                 </div>
                 {items.length === 0 && (
                     <div style={{ color: '#9ca3af', fontSize: '0.9rem', marginTop: '0.5rem' }}>

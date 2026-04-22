@@ -36,20 +36,6 @@ import { PasswordResetPage } from './components/PasswordResetPage';
 import { Modal } from './components/Modal';
 import './App.css';
 
-import {
-  DndContext,
-  closestCenter,
-  MouseSensor,
-  TouchSensor,
-  KeyboardSensor,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
-import {
-  arrayMove,
-  sortableKeyboardCoordinates,
-} from '@dnd-kit/sortable';
-
 const LoadingScreen = ({
   label,
   subLabel,
@@ -315,6 +301,11 @@ function AppContent() {
     loadRecentHistory();
   }, [authLoading, user?.id]);
 
+  // Clear cross-account residue immediately on account switch/logout.
+  useEffect(() => {
+    setRecentIds([]);
+  }, [user?.id]);
+
   // Admin helper: load all profiles so we can show "which user's recipe" in UI.
   useEffect(() => {
     if (authLoading) return;
@@ -351,41 +342,6 @@ function AppContent() {
     const p = profilesById[raw] || profilesByDisplayId[raw] || null;
     if (p) return p.display_id || p.email || raw;
     return raw.length > 12 ? \`\${raw.slice(0, 8)}…\` : raw;
-  };
-
-  const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
-    useSensor(TouchSensor, {
-      activationConstraint: {
-        delay: 1000,
-        tolerance: 5,
-      },
-    }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  const handleDragEnd = (event) => {
-    const { active, over } = event;
-
-    if (active.id !== over.id) {
-      setRecipes((items) => {
-        const oldIndex = items.findIndex((item) => item.id === active.id);
-        const newIndex = items.findIndex((item) => item.id === over.id);
-
-        if (oldIndex === -1 || newIndex === -1) return items;
-
-        const newItems = arrayMove(items, oldIndex, newIndex);
-
-        // Optimistically update UI, fire and forget backend update
-        const updates = newItems.map((item, index) => ({
-          id: item.id,
-          order_index: index
-        }));
-        recipeService.updateOrder(updates).catch(err => console.error("Order update failed", err));
-
-        return newItems;
-      });
-    }
   };
 
   const loadRecentHistory = async () => {
@@ -618,8 +574,6 @@ function AppContent() {
     setPublicRecipeView('none');
     setDisplayMode('normal');
   };
-
-  const isDragEnabled = selectedTag === 'すべて' && !searchQuery.trim() && currentView === 'list';
 
   const handleSelectRecipe = (recipe, extraParams = {}) => {
     // Navigate to detail view
@@ -1461,42 +1415,18 @@ function AppContent() {
                   </div>
                 )}
                 <div className="recipe-list-container">
-                  {/* Wrap only RecipeList with DndContext */}
-                  {currentView === 'list' ? (
-                    <DndContext
-                      sensors={sensors}
-                      collisionDetection={closestCenter}
-                      onDragEnd={handleDragEnd}
-                    >
-                      <RecipeList
-                        recipes={filteredRecipes}
-                        onSelectRecipe={handleSelectRecipe}
-                        isSelectMode={isSelectMode}
-                        selectedIds={selectedRecipeIds}
-                        onToggleSelection={handleToggleSelection}
-                        disableDrag={!isDragEnabled}
-                        displayMode={displayMode}
-                        publicRecipeView={publicRecipeView}
-                        showOwner={user?.role === 'admin'}
-                        ownerLabelFn={getRecipeOwnerLabel}
-                        currentUser={user}
-                      />
-                    </DndContext>
-                  ) : (
-                    <RecipeList
-                      recipes={filteredRecipes}
-                      onSelectRecipe={handleSelectRecipe}
-                      isSelectMode={isSelectMode}
-                      selectedIds={selectedRecipeIds}
-                      onToggleSelection={handleToggleSelection}
-                      disableDrag={true} // Disable drag for trash/filtered views if accidentally here
-                      displayMode={displayMode}
-                      publicRecipeView={publicRecipeView}
-                      showOwner={user?.role === 'admin'}
-                      ownerLabelFn={getRecipeOwnerLabel}
-                      currentUser={user}
-                    />
-                  )}
+                  <RecipeList
+                    recipes={filteredRecipes}
+                    onSelectRecipe={handleSelectRecipe}
+                    isSelectMode={isSelectMode}
+                    selectedIds={selectedRecipeIds}
+                    onToggleSelection={handleToggleSelection}
+                    displayMode={displayMode}
+                    publicRecipeView={publicRecipeView}
+                    showOwner={user?.role === 'admin'}
+                    ownerLabelFn={getRecipeOwnerLabel}
+                    currentUser={user}
+                  />
                 </div>
               </div>
             )

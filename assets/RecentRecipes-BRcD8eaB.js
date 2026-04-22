@@ -6,7 +6,7 @@ export const RecentRecipes = ({ recipes, recentIds, onSelect }) => {
 
     // Filter and sort recipes based on recentIds order
     const recentRecipes = recentIds
-        .map(id => recipes.find(r => r.id === id))
+        .map(id => recipes.find(r => String(r.id) === String(id)))
         .filter(Boolean)
         .slice(0, 7); // Limit to 7 items as requested
 
