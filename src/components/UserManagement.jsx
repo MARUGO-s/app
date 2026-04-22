@@ -451,13 +451,15 @@ export const UserManagement = ({ onBack }) => {
             && presenceTs < dailyActivityWindow.endMs;
         const apiToday = dailyActivityMap?.[user.id] || null;
         const usedApiToday = Boolean(apiToday?.lastApiAt);
-        const todayActive = loggedInToday || usedApiToday || presenceSeenToday;
+        const todayActive = onlineNow || loggedInToday || usedApiToday || presenceSeenToday;
         const todayStateText = todayActive ? 'アクティブ' : '未アクティブ';
         const todayStateClass = todayActive
             ? 'user-management__activity-pill user-management__activity-pill--active'
             : 'user-management__activity-pill user-management__activity-pill--inactive';
         let todayReasonText = 'ログイン / API利用なし';
-        if (loggedInToday && usedApiToday) todayReasonText = 'ログイン + API利用';
+        if (onlineNow && usedApiToday) todayReasonText = 'ログイン中 + API利用';
+        else if (onlineNow) todayReasonText = 'ログイン中';
+        else if (loggedInToday && usedApiToday) todayReasonText = 'ログイン + API利用';
         else if (loggedInToday) todayReasonText = 'ログイン';
         else if (usedApiToday) todayReasonText = 'API利用';
         else if (presenceSeenToday) todayReasonText = '画面アクセス(セッション継続)';
