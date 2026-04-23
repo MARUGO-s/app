@@ -387,7 +387,7 @@ export const UserManagement = ({ onBack }) => {
     const getLoginBadge = (lastSignInAt) => {
         const info = getLoginAgeInfo(lastSignInAt);
         if (!info) {
-            return { text: '未ログイン', color: '#666666', bg: '#f0f0f0' };
+            return { text: '記録なし', color: '#666666', bg: '#f0f0f0' };
         }
 
         const days = info.days;
@@ -428,8 +428,9 @@ export const UserManagement = ({ onBack }) => {
         isLoadingPresence,
         isPresenceFeatureAvailable,
     }) => {
-        const badge = getLoginBadge(user.last_sign_in_at);
-        const loginAge = getLoginAgeInfo(user.last_sign_in_at);
+        const effectiveLastActiveAt = user.last_active_at || user.last_sign_in_at || null;
+        const badge = getLoginBadge(effectiveLastActiveAt);
+        const loginAge = getLoginAgeInfo(effectiveLastActiveAt);
         const isEditableRoleTarget = !isSuperAdmin(user) && currentUser?.id !== user.id;
         const presence = presenceMap?.[user.id] || null;
         const presenceTs = toSafeTimestamp(presence?.lastSeenAt);
@@ -442,7 +443,7 @@ export const UserManagement = ({ onBack }) => {
         const presenceText = !isPresenceFeatureAvailable
             ? '未設定'
             : (isLoadingPresence ? '判定中' : (onlineNow ? 'ログイン中' : 'オフライン'));
-        const loginAtTs = toSafeTimestamp(user.last_sign_in_at);
+        const loginAtTs = toSafeTimestamp(effectiveLastActiveAt);
         const loggedInToday = loginAtTs !== null
             && loginAtTs >= dailyActivityWindow.startMs
             && loginAtTs < dailyActivityWindow.endMs;
@@ -492,7 +493,7 @@ export const UserManagement = ({ onBack }) => {
                         更新: {user.updated_at ? new Date(user.updated_at).toLocaleString() : '---'}
                     </div>
                     <div className="user-management__meta">
-                        最終ログイン: {loginAge ? loginAge.text : '記録なし'}
+                        最終アクティブ: {loginAge ? loginAge.text : '記録なし'}
                     </div>
                     <div className="user-management__meta">
                         現在ステータス: <span className={presenceClass}>{presenceText}</span>
