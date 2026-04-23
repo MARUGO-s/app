@@ -54,6 +54,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     needs: build
     steps:
       - name: Checkout repository for deployment script
@@ -62,6 +63,8 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          timeout: 1800000
         
       - name: Install dependencies for script
         run: npm install @supabase/supabase-js
