@@ -540,7 +540,6 @@ export const recipeService = {
                 return true;
             }
 
-            //console.log(`Hidden. Owner: ${ownerTag}, User: ${currentUser.id}`);
             return false;
         });
 
@@ -635,7 +634,6 @@ export const recipeService = {
     },
 
     async createRecipe(recipe, currentUser) {
-        console.log("createRecipe called with user:", currentUser);
         const { id: _ID, created_at: _CREATED_AT, sourceUrl, ...recipeData } = recipe
 
         // Add Owner Tag
@@ -644,7 +642,6 @@ export const recipeService = {
             // Remove any existing owner tags to be safe (though create shouldn't have them)
             const cleanTags = tags.filter(t => !t.startsWith('owner:'));
             recipeData.tags = [...cleanTags, `owner:${currentUser.id}`];
-            console.log("Added owner tag. New tags:", recipeData.tags);
         } else {
             console.warn("createRecipe: No currentUser provided! Recipe will be public.");
         }
@@ -727,15 +724,12 @@ export const recipeService = {
             dbLike.created_at = newRecipe.created_at;
             dbLike.updated_at = newRecipe.updated_at;
 
-            console.log("Saving to LocalStorage:", dbLike);
-
             // LocalStorage Save
             try {
                 const localData = localStorage.getItem('local_recipes');
                 const recipes = localData ? JSON.parse(localData) : [];
                 recipes.push(dbLike);
                 localStorage.setItem('local_recipes', JSON.stringify(recipes));
-                console.log("Saved to LocalStorage success. Total recipes:", recipes.length);
             } catch (e) {
                 console.error("Failed to save to LocalStorage:", e);
                 throw error; // If both fail, throw original

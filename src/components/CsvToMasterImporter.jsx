@@ -87,8 +87,6 @@ const CsvToMasterImporter = () => {
         setLoading(true);
         setError(null);
         try {
-            console.log("Starting data load for CsvToMasterImporter...");
-
             // Fetch data
             const [csvData, masterDataMap] = await Promise.all([
                 purchasePriceService.getPriceListArray().catch(e => {
@@ -100,8 +98,6 @@ const CsvToMasterImporter = () => {
                     return new Map();
                 })
             ]);
-
-            console.log("Data fetched:", { csvCount: csvData?.length, masterSize: masterDataMap?.size });
 
             // Validate data types
             if (!Array.isArray(csvData)) {
@@ -151,8 +147,6 @@ const CsvToMasterImporter = () => {
                     isModified: false
                 });
             }
-
-            console.log("Merge completed. Items:", uniqueCsvItems.length);
             setMergedData(uniqueCsvItems);
 
         } catch (error) {

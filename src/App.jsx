@@ -678,7 +678,6 @@ function AppContent() {
         // If it has an owner tag and I am NOT the owner, I cannot overwrite it.
         // stricter: If I am NOT the confirmed owner, FORCE copy. (Protects legacy/admin recipes without tags)
         if (!isOwner) {
-          console.log(`Editing Recipe (Owner Tag: ${ownerTag || 'None'}) as ${user.id}. Not the owner. Switching to Create mode (Copy).`);
           effectiveIsEdit = false;
         }
       }

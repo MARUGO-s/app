@@ -649,7 +649,6 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                 });
 
                 if (extractedSteps.length > 0) {
-                    console.log("Extracted steps from ingredients:", extractedSteps);
                     finalRecipe.ingredients = realIngredients;
                     // Ensure steps array exists
                     finalRecipe.steps = Array.isArray(finalRecipe.steps) ? finalRecipe.steps : [];

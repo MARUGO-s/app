@@ -67,7 +67,6 @@ export const AuthProvider = ({ children }) => {
                 const parsed = JSON.parse(cached);
                 // Verify it belongs to current user
                 if (parsed && parsed.id === uid) {
-                    // console.log('[Auth] Loaded from cache:', parsed.displayId);
                     cachedUser = parsed;
                     setUser(parsed);
                 }

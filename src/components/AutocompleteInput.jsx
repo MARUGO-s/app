@@ -140,10 +140,7 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
             if (newValue.length > 0) {
                 const currentRequestId = ++requestRef.current; // Increment ID
 
-                console.log('🔍 AutocompleteInput: Fetching suggestions for:', newValue);
                 const results = await ingredientSearchService.search(newValue);
-
-                console.log('📋 AutocompleteInput: Got', results.length, 'suggestions');
 
                 // RACE CONDITION CHECK:
                 // Only update state if this is still the latest request

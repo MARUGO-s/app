@@ -38,7 +38,6 @@ export const backupService = {
         if (!token) throw new Error('ログインが必要です')
 
         const url = getEdgeFunctionUrl('scheduled-backup')
-        console.log('[backupService] Calling Edge Function:', url)
 
         const resp = await fetch(url, {
             method: 'POST',
@@ -50,7 +49,6 @@ export const backupService = {
         })
 
         const text = await resp.text()
-        console.log('[backupService] Response status:', resp.status, text)
 
         if (!resp.ok) {
             throw new Error(`バックアップ実行失敗 (${resp.status}): ${text}`)
@@ -72,7 +70,6 @@ export const backupService = {
         if (!token) throw new Error('ログインが必要です')
 
         const url = getEdgeFunctionUrl('scheduled-backup')
-        console.log('[backupService] Calling Edge Function for user:', userId, url)
 
         const resp = await fetch(url, {
             method: 'POST',
@@ -84,7 +81,6 @@ export const backupService = {
         })
 
         const text = await resp.text()
-        console.log('[backupService] Response status:', resp.status, text)
 
         if (!resp.ok) {
             throw new Error(`バックアップ実行失敗 (${resp.status}): ${text}`)

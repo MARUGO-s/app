@@ -141,7 +141,6 @@ export const VoiceInputButton = ({
             mediaStreamRef.current = stream;
 
             const mimeType = pickMimeType();
-            // console.log('[VoiceInputButton] Using mimeType:', mimeType);
 
             const recorder = mimeType
                 ? new MediaRecorder(stream, { mimeType })
