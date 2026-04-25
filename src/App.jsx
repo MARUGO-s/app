@@ -25,6 +25,7 @@ import RequestLogs from './components/RequestLogs';
 import { supabase } from './supabase';
 import { recipeService } from './services/recipeService';
 import { formatDisplayId } from './utils/formatUtils';
+import { applyImportedRecipeType } from './utils/importRecipeType';
 import { userService } from './services/userService';
 import { STORE_LIST } from './constants';
 import { AuthProvider } from './contexts/AuthContext.jsx';
@@ -749,77 +750,27 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentView, selectedRecipeId]);
 
-  const handleImportRecipe = (recipeData, sourceUrl = '') => {
+  const handleImportRecipe = (recipeData, sourceUrl = '', importOptions = {}) => {
+    const importTypeMode = importOptions?.mode === 'image'
+      ? (importOptions?.recipeType === 'bread' ? 'bread' : 'normal')
+      : 'auto';
+    const typedRecipeData = applyImportedRecipeType(recipeData, importTypeMode);
+
     // Force RecipeForm remount even when importing multiple times in the same "create" view.
     // (RecipeForm initializes local state from initialData only on mount.)
     try {
-      recipeData.__importId = (globalThis.crypto && crypto.randomUUID)
+      typedRecipeData.__importId = (globalThis.crypto && crypto.randomUUID)
         ? crypto.randomUUID()
         : `${Date.now()}_${Math.random().toString(16).slice(2)}`;
     } catch {
-      recipeData.__importId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      typedRecipeData.__importId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
     }
 
-    // Smart detection for Bread recipes (Baker's %)
-    // 1. Check for explicit keywords in title/description
-    const breadKeywords = ['ベーカーズ', 'baker', '生地', 'パン', '発酵', 'dough', 'fermentation'];
-    const recipeTitle = (recipeData.title || recipeData.name || "");
-    const titleMatch = breadKeywords.some(k => recipeTitle.toLowerCase().includes(k));
-
-    // 2. Check for yeast or flour keywords in ingredients
-    const flourKeywords = ['flour', '強力粉', '薄力粉', '準強力粉', '中力粉', '全粒粉', 'ライ麦粉', 'フランス粉', 'デュラムセモリナ', '粉'];
-    const yeastKeywords = ['yeast', 'イースト', '酵母', 'ルヴァン'];
-
-    const ingredients = recipeData.ingredients || [];
-    const hasYeast = ingredients.some(ing =>
-      yeastKeywords.some(k => (ing.name || "").toLowerCase().includes(k))
-    );
-    const hasFlour = ingredients.some(ing =>
-      flourKeywords.some(k => (ing.name || "").toLowerCase().includes(k)) &&
-      !ing.name.includes('粉糖') // Exclude powdered sugar
-    );
-
-    // 3. Check for percentage sign in quantities or units (Strong indicator of Baker's %)
-    const hasPercent = ingredients.some(ing =>
-      (ing.quantity && String(ing.quantity).includes('%')) ||
-      (ing.unit && String(ing.unit).includes('%'))
-    );
-
-    // Final Decision
-    if (hasPercent || hasYeast || (titleMatch && hasFlour)) {
-      recipeData.type = 'bread';
-      recipeData.flours = [];
-      recipeData.breadIngredients = [];
-
-      // Strict flour keywords for splitting
-      const strictFlourKeywords = ['flour', '強力粉', '薄力粉', '準強力粉', '中力粉', '全粒粉', 'ライ麦粉', 'フランス粉', 'デュラムセモリナ'];
-
-      ingredients.forEach(ing => {
-        // Cleanup quantity if it contains percent (e.g. "2%(10g)" -> "10")
-        // But for now, we just split into groups.
-        const isFlour = strictFlourKeywords.some(k => (ing.name || "").includes(k));
-        if (isFlour) {
-          recipeData.flours.push(ing);
-        } else {
-          recipeData.breadIngredients.push(ing);
-        }
-      });
-
-      // Fallback: If no flours found but it's bread, push the first ingredient as flour if it contains '粉'
-      if (recipeData.flours.length === 0 && ingredients.length > 0) {
-        const firstIng = ingredients[0];
-        if ((firstIng.name || "").includes('粉')) {
-          recipeData.flours.push(firstIng);
-          recipeData.breadIngredients = recipeData.breadIngredients.filter(i => i !== firstIng);
-        }
-      }
-    }
-
-    recipeData.sourceUrl = sourceUrl;
+    typedRecipeData.sourceUrl = sourceUrl;
     if (sourceUrl) {
-      recipeData.category = 'URL取り込み';
+      typedRecipeData.category = 'URL取り込み';
     }
-    setImportedData(recipeData);
+    setImportedData(typedRecipeData);
     setSearchParams({ view: 'create' });
   };
 

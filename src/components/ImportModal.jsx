@@ -9,10 +9,12 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
     const toast = useToast();
     const [mode, setMode] = useState(initialMode); // 'url' | 'image' | 'confirm-translation'
     const [pendingRecipe, setPendingRecipe] = useState(null);
+    const [pendingImportOptions, setPendingImportOptions] = useState(null);
     const [scrapedUrl, setScrapedUrl] = useState('');
     const [url, setUrl] = useState('');
     const [imageFile, setImageFile] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
+    const [importAsBread, setImportAsBread] = useState(false);
     // Image analysis engine preference. This is only a hint; the server may still fall back.
     // - groq: Groq (Vision) first. If it fails and Azure OCR is configured, do OCR -> Groq (Text).
     // - auto: best-effort. Groq -> (Azure OCR -> Groq) -> Gemini last.
@@ -393,6 +395,9 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
         try {
             let data;
             let currentUrl = '';
+            let importOptions = mode === 'image'
+                ? { mode: 'image', recipeType: importAsBread ? 'bread' : 'normal' }
+                : { mode: 'url' };
 
             if (mode === 'url') {
                 if (!url) return;
@@ -667,13 +672,14 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
             if (sampleText && !hasJapanese(sampleText)) {
                 // Switch to confirmation mode instead of window.confirm
                 setPendingRecipe(finalRecipe);
+                setPendingImportOptions(importOptions);
                 setScrapedUrl(currentUrl);
                 setMode('confirm-translation');
                 setIsLoading(false); // Stop loading to show UI
                 return;
             }
 
-            onImport(finalRecipe, currentUrl);
+            onImport(finalRecipe, currentUrl, importOptions);
             onClose();
 
         } catch (err) {
@@ -701,7 +707,7 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
             if (shouldTranslate) {
                 finalRecipe = await translateRecipe(pendingRecipe);
             }
-            onImport(finalRecipe, scrapedUrl);
+            onImport(finalRecipe, scrapedUrl, pendingImportOptions || {});
             onClose();
         } catch (err) {
             console.error("Translation flow error:", err);
@@ -851,6 +857,30 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                                     </label>
                                     <div className="image-engine-help">
                                         基本はここで使うAIを選んでください。おすすめは「Groq優先」です。うまくいかない場合は「Best Effort」か「手書き（Gemini）」を試してください（Geminiは高コストになりやすいので必要な時だけ）。
+                                    </div>
+                                </div>
+                                <div className="image-target-panel">
+                                    <div className="image-target-label">取り込み先タイプ</div>
+                                    <div className="image-target-buttons">
+                                        <button
+                                            type="button"
+                                            className={`image-target-btn ${!importAsBread ? 'active' : ''}`}
+                                            onClick={() => setImportAsBread(false)}
+                                            disabled={isLoading || isImagePreparing}
+                                        >
+                                            通常で取り込む
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`image-target-btn image-target-btn-bread ${importAsBread ? 'active' : ''}`}
+                                            onClick={() => setImportAsBread(true)}
+                                            disabled={isLoading || isImagePreparing}
+                                        >
+                                            {importAsBread ? '☑ パン用で取り込む' : '☐ パン用で取り込む'}
+                                        </button>
+                                    </div>
+                                    <div className="image-target-help">
+                                        デフォルトは通常です。「パン用」にチェックが付いた時のみ、パンレシピとして挿入します。
                                     </div>
                                 </div>
                                 <div className="image-upload-wrapper">

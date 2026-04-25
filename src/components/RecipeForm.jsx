@@ -9,6 +9,7 @@ import { RecipeFormSteps } from './RecipeFormSteps';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { featureFlagService } from '../services/featureFlagService';
 import { VoiceInputButton } from './VoiceInputButton';
+import { applyImportedRecipeType } from '../utils/importRecipeType';
 import './RecipeForm.css';
 import './RecipeFormMock.css';
 import { ImportModal } from './ImportModal';
@@ -159,11 +160,42 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         };
     }, []);
 
-    const handleImportedRecipe = (importedData, sourceUrl = '') => {
+    const handleImportedRecipe = (importedData, sourceUrl = '', importOptions = {}) => {
+        const importTypeMode = importOptions?.mode === 'image'
+            ? (importOptions?.recipeType === 'bread' ? 'bread' : 'normal')
+            : 'auto';
+        const typedImportedData = applyImportedRecipeType(importedData, importTypeMode);
+
+        const mapBreadItem = (item) => {
+            if (typeof item === 'string') {
+                return {
+                    id: crypto.randomUUID(),
+                    name: item,
+                    quantity: '',
+                    unit: 'g',
+                    cost: '',
+                    purchaseCost: '',
+                    isAlcohol: false,
+                    itemCategory: null,
+                };
+            }
+
+            return {
+                id: crypto.randomUUID(),
+                name: item?.name || '',
+                quantity: item?.quantity ?? '',
+                unit: item?.unit || 'g',
+                cost: item?.cost ?? '',
+                purchaseCost: item?.purchaseCost ?? '',
+                isAlcohol: Boolean(item?.isAlcohol),
+                itemCategory: item?.itemCategory ?? item?.item_category ?? null,
+            };
+        };
+
         // Map imported ingredients to form structure
         // 1. Extract Groups
         const groupMap = new Map(); // Name -> ID
-        const rawIngredients = importedData.ingredients || [];
+        const rawIngredients = typedImportedData.ingredients || [];
 
         rawIngredients.forEach(ing => {
             // Treat 'Main' as a group too (rename to '材料') to ensure it comes first if it appears first
@@ -233,15 +265,22 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
 
         setFormData(prev => ({
             ...prev,
-            title: importedData.name || importedData.title || prev.title,
-            description: importedData.description || prev.description,
-            category: sourceUrl ? 'URL取り込み' : (importedData.category || prev.category),
-            image: importedData.image || prev.image,
-            servings: importedData.recipeYield || importedData.servings || prev.servings,
+            title: typedImportedData.name || typedImportedData.title || prev.title,
+            description: typedImportedData.description || prev.description,
+            category: sourceUrl ? 'URL取り込み' : (typedImportedData.category || prev.category),
+            image: typedImportedData.image || prev.image,
+            servings: typedImportedData.recipeYield || typedImportedData.servings || prev.servings,
             ingredients: mappedIngredients,
             ingredientGroups: newGroups, // Set the groups
             steps: mappedSteps,
             stepGroups: newStepGroups, // Set step groups
+            type: typedImportedData.type || prev.type,
+            flours: typedImportedData.type === 'bread'
+                ? (typedImportedData.flours || []).map(mapBreadItem)
+                : [],
+            breadIngredients: typedImportedData.type === 'bread'
+                ? (typedImportedData.breadIngredients || []).map(mapBreadItem)
+                : [],
             // Reset sections 
             ingredientSections: undefined,
             stepSections: undefined,
