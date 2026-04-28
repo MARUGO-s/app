@@ -1720,15 +1720,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
 
                                                     return (
                                                         <div key={group.id} style={{ marginBottom: '1.5rem' }}>
-                                                            <h3 style={{
-                                                                fontSize: '1rem',
-                                                                borderBottom: '2px solid var(--color-border)',
-                                                                paddingBottom: '0.5rem',
-                                                                marginBottom: '0.5rem',
-                                                                marginTop: '0.5rem',
-                                                                color: 'var(--color-text-main)',
-                                                                display: ['材料', 'Ingredients', 'ingredients'].includes(group.name) ? 'none' : 'block'
-                                                            }}>
+                                                            <h3 className={`ingredient-group-heading ${['材料', 'Ingredients', 'ingredients'].includes(group.name) ? 'ingredient-group-heading--hidden' : ''}`}>
                                                                 {group.name}
                                                             </h3>
                                                             <table className="ingredients-table">

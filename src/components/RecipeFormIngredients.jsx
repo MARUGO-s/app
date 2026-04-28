@@ -181,8 +181,28 @@ const isLikelyLegacyPackPrice = (item, normalizedCost) => {
     return false;
 };
 
+const SECTION_SORT_PREFIX = 'ingredient-section-sort:';
+const SECTION_DROP_PREFIX = 'ingredient-section-drop:';
+const ITEM_SORT_PREFIX = 'ingredient-item-sort:';
+
+const toDndString = (value) => String(value ?? '');
+const toSectionSortId = (sectionId) => `${SECTION_SORT_PREFIX}${toDndString(sectionId)}`;
+const toSectionDropId = (sectionId) => `${SECTION_DROP_PREFIX}${toDndString(sectionId)}`;
+const toItemSortId = (itemId) => `${ITEM_SORT_PREFIX}${toDndString(itemId)}`;
+
+const parsePrefixedId = (value, prefix) => {
+    const str = String(value ?? '');
+    if (!str.startsWith(prefix)) return null;
+    return str.slice(prefix.length);
+};
+
+const parseSectionSortId = (value) => parsePrefixedId(value, SECTION_SORT_PREFIX);
+const parseSectionDropId = (value) => parsePrefixedId(value, SECTION_DROP_PREFIX);
+const parseItemSortId = (value) => parsePrefixedId(value, ITEM_SORT_PREFIX);
+
 // --- Sortable Item Component ---
 const SortableIngredientItem = React.memo(({
+    sortId,
     id,
     index,
     item,
@@ -209,7 +229,10 @@ const SortableIngredientItem = React.memo(({
         transform,
         transition,
         isDragging
-    } = useSortable({ id, data: { groupId, index } });
+    } = useSortable({
+        id: sortId,
+        data: { type: 'ingredient-item', groupId, index, itemId: id },
+    });
 
     const style = {
         transform: CSS.Translate.toString(transform),
@@ -362,6 +385,7 @@ const SortableIngredientItem = React.memo(({
     if (triggerTargetsThis(nextProps.voiceSearchTrigger) && prevProps.voiceSearchTrigger?.key !== nextProps.voiceSearchTrigger?.key) return false;
     return (
         prevProps.id === nextProps.id &&
+        prevProps.sortId === nextProps.sortId &&
         prevProps.index === nextProps.index &&
         prevProps.groupId === nextProps.groupId &&
         prevProps.yieldPercentApplied === nextProps.yieldPercentApplied &&
@@ -370,19 +394,59 @@ const SortableIngredientItem = React.memo(({
 });
 
 // --- Sortable Section Component ---
-const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, children }) => {
-    const { setNodeRef } = useDroppable({ id: section.id });
+const SortableSection = ({
+    section,
+    sections,
+    sortId,
+    dropId,
+    onSectionChange,
+    onRemoveSection,
+    children
+}) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef: setSortableNodeRef,
+        transform,
+        transition,
+        isDragging
+    } = useSortable({
+        id: sortId,
+        data: { type: 'ingredient-section', sectionId: section.id },
+    });
+    const { setNodeRef: setDropNodeRef } = useDroppable({ id: dropId });
+
+    const sectionStyle = {
+        border: '1px solid #e0e0e0',
+        boxShadow: 'none',
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.8 : 1,
+        position: 'relative',
+        zIndex: isDragging ? 20 : 'auto',
+    };
 
     return (
-        <Card className="ingredient-section mb-md" style={{ border: '1px solid #e0e0e0', boxShadow: 'none' }}>
+        <Card ref={setSortableNodeRef} className="ingredient-section mb-md" style={sectionStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '0.5rem' }}>
-                <Input
-                    value={section.name}
-                    onChange={(e) => onSectionChange(section.id, e.target.value)}
-                    placeholder="グループ名 (例: ソース)"
-                    className="section-header-input"
-                    style={{ fontWeight: 'bold', border: 'none', background: 'transparent', fontSize: '1.05rem', padding: '4px', width: '70%' }}
-                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '70%' }}>
+                    <div
+                        {...attributes}
+                        {...listeners}
+                        className="section-drag-handle"
+                        title="グループを並び替え"
+                        style={{ cursor: 'grab', color: '#9ca3af', padding: '0 4px', touchAction: 'none', userSelect: 'none' }}
+                    >
+                        ⋮⋮
+                    </div>
+                    <Input
+                        value={section.name}
+                        onChange={(e) => onSectionChange(section.id, e.target.value)}
+                        placeholder="グループ名 (例: ソース)"
+                        className="section-header-input"
+                        style={{ fontWeight: 'bold', border: 'none', background: 'transparent', fontSize: '1.05rem', padding: '4px', width: '100%' }}
+                    />
+                </div>
 
                 <div style={{ display: 'flex', gap: '8px' }}>
                     {sections.length > 1 && (
@@ -404,7 +468,7 @@ const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, 
                 <span></span>
             </div>
 
-            <div ref={setNodeRef} className="section-ingredients-list" style={{ minHeight: '50px', transition: 'min-height 0.2s', paddingBottom: '10px' }}>
+            <div ref={setDropNodeRef} className="section-ingredients-list" style={{ minHeight: '50px', transition: 'min-height 0.2s', paddingBottom: '10px' }}>
                 {children}
                 {section.items.length === 0 && (
                     <div className="recipe-form-drop-placeholder" style={{ padding: '10px', textAlign: 'center', color: '#aaa', fontSize: '0.85rem', border: '1px dashed #ddd', borderRadius: '4px' }}>
@@ -582,54 +646,83 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
 
     const handleDragOver = ({ active, over }) => {
         if (!over) return;
-        const activeId = active.id;
-        const overId = over.id;
+        const activeItemId = parseItemSortId(active.id);
+        if (!activeItemId) return;
 
-        // Find which section the items belong to
-        const activeSection = sections.find(s => s.items.some(i => i.id === activeId));
-        const overSection = sections.find(s => s.items.some(i => i.id === overId)) || sections.find(s => s.id === overId); // over could be container or item
+        const overItemId = parseItemSortId(over.id);
+        const overSectionDrop = parseSectionDropId(over.id);
+        const overSectionSort = parseSectionSortId(over.id);
 
-        if (!activeSection || !overSection || activeSection === overSection) {
+        const activeSection = sections.find((section) =>
+            section.items.some((item) => toDndString(item.id) === activeItemId)
+        );
+
+        let overSection = null;
+        if (overItemId) {
+            overSection = sections.find((section) =>
+                section.items.some((item) => toDndString(item.id) === overItemId)
+            );
+        } else if (overSectionDrop) {
+            overSection = sections.find((section) => toDndString(section.id) === overSectionDrop);
+        } else if (overSectionSort) {
+            overSection = sections.find((section) => toDndString(section.id) === overSectionSort);
+        }
+
+        if (!activeSection || !overSection || activeSection.id === overSection.id) {
             return;
         }
 
         // Moving between containers
-        setFormData(prev => {
-            const activeItems = activeSection.items;
-            const overItems = overSection.items;
-            const activeIndex = activeItems.findIndex(i => i.id === activeId);
-            const overIndex = overItems.findIndex(i => i.id === overId);
+        setFormData((prev) => {
+            const prevSections = prev.ingredientSections || [];
+            const activeSectionIndex = prevSections.findIndex((section) =>
+                section.items.some((item) => toDndString(item.id) === activeItemId)
+            );
+            const overSectionId = overSectionDrop || overSectionSort;
+            const overSectionIndex = overItemId
+                ? prevSections.findIndex((section) =>
+                    section.items.some((item) => toDndString(item.id) === overItemId)
+                )
+                : prevSections.findIndex((section) => toDndString(section.id) === overSectionId);
 
-            let newIndex;
-            if (overId === overSection.id) {
-                // Dropped on container
-                newIndex = overItems.length + 1;
-            } else {
-                const isBelowOverItem =
+            if (activeSectionIndex < 0 || overSectionIndex < 0 || activeSectionIndex === overSectionIndex) {
+                return prev;
+            }
+
+            const sourceSection = prevSections[activeSectionIndex];
+            const targetSection = prevSections[overSectionIndex];
+            const movingItemIndex = sourceSection.items.findIndex((item) => toDndString(item.id) === activeItemId);
+            if (movingItemIndex < 0) return prev;
+
+            const movingItem = sourceSection.items[movingItemIndex];
+            const nextSourceItems = sourceSection.items.filter((item) => toDndString(item.id) !== activeItemId);
+            const baseTargetItems = targetSection.items.filter((item) => toDndString(item.id) !== activeItemId);
+
+            let insertIndex = baseTargetItems.length;
+            if (overItemId) {
+                const overIndex = baseTargetItems.findIndex((item) => toDndString(item.id) === overItemId);
+                const isBelowOverItem = Boolean(
                     over &&
                     active.rect.current.translated &&
-                    active.rect.current.translated.top > over.rect.top + over.rect.height;
-                const modifier = isBelowOverItem ? 1 : 0;
-                newIndex = overIndex >= 0 ? overIndex + modifier : overItems.length + 1;
+                    active.rect.current.translated.top > over.rect.top + over.rect.height
+                );
+                if (overIndex >= 0) {
+                    insertIndex = overIndex + (isBelowOverItem ? 1 : 0);
+                }
             }
+            const boundedInsertIndex = Math.max(0, Math.min(insertIndex, baseTargetItems.length));
+            const nextTargetItems = [
+                ...baseTargetItems.slice(0, boundedInsertIndex),
+                movingItem,
+                ...baseTargetItems.slice(boundedInsertIndex),
+            ];
 
             return {
                 ...prev,
-                ingredientSections: prev.ingredientSections.map(s => {
-                    if (s.id === activeSection.id) {
-                        return { ...s, items: activeItems.filter(i => i.id !== activeId) };
-                    }
-                    if (s.id === overSection.id) {
-                        return {
-                            ...s,
-                            items: [
-                                ...overItems.slice(0, newIndex),
-                                activeItems[activeIndex],
-                                ...overItems.slice(newIndex, overItems.length)
-                            ]
-                        };
-                    }
-                    return s;
+                ingredientSections: prevSections.map((section, index) => {
+                    if (index === activeSectionIndex) return { ...section, items: nextSourceItems };
+                    if (index === overSectionIndex) return { ...section, items: nextTargetItems };
+                    return section;
                 })
             };
         });
@@ -637,27 +730,53 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
 
     const handleDragEnd = ({ active, over }) => {
         if (!over) return;
-        const activeId = active.id;
-        const overId = over.id;
+        const activeSectionSortId = parseSectionSortId(active.id);
+        const overSectionSortId = parseSectionSortId(over.id);
 
-        const activeSection = sections.find(s => s.items.some(i => i.id === activeId));
-        const overSection = sections.find(s => s.items.some(i => i.id === overId)) || sections.find(s => s.id === overId);
-
-        if (activeSection && overSection && activeSection === overSection) {
-            const activeIndex = activeSection.items.findIndex(i => i.id === activeId);
-            const overIndex = overSection.items.findIndex(i => i.id === overId);
-            if (activeIndex !== overIndex) {
-                setFormData(prev => ({
-                    ...prev,
-                    ingredientSections: prev.ingredientSections.map(s => {
-                        if (s.id === activeSection.id) {
-                            return { ...s, items: arrayMove(s.items, activeIndex, overIndex) };
-                        }
-                        return s;
-                    })
-                }));
+        if (activeSectionSortId && overSectionSortId) {
+            if (activeSectionSortId !== overSectionSortId) {
+                setFormData((prev) => {
+                    const prevSections = prev.ingredientSections || [];
+                    const oldIndex = prevSections.findIndex((section) => toDndString(section.id) === activeSectionSortId);
+                    const newIndex = prevSections.findIndex((section) => toDndString(section.id) === overSectionSortId);
+                    if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return prev;
+                    return {
+                        ...prev,
+                        ingredientSections: arrayMove(prevSections, oldIndex, newIndex),
+                    };
+                });
             }
+            return;
         }
+
+        const activeItemId = parseItemSortId(active.id);
+        const overItemId = parseItemSortId(over.id);
+        if (!activeItemId || !overItemId) return;
+
+        setFormData((prev) => {
+            const prevSections = prev.ingredientSections || [];
+            const activeSectionIndex = prevSections.findIndex((section) =>
+                section.items.some((item) => toDndString(item.id) === activeItemId)
+            );
+            const overSectionIndex = prevSections.findIndex((section) =>
+                section.items.some((item) => toDndString(item.id) === overItemId)
+            );
+            if (activeSectionIndex < 0 || overSectionIndex < 0 || activeSectionIndex !== overSectionIndex) {
+                return prev;
+            }
+
+            const section = prevSections[activeSectionIndex];
+            const oldIndex = section.items.findIndex((item) => toDndString(item.id) === activeItemId);
+            const newIndex = section.items.findIndex((item) => toDndString(item.id) === overItemId);
+            if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return prev;
+
+            const nextSections = [...prevSections];
+            nextSections[activeSectionIndex] = {
+                ...section,
+                items: arrayMove(section.items, oldIndex, newIndex),
+            };
+            return { ...prev, ingredientSections: nextSections };
+        });
     };
 
     const handleConversionApply = (normalizedCost, normalizedUnit, packetPrice, packetSize) => {
@@ -1070,40 +1189,46 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
             onDragEnd={handleDragEnd}
         >
             <div className="recipe-form-ingredients">
-                {sections.map(section => (
-                    <SortableContext key={section.id} id={section.id} items={section.items.map(i => i.id)} strategy={verticalListSortingStrategy}>
+                <SortableContext items={sections.map((section) => toSectionSortId(section.id))} strategy={verticalListSortingStrategy}>
+                    {sections.map(section => (
                         <SortableSection
+                            key={section.id}
                             section={section}
                             sections={sections}
+                            sortId={toSectionSortId(section.id)}
+                            dropId={toSectionDropId(section.id)}
                             onSectionChange={handleSectionNameChange}
                             onRemoveSection={handleRemoveSection}
                         >
-                            {section.items.map((item, index) => (
-                                (() => {
-                                    const convForYield = findConversionByName(conversionMap, item?.name);
-                                    const yieldPercentApplied = normalizeYieldPercent(
-                                        convForYield?.yieldPercent ?? convForYield?.yield_percent ?? item?.yieldPercent ?? item?.yield_percent
-                                    );
+                            <SortableContext items={section.items.map((item) => toItemSortId(item.id))} strategy={verticalListSortingStrategy}>
+                                {section.items.map((item, index) => (
+                                    (() => {
+                                        const convForYield = findConversionByName(conversionMap, item?.name);
+                                        const yieldPercentApplied = normalizeYieldPercent(
+                                            convForYield?.yieldPercent ?? convForYield?.yield_percent ?? item?.yieldPercent ?? item?.yield_percent
+                                        );
 
-                                    return (
-                                        <SortableIngredientItem
-                                            key={item.id}
-                                            id={item.id}
-                                            index={index}
-                                            item={item}
-                                            groupId={section.id}
-                                            yieldPercentApplied={yieldPercentApplied}
-                                            onChange={handleItemChange}
-                                            onRemove={handleRemoveItem}
-                                            handleSuggestionSelect={handleSuggestionSelect}
-                                            onOpenConversion={() => setConversionModal({ isOpen: true, groupId: section.id, index: index })}
-                                            onQuantityVoiceTranscript={handleQuantityVoiceTranscript}
-                                            onNameVoiceComplete={(gid, idx) => setVoiceSearchTrigger(prev => ({ key: prev.key + 1, groupId: gid, index: idx }))}
-                                            voiceSearchTrigger={voiceSearchTrigger}
-                                        />
-                                    );
-                                })()
-                            ))}
+                                        return (
+                                            <SortableIngredientItem
+                                                key={item.id}
+                                                sortId={toItemSortId(item.id)}
+                                                id={item.id}
+                                                index={index}
+                                                item={item}
+                                                groupId={section.id}
+                                                yieldPercentApplied={yieldPercentApplied}
+                                                onChange={handleItemChange}
+                                                onRemove={handleRemoveItem}
+                                                handleSuggestionSelect={handleSuggestionSelect}
+                                                onOpenConversion={() => setConversionModal({ isOpen: true, groupId: section.id, index: index })}
+                                                onQuantityVoiceTranscript={handleQuantityVoiceTranscript}
+                                                onNameVoiceComplete={(gid, idx) => setVoiceSearchTrigger(prev => ({ key: prev.key + 1, groupId: gid, index: idx }))}
+                                                voiceSearchTrigger={voiceSearchTrigger}
+                                            />
+                                        );
+                                    })()
+                                ))}
+                            </SortableContext>
                             <Button
                                 type="button"
                                 variant="ghost"
@@ -1113,8 +1238,8 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                                 + 材料を追加
                             </Button>
                         </SortableSection>
-                    </SortableContext>
-                ))}
+                    ))}
+                </SortableContext>
 
                 <Button
                     type="button"
