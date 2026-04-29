@@ -149,6 +149,41 @@
   word-break: break-word;
 }
 
+.user-management__store-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  border: 1px solid #fdba74;
+  padding: 2px 8px;
+  margin-left: 6px;
+  color: #9a3412;
+  background-color: #fff7ed;
+}
+
+.user-management__store-chip--empty {
+  color: #6b7280;
+  background-color: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.user-management__store-error {
+  background-color: #ffebee;
+  color: #c62828;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+  max-height: 180px;
+  overflow: auto;
+}
+
 .user-management__meta + .user-management__meta {
   margin-top: 2px;
 }

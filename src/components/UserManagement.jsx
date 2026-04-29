@@ -5,6 +5,7 @@ import { Card } from './Card';
 import { Modal } from './Modal';
 import { useAuth } from '../contexts/useAuth';
 import { formatDisplayId } from '../utils/formatUtils';
+import { STORE_LIST } from '../constants';
 import './UserManagement.css';
 
 const NARROW_BREAKPOINT = 480;
@@ -113,6 +114,10 @@ export const UserManagement = ({ onBack }) => {
     const [isResetting, setIsResetting] = useState(false);
     const [isSendingResetEmail, setIsSendingResetEmail] = useState(false);
     const [savingMasterTargets, setSavingMasterTargets] = useState(new Set());
+    const [storeEditTarget, setStoreEditTarget] = useState(null);
+    const [storeDraft, setStoreDraft] = useState('');
+    const [storeEditError, setStoreEditError] = useState('');
+    const [isSavingStore, setIsSavingStore] = useState(false);
 
     // Login Logs state
     const [logTarget, setLogTarget] = useState(null); // { id, display_id, email }
@@ -352,6 +357,44 @@ export const UserManagement = ({ onBack }) => {
         }
     };
 
+    const openStoreEditor = (targetUser) => {
+        setStoreEditTarget(targetUser);
+        setStoreDraft(targetUser?.store_name || '');
+        setStoreEditError('');
+    };
+
+    const handleSaveStoreAssignment = async () => {
+        if (!storeEditTarget?.id) return;
+        setIsSavingStore(true);
+        setStoreEditError('');
+
+        try {
+            const updated = await userService.adminSetProfileStoreName(storeEditTarget.id, storeDraft);
+            const confirmedStoreName = String(updated?.store_name || '').trim();
+
+            setUsers(prev => prev.map((user) => (
+                user.id === storeEditTarget.id
+                    ? {
+                        ...user,
+                        store_name: confirmedStoreName,
+                        updated_at: updated?.updated_at || user.updated_at,
+                    }
+                    : user
+            )));
+
+            if (storeEditTarget.id === currentUser?.id) {
+                patchCurrentUserProfile?.({ storeName: confirmedStoreName });
+            }
+
+            setStoreEditTarget(null);
+        } catch (err) {
+            console.error(err);
+            setStoreEditError(err?.message || '店舗配属の保存に失敗しました');
+        } finally {
+            setIsSavingStore(false);
+        }
+    };
+
     const handleDeleteUser = async () => {
         if (!deleteTarget) return;
         setIsDeleting(true);
@@ -412,6 +455,7 @@ export const UserManagement = ({ onBack }) => {
         isSuperAdmin,
         currentUser,
         handleRoleChange,
+        handleOpenStoreEditor,
         savingMasterTargets,
         handleToggleMasterRecipeVisibility,
         handleOpenLoginLogs,
@@ -487,6 +531,12 @@ export const UserManagement = ({ onBack }) => {
                         </div>
                     )}
                     <div className="user-management__meta">
+                        店舗配属:
+                        <span className={`user-management__store-chip ${user.store_name ? '' : 'user-management__store-chip--empty'}`}>
+                            {user.store_name || '未設定'}
+                        </span>
+                    </div>
+                    <div className="user-management__meta">
                         登録: {new Date(user.created_at).toLocaleString()}
                     </div>
                     <div className="user-management__meta">
@@ -537,6 +587,14 @@ export const UserManagement = ({ onBack }) => {
                     )}
 
                     <div className="user-management__card-actions-row">
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleOpenStoreEditor(user)}
+                            className="user-management__action-btn"
+                        >
+                            店舗配属
+                        </Button>
                         {!isSuperAdmin(user) && (
                             <label className="user-management__master-toggle">
                                 <input
@@ -634,6 +692,7 @@ export const UserManagement = ({ onBack }) => {
                                             isSuperAdmin={isSuperAdmin}
                                             currentUser={currentUser}
                                             handleRoleChange={handleRoleChange}
+                                            handleOpenStoreEditor={openStoreEditor}
                                             savingMasterTargets={savingMasterTargets}
                                             handleToggleMasterRecipeVisibility={handleToggleMasterRecipeVisibility}
                                             handleOpenLoginLogs={handleOpenLoginLogs}
@@ -667,6 +726,7 @@ export const UserManagement = ({ onBack }) => {
                                             isSuperAdmin={isSuperAdmin}
                                             currentUser={currentUser}
                                             handleRoleChange={handleRoleChange}
+                                            handleOpenStoreEditor={openStoreEditor}
                                             savingMasterTargets={savingMasterTargets}
                                             handleToggleMasterRecipeVisibility={handleToggleMasterRecipeVisibility}
                                             handleOpenLoginLogs={handleOpenLoginLogs}
@@ -693,6 +753,77 @@ export const UserManagement = ({ onBack }) => {
                         </div>
                     </div>
                 )}
+
+                <Modal
+                    isOpen={!!storeEditTarget}
+                    onClose={() => {
+                        if (isSavingStore) return;
+                        setStoreEditTarget(null);
+                        setStoreEditError('');
+                    }}
+                    title="店舗配属の設定"
+                    size="small"
+                >
+                    <div style={{ color: '#333', lineHeight: 1.5 }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>
+                            対象: {formatDisplayId(storeEditTarget?.display_id || storeEditTarget?.email || storeEditTarget?.id)}
+                        </div>
+                        {storeEditTarget?.email && (
+                            <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '12px', wordBreak: 'break-all' }}>
+                                {storeEditTarget.email}
+                            </div>
+                        )}
+
+                        <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '12px' }}>
+                            店舗一覧から選択するか、直接入力してください。空欄で保存すると未設定に戻ります。
+                        </div>
+
+                        {storeEditError && (
+                            <div className="user-management__store-error">
+                                {storeEditError}
+                            </div>
+                        )}
+
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: '#555', marginBottom: '6px' }}>
+                                店舗名
+                            </label>
+                            <input
+                                type="text"
+                                value={storeDraft}
+                                onChange={(e) => setStoreDraft(e.target.value)}
+                                placeholder="店舗名を入力または選択"
+                                list="user-management-store-options"
+                                style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ddd' }}
+                            />
+                            <datalist id="user-management-store-options">
+                                {STORE_LIST.map((store) => (
+                                    <option key={store} value={store} />
+                                ))}
+                            </datalist>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' }}>
+                            <Button
+                                variant="ghost"
+                                onClick={() => {
+                                    setStoreEditTarget(null);
+                                    setStoreEditError('');
+                                }}
+                                disabled={isSavingStore}
+                            >
+                                キャンセル
+                            </Button>
+                            <Button
+                                variant="primary"
+                                isLoading={isSavingStore}
+                                onClick={handleSaveStoreAssignment}
+                            >
+                                保存する
+                            </Button>
+                        </div>
+                    </div>
+                </Modal>
 
                 <Modal
                     isOpen={!!resetTarget}

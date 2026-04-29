@@ -12,6 +12,90 @@ const normalizeProfileRow = (payload) => {
     return null;
 };
 
+const PROFILE_SELECT_FIELD_SETS = [
+    'id, display_id, email, store_name, role, show_master_recipes, created_at, updated_at',
+    'id, display_id, email, role, show_master_recipes, created_at, updated_at',
+    'id, display_id, store_name, role, show_master_recipes, created_at, updated_at',
+    'id, display_id, role, show_master_recipes, created_at, updated_at',
+];
+
+const normalizeStoreName = (value) => {
+    const normalized = String(value || '').trim();
+    return normalized || null;
+};
+
+const isRpcSignatureOrMissingError = (error) => {
+    const code = String(error?.code || '').toUpperCase();
+    const text = [error?.message, error?.details, error?.hint]
+        .map((v) => String(v || '').toLowerCase())
+        .join(' ');
+    if (code === 'PGRST202' || code === 'PGRST204') return true;
+    return text.includes('could not find the function') || text.includes('schema cache');
+};
+
+const toStoreAssignmentError = (error) => {
+    if (!error) return new Error('店舗配属の保存に失敗しました。');
+    if (isRpcSignatureOrMissingError(error)) {
+        return new Error('店舗配属の保存に失敗しました。DB側の最新マイグレーション適用後に再実行してください。');
+    }
+    return error instanceof Error ? error : new Error(String(error?.message || error));
+};
+
+const hasMissingProfileColumnError = (error, columnName) => (
+    String(error?.message || '').toLowerCase().includes(String(columnName || '').toLowerCase())
+);
+
+const shouldRetryProfileColumnFallback = (error) => (
+    hasMissingProfileColumnError(error, 'email')
+    || hasMissingProfileColumnError(error, 'store_name')
+);
+
+const selectAllProfilesDirect = async () => {
+    let lastError = null;
+
+    for (const fields of PROFILE_SELECT_FIELD_SETS) {
+        const result = await supabase
+            .from('profiles')
+            .select(fields)
+            .order('created_at', { ascending: false });
+
+        if (!result.error) {
+            return result.data || [];
+        }
+
+        lastError = result.error;
+        if (!shouldRetryProfileColumnFallback(lastError)) {
+            throw lastError;
+        }
+    }
+
+    throw lastError || new Error('profiles select failed');
+};
+
+const updateProfileDirectWithFallback = async (profileId, updates) => {
+    let lastError = null;
+
+    for (const fields of PROFILE_SELECT_FIELD_SETS) {
+        const result = await supabase
+            .from('profiles')
+            .update(updates)
+            .eq('id', profileId)
+            .select(fields)
+            .single();
+
+        if (!result.error) {
+            return result.data;
+        }
+
+        lastError = result.error;
+        if (!shouldRetryProfileColumnFallback(lastError)) {
+            throw lastError;
+        }
+    }
+
+    throw lastError || new Error('profiles update failed');
+};
+
 export const userService = {
     async fetchAllProfiles() {
         // Prefer admin RPC if available (profiles RLS may restrict direct SELECT).
@@ -26,24 +110,7 @@ export const userService = {
             console.warn('admin_list_profiles RPC threw (fallback to direct select):', e);
         }
 
-        // Prefer selecting email if schema supports it; fallback for older DBs.
-        const res1 = await supabase
-            .from('profiles')
-            .select('id, display_id, email, role, show_master_recipes, created_at, updated_at')
-            .order('created_at', { ascending: false });
-
-        if (!res1.error) return res1.data || [];
-
-        if (String(res1.error.message || '').toLowerCase().includes('email')) {
-            const res2 = await supabase
-                .from('profiles')
-                .select('id, display_id, role, show_master_recipes, created_at, updated_at')
-                .order('created_at', { ascending: false });
-            if (res2.error) throw res2.error;
-            return res2.data || [];
-        }
-
-        throw res1.error;
+        return selectAllProfilesDirect();
     },
 
     async updateProfile(profileId, updates) {
@@ -80,40 +147,48 @@ export const userService = {
         // and 'profiles_update_own_or_admin' is gone.
         // So we strictly rely on RPC for that specific field. 
         // But we try anyway to support "own profile" updates or other fields.
+        try {
+            return await updateProfileDirectWithFallback(profileId, updates);
+        } catch (res1Error) {
+            if (rpcError && isMasterPrefOnlyUpdate) {
+                console.error('Direct update also failed:', res1Error);
+                throw new Error(`設定の保存に失敗しました。(RPC: ${rpcError.message})`);
+            }
 
-        const res1 = await supabase
-            .from('profiles')
-            .update(updates)
-            .eq('id', profileId)
-            .select('id, display_id, email, role, show_master_recipes, created_at, updated_at')
-            .single();
-
-        if (!res1.error) return res1.data;
-
-        // If direct update failed...
-        if (rpcError && isMasterPrefOnlyUpdate) {
-            // Check if direct update also failed. 
-            // If so, throw the RPC error as it's more relevant for "Master Share" feature.
-            // But if direct update failed with "PGRST116" (not found?) or "42501" (RLS), 
-            // and we had an RPC error, we should probably throw the RPC error message if meaningful.
-            console.error('Direct update also failed:', res1.error);
-            throw new Error(`設定の保存に失敗しました。(RPC: ${rpcError.message})`);
+            throw res1Error;
         }
-
-        if (String(res1.error.message || '').toLowerCase().includes('email')) {
-            const res2 = await supabase
-                .from('profiles')
-                .update(updates)
-                .eq('id', profileId)
-                .select('id, display_id, role, show_master_recipes, created_at, updated_at')
-                .single();
-            if (res2.error) throw res2.error;
-            return res2.data;
-        }
-
-        throw res1.error;
     }
     ,
+
+    async adminSetProfileStoreName(profileId, storeName) {
+        const normalizedStoreName = normalizeStoreName(storeName);
+        let rpcFailure = null;
+        const rpcParamCandidates = [
+            { target_profile_id: profileId, new_store_name: normalizedStoreName },
+            { p_target_profile_id: profileId, p_new_store_name: normalizedStoreName },
+        ];
+
+        for (const params of rpcParamCandidates) {
+            try {
+                const { data, error } = await supabase.rpc('admin_set_profile_store_name', params);
+                if (error) throw error;
+
+                const row = normalizeProfileRow(data);
+                if (row) return row;
+                return await this.fetchAllProfiles().then((rows) => rows.find((rowItem) => rowItem.id === profileId));
+            } catch (error) {
+                rpcFailure = error;
+                console.warn('RPC admin_set_profile_store_name failed:', error);
+                if (!isRpcSignatureOrMissingError(error)) break;
+            }
+        }
+
+        try {
+            return await this.updateProfile(profileId, { store_name: normalizedStoreName });
+        } catch (fallbackError) {
+            throw toStoreAssignmentError(rpcFailure || fallbackError);
+        }
+    },
 
     async adminGetLoginLogs(userId) {
         const { data, error } = await supabase.rpc('admin_get_login_logs', {
