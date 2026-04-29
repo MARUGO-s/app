@@ -76,15 +76,32 @@ const toPlainTextList = (value) => {
         .filter(Boolean);
 };
 
+const stripCodeFence = (value) => {
+    const text = String(value || '').trim();
+    const fenceMatch = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+    if (fenceMatch) {
+        return String(fenceMatch[1] || '').trim();
+    }
+    return text;
+};
+
+const tryParseJson = (value) => {
+    try {
+        return JSON.parse(value);
+    } catch {
+        return null;
+    }
+};
+
 const formatAnswerText = (answer) => {
-    const raw = String(answer || '').trim();
+    const raw = stripCodeFence(answer);
     if (!raw) return '';
 
-    let parsed = null;
-    try {
-        parsed = JSON.parse(raw);
-    } catch {
-        return raw;
+    let parsed = tryParseJson(raw);
+    if (typeof parsed === 'string') {
+        // Some logs are double-encoded JSON strings.
+        const nested = tryParseJson(stripCodeFence(parsed));
+        if (nested && typeof nested === 'object') parsed = nested;
     }
 
     if (!parsed || typeof parsed !== 'object') return raw;
