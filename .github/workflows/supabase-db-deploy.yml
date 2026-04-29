@@ -15,11 +15,28 @@ jobs:
         with:
           version: latest
 
-      - name: Push migrations to Supabase
+      - name: Validate required secrets
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-        run: supabase db push --project-ref "${SUPABASE_PROJECT_REF}" --include-all
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          test -n "${SUPABASE_ACCESS_TOKEN}" || (echo "Missing secret: SUPABASE_ACCESS_TOKEN" && exit 1)
+          test -n "${SUPABASE_PROJECT_REF}" || (echo "Missing secret: SUPABASE_PROJECT_REF" && exit 1)
+          test -n "${SUPABASE_DB_PASSWORD}" || (echo "Missing secret: SUPABASE_DB_PASSWORD" && exit 1)
+
+      - name: Link Supabase project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase link --project-ref "${SUPABASE_PROJECT_REF}" --password "${SUPABASE_DB_PASSWORD}"
+
+      - name: Push migrations to Supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase db push --linked --include-all --password "${SUPABASE_DB_PASSWORD}"
 
       - name: Install dependencies
         run: npm install @supabase/supabase-js
