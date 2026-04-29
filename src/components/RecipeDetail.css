@@ -778,6 +778,18 @@
     line-height: 1.1;
 }
 
+.ingredient-group-heading__applied-cost {
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #ffffff;
+    border: 1px solid rgba(180, 83, 9, 0.35);
+    color: #b45309;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
 .ingredient-group-heading--hidden {
     display: none;
 }
@@ -945,6 +957,11 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 12px;
+}
+
+.group-usage-simulator__actions {
+    display: flex;
+    justify-content: flex-end;
 }
 
 .group-usage-simulator__result-card {
