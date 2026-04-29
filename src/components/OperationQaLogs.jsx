@@ -62,6 +62,57 @@ const clipText = (value, max = 130) => {
     return `${text.slice(0, max - 1)}…`;
 };
 
+const toPlainTextList = (value) => {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map((item) => {
+            if (typeof item === 'string') return item.trim();
+            if (item && typeof item === 'object') {
+                const step = String(item.step || '').trim();
+                return step;
+            }
+            return '';
+        })
+        .filter(Boolean);
+};
+
+const formatAnswerText = (answer) => {
+    const raw = String(answer || '').trim();
+    if (!raw) return '';
+
+    let parsed = null;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        return raw;
+    }
+
+    if (!parsed || typeof parsed !== 'object') return raw;
+
+    const lines = [];
+    const title = String(parsed.title || '').trim();
+    const description = String(parsed.description || '').trim();
+    if (title) lines.push(title);
+    if (description) lines.push(description);
+
+    const servings = String(parsed.servings || '').trim();
+    if (servings && servings !== '-') {
+        lines.push(`分量: ${servings}`);
+    }
+
+    const ingredients = toPlainTextList(parsed.ingredients);
+    if (ingredients.length > 0) {
+        lines.push(`材料: ${ingredients.join(' / ')}`);
+    }
+
+    const steps = toPlainTextList(parsed.steps);
+    if (steps.length > 0) {
+        lines.push(`手順: ${steps.join(' / ')}`);
+    }
+
+    return lines.length > 0 ? lines.join(' | ') : raw;
+};
+
 const normalizeSearchText = (value) => String(value || '').toLowerCase().trim();
 
 const getSourceBadge = (log) => {
@@ -89,7 +140,7 @@ const filterLogsBySearch = (items, search) => {
             log.user_email,
             log.current_view,
             log.question,
-            log.answer,
+            formatAnswerText(log.answer),
             log.ai_model,
             log.answer_source,
         ]
@@ -420,6 +471,7 @@ export default function OperationQaLogs() {
 
             logsForExport.forEach((rawLog) => {
                 const log = normalizeExportRecord(rawLog);
+                const answerText = formatAnswerText(log.answer || '');
                 rows.push([
                     buildCsvCell(log.id || ''),
                     buildCsvCell(log.created_at || ''),
@@ -432,7 +484,7 @@ export default function OperationQaLogs() {
                     buildCsvCell(log.current_view || ''),
                     buildCsvCell(log.answer_mode || ''),
                     buildCsvCell(log.question || ''),
-                    buildCsvCell(log.answer || ''),
+                    buildCsvCell(answerText),
                     buildCsvCell(log.source_label || ''),
                     buildCsvCell(log.ai_used ? 'true' : 'false'),
                     buildCsvCell(log.ai_attempted ? 'true' : 'false'),
@@ -693,7 +745,7 @@ export default function OperationQaLogs() {
                                         <td>{log.user_email || (log.user_id ? String(log.user_id).slice(0, 8) : '-')}</td>
                                         <td>{log.current_view || '-'}</td>
                                         <td title={log.question || ''}>{clipText(log.question, 120)}</td>
-                                        <td title={log.answer || ''}>{clipText(log.answer, 160)}</td>
+                                        <td title={formatAnswerText(log.answer || '')}>{clipText(formatAnswerText(log.answer || ''), 160)}</td>
                                         <td>
                                             <span className={badge.className}>{badge.label}</span>
                                         </td>
