@@ -268,15 +268,32 @@ export const recipeService = {
     async _getCurrentUserId() {
         try {
             const { data, error } = await withTimeout(
+                supabase.auth.getSession(),
+                4000,
+                'auth.getSession(recent_views)'
+            );
+            if (!error) {
+                const id = String(data?.session?.user?.id || '').trim();
+                if (id) return id;
+            }
+        } catch {
+            // Fall through to other user-id sources.
+        }
+
+        try {
+            const { data, error } = await withTimeout(
                 supabase.auth.getUser(),
                 6000,
                 'auth.getUser(recent_views)'
             );
             if (error) throw error;
-            return data?.user?.id || null;
+            const id = String(data?.user?.id || '').trim();
+            if (id) return id;
         } catch {
-            return null;
+            // ignore
         }
+
+        return null;
     },
 
     async _resolveShowMasterPreference(currentUser, timeoutMs = 15000) {
@@ -1048,69 +1065,45 @@ export const recipeService = {
         const userId = await this._getCurrentUserId();
         if (!userId) return [];
 
-        const localIds = loadRecentViewsLocal(userId);
+        const { data, error } = await withTimeout(
+            supabase
+                .from('recent_views')
+                .select('recipe_id, viewed_at')
+                .eq('viewer_user_id', userId)
+                .order('viewed_at', { ascending: false })
+                .limit(RECENT_VIEWS_MAX_ITEMS),
+            10000,
+            'recent_views.select'
+        );
+        if (error) throw error;
 
-        try {
-            const { data, error } = await withTimeout(
-                supabase
-                    .from('recent_views')
-                    .select('recipe_id, viewed_at')
-                    .eq('viewer_user_id', userId)
-                    .order('viewed_at', { ascending: false })
-                    .limit(RECENT_VIEWS_MAX_ITEMS),
-                10000,
-                'recent_views.select'
-            );
-            if (error) throw error;
-
-            const remoteIds = (data || []).map(item => String(item.recipe_id || '').trim()).filter(Boolean);
-            const merged = [...new Set([...remoteIds, ...localIds])].slice(0, RECENT_VIEWS_MAX_ITEMS);
-            saveRecentViewsLocal(userId, merged);
-            return merged;
-        } catch (error) {
-            const message = String(error?.message || '').toLowerCase();
-            const missingUserColumn =
-                message.includes('viewer_user_id') &&
-                (message.includes('column') || message.includes('does not exist'));
-            if (!missingUserColumn) {
-                console.warn('fetchRecentRecipes fallback to local cache:', error);
-            }
-            return localIds;
-        }
+        const remoteIds = (data || []).map(item => String(item.recipe_id || '').trim()).filter(Boolean);
+        saveRecentViewsLocal(userId, remoteIds);
+        return remoteIds;
     },
 
     async addToHistory(recipeId) {
         const userId = await this._getCurrentUserId();
         if (!userId || !recipeId) return false;
 
-        // Keep per-user local history first so UI remains isolated even if network/DB fails.
         const key = String(recipeId).trim();
+        const { error } = await withTimeout(
+            supabase
+                .from('recent_views')
+                .upsert({
+                    viewer_user_id: userId,
+                    recipe_id: recipeId,
+                    viewed_at: new Date().toISOString()
+                }, { onConflict: 'viewer_user_id,recipe_id' }),
+            10000,
+            'recent_views.upsert'
+        );
+        if (error) throw error;
+
+        // Keep local cache aligned to DB-backed ordering.
         const current = loadRecentViewsLocal(userId);
         const updatedLocal = [key, ...current.filter(id => id !== key)].slice(0, RECENT_VIEWS_MAX_ITEMS);
         saveRecentViewsLocal(userId, updatedLocal);
-
-        try {
-            const { error } = await withTimeout(
-                supabase
-                    .from('recent_views')
-                    .upsert({
-                        viewer_user_id: userId,
-                        recipe_id: recipeId,
-                        viewed_at: new Date().toISOString()
-                    }, { onConflict: 'viewer_user_id,recipe_id' }),
-                10000,
-                'recent_views.upsert'
-            );
-            if (error) throw error;
-        } catch (error) {
-            const message = String(error?.message || '').toLowerCase();
-            const missingUserColumn =
-                message.includes('viewer_user_id') &&
-                (message.includes('column') || message.includes('does not exist'));
-            if (!missingUserColumn) {
-                console.warn('addToHistory remote sync skipped:', error);
-            }
-        }
 
         return true;
     },
