@@ -207,12 +207,25 @@ const summarizeIngredientGroup = (items, { multiplier = 1, totalRecipeCostTaxInc
             : `${formatCompactNumber(total)} ${unitLabel}`,
     }));
 
+    const hasWeightBasis = totalWeightGrams > 0;
+    const hasVolumeBasis = totalVolumeMl > 0;
+    const hasMixedMeasure = hasWeightBasis && hasVolumeBasis;
+    const defaultUsageUnit = hasWeightBasis ? 'g' : (hasVolumeBasis ? 'ml' : 'g');
+    const defaultBatchAmount = hasMixedMeasure
+        ? null
+        : (hasWeightBasis ? totalWeightGrams : (hasVolumeBasis ? totalVolumeMl : null));
+
     return {
         ingredientCount,
         quantifiedItemCount,
         quantityBreakdown,
         totalWeightGrams,
         totalVolumeMl,
+        hasWeightBasis,
+        hasVolumeBasis,
+        hasMixedMeasure,
+        defaultUsageUnit,
+        defaultBatchAmount,
         costTaxExcluded,
         costTaxIncluded,
         costShare: totalRecipeCostTaxIncluded > 0
@@ -277,6 +290,9 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
     const [showOriginal, setShowOriginal] = React.useState(true); // Default to showing original
     const [showPrintModal, setShowPrintModal] = React.useState(false);
     const [selectedIngredientGroupStats, setSelectedIngredientGroupStats] = React.useState(null);
+    const [groupUsageUnit, setGroupUsageUnit] = React.useState('g');
+    const [groupTotalBatchAmount, setGroupTotalBatchAmount] = React.useState('');
+    const [groupUsageAmount, setGroupUsageAmount] = React.useState('');
     const [conversionMap, setConversionMap] = React.useState(new Map());
     const [uiTextCache, setUiTextCache] = React.useState({});
 
@@ -1110,6 +1126,48 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         });
     }, [normalEffectiveMultiplier, normalPrintTotal]);
 
+    React.useEffect(() => {
+        if (!selectedIngredientGroupStats) {
+            setGroupUsageUnit('g');
+            setGroupTotalBatchAmount('');
+            setGroupUsageAmount('');
+            return;
+        }
+
+        const nextUnit = selectedIngredientGroupStats.defaultUsageUnit || 'g';
+        setGroupUsageUnit(nextUnit);
+        setGroupTotalBatchAmount(
+            selectedIngredientGroupStats.defaultBatchAmount != null
+                ? String(Math.round(selectedIngredientGroupStats.defaultBatchAmount * 100) / 100)
+                : ''
+        );
+        setGroupUsageAmount('');
+    }, [selectedIngredientGroupStats]);
+
+    const groupUsageSimulation = React.useMemo(() => {
+        if (!selectedIngredientGroupStats) return null;
+
+        const totalBatchAmount = toFiniteNumber(groupTotalBatchAmount);
+        const usageAmount = toFiniteNumber(groupUsageAmount);
+        const categoryCost = toFiniteNumber(selectedIngredientGroupStats.costTaxIncluded);
+
+        const costPerUnit =
+            Number.isFinite(totalBatchAmount) && totalBatchAmount > 0 && Number.isFinite(categoryCost)
+                ? categoryCost / totalBatchAmount
+                : null;
+        const usageCost =
+            costPerUnit != null && Number.isFinite(usageAmount) && usageAmount >= 0
+                ? costPerUnit * usageAmount
+                : null;
+
+        return {
+            totalBatchAmount,
+            usageAmount,
+            costPerUnit,
+            usageCost,
+        };
+    }, [groupTotalBatchAmount, groupUsageAmount, selectedIngredientGroupStats]);
+
 
     return (
         <>
@@ -1240,6 +1298,84 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                     ) : (
                                         <strong className="group-stats-card__value">—</strong>
                                     )}
+                                </div>
+                            </div>
+
+                            <div className="group-usage-simulator">
+                                <div className="group-usage-simulator__header">
+                                    <h4 className="group-usage-simulator__title">使用量シミュレーション</h4>
+                                    <p className="group-usage-simulator__desc">
+                                        このカテゴリ全体をひとつの仕込みとして、使用量に応じた原価（税込）を計算します。
+                                    </p>
+                                </div>
+
+                                <div className="group-usage-simulator__controls">
+                                    <label className="group-usage-simulator__field">
+                                        <span className="group-usage-simulator__label">総出来上がり量</span>
+                                        <div className="group-usage-simulator__input-row">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="0.1"
+                                                value={groupTotalBatchAmount}
+                                                onChange={(e) => setGroupTotalBatchAmount(e.target.value)}
+                                                placeholder={selectedIngredientGroupStats.defaultBatchAmount != null ? String(Math.round(selectedIngredientGroupStats.defaultBatchAmount)) : '例: 280'}
+                                            />
+                                            <select value={groupUsageUnit} onChange={(e) => setGroupUsageUnit(e.target.value)}>
+                                                <option value="g">g</option>
+                                                <option value="ml">ml</option>
+                                            </select>
+                                        </div>
+                                    </label>
+
+                                    <label className="group-usage-simulator__field">
+                                        <span className="group-usage-simulator__label">今回使う量</span>
+                                        <div className="group-usage-simulator__input-row">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="0.1"
+                                                value={groupUsageAmount}
+                                                onChange={(e) => setGroupUsageAmount(e.target.value)}
+                                                placeholder={`例: 20`}
+                                            />
+                                            <span className="group-usage-simulator__unit-pill">{groupUsageUnit}</span>
+                                        </div>
+                                    </label>
+                                </div>
+
+                                <div className="group-usage-simulator__notes">
+                                    {selectedIngredientGroupStats.hasMixedMeasure ? (
+                                        <p>重量と液量が混在しているため、総出来上がり量は実際の仕上がり量に合わせて入力してください。</p>
+                                    ) : selectedIngredientGroupStats.defaultBatchAmount != null ? (
+                                        <p>
+                                            初期値はカテゴリ内の計量可能な材料合計から入れています。
+                                            必要なら実際の出来上がり量に合わせて上書きしてください。
+                                        </p>
+                                    ) : (
+                                        <p>総出来上がり量が自動で出せないため、実際の仕上がり量を入力してください。</p>
+                                    )}
+                                </div>
+
+                                <div className="group-usage-simulator__results">
+                                    <div className="group-usage-simulator__result-card">
+                                        <span className="group-usage-simulator__result-label">1{groupUsageUnit}あたり原価（税込）</span>
+                                        <strong className="group-usage-simulator__result-value">
+                                            {groupUsageSimulation?.costPerUnit == null
+                                                ? '—'
+                                                : formatYen(groupUsageSimulation.costPerUnit, { maximumFractionDigits: 2 })}
+                                        </strong>
+                                    </div>
+                                    <div className="group-usage-simulator__result-card group-usage-simulator__result-card--accent">
+                                        <span className="group-usage-simulator__result-label">
+                                            {groupUsageAmount || '入力した量'} {groupUsageUnit} 使用時の原価（税込）
+                                        </span>
+                                        <strong className="group-usage-simulator__result-value">
+                                            {groupUsageSimulation?.usageCost == null
+                                                ? '—'
+                                                : formatYen(groupUsageSimulation.usageCost, { maximumFractionDigits: 2 })}
+                                        </strong>
+                                    </div>
                                 </div>
                             </div>
                         </div>
