@@ -211,9 +211,13 @@ const summarizeIngredientGroup = (items, { multiplier = 1, totalRecipeCostTaxInc
     const hasVolumeBasis = totalVolumeMl > 0;
     const hasMixedMeasure = hasWeightBasis && hasVolumeBasis;
     const defaultUsageUnit = hasWeightBasis ? 'g' : (hasVolumeBasis ? 'ml' : 'g');
-    const defaultBatchAmount = hasMixedMeasure
-        ? null
-        : (hasWeightBasis ? totalWeightGrams : (hasVolumeBasis ? totalVolumeMl : null));
+    const defaultBatchAmount =
+        hasWeightBasis || hasVolumeBasis
+            ? (totalWeightGrams + totalVolumeMl)
+            : null;
+    const defaultBatchAmountSource = hasMixedMeasure
+        ? 'mixed_g_plus_ml'
+        : (hasWeightBasis ? 'weight_only' : (hasVolumeBasis ? 'volume_only' : 'manual'));
 
     return {
         ingredientCount,
@@ -226,6 +230,7 @@ const summarizeIngredientGroup = (items, { multiplier = 1, totalRecipeCostTaxInc
         hasMixedMeasure,
         defaultUsageUnit,
         defaultBatchAmount,
+        defaultBatchAmountSource,
         costTaxExcluded,
         costTaxIncluded,
         costShare: totalRecipeCostTaxIncluded > 0
@@ -1168,6 +1173,24 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         };
     }, [groupTotalBatchAmount, groupUsageAmount, selectedIngredientGroupStats]);
 
+    const groupUsageNotice = React.useMemo(() => {
+        if (!selectedIngredientGroupStats) return null;
+
+        if (selectedIngredientGroupStats.defaultBatchAmountSource === 'mixed_g_plus_ml') {
+            return `初期値は 総重量 ${formatCompactNumber(selectedIngredientGroupStats.totalWeightGrams, { maximumFractionDigits: 1 })}g と 総液量 ${formatCompactNumber(selectedIngredientGroupStats.totalVolumeMl, { maximumFractionDigits: 1 })}ml を、1ml=1g の概算で合算しています。個・本などは自動換算に含めていません。`;
+        }
+
+        if (selectedIngredientGroupStats.defaultBatchAmountSource === 'weight_only') {
+            return `初期値は重量合計 ${formatCompactNumber(selectedIngredientGroupStats.totalWeightGrams, { maximumFractionDigits: 1 })}g をそのまま入れています。個・本などは自動換算に含めていません。`;
+        }
+
+        if (selectedIngredientGroupStats.defaultBatchAmountSource === 'volume_only') {
+            return `初期値は液量合計 ${formatCompactNumber(selectedIngredientGroupStats.totalVolumeMl, { maximumFractionDigits: 1 })}ml を入れています。必要なら実際の仕上がり量に合わせて調整してください。`;
+        }
+
+        return '総出来上がり量が自動で出せないため、実際の仕上がり量を入力してください。';
+    }, [selectedIngredientGroupStats]);
+
 
     return (
         <>
@@ -1345,16 +1368,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                 </div>
 
                                 <div className="group-usage-simulator__notes">
-                                    {selectedIngredientGroupStats.hasMixedMeasure ? (
-                                        <p>重量と液量が混在しているため、総出来上がり量は実際の仕上がり量に合わせて入力してください。</p>
-                                    ) : selectedIngredientGroupStats.defaultBatchAmount != null ? (
-                                        <p>
-                                            初期値はカテゴリ内の計量可能な材料合計から入れています。
-                                            必要なら実際の出来上がり量に合わせて上書きしてください。
-                                        </p>
-                                    ) : (
-                                        <p>総出来上がり量が自動で出せないため、実際の仕上がり量を入力してください。</p>
-                                    )}
+                                    <p>{groupUsageNotice}</p>
                                 </div>
 
                                 <div className="group-usage-simulator__results">
