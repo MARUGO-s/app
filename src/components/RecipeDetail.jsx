@@ -8,6 +8,7 @@ import { unitConversionService } from '../services/unitConversionService';
 import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../contexts/useToast';
 import { SUPPORTED_LANGUAGES } from '../constants';
+import { normalizeUnit } from '../utils/unitUtils';
 import './RecipeDetail.css';
 import QRCode from "react-qr-code";
 
@@ -30,6 +31,30 @@ const formatYen = (value, { maximumFractionDigits = 1 } = {}) => {
     const n = toFiniteCurrencyNumber(value);
     if (!Number.isFinite(n)) return null;
     return `¥${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits })}`;
+};
+
+const formatCompactNumber = (value, { maximumFractionDigits = 2 } = {}) => {
+    if (!Number.isFinite(value)) return null;
+    return value.toLocaleString(undefined, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits,
+    });
+};
+
+const formatWeightSummary = (grams) => {
+    if (!Number.isFinite(grams) || grams <= 0) return '—';
+    if (grams >= 1000) {
+        return `${formatCompactNumber(grams, { maximumFractionDigits: 1 })} g (${formatCompactNumber(grams / 1000)} kg)`;
+    }
+    return `${formatCompactNumber(grams, { maximumFractionDigits: 1 })} g`;
+};
+
+const formatVolumeSummary = (milliliters) => {
+    if (!Number.isFinite(milliliters) || milliliters <= 0) return '—';
+    if (milliliters >= 1000) {
+        return `${formatCompactNumber(milliliters, { maximumFractionDigits: 1 })} ml (${formatCompactNumber(milliliters / 1000)} L)`;
+    }
+    return `${formatCompactNumber(milliliters, { maximumFractionDigits: 1 })} ml`;
 };
 
 const ALLOWED_ITEM_CATEGORIES = new Set(['food', 'alcohol', 'soft_drink', 'supplies']);
@@ -134,6 +159,68 @@ const calculateCostByUnit = (quantity, purchaseCost, unit, { defaultWeightWhenUn
     return (qty * pCost) / safeYieldRate;
 };
 
+const summarizeIngredientGroup = (items, { multiplier = 1, totalRecipeCostTaxIncluded = 0 } = {}) => {
+    const quantityByUnit = new Map();
+    let ingredientCount = 0;
+    let quantifiedItemCount = 0;
+    let totalWeightGrams = 0;
+    let totalVolumeMl = 0;
+    let costTaxExcluded = 0;
+    let costTaxIncluded = 0;
+
+    items.forEach((item) => {
+        if (!item) return;
+
+        ingredientCount += 1;
+        if (typeof item !== 'object') return;
+
+        const qty = toFiniteNumber(item.quantity);
+        const scaledQty = Number.isFinite(qty) ? qty * multiplier : NaN;
+        const rawUnit = String(item.unit || '').trim();
+        const normalizedUnit = normalizeUnit(rawUnit);
+
+        if (Number.isFinite(scaledQty)) {
+            quantifiedItemCount += 1;
+            const quantityLabel = rawUnit || '単位なし';
+            quantityByUnit.set(quantityLabel, (quantityByUnit.get(quantityLabel) || 0) + scaledQty);
+
+            if (normalizedUnit === 'g') totalWeightGrams += scaledQty;
+            if (normalizedUnit === 'kg') totalWeightGrams += scaledQty * 1000;
+            if (normalizedUnit === 'ml' || normalizedUnit === 'cc') totalVolumeMl += scaledQty;
+            if (normalizedUnit === 'cl') totalVolumeMl += scaledQty * 10;
+            if (normalizedUnit === 'l') totalVolumeMl += scaledQty * 1000;
+        }
+
+        const rawCost = toFiniteNumber(item.cost);
+        if (Number.isFinite(rawCost)) {
+            const scaledCost = rawCost * multiplier;
+            costTaxExcluded += scaledCost;
+            costTaxIncluded += scaledCost * getItemTaxRate(item);
+        }
+    });
+
+    const quantityBreakdown = Array.from(quantityByUnit.entries()).map(([unitLabel, total]) => ({
+        unitLabel,
+        total,
+        display: unitLabel === '単位なし'
+            ? `${formatCompactNumber(total)}`
+            : `${formatCompactNumber(total)} ${unitLabel}`,
+    }));
+
+    return {
+        ingredientCount,
+        quantifiedItemCount,
+        quantityBreakdown,
+        totalWeightGrams,
+        totalVolumeMl,
+        costTaxExcluded,
+        costTaxIncluded,
+        costShare: totalRecipeCostTaxIncluded > 0
+            ? (costTaxIncluded / totalRecipeCostTaxIncluded) * 100
+            : null,
+    };
+};
+
 const isLikelyLegacyPackPrice = (item, normalizedCost) => {
     const stored = toFiniteNumber(item?.purchaseCost);
     const ref = toFiniteNumber(item?.purchaseCostRef ?? item?.purchase_cost);
@@ -189,6 +276,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
     const [isTranslating, setIsTranslating] = React.useState(false);
     const [showOriginal, setShowOriginal] = React.useState(true); // Default to showing original
     const [showPrintModal, setShowPrintModal] = React.useState(false);
+    const [selectedIngredientGroupStats, setSelectedIngredientGroupStats] = React.useState(null);
     const [conversionMap, setConversionMap] = React.useState(new Map());
     const [uiTextCache, setUiTextCache] = React.useState({});
 
@@ -588,6 +676,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         setCompletedSteps(new Set());
         setPreviewCompletedSteps(new Set());
         setPreviewCompletedIngredients(new Set());
+        setSelectedIngredientGroupStats(null);
         // Reset public state based on new recipe
         setIsPublic(recipe.tags?.includes('public') || false);
 
@@ -1011,6 +1100,16 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         return null;
     }, [displayRecipe.type, normalBaseItem, ingredients, displayRecipe]);
 
+    const openIngredientGroupStats = React.useCallback((groupName, groupIngredients) => {
+        setSelectedIngredientGroupStats({
+            groupName,
+            ...summarizeIngredientGroup(groupIngredients, {
+                multiplier: normalEffectiveMultiplier,
+                totalRecipeCostTaxIncluded: normalPrintTotal,
+            }),
+        });
+    }, [normalEffectiveMultiplier, normalPrintTotal]);
+
 
     return (
         <>
@@ -1079,6 +1178,73 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                         </Card>
                     </div>
                 )}
+
+                <Modal
+                    isOpen={Boolean(selectedIngredientGroupStats)}
+                    onClose={() => setSelectedIngredientGroupStats(null)}
+                    title={selectedIngredientGroupStats ? `${selectedIngredientGroupStats.groupName} の集計` : 'カテゴリ集計'}
+                    size="medium"
+                >
+                    {selectedIngredientGroupStats && (
+                        <div className="group-stats-modal">
+                            <p className="group-stats-modal__intro">
+                                現在表示中の分量倍率を反映したカテゴリ別集計です。
+                                {normalEffectiveMultiplier !== 1 && (
+                                    <span className="group-stats-modal__multiplier"> 倍率: ×{normalEffectiveMultiplier.toFixed(3)}</span>
+                                )}
+                            </p>
+
+                            <div className="group-stats-grid">
+                                <div className="group-stats-card">
+                                    <span className="group-stats-card__label">材料数</span>
+                                    <strong className="group-stats-card__value">{selectedIngredientGroupStats.ingredientCount} 点</strong>
+                                </div>
+                                <div className="group-stats-card">
+                                    <span className="group-stats-card__label">数量入力あり</span>
+                                    <strong className="group-stats-card__value">{selectedIngredientGroupStats.quantifiedItemCount} 点</strong>
+                                </div>
+                                <div className="group-stats-card">
+                                    <span className="group-stats-card__label">総重量</span>
+                                    <strong className="group-stats-card__value">{formatWeightSummary(selectedIngredientGroupStats.totalWeightGrams)}</strong>
+                                </div>
+                                <div className="group-stats-card">
+                                    <span className="group-stats-card__label">総液量</span>
+                                    <strong className="group-stats-card__value">{formatVolumeSummary(selectedIngredientGroupStats.totalVolumeMl)}</strong>
+                                </div>
+                                <div className="group-stats-card">
+                                    <span className="group-stats-card__label">原価小計</span>
+                                    <strong className="group-stats-card__value">{formatYen(selectedIngredientGroupStats.costTaxExcluded, { maximumFractionDigits: 2 }) ?? '—'}</strong>
+                                </div>
+                                <div className="group-stats-card">
+                                    <span className="group-stats-card__label">原価（税込）</span>
+                                    <strong className="group-stats-card__value">{formatYen(selectedIngredientGroupStats.costTaxIncluded, { maximumFractionDigits: 2 }) ?? '—'}</strong>
+                                </div>
+                                <div className="group-stats-card">
+                                    <span className="group-stats-card__label">カテゴリ原価率</span>
+                                    <strong className="group-stats-card__value">
+                                        {selectedIngredientGroupStats.costShare == null
+                                            ? '—'
+                                            : `${selectedIngredientGroupStats.costShare.toFixed(1)}%`}
+                                    </strong>
+                                </div>
+                                <div className="group-stats-card group-stats-card--wide">
+                                    <span className="group-stats-card__label">分量集計（単位別）</span>
+                                    {selectedIngredientGroupStats.quantityBreakdown.length > 0 ? (
+                                        <div className="group-stats-chip-list">
+                                            {selectedIngredientGroupStats.quantityBreakdown.map((entry) => (
+                                                <span key={entry.unitLabel} className="group-stats-chip">
+                                                    {entry.display}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <strong className="group-stats-card__value">—</strong>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </Modal>
 
                 <div className="recipe-detail__header">
                     <div style={{ display: 'flex', gap: '8px' }}>
@@ -1717,12 +1883,22 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                     if (groupIngredients.length === 0) return null;
 
                                                     if (['作り方', 'Steps', 'Method', '手順'].includes(group.name)) return null;
+                                                    const shouldHideHeading = ['材料', 'Ingredients', 'ingredients'].includes(group.name);
 
                                                     return (
                                                         <div key={group.id} style={{ marginBottom: '1.5rem' }}>
-                                                            <h3 className={`ingredient-group-heading ${['材料', 'Ingredients', 'ingredients'].includes(group.name) ? 'ingredient-group-heading--hidden' : ''}`}>
-                                                                {group.name}
-                                                            </h3>
+                                                            {!shouldHideHeading && (
+                                                                <h3 className="ingredient-group-heading">
+                                                                    <button
+                                                                        type="button"
+                                                                        className="ingredient-group-heading__button"
+                                                                        onClick={() => openIngredientGroupStats(group.name, groupIngredients)}
+                                                                    >
+                                                                        <span>{group.name}</span>
+                                                                        <span className="ingredient-group-heading__hint screen-only">集計を見る</span>
+                                                                    </button>
+                                                                </h3>
+                                                            )}
                                                             <table className="ingredients-table">
                                                                 <thead>
                                                                     <tr>
