@@ -62,6 +62,13 @@ export const RecipeCompositeCostCalculator = ({
     currentIngredients,
     currentTotalCostTaxIncluded,
     showHeader = true,
+    initialState = null,
+    initialStateKey = '',
+    onStateChange,
+    queuedRecipeId = '',
+    onQueuedRecipeHandled,
+    onBaseRecipeChange,
+    onBaseRecipeRemove,
 }) => {
     const { user } = useAuth();
     const [candidateRecipes, setCandidateRecipes] = React.useState([]);
@@ -72,6 +79,7 @@ export const RecipeCompositeCostCalculator = ({
     const [currentUsageAmount, setCurrentUsageAmount] = React.useState('');
     const [salesPrice, setSalesPrice] = React.useState('');
     const [salesCount, setSalesCount] = React.useState(() => getDefaultSalesCount(currentRecipe));
+    const queuedRecipeHandledRef = React.useRef('');
 
     const currentMetrics = React.useMemo(() => {
         const ingredients = Array.isArray(currentIngredients) && currentIngredients.length > 0
@@ -95,11 +103,25 @@ export const RecipeCompositeCostCalculator = ({
     }, [currentIngredients, currentRecipe, currentTotalCostTaxIncluded, overrideMapsByRecipe]);
 
     React.useEffect(() => {
-        setCurrentUsageAmount('');
-        setRows([]);
-        setSalesPrice('');
-        setSalesCount(getDefaultSalesCount(currentRecipe));
-    }, [currentMetrics.recipeId, currentRecipe]);
+        const safeRows = Array.isArray(initialState?.rows)
+            ? initialState.rows
+                .map((row) => ({
+                    id: String(row?.id || createRowId()),
+                    recipeId: String(row?.recipeId || ''),
+                    usageAmount: row?.usageAmount == null ? '' : String(row.usageAmount),
+                }))
+            : [];
+        setCurrentUsageAmount(
+            initialState?.currentUsageAmount == null ? '' : String(initialState.currentUsageAmount)
+        );
+        setRows(safeRows);
+        setSalesPrice(initialState?.salesPrice == null ? '' : String(initialState.salesPrice));
+        setSalesCount(
+            initialState?.salesCount == null
+                ? getDefaultSalesCount(currentRecipe)
+                : String(initialState.salesCount)
+        );
+    }, [currentMetrics.recipeId, currentRecipe, initialStateKey]);
 
     React.useEffect(() => {
         let cancelled = false;
@@ -188,13 +210,28 @@ export const RecipeCompositeCostCalculator = ({
         }
     };
 
-    const addRow = () => {
+    const appendRecipeAsRow = React.useCallback(async (recipeId) => {
+        const normalizedId = String(recipeId || '').trim();
+        if (!normalizedId) return;
+        if (normalizedId === String(currentRecipe?.id || '')) return;
+
+        const rowId = createRowId();
         setRows((prev) => [...prev, {
-            id: createRowId(),
-            recipeId: '',
+            id: rowId,
+            recipeId: normalizedId,
             usageAmount: '',
         }]);
-    };
+
+        if (recipeDetails[normalizedId]) return;
+        try {
+            const full = await recipeService.getRecipe(normalizedId);
+            setRecipeDetails((prev) => ({ ...prev, [normalizedId]: full }));
+            const overrideMap = await categoryCostOverrideService.fetchByRecipeId(normalizedId);
+            setOverrideMapsByRecipe((prev) => ({ ...prev, [normalizedId]: overrideMap }));
+        } catch {
+            // Keep row selectable; user can modify/remove even if fetch fails.
+        }
+    }, [currentRecipe?.id, recipeDetails]);
 
     const removeRow = (rowId) => {
         setRows((prev) => prev.filter((row) => row.id !== rowId));
@@ -272,6 +309,51 @@ export const RecipeCompositeCostCalculator = ({
         };
     }, [salesCount, salesPrice, totalCompositeCost]);
 
+    const snapshot = React.useMemo(() => ({
+        baseRecipeId: currentMetrics.recipeId,
+        currentUsageAmount,
+        rows: rows.map((row) => ({
+            recipeId: String(row.recipeId || ''),
+            usageAmount: row.usageAmount == null ? '' : String(row.usageAmount),
+        })),
+        salesPrice,
+        salesCount,
+        totalCompositeCost,
+        unitCost: compositeFinancials.unitCost,
+        totalSales: compositeFinancials.totalSales,
+        grossProfit: compositeFinancials.grossProfit,
+        costRate: compositeFinancials.costRate,
+    }), [
+        currentMetrics.recipeId,
+        currentUsageAmount,
+        rows,
+        salesPrice,
+        salesCount,
+        totalCompositeCost,
+        compositeFinancials,
+    ]);
+
+    React.useEffect(() => {
+        if (typeof onStateChange !== 'function') return;
+        onStateChange(snapshot);
+    }, [onStateChange, snapshot]);
+
+    React.useEffect(() => {
+        const normalizedId = String(queuedRecipeId || '').trim();
+        if (!normalizedId) {
+            queuedRecipeHandledRef.current = '';
+            return;
+        }
+        if (queuedRecipeHandledRef.current === normalizedId) return;
+        queuedRecipeHandledRef.current = normalizedId;
+        appendRecipeAsRow(normalizedId)
+            .finally(() => {
+                if (typeof onQueuedRecipeHandled === 'function') {
+                    onQueuedRecipeHandled(normalizedId);
+                }
+            });
+    }, [queuedRecipeId, appendRecipeAsRow, onQueuedRecipeHandled]);
+
     const formatMoney = (value) => {
         const n = toFiniteNumber(value);
         if (!Number.isFinite(n)) return '—';
@@ -303,10 +385,25 @@ export const RecipeCompositeCostCalculator = ({
                     <strong>総出来上がり量（固定）</strong>
                     <strong>使用量</strong>
                     <strong>使用原価</strong>
+                    <span className="composite-cost__remove-spacer" aria-hidden="true" />
                 </div>
 
                 <div className="composite-cost__row">
-                    <div className="composite-cost__recipe-name">{currentMetrics.title}</div>
+                    <select
+                        className="composite-cost__input"
+                        value={currentMetrics.recipeId}
+                        onChange={(e) => {
+                            if (typeof onBaseRecipeChange !== 'function') return;
+                            onBaseRecipeChange(String(e.target.value || ''));
+                        }}
+                    >
+                        <option value={String(currentRecipe?.id || '')}>{currentMetrics.title}</option>
+                        {candidateRecipes
+                            .filter((r) => String(r.id) !== String(currentRecipe?.id || ''))
+                            .map((r) => (
+                                <option key={r.id} value={String(r.id)}>{r.title}</option>
+                            ))}
+                    </select>
                     <div className="composite-cost__fixed-batch">{formatBatch(currentMetrics.defaultBatchAmount, currentMetrics.defaultUnit)}</div>
                     <input
                         className="composite-cost__input"
@@ -318,6 +415,16 @@ export const RecipeCompositeCostCalculator = ({
                         placeholder="例: 100"
                     />
                     <div className="composite-cost__line-total">{formatMoney(currentLine.lineCost)}</div>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                            if (typeof onBaseRecipeRemove === 'function') onBaseRecipeRemove();
+                        }}
+                        className="composite-cost__remove-btn"
+                    >
+                        ✕
+                    </Button>
                 </div>
 
                 {rows.map((row) => {
@@ -354,13 +461,6 @@ export const RecipeCompositeCostCalculator = ({
                         </div>
                     );
                 })}
-            </div>
-
-            <div className="composite-cost__actions">
-                <Button type="button" variant="secondary" onClick={addRow} disabled={loadingCandidates}>
-                    + 組み合わせを追加
-                </Button>
-                {loadingCandidates && <span className="composite-cost__loading">レシピ候補を読み込み中...</span>}
             </div>
 
             <div className="composite-cost__footer">
