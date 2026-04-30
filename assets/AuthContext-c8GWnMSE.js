@@ -23,137 +23,8 @@ const getEmailLocalPart = (email) => {
     return at > 0 ? email.slice(0, at) : email;
 };
 
-const PROFILE_SELECT_FIELD_SETS = [
-    'id, display_id, role, show_master_recipes, email, store_name',
-    'id, display_id, role, show_master_recipes, email',
-    'id, display_id, role, show_master_recipes, store_name',
-    'id, display_id, role, show_master_recipes',
-];
-
-const normalizeStoreName = (value) => {
-    const normalized = String(value || '').trim();
-    return normalized || null;
-};
-
-const hasMissingProfileColumnError = (error, columnName) => (
-    String(error?.message || '').toLowerCase().includes(String(columnName || '').toLowerCase())
-);
-
-const shouldRetryProfileColumnFallback = (error) => (
-    hasMissingProfileColumnError(error, 'email')
-    || hasMissingProfileColumnError(error, 'store_name')
-);
-
-const omitKeys = (source, keys) => Object.fromEntries(
-    Object.entries(source || {}).filter(([key]) => !keys.includes(key))
-);
-
-const buildProfilePayloadVariants = (payload) => {
-    const variants = [payload];
-    if (Object.prototype.hasOwnProperty.call(payload, 'store_name')) {
-        variants.push(omitKeys(payload, ['store_name']));
-    }
-    if (Object.prototype.hasOwnProperty.call(payload, 'email')) {
-        variants.push(omitKeys(payload, ['email']));
-    }
-    if (
-        Object.prototype.hasOwnProperty.call(payload, 'email')
-        && Object.prototype.hasOwnProperty.call(payload, 'store_name')
-    ) {
-        variants.push(omitKeys(payload, ['email', 'store_name']));
-    }
-
-    const seen = new Set();
-    return variants.filter((variant) => {
-        const key = JSON.stringify(Object.keys(variant).sort().map((field) => [field, variant[field]]));
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
-};
-
-const selectOwnProfileWithFallback = async (userId, timeoutMs = 4000) => {
-    let lastError = null;
-
-    for (const fields of PROFILE_SELECT_FIELD_SETS) {
-        const result = await withTimeout(
-            supabase.from('profiles').select(fields).eq('id', userId).single(),
-            timeoutMs,
-            \`profiles.select(\${fields})\`
-        );
-
-        if (!result?.error) {
-            return result?.data || null;
-        }
-
-        lastError = result.error;
-        if (lastError.code === 'PGRST116') {
-            throw lastError;
-        }
-        if (!shouldRetryProfileColumnFallback(lastError)) {
-            throw lastError;
-        }
-    }
-
-    throw lastError || new Error('Profile fetch failed');
-};
-
-const insertOwnProfileWithFallback = async (payload, timeoutMs = 6000) => {
-    const variants = buildProfilePayloadVariants(payload);
-    let lastError = null;
-
-    for (const variant of variants) {
-        const result = await withTimeout(
-            supabase.from('profiles').insert([variant]),
-            timeoutMs,
-            'profiles.insert'
-        );
-
-        if (!result?.error || result.error?.code === '23505') {
-            return selectOwnProfileWithFallback(payload.id, timeoutMs);
-        }
-
-        lastError = result.error;
-        if (!shouldRetryProfileColumnFallback(lastError)) {
-            throw lastError;
-        }
-    }
-
-    throw lastError || new Error('Profile create failed');
-};
-
-const backfillOwnProfileWithFallback = async (userId, patch) => {
-    const normalizedPatch = Object.fromEntries(
-        Object.entries(patch || {}).filter(([, value]) => value !== undefined)
-    );
-    if (Object.keys(normalizedPatch).length === 0) return;
-
-    const variants = buildProfilePayloadVariants(normalizedPatch);
-    let lastError = null;
-
-    for (const variant of variants) {
-        const result = await supabase
-            .from('profiles')
-            .update(variant)
-            .eq('id', userId);
-
-        if (!result?.error) {
-            return;
-        }
-
-        lastError = result.error;
-        if (!shouldRetryProfileColumnFallback(lastError)) {
-            throw lastError;
-        }
-    }
-
-    if (lastError) {
-        throw lastError;
-    }
-};
-
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null); // { id, email, displayId, storeName, role, showMasterRecipes }
+    const [user, setUser] = useState(null); // { id, email, displayId, role, showMasterRecipes }
     const [loading, setLoading] = useState(true);
     const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
@@ -208,45 +79,69 @@ export const AuthProvider = ({ children }) => {
         let profile = null;
         const profileSelectTimeoutMs = 4000;
         const maxRetries = 2;
-        const metaStoreName = normalizeStoreName(sessionUser?.user_metadata?.store_name);
 
         const tryLoadProfile = async () => {
             let retryCount = 0;
             while (retryCount < maxRetries) {
                 try {
-                    try {
-                        profile = await selectOwnProfileWithFallback(uid, profileSelectTimeoutMs);
-                    } catch (error) {
+                    const [res1, res2] = await Promise.all([
+                        withTimeout(
+                            supabase.from('profiles').select('id, display_id, role, show_master_recipes, email').eq('id', uid).single().then(data => ({ data, error: null })).catch(error => ({ data: null, error })),
+                            profileSelectTimeoutMs,
+                            'profiles.select(with_email)'
+                        ).catch(error => ({ data: null, error })),
+                        withTimeout(
+                            supabase.from('profiles').select('id, display_id, role, show_master_recipes').eq('id', uid).single().then(data => ({ data, error: null })).catch(error => ({ data: null, error })),
+                            profileSelectTimeoutMs,
+                            'profiles.select'
+                        ).catch(error => ({ data: null, error }))
+                    ]);
+
+                    let data = null;
+                    let error = null;
+                    if (res1?.data?.data) {
+                        data = res1.data.data;
+                    } else if (res2?.data?.data) {
+                        data = res2.data.data;
+                    } else {
+                        error = res1?.error ?? res2?.error ?? new Error('Profile fetch failed');
+                    }
+
+                    if (error) {
                         if (error.code === 'PGRST116') {
                             const fallbackDisplayId = (sessionUser.user_metadata?.display_id)
                                 ? String(sessionUser.user_metadata.display_id)
                                 : getEmailLocalPart(email) || uid.slice(0, 8);
-                            profile = await insertOwnProfileWithFallback({
-                                id: uid,
-                                display_id: fallbackDisplayId,
-                                email: email || null,
-                                store_name: metaStoreName,
-                                role: 'user',
-                                show_master_recipes: false,
-                            });
+                            let created = null;
+                            let createError = null;
+                            const ins1 = await withTimeout(
+                                supabase.from('profiles').insert([{ id: uid, display_id: fallbackDisplayId, email: email || null, role: 'user', show_master_recipes: false }]).select('id, display_id, role, show_master_recipes, email').single(),
+                                6000, 'profiles.insert(with_email)'
+                            );
+                            created = ins1?.data ?? null;
+                            createError = ins1?.error ?? null;
+                            if (createError && String(createError.message || '').toLowerCase().includes('email')) {
+                                const ins2 = await withTimeout(
+                                    supabase.from('profiles').insert([{ id: uid, display_id: fallbackDisplayId, role: 'user', show_master_recipes: false }]).select('id, display_id, role, show_master_recipes').single(),
+                                    6000, 'profiles.insert'
+                                );
+                                created = ins2?.data ?? null;
+                                createError = ins2?.error ?? null;
+                            }
+                            if (createError) throw createError;
+                            profile = created;
                         } else {
                             throw error;
                         }
+                    } else {
+                        profile = data;
                     }
 
-                    const backfillPatch = {};
                     if (profile && Object.prototype.hasOwnProperty.call(profile, 'email') && email && !profile.email) {
-                        backfillPatch.email = email;
-                    }
-                    if (metaStoreName && !normalizeStoreName(profile?.store_name)) {
-                        backfillPatch.store_name = metaStoreName;
-                    }
-
-                    if (Object.keys(backfillPatch).length > 0) {
                         try {
-                            await backfillOwnProfileWithFallback(uid, backfillPatch);
+                            await supabase.from('profiles').update({ email }).eq('id', uid);
                         } catch (e2) {
-                            console.warn('Failed to backfill profile fields', e2);
+                            console.warn('Failed to backfill profile email', e2);
                         }
                     }
                     break;
@@ -266,13 +161,12 @@ export const AuthProvider = ({ children }) => {
                 if (p) {
                     const metaDisplayId = (sessionUser?.user_metadata?.display_id || '').toString().trim();
                     const displayId = p.display_id || metaDisplayId || cachedUser.displayId || getEmailLocalPart(email) || uid.slice(0, 8);
-                    const storeName = normalizeStoreName(p.store_name) || metaStoreName || normalizeStoreName(cachedUser.storeName) || '';
                     const role = String((p.role || 'user')).trim().toLowerCase();
                     const isSuperAdmin = email === 'pingus0428@gmail.com';
                     const showMasterRecipes = isSuperAdmin ? true : (p.show_master_recipes === true);
-                    setUser({ id: uid, email, displayId, storeName, role, showMasterRecipes });
+                    setUser({ id: uid, email, displayId, role, showMasterRecipes });
                     try {
-                        localStorage.setItem('auth_user_cache', JSON.stringify({ id: uid, email, displayId, storeName, role, showMasterRecipes }));
+                        localStorage.setItem('auth_user_cache', JSON.stringify({ id: uid, email, displayId, role, showMasterRecipes }));
                     } catch (e) {
                         console.warn('[Auth] Failed to save cache', e);
                     }
@@ -284,10 +178,6 @@ export const AuthProvider = ({ children }) => {
         profile = await tryLoadProfile();
 
         const metaDisplayId = (sessionUser?.user_metadata?.display_id || '').toString().trim();
-        const resolvedStoreName = normalizeStoreName(profile?.store_name)
-            || metaStoreName
-            || normalizeStoreName(cachedUser?.storeName)
-            || '';
         const displayId =
             profile?.display_id ||
             (metaDisplayId || '') ||
@@ -310,7 +200,6 @@ export const AuthProvider = ({ children }) => {
             id: uid,
             email,
             displayId,
-            storeName: resolvedStoreName,
             role,
             showMasterRecipes,
         };
@@ -409,17 +298,13 @@ export const AuthProvider = ({ children }) => {
         }
     }, []);
 
-    const register = useCallback(async (email, password, displayId, storeName) => {
-        const normalizedStoreName = normalizeStoreName(storeName);
+    const register = useCallback(async (email, password, displayId) => {
         warnIfUsingLocalAuthRedirect('signup email');
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
             options: {
-                data: {
-                    display_id: displayId,
-                    store_name: normalizedStoreName,
-                },
+                data: { display_id: displayId },
                 emailRedirectTo: getAuthRedirectUrl()
             }
         });
@@ -432,19 +317,34 @@ export const AuthProvider = ({ children }) => {
         // If session exists immediately, create profile now. If email confirmation is required, session may be null.
         const sessionUser = data?.user;
         if (sessionUser?.id) {
-            try {
-                await insertOwnProfileWithFallback({
+            // Try insert with email column; fallback if schema isn't updated yet.
+            let profileError = null;
+            const ins1 = await supabase
+                .from('profiles')
+                .insert([{
                     id: sessionUser.id,
                     display_id: displayId,
                     email: email || null,
-                    store_name: normalizedStoreName,
                     role: 'user',
                     show_master_recipes: false
-                });
-            } catch (profileError) {
-                if (profileError?.code !== '23505') {
-                    console.error('Profile create error:', profileError);
-                }
+                }]);
+            profileError = ins1?.error ?? null;
+
+            if (profileError && String(profileError.message || '').toLowerCase().includes('email')) {
+                const ins2 = await supabase
+                    .from('profiles')
+                    .insert([{
+                        id: sessionUser.id,
+                        display_id: displayId,
+                        role: 'user',
+                        show_master_recipes: false
+                    }]);
+                profileError = ins2?.error ?? null;
+            }
+
+            // If profile already exists (rare), ignore unique errors
+            if (profileError && profileError.code !== '23505') {
+                console.error('Profile create error:', profileError);
             }
         }
 

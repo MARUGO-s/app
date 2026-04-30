@@ -13,6 +13,8 @@ import { LevainGuide } from './components/LevainGuide';
 import { UserManagement } from './components/UserManagement';
 import { Inventory } from './components/Inventory';
 import { RecipeCompositeCostPage } from './components/RecipeCompositeCostPage';
+import { RecipeCompositeSavedListPage } from './components/RecipeCompositeSavedListPage';
+import { RecipeCompositeCostEditPage } from './components/RecipeCompositeCostEditPage';
 import { IncomingDeliveries } from './components/IncomingDeliveries';
 import { IncomingStock } from './components/IncomingStock';
 import { Planner } from './components/Planner';
@@ -1158,6 +1160,9 @@ function AppContent() {
                           <Button variant="secondary" onClick={() => { setSearchParams({ view: 'composite-cost' }); setIsMenuOpen(false); }}>
                             <span style={{ marginRight: '8px' }}>🥪</span> 合成原価
                           </Button>
+                          <Button variant="secondary" onClick={() => { setSearchParams({ view: 'composite-cost-saved' }); setIsMenuOpen(false); }}>
+                            <span style={{ marginRight: '8px' }}>📚</span> 合成レシピ保存一覧
+                          </Button>
                           <div className="menu-divider"></div>
 
                           <Button variant="secondary" onClick={() => { setSearchParams({ view: 'data' }); setIsMenuOpen(false); }}>
@@ -1485,6 +1490,21 @@ function AppContent() {
             }
             setSearchParams({ view: 'list' });
           }}
+          onOpenSavedList={() => setSearchParams({ view: 'composite-cost-saved' })}
+        />
+      )}
+
+      {currentView === 'composite-cost-saved' && (
+        <RecipeCompositeSavedListPage
+          onBack={() => setSearchParams({ view: 'composite-cost' })}
+          onOpenEditor={(compositeId) => setSearchParams({ view: 'composite-cost-edit', compositeId: String(compositeId) })}
+        />
+      )}
+
+      {currentView === 'composite-cost-edit' && (
+        <RecipeCompositeCostEditPage
+          compositeId={searchParams.get('compositeId') || ''}
+          onBack={() => setSearchParams({ view: 'composite-cost-saved' })}
         />
       )}
 

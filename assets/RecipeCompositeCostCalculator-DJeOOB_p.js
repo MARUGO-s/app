@@ -29,7 +29,7 @@ const n=`.composite-cost {
 
 .composite-cost__head-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 0.8fr);
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 0.8fr) 34px;
   gap: 10px;
   font-size: 0.76rem;
   color: #475569;
@@ -39,13 +39,13 @@ const n=`.composite-cost {
 
 .composite-cost__row {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 0.8fr);
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 0.8fr) 34px;
   gap: 10px;
   align-items: center;
 }
 
 .composite-cost__row--with-remove {
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 0.8fr) auto;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 0.8fr) 34px;
 }
 
 .composite-cost__head-row > *,
@@ -91,6 +91,17 @@ const n=`.composite-cost {
   white-space: nowrap;
   color: #1f2937;
   text-align: right;
+}
+
+.composite-cost__remove-btn,
+.composite-cost__remove-spacer {
+  width: 34px;
+  min-width: 34px;
+  justify-self: end;
+}
+
+.composite-cost__remove-spacer {
+  visibility: hidden;
 }
 
 .composite-cost__input,

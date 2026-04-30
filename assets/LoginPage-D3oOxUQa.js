@@ -2,7 +2,6 @@ const e=`import React, { useState } from 'react';
 import { useAuth } from '../contexts/useAuth';
 import { Card } from './Card';
 import { Button } from './Button';
-import { STORE_LIST } from '../constants';
 
 export const LoginPage = () => {
     const [isLoginMode, setIsLoginMode] = useState(true);
@@ -11,7 +10,6 @@ export const LoginPage = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [displayId, setDisplayId] = useState('');
-    const [storeName, setStoreName] = useState('');
 
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
@@ -64,11 +62,7 @@ export const LoginPage = () => {
                 setError('表示IDを入力してください（例: yoshito）');
                 return;
             }
-            if (!storeName.trim()) {
-                setError('店舗名を入力または選択してください');
-                return;
-            }
-            const result = await register(email.trim(), password, displayId.trim(), storeName.trim());
+            const result = await register(email.trim(), password, displayId.trim());
             if (result?.needsEmailConfirmation) {
                 setSuccessMsg('確認メールを送信しました。メール内のリンクを開いてからログインしてください。');
             } else {
@@ -181,31 +175,6 @@ export const LoginPage = () => {
                             />
                             <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '6px', lineHeight: 1.4 }}>
                                 既存データ（在庫/棚卸し/レシピ）の引き継ぎに使います。あとから変更しないでください。
-                            </div>
-                        </div>
-                    )}
-
-                    {!isResetMode && !isLoginMode && (
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', color: '#333' }}>
-                                店舗名
-                            </label>
-                            <input
-                                type="text"
-                                value={storeName}
-                                onChange={(e) => setStoreName(e.target.value)}
-                                placeholder="店舗名を入力または選択"
-                                list="signup-store-options"
-                                style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '1rem', color: '#333', backgroundColor: '#fff' }}
-                                required
-                            />
-                            <datalist id="signup-store-options">
-                                {STORE_LIST.map((store) => (
-                                    <option key={store} value={store} />
-                                ))}
-                            </datalist>
-                            <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '6px', lineHeight: 1.4 }}>
-                                一覧から選択するか、直接入力できます。あとからユーザー管理画面でも変更できます。
                             </div>
                         </div>
                     )}
