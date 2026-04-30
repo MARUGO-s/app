@@ -1497,6 +1497,7 @@ function AppContent() {
       {currentView === 'composite-cost-saved' && (
         <RecipeCompositeSavedListPage
           onBack={() => setSearchParams({ view: 'composite-cost' })}
+          onOpenTop={() => setSearchParams({ view: 'list' })}
           onOpenEditor={(compositeId) => setSearchParams({ view: 'composite-cost-edit', compositeId: String(compositeId) })}
         />
       )}

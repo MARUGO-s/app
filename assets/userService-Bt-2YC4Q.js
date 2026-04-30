@@ -72,6 +72,11 @@ const selectAllProfilesDirect = async () => {
     throw lastError || new Error('profiles select failed');
 };
 
+const hasStoreNameFieldInProfiles = (rows) => {
+    if (!Array.isArray(rows) || rows.length === 0) return true;
+    return rows.some((row) => row && Object.prototype.hasOwnProperty.call(row, 'store_name'));
+};
+
 const updateProfileDirectWithFallback = async (profileId, updates) => {
     let lastError = null;
 
@@ -101,7 +106,18 @@ export const userService = {
         // Prefer admin RPC if available (profiles RLS may restrict direct SELECT).
         try {
             const { data, error } = await supabase.rpc('admin_list_profiles');
-            if (!error && Array.isArray(data)) return data;
+            if (!error && Array.isArray(data)) {
+                if (hasStoreNameFieldInProfiles(data)) {
+                    return data;
+                }
+
+                try {
+                    return await selectAllProfilesDirect();
+                } catch (fallbackError) {
+                    console.warn('profiles direct select fallback failed after old admin_list_profiles RPC:', fallbackError);
+                    return data;
+                }
+            }
             if (error) {
                 // Fall back to direct SELECT for older DBs or non-admin users.
                 console.warn('admin_list_profiles RPC failed (fallback to direct select):', error);

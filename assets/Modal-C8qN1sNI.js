@@ -47,7 +47,7 @@ const n=`.modal-overlay {
 }
 
 .modal-small {
-    max-width: 400px;
+    max-width: 460px;
 }
 
 .modal-medium {
@@ -93,6 +93,7 @@ const n=`.modal-overlay {
 .modal-body {
     padding: 24px;
     overflow-y: auto;
+    overflow-x: hidden;
     flex: 1;
     color: #333;
 }
@@ -124,4 +125,5 @@ const n=`.modal-overlay {
     .modal-body {
         padding: 20px;
     }
-}`;export{n as default};
+}
+`;export{n as default};

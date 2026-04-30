@@ -155,6 +155,43 @@ export const RecipeCompositeCostCalculator = ({
 
     React.useEffect(() => {
         let cancelled = false;
+        const recipeIdsToLoad = Array.from(
+            new Set(
+                rows
+                    .map((row) => String(row?.recipeId || '').trim())
+                    .filter((id) => id && !recipeDetails[id])
+            )
+        );
+        if (recipeIdsToLoad.length === 0) return undefined;
+
+        const loadMissingDetails = async () => {
+            for (const recipeId of recipeIdsToLoad) {
+                try {
+                    const full = await recipeService.getRecipe(recipeId);
+                    if (cancelled) return;
+                    setRecipeDetails((prev) => ({ ...prev, [recipeId]: full }));
+                } catch {
+                    // Keep UI usable even if one detail fetch fails.
+                }
+                try {
+                    const overrideMap = await categoryCostOverrideService.fetchByRecipeId(recipeId);
+                    if (cancelled) return;
+                    setOverrideMapsByRecipe((prev) => ({ ...prev, [recipeId]: overrideMap }));
+                } catch {
+                    if (cancelled) return;
+                    setOverrideMapsByRecipe((prev) => ({ ...prev, [recipeId]: prev[recipeId] || new Map() }));
+                }
+            }
+        };
+
+        loadMissingDetails();
+        return () => {
+            cancelled = true;
+        };
+    }, [rows, recipeDetails]);
+
+    React.useEffect(() => {
+        let cancelled = false;
         const recipeId = String(currentRecipe?.id || '').trim();
         if (!recipeId) return undefined;
 
@@ -292,17 +329,23 @@ export const RecipeCompositeCostCalculator = ({
         const count = toFiniteNumber(salesCount);
         const hasCount = Number.isFinite(count) && count > 0;
         const hasPrice = Number.isFinite(price) && price > 0;
+        // totalCompositeCost is the cost for one composed product at current usage settings.
+        // Therefore cost rate should not change by sales count.
+        const unitCost = Number.isFinite(totalCompositeCost) ? totalCompositeCost : NaN;
         const totalSales = hasPrice && hasCount ? price * count : NaN;
-        const unitCost = hasCount ? totalCompositeCost / count : NaN;
-        const grossProfit = Number.isFinite(totalSales) ? totalSales - totalCompositeCost : NaN;
-        const costRate = Number.isFinite(totalSales) && totalSales > 0
-            ? (totalCompositeCost / totalSales) * 100
+        const totalCostForSales = Number.isFinite(unitCost) && hasCount ? unitCost * count : NaN;
+        const grossProfit = Number.isFinite(totalSales) && Number.isFinite(totalCostForSales)
+            ? totalSales - totalCostForSales
+            : NaN;
+        const costRate = hasPrice && Number.isFinite(unitCost)
+            ? (unitCost / price) * 100
             : NaN;
 
         return {
             price,
             count,
             totalSales,
+            totalCostForSales,
             unitCost,
             grossProfit,
             costRate,

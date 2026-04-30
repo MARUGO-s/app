@@ -10,7 +10,7 @@ const formatYen = (value) => {
     return \`¥\${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}\`;
 };
 
-export const RecipeCompositeSavedListPage = ({ onBack, onOpenEditor }) => {
+export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }) => {
     const [rows, setRows] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState('');
@@ -56,11 +56,22 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenEditor }) => {
         <div className="composite-cost-page">
             <div className="composite-cost-page__header">
                 <Button variant="secondary" onClick={onBack}>← 合成原価ページに戻る</Button>
+                <Button variant="secondary" onClick={onOpenTop}>← トップページに戻る</Button>
             </div>
 
-            <Card className="composite-cost-page__hero">
-                <h2 className="section-title composite-cost-page__title">保存済み合成レシピ</h2>
-                <p className="composite-cost-page__desc">保存した組み合わせを開いて、使用グラムを再編集できます。</p>
+            <Card className="composite-cost-page__hero composite-cost-page__saved-hero">
+                <div className="composite-cost-page__saved-hero-head">
+                    <div className="composite-cost-page__saved-hero-head-left">
+                        <span className="composite-cost-page__saved-hero-badge">COMPOSITE LIBRARY</span>
+                        <h2 className="section-title composite-cost-page__title composite-cost-page__saved-title">保存済み合成レシピ</h2>
+                    </div>
+                    <span className="composite-cost-page__saved-hero-count">
+                        {loading ? '読み込み中...' : \`\${rows.length}件\`}
+                    </span>
+                </div>
+                <div className="composite-cost-page__saved-hero-note">
+                    保存した組み合わせを開いて、使用グラムを再編集できます。
+                </div>
             </Card>
 
             {loading && (
@@ -81,8 +92,16 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenEditor }) => {
                         <Card key={row.id} className="composite-cost-page__saved-item">
                             <div className="composite-cost-page__saved-main">
                                 <strong>{row.dish_name}</strong>
-                                <span>合成原価: {formatYen(row.total_cost_tax_included)}</span>
-                                <span>更新: {new Date(row.updated_at || row.created_at).toLocaleString()}</span>
+                                <div className="composite-cost-page__saved-meta">
+                                    <span className="composite-cost-page__saved-chip composite-cost-page__saved-chip--cost">
+                                        <em>合成原価</em>
+                                        <b>{formatYen(row.total_cost_tax_included)}</b>
+                                    </span>
+                                    <span className="composite-cost-page__saved-chip composite-cost-page__saved-chip--updated">
+                                        <em>更新</em>
+                                        <b>{new Date(row.updated_at || row.created_at).toLocaleString()}</b>
+                                    </span>
+                                </div>
                             </div>
                             <div className="composite-cost-page__saved-actions">
                                 <Button type="button" variant="secondary" onClick={() => onOpenEditor?.(row.id)}>
@@ -90,7 +109,7 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenEditor }) => {
                                 </Button>
                                 <Button
                                     type="button"
-                                    variant="ghost"
+                                    variant="danger"
                                     onClick={() => handleDelete(row.id)}
                                     disabled={deletingId === row.id}
                                 >
