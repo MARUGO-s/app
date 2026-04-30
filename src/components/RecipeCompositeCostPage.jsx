@@ -4,6 +4,8 @@ import { Button } from './Button';
 import { RecipeCompositeCostCalculator } from './RecipeCompositeCostCalculator';
 import { recipeService } from '../services/recipeService';
 import { useAuth } from '../contexts/useAuth';
+import { useToast } from '../contexts/useToast';
+import { compositeRecipeService } from '../services/compositeRecipeService';
 import './RecipeCompositeCostPage.css';
 
 const getCategoryToneClass = (category) => {
@@ -17,13 +19,18 @@ const getCategoryToneClass = (category) => {
     return `composite-cost-page__search-card--tone-${tone}`;
 };
 
-export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack }) => {
+export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack, onOpenSavedList }) => {
     const { user } = useAuth();
+    const toast = useToast();
     const [recipeOptions, setRecipeOptions] = React.useState([]);
     const [loadingOptions, setLoadingOptions] = React.useState(false);
     const [searchQuery, setSearchQuery] = React.useState('');
     const [selectedRecipeId, setSelectedRecipeId] = React.useState(initialRecipeId ? String(initialRecipeId) : '');
     const [selectedRecipe, setSelectedRecipe] = React.useState(null);
+    const [dishName, setDishName] = React.useState('');
+    const [isSaving, setIsSaving] = React.useState(false);
+    const [calculatorState, setCalculatorState] = React.useState(null);
+    const [queuedRecipeId, setQueuedRecipeId] = React.useState('');
     const [loadingRecipe, setLoadingRecipe] = React.useState(false);
     const [errorMessage, setErrorMessage] = React.useState('');
     const showSearchCards = String(searchQuery || '').trim().length > 0;
@@ -121,11 +128,55 @@ export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack }) => {
         };
     }, [selectedRecipeId]);
 
+    const handleSaveComposite = async () => {
+        const name = String(dishName || '').trim();
+        if (!name) {
+            toast.warning('保存する料理名を入力してください。');
+            return;
+        }
+        if (!selectedRecipe?.id) {
+            toast.warning('ベースレシピを選択してください。');
+            return;
+        }
+        if (!calculatorState) {
+            toast.warning('合成原価の内容を入力してください。');
+            return;
+        }
+        try {
+            setIsSaving(true);
+            await compositeRecipeService.createSet({
+                dishName: name,
+                baseRecipeId: selectedRecipe.id,
+                ...calculatorState,
+            });
+            toast.success('合成レシピを保存しました。');
+            setDishName('');
+        } catch (error) {
+            toast.error(`保存に失敗しました: ${error?.message || 'unknown error'}`);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleSearchPick = (recipeId) => {
+        const nextId = String(recipeId || '').trim();
+        if (!nextId) return;
+        if (!selectedRecipeId) {
+            setSelectedRecipeId(nextId);
+            return;
+        }
+        if (nextId === String(selectedRecipeId)) return;
+        setQueuedRecipeId(nextId);
+    };
+
     return (
         <div className="composite-cost-page">
             <div className="composite-cost-page__header">
                 <Button variant="secondary" onClick={onBack}>
                     ← レシピ一覧に戻る
+                </Button>
+                <Button variant="secondary" onClick={onOpenSavedList}>
+                    保存済み合成レシピ
                 </Button>
             </div>
 
@@ -133,7 +184,7 @@ export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack }) => {
                 <div className="composite-cost-page__hero-copy">
                     <h2 className="section-title composite-cost-page__title">🥪 レシピ合成原価シミュレーター</h2>
                     <p className="composite-cost-page__desc">
-                        ベースにするレシピを選んで、他のレシピを組み合わせた時の合成原価と原価率を独立ページで試算できます。
+                        レシピを自由に組み合わせて、使用量ごとの合成原価と原価率をこのページで試算できます。
                     </p>
                 </div>
 
@@ -153,22 +204,6 @@ export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack }) => {
                             ? 'レシピ一覧を読み込み中...'
                             : `${filteredRecipeOptions.length}件 表示中`}
                     </div>
-
-                    <label htmlFor="composite-base-recipe" className="composite-cost-page__label">ベースレシピ</label>
-                    <select
-                        id="composite-base-recipe"
-                        className="composite-cost-page__select"
-                        value={selectedRecipeId}
-                        onChange={(e) => setSelectedRecipeId(e.target.value)}
-                        disabled={loadingOptions}
-                    >
-                        <option value="">レシピを選択してください</option>
-                        {visibleRecipeOptions.map((recipe) => (
-                            <option key={recipe.id} value={recipe.id}>
-                                {recipe.title}
-                            </option>
-                        ))}
-                    </select>
                     {!loadingOptions && filteredRecipeOptions.length === 0 && (
                         <div className="composite-cost-page__empty-search">
                             該当するレシピがありません。検索語を変えてください。
@@ -180,7 +215,7 @@ export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack }) => {
                     <div className="composite-cost-page__search-results">
                         <div className="composite-cost-page__search-results-head">
                             <strong>検索候補</strong>
-                            <span>カードを押すとベースレシピにセットされます。</span>
+                            <span>カードを押すと組み合わせに追加されます（未選択時は1件目として開始）。</span>
                         </div>
 
                         <div className="composite-cost-page__search-grid">
@@ -193,7 +228,7 @@ export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack }) => {
                                         key={recipe.id}
                                         type="button"
                                         className={`composite-cost-page__search-card ${accentClass} ${isSelected ? 'composite-cost-page__search-card--selected' : ''}`}
-                                        onClick={() => setSelectedRecipeId(String(recipe.id))}
+                                        onClick={() => handleSearchPick(recipe.id)}
                                     >
                                         <div className="composite-cost-page__search-card-title">{recipe.title}</div>
                                         <div className="composite-cost-page__search-card-meta">
@@ -206,6 +241,9 @@ export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack }) => {
                                                 {recipe.description}
                                             </div>
                                         )}
+                                        <div className="composite-cost-page__search-card-action">
+                                            {!selectedRecipeId || isSelected ? 'このレシピで開始' : '組み合わせに追加'}
+                                        </div>
                                     </button>
                                 );
                             })}
@@ -238,18 +276,51 @@ export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack }) => {
 
             {!selectedRecipeId && (
                 <Card className="composite-cost-page__placeholder">
-                    ベースレシピを選ぶと、ここに合成原価シミュレーターが表示されます。
+                    レシピを1つ選ぶと、ここに合成原価シミュレーターが表示されます。
                 </Card>
             )}
 
             {selectedRecipeId && loadingRecipe && (
                 <Card className="composite-cost-page__placeholder">
-                    ベースレシピを読み込み中です。
+                    レシピを読み込み中です。
                 </Card>
             )}
 
             {selectedRecipeId && !loadingRecipe && selectedRecipe && (
-                <RecipeCompositeCostCalculator currentRecipe={selectedRecipe} showHeader={false} />
+                <>
+                    <Card className="composite-cost-page__hero">
+                        <div className="composite-cost-page__save-row">
+                            <input
+                                type="text"
+                                className="composite-cost-page__search"
+                                value={dishName}
+                                onChange={(e) => setDishName(e.target.value)}
+                                placeholder="保存する料理名（例: バゲットポテサラパン）"
+                            />
+                            <Button type="button" variant="primary" onClick={handleSaveComposite} disabled={isSaving}>
+                                {isSaving ? '保存中...' : 'この組み合わせを保存'}
+                            </Button>
+                        </div>
+                    </Card>
+                    <RecipeCompositeCostCalculator
+                        currentRecipe={selectedRecipe}
+                        showHeader={false}
+                        onStateChange={setCalculatorState}
+                        queuedRecipeId={queuedRecipeId}
+                        onQueuedRecipeHandled={() => setQueuedRecipeId('')}
+                        onBaseRecipeChange={(nextId) => {
+                            const normalized = String(nextId || '').trim();
+                            if (!normalized) return;
+                            setSelectedRecipeId(normalized);
+                        }}
+                        onBaseRecipeRemove={() => {
+                            setSelectedRecipeId('');
+                            setQueuedRecipeId('');
+                            setDishName('');
+                            setCalculatorState(null);
+                        }}
+                    />
+                </>
             )}
         </div>
     );

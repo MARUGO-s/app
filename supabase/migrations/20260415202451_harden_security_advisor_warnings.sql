@@ -64,6 +64,10 @@ DROP POLICY IF EXISTS "Allow anonymous read access" ON public.material_costs;
 DROP POLICY IF EXISTS "Allow anonymous insert" ON public.material_costs;
 DROP POLICY IF EXISTS "Allow anonymous update" ON public.material_costs;
 DROP POLICY IF EXISTS "Allow anonymous delete" ON public.material_costs;
+DROP POLICY IF EXISTS material_costs_select_authenticated ON public.material_costs;
+DROP POLICY IF EXISTS material_costs_insert_authenticated ON public.material_costs;
+DROP POLICY IF EXISTS material_costs_update_authenticated ON public.material_costs;
+DROP POLICY IF EXISTS material_costs_delete_authenticated ON public.material_costs;
 CREATE POLICY material_costs_select_authenticated
   ON public.material_costs
   FOR SELECT
