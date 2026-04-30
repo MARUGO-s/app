@@ -778,14 +778,13 @@
     line-height: 1.1;
 }
 
-.ingredient-group-heading__applied-cost {
+.ingredient-group-heading__set-cost {
     flex-shrink: 0;
-    padding: 4px 10px;
+    padding: 4px 12px;
     border-radius: 999px;
-    background: #ffffff;
-    border: 1px solid rgba(180, 83, 9, 0.35);
-    color: #b45309;
-    font-size: 0.78rem;
+    background: rgba(217, 119, 6, 0.15);
+    color: #d97706;
+    font-size: 0.84rem;
     font-weight: 700;
     line-height: 1.1;
 }
@@ -957,11 +956,6 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 12px;
-}
-
-.group-usage-simulator__actions {
-    display: flex;
-    justify-content: flex-end;
 }
 
 .group-usage-simulator__result-card {

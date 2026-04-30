@@ -12,6 +12,7 @@ import { RecentRecipes } from './components/RecentRecipes';
 import { LevainGuide } from './components/LevainGuide';
 import { UserManagement } from './components/UserManagement';
 import { Inventory } from './components/Inventory';
+import { RecipeCompositeCostPage } from './components/RecipeCompositeCostPage';
 import { IncomingDeliveries } from './components/IncomingDeliveries';
 import { IncomingStock } from './components/IncomingStock';
 import { Planner } from './components/Planner';
@@ -1154,6 +1155,9 @@ function AppContent() {
                           <Button variant="secondary" onClick={() => { setSearchParams({ view: 'order-list' }); setIsMenuOpen(false); }}>
                             <span style={{ marginRight: '8px' }}>🛒</span> 発注リスト
                           </Button>
+                          <Button variant="secondary" onClick={() => { setSearchParams({ view: 'composite-cost' }); setIsMenuOpen(false); }}>
+                            <span style={{ marginRight: '8px' }}>🥪</span> 合成原価
+                          </Button>
                           <div className="menu-divider"></div>
 
                           <Button variant="secondary" onClick={() => { setSearchParams({ view: 'data' }); setIsMenuOpen(false); }}>
@@ -1406,6 +1410,11 @@ function AppContent() {
           onView={addToHistory}
           onHardDelete={handleHardDeleteRecipe}
           onDuplicate={handleDuplicate}
+          onOpenCompositeCost={() => setSearchParams({
+            view: 'composite-cost',
+            baseId: String(selectedRecipe.id),
+            from: 'detail',
+          })}
         />
       )}
 
@@ -1462,6 +1471,21 @@ function AppContent() {
 
       {currentView === 'inventory' && (
         <Inventory onBack={() => setSearchParams({ view: 'list' })} />
+      )}
+
+      {currentView === 'composite-cost' && (
+        <RecipeCompositeCostPage
+          initialRecipeId={searchParams.get('baseId') || ''}
+          onBack={() => {
+            const from = searchParams.get('from');
+            const baseId = searchParams.get('baseId');
+            if (from === 'detail' && baseId) {
+              setSearchParams({ view: 'detail', id: baseId });
+              return;
+            }
+            setSearchParams({ view: 'list' });
+          }}
+        />
       )}
 
       {currentView === 'incoming-deliveries' && (
