@@ -323,14 +323,22 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         let unsub = null;
+        let loadingCleared = false;
 
-        // 1. Check URL hash manually for recovery flow to set state immediately
-        // Supabase sends type=recovery in the hash
+        const clearLoading = () => {
+            if (!loadingCleared) {
+                loadingCleared = true;
+                setLoading(false);
+            }
+        };
+
+        // Check URL hash manually for recovery flow to set state immediately
         if (typeof window !== 'undefined' && window.location.hash && window.location.hash.includes('type=recovery')) {
             setIsPasswordRecovery(true);
         }
 
-        // 2. Subscribe to auth changes FIRST to catch explicit events
+        // Supabase v2 fires INITIAL_SESSION on mount with the current session state,
+        // so a separate getSession() call is redundant and causes a double profile fetch.
         const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
             if (_event === 'PASSWORD_RECOVERY') {
                 setIsPasswordRecovery(true);
@@ -339,30 +347,21 @@ export const AuthProvider = ({ children }) => {
                 await loadProfileAndSetUser(session?.user || null);
             } catch (e) {
                 console.error('Auth state change handler failed:', e);
+            } finally {
+                // INITIAL_SESSION is emitted on mount; use it to clear the loading state
+                // so the app renders only after the first profile fetch is complete.
+                if (_event === 'INITIAL_SESSION') {
+                    clearLoading();
+                }
             }
         });
         unsub = sub?.subscription;
 
-        // 3. Initial Session Load
-        const init = async () => {
-            try {
-                const { data } = await withTimeout(
-                    supabase.auth.getSession(),
-                    10000,
-                    'auth.getSession'
-                );
-                // Only set user if we didn't already get it from onAuthStateChange (though safe to call twice)
-                await loadProfileAndSetUser(data?.session?.user || null);
-            } catch (e) {
-                console.error('Auth init failed:', e);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        init();
+        // Safety fallback: clear loading if INITIAL_SESSION never fires.
+        const fallbackTimer = setTimeout(clearLoading, 10000);
 
         return () => {
+            clearTimeout(fallbackTimer);
             try {
                 unsub?.unsubscribe?.();
             } catch {
