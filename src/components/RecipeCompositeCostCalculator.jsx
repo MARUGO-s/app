@@ -133,6 +133,7 @@ export const RecipeCompositeCostCalculator = ({
     currentIngredients,
     currentTotalCostTaxIncluded,
     showHeader = true,
+    readOnly = false,
     initialState = null,
     initialStateKey = '',
     onStateChange,
@@ -212,6 +213,11 @@ export const RecipeCompositeCostCalculator = ({
 
     React.useEffect(() => {
         let cancelled = false;
+        if (readOnly) {
+            setCandidateRecipes([]);
+            setLoadingCandidates(false);
+            return undefined;
+        }
         if (!user) return undefined;
 
         const loadCandidates = async () => {
@@ -238,7 +244,7 @@ export const RecipeCompositeCostCalculator = ({
         return () => {
             cancelled = true;
         };
-    }, [user, currentRecipe?.id]);
+    }, [user, currentRecipe?.id, readOnly]);
 
     React.useEffect(() => {
         let cancelled = false;
@@ -301,6 +307,11 @@ export const RecipeCompositeCostCalculator = ({
 
     React.useEffect(() => {
         let cancelled = false;
+        if (readOnly) {
+            setIngredientResults([]);
+            setLoadingIngredients(false);
+            return undefined;
+        }
         const query = String(ingredientSearchQuery || '').trim();
         if (!query) {
             setIngredientResults([]);
@@ -325,7 +336,7 @@ export const RecipeCompositeCostCalculator = ({
             cancelled = true;
             window.clearTimeout(timer);
         };
-    }, [ingredientSearchQuery]);
+    }, [ingredientSearchQuery, readOnly]);
 
     const getMetricsByRecipe = React.useCallback((recipeObj) => {
         if (!recipeObj) return null;
@@ -622,13 +633,18 @@ export const RecipeCompositeCostCalculator = ({
         <div className="screen-only no-print composite-cost">
             {showHeader && (
                 <>
-                    <h4 className="composite-cost__title">🥪 レシピ合成原価シミュレーター</h4>
+                    <h4 className="composite-cost__title">
+                        {readOnly ? '📘 合成レシピ版の読み取り専用表示' : '🥪 レシピ合成原価シミュレーター'}
+                    </h4>
                     <p className="composite-cost__desc">
-                        複数レシピの「総出来上がり量」と「使用量」から、惣菜パンなどの合成原価（税込）を試算できます。
+                        {readOnly
+                            ? '保存されている版の内容を読み取り専用で表示しています。'
+                            : '複数レシピの「総出来上がり量」と「使用量」から、惣菜パンなどの合成原価（税込）を試算できます。'}
                     </p>
                 </>
             )}
 
+            {!readOnly && (
             <div className="composite-cost__add-panel">
                 <div className="composite-cost__add-box">
                     <label htmlFor="composite-recipe-search">レシピ検索</label>
@@ -698,6 +714,7 @@ export const RecipeCompositeCostCalculator = ({
                     )}
                 </div>
             </div>
+            )}
 
             <div className="composite-cost__grid">
                 <div className="composite-cost__head-row">
@@ -725,6 +742,7 @@ export const RecipeCompositeCostCalculator = ({
                         <select
                             className="composite-cost__input"
                             value={currentMetrics.recipeId}
+                            disabled={readOnly}
                             onChange={(e) => {
                                 if (typeof onBaseRecipeChange !== 'function') return;
                                 onBaseRecipeChange(String(e.target.value || ''));
@@ -745,20 +763,25 @@ export const RecipeCompositeCostCalculator = ({
                         min="0"
                         step="0.1"
                         value={currentUsageAmount}
+                        disabled={readOnly}
                         onChange={(e) => setCurrentUsageAmount(e.target.value)}
                         placeholder="例: 100"
                     />
                     <div className="composite-cost__line-total">{formatMoney(currentLine.lineCost)}</div>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => {
-                            if (typeof onBaseRecipeRemove === 'function') onBaseRecipeRemove();
-                        }}
-                        className="composite-cost__remove-btn"
-                    >
-                        ✕
-                    </Button>
+                    {readOnly ? (
+                        <span className="composite-cost__remove-spacer" aria-hidden="true" />
+                    ) : (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => {
+                                if (typeof onBaseRecipeRemove === 'function') onBaseRecipeRemove();
+                            }}
+                            className="composite-cost__remove-btn"
+                        >
+                            ✕
+                        </Button>
+                    )}
                 </div>
 
                 {rows.map((row) => {
@@ -780,12 +803,14 @@ export const RecipeCompositeCostCalculator = ({
                                         min="0"
                                         step="0.1"
                                         value={row.usageAmount}
+                                        disabled={readOnly}
                                         onChange={(e) => updateRowField(row.id, 'usageAmount', e.target.value)}
                                         placeholder="例: 10"
                                     />
                                     <select
                                         className="composite-cost__input composite-cost__unit-select"
                                         value={row.usageUnit || ingredient.defaultUsageUnit || ingredient.unit || unitOptions[0]}
+                                        disabled={readOnly}
                                         onChange={(e) => updateRowField(row.id, 'usageUnit', e.target.value)}
                                     >
                                         {unitOptions.map((unit) => (
@@ -794,7 +819,11 @@ export const RecipeCompositeCostCalculator = ({
                                     </select>
                                 </div>
                                 <div className="composite-cost__line-total">{formatMoney(line?.lineCost)}</div>
-                                <Button type="button" variant="ghost" onClick={() => removeRow(row.id)} className="composite-cost__remove-btn">✕</Button>
+                                {readOnly ? (
+                                    <span className="composite-cost__remove-spacer" aria-hidden="true" />
+                                ) : (
+                                    <Button type="button" variant="ghost" onClick={() => removeRow(row.id)} className="composite-cost__remove-btn">✕</Button>
+                                )}
                             </div>
                         );
                     }
@@ -817,6 +846,7 @@ export const RecipeCompositeCostCalculator = ({
                                 <select
                                     className="composite-cost__input"
                                     value={row.recipeId}
+                                    disabled={readOnly}
                                     onChange={(e) => handleRecipeChange(row.id, e.target.value)}
                                 >
                                     <option value="">レシピを選択</option>
@@ -838,10 +868,14 @@ export const RecipeCompositeCostCalculator = ({
                                 value={row.usageAmount}
                                 onChange={(e) => updateRowField(row.id, 'usageAmount', e.target.value)}
                                 placeholder="例: 30"
-                                disabled={!row.recipeId}
+                                disabled={readOnly || !row.recipeId}
                             />
                             <div className="composite-cost__line-total">{formatMoney(line?.lineCost)}</div>
-                            <Button type="button" variant="ghost" onClick={() => removeRow(row.id)} className="composite-cost__remove-btn">✕</Button>
+                            {readOnly ? (
+                                <span className="composite-cost__remove-spacer" aria-hidden="true" />
+                            ) : (
+                                <Button type="button" variant="ghost" onClick={() => removeRow(row.id)} className="composite-cost__remove-btn">✕</Button>
+                            )}
                         </div>
                     );
                 })}
@@ -869,6 +903,7 @@ export const RecipeCompositeCostCalculator = ({
                                 min="0"
                                 step="1"
                                 value={salesPrice}
+                                disabled={readOnly}
                                 onChange={(e) => setSalesPrice(e.target.value)}
                                 placeholder="例: 420"
                             />
@@ -883,6 +918,7 @@ export const RecipeCompositeCostCalculator = ({
                             min="0"
                             step="1"
                             value={salesCount}
+                            disabled={readOnly}
                             onChange={(e) => setSalesCount(e.target.value)}
                             placeholder="例: 10"
                         />

@@ -390,6 +390,124 @@
   min-width: 180px;
 }
 
+.composite-cost-page__version-panel {
+  padding: 20px 22px;
+  border: 1px solid #DDD0B8;
+  background: #fffdfa;
+}
+
+.composite-cost-page__version-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.composite-cost-page__version-title {
+  margin: 0;
+  font-size: 1.08rem;
+  color: #0f172a;
+}
+
+.composite-cost-page__version-note {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.composite-cost-page__version-summary-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.composite-cost-page__version-summary-card {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid #E8DCC4;
+  background: #FAF7F2;
+  display: grid;
+  gap: 6px;
+}
+
+.composite-cost-page__version-summary-card span {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.composite-cost-page__version-summary-card strong {
+  color: #0f172a;
+  line-height: 1.5;
+}
+
+.composite-cost-page__version-compare-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.composite-cost-page__version-compare-card {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid #E8DCC4;
+  background: #ffffff;
+  display: grid;
+  gap: 10px;
+}
+
+.composite-cost-page__version-compare-card h4,
+.composite-cost-page__version-items h4 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.96rem;
+}
+
+.composite-cost-page__compare-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.composite-cost-page__compare-row span {
+  color: #475569;
+  font-size: 0.82rem;
+}
+
+.composite-cost-page__compare-row strong {
+  color: #0f172a;
+  text-align: right;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.composite-cost-page__compare-row.is-changed {
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+
+.composite-cost-page__version-items {
+  margin-top: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.composite-cost-page__version-item-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #334155;
+  line-height: 1.75;
+}
+
 .composite-cost-page__share-toggle {
   display: inline-flex;
   align-items: center;
