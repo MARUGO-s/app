@@ -64,6 +64,91 @@ const clipText = (value, max = 130) => {
 
 const normalizeSearchText = (value) => String(value || '').toLowerCase().trim();
 
+/**
+ * AIレスポンスのJSON文字列をパースして人間が読める形式に変換する
+ */
+const parseAnswerJson = (rawAnswer) => {
+    const raw = String(rawAnswer || '').trim();
+    if (!raw) return null;
+
+    // ```json ... ``` または ``` ... ``` のコードブロックを除去
+    let jsonStr = raw;
+    if (raw.startsWith('`')) {
+        jsonStr = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+    }
+
+    try {
+        const parsed = JSON.parse(jsonStr);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            const title = String(parsed.title || '').trim();
+            const description = String(parsed.description || '').trim();
+            const notes = String(parsed.notes || '').trim();
+            const steps = Array.isArray(parsed.steps)
+                ? parsed.steps
+                    .map((s) => (typeof s === 'string' ? s : String(s?.step || s || '')).trim())
+                    .filter(Boolean)
+                : [];
+            return { title, description, steps, notes };
+        }
+    } catch {
+        // JSONではない場合はそのまま返す
+    }
+    return null;
+};
+
+/** テーブルセル用: パース結果を短いプレーンテキストに変換 */
+const formatAnswerShort = (rawAnswer, maxLen = 160) => {
+    const parsed = parseAnswerJson(rawAnswer);
+    if (parsed) {
+        const { title, description, steps } = parsed;
+        const parts = [];
+        if (title) parts.push(`【${title}】`);
+        if (description) parts.push(description);
+        else if (steps.length > 0) parts.push(steps[0]);
+        const text = parts.join(' ');
+        if (text.length <= maxLen) return text;
+        return `${text.slice(0, maxLen - 1)}…`;
+    }
+    return clipText(rawAnswer, maxLen);
+};
+
+/** ツールチップ用: 全ステップをプレーンテキストに変換 */
+const formatAnswerFull = (rawAnswer) => {
+    const parsed = parseAnswerJson(rawAnswer);
+    if (!parsed) return String(rawAnswer || '');
+    const { title, description, steps, notes } = parsed;
+    const lines = [];
+    if (title) lines.push(`■ ${title}`);
+    if (description) lines.push(description);
+    steps.forEach((step, i) => lines.push(`${i + 1}. ${step}`));
+    if (notes) lines.push(`※ ${notes}`);
+    return lines.join('\n');
+};
+
+/** 展開モーダル用: JSX要素として返す */
+const AnswerDetail = ({ rawAnswer }) => {
+    const parsed = parseAnswerJson(rawAnswer);
+    if (!parsed) {
+        return <p className="operation-qa-logs__answer-plain">{rawAnswer || '-'}</p>;
+    }
+    const { title, description, steps, notes } = parsed;
+    return (
+        <div className="operation-qa-logs__answer-detail">
+            {title && <p className="operation-qa-logs__answer-title">{title}</p>}
+            {description && <p className="operation-qa-logs__answer-desc">{description}</p>}
+            {steps.length > 0 && (
+                <ol className="operation-qa-logs__answer-steps">
+                    {steps.map((step, i) => (
+                        // eslint-disable-next-line react/no-array-index-key
+                        <li key={i}>{step}</li>
+                    ))}
+                </ol>
+            )}
+            {notes && <p className="operation-qa-logs__answer-notes">※ {notes}</p>}
+        </div>
+    );
+};
+
 const getSourceBadge = (log) => {
     if (log?.ai_used) {
         return { className: 'operation-qa-logs__badge operation-qa-logs__badge--ai', label: 'AI使用' };
@@ -159,6 +244,7 @@ export default function OperationQaLogs() {
     const [deletingType, setDeletingType] = useState('');
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [search, setSearch] = useState('');
+    const [expandedLogId, setExpandedLogId] = useState(null);
     const [filter, setFilter] = useState({
         source: 'all',
         rating: 'all',
@@ -662,57 +748,86 @@ export default function OperationQaLogs() {
                                 <th>ユーザー</th>
                                 <th>画面</th>
                                 <th>質問</th>
-                                <th>回答</th>
+                                <th>回答 <span className="operation-qa-logs__answer-hint">（クリックで展開）</span></th>
                                 <th>回答種別</th>
                                 <th>AIモデル</th>
                                 <th>トークン</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            {displayedLogs.map((log) => {
-                                const badge = getSourceBadge(log);
-                                return (
-                                    <tr key={log.id}>
-                                        <td className="operation-qa-logs__select-col">
-                                            <input
-                                                type="checkbox"
-                                                aria-label="ログを選択"
-                                                checked={selectedIds.has(log.id)}
-                                                onChange={() => handleToggleSelectOne(log.id)}
-                                                disabled={isBusy}
-                                            />
-                                        </td>
-                                        <td>{formatDate(log.created_at)}</td>
-                                        <td>
-                                            {toRatingScore(log.rating_score) ? (
-                                                <span className="operation-qa-logs__rating">{toRatingScore(log.rating_score)}/5</span>
-                                            ) : (
-                                                <span className="operation-qa-logs__rating operation-qa-logs__rating--none">未評価</span>
-                                            )}
-                                        </td>
-                                        <td>{log.user_email || (log.user_id ? String(log.user_id).slice(0, 8) : '-')}</td>
-                                        <td>{log.current_view || '-'}</td>
-                                        <td title={log.question || ''}>{clipText(log.question, 120)}</td>
-                                        <td title={log.answer || ''}>{clipText(log.answer, 160)}</td>
-                                        <td>
-                                            <span className={badge.className}>{badge.label}</span>
-                                        </td>
-                                        <td>
-                                            {log.ai_model ? (
-                                                <code>{log.ai_model}</code>
-                                            ) : (
-                                                '-'
-                                            )}
-                                        </td>
-                                        <td>
-                                            {(log.input_tokens || log.output_tokens)
-                                                ? `↓${toSafeNumber(log.input_tokens, 0)} / ↑${toSafeNumber(log.output_tokens, 0)}`
-                                                : '-'}
-                                        </td>
-                                    </tr>
+                        {displayedLogs.map((log) => {
+                            const badge = getSourceBadge(log);
+                            return (
+                                    <tbody key={log.id}>
+                                        <tr>
+                                            <td className="operation-qa-logs__select-col">
+                                                <input
+                                                    type="checkbox"
+                                                    aria-label="ログを選択"
+                                                    checked={selectedIds.has(log.id)}
+                                                    onChange={() => handleToggleSelectOne(log.id)}
+                                                    disabled={isBusy}
+                                                />
+                                            </td>
+                                            <td>{formatDate(log.created_at)}</td>
+                                            <td>
+                                                {toRatingScore(log.rating_score) ? (
+                                                    <span className="operation-qa-logs__rating">{toRatingScore(log.rating_score)}/5</span>
+                                                ) : (
+                                                    <span className="operation-qa-logs__rating operation-qa-logs__rating--none">未評価</span>
+                                                )}
+                                            </td>
+                                            <td>{log.user_email || (log.user_id ? String(log.user_id).slice(0, 8) : '-')}</td>
+                                            <td>{log.current_view || '-'}</td>
+                                            <td title={log.question || ''}>{clipText(log.question, 120)}</td>
+                                            <td
+                                                className="operation-qa-logs__answer-cell"
+                                                title="クリックで全文を展開"
+                                                onClick={() => setExpandedLogId(
+                                                    expandedLogId === log.id ? null : log.id
+                                                )}
+                                            >
+                                                <span className="operation-qa-logs__answer-short">
+                                                    {formatAnswerShort(log.answer, 160)}
+                                                </span>
+                                                <span className="operation-qa-logs__answer-expand-btn">
+                                                    {expandedLogId === log.id ? '▲' : '▼'}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span className={badge.className}>{badge.label}</span>
+                                            </td>
+                                            <td>
+                                                {log.ai_model ? (
+                                                    <code>{log.ai_model}</code>
+                                                ) : (
+                                                    '-'
+                                                )}
+                                            </td>
+                                            <td>
+                                                {(log.input_tokens || log.output_tokens)
+                                                    ? `↓${toSafeNumber(log.input_tokens, 0)} / ↑${toSafeNumber(log.output_tokens, 0)}`
+                                                    : '-'}
+                                            </td>
+                                        </tr>
+                                        {expandedLogId === log.id && (
+                                            <tr className="operation-qa-logs__expanded-row">
+                                                <td colSpan={10}>
+                                                    <div className="operation-qa-logs__expanded-content">
+                                                        <div className="operation-qa-logs__expanded-section">
+                                                            <span className="operation-qa-logs__expanded-label">質問</span>
+                                                            <p>{log.question || '-'}</p>
+                                                        </div>
+                                                        <div className="operation-qa-logs__expanded-section">
+                                                            <span className="operation-qa-logs__expanded-label">回答</span>
+                                                            <AnswerDetail rawAnswer={log.answer} />
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
                                 );
                             })}
-                        </tbody>
                     </table>
                     {displayedLogs.length === 0 && (
                         <div className="operation-qa-logs__empty">ログがありません</div>
