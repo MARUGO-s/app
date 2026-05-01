@@ -741,10 +741,14 @@ function AppContent() {
     const from = searchParams.get('from');
     const compositeId = searchParams.get('compositeId');
     const baseId = searchParams.get('baseId');
+    const replacedFromId = searchParams.get('replacedFromId');
+    const replacedToId = searchParams.get('replacedToId');
     const params = {};
     if (from) params.from = from;
     if (compositeId) params.compositeId = compositeId;
     if (baseId) params.baseId = baseId;
+    if (replacedFromId) params.replacedFromId = replacedFromId;
+    if (replacedToId) params.replacedToId = replacedToId;
     return params;
   };
 
@@ -879,12 +883,20 @@ function AppContent() {
         setRecipes([savedRecipe, ...recipes]);
       }
       // Navigate
+      const returnFrom = searchParams.get('from');
+      const isCompositeReturn = returnFrom === 'composite-cost' || returnFrom === 'composite-cost-edit';
+      const replacementParams = (!effectiveIsEdit && isCompositeReturn)
+        ? {
+          replacedFromId: String(recipe?.id || ''),
+          replacedToId: String(savedRecipe?.id || ''),
+        }
+        : {};
       if (effectiveIsEdit) {
         setSearchParams({ view: 'detail', id: savedRecipe.id, ...getDetailReturnParams() });
       } else {
         // Even if originally edit, if we created new, go to list or detail of NEW one
         // User probably expects to see the new one.
-        setSearchParams({ view: 'detail', id: savedRecipe.id, ...getDetailReturnParams() }); // Better UX: Show the new recipe
+        setSearchParams({ view: 'detail', id: savedRecipe.id, ...getDetailReturnParams(), ...replacementParams }); // Better UX: Show the new recipe
       }
 
     } catch (error) {
@@ -1619,12 +1631,22 @@ function AppContent() {
             const from = searchParams.get('from');
             const compositeId = searchParams.get('compositeId');
             const baseId = searchParams.get('baseId');
+            const replacedFromId = searchParams.get('replacedFromId');
+            const replacedToId = searchParams.get('replacedToId');
             if (from === 'planner') {
               setSearchParams({ view: 'planner' });
             } else if (from === 'composite-cost-edit' && compositeId) {
-              setSearchParams({ view: 'composite-cost-edit', compositeId });
+              setSearchParams({
+                view: 'composite-cost-edit',
+                compositeId,
+                ...(replacedFromId && replacedToId ? { replacedFromId, replacedToId } : {}),
+              });
             } else if (from === 'composite-cost') {
-              setSearchParams({ view: 'composite-cost', ...(baseId ? { baseId } : {}) });
+              setSearchParams({
+                view: 'composite-cost',
+                ...(baseId ? { baseId } : {}),
+                ...(replacedFromId && replacedToId ? { replacedFromId, replacedToId } : {}),
+              });
             } else if (selectedRecipe.deletedAt) {
               handleSwitchToTrash();
             } else {
@@ -1648,6 +1670,7 @@ function AppContent() {
           onView={addToHistory}
           onHardDelete={handleHardDeleteRecipe}
           onDuplicate={handleDuplicate}
+          forceEditEnabled={searchParams.get('from') === 'composite-cost-edit' || searchParams.get('from') === 'composite-cost'}
           onOpenCompositeCost={() => setSearchParams({
             view: 'composite-cost',
             baseId: String(selectedRecipe.id),
@@ -1752,6 +1775,8 @@ function AppContent() {
         <RecipeCompositeCostEditPage
           compositeId={searchParams.get('compositeId') || ''}
           onBack={() => setSearchParams({ view: 'composite-cost-saved' })}
+          replaceFromRecipeId={searchParams.get('replacedFromId') || ''}
+          replaceToRecipeId={searchParams.get('replacedToId') || ''}
           onOpenRecipeDetail={(recipeId) => {
             const normalizedId = String(recipeId || '').trim();
             const compositeId = String(searchParams.get('compositeId') || '').trim();
@@ -1761,6 +1786,9 @@ function AppContent() {
               id: normalizedId,
               from: 'composite-cost-edit',
               compositeId,
+              ...(searchParams.get('replacedFromId') && searchParams.get('replacedToId')
+                ? { replacedFromId: searchParams.get('replacedFromId'), replacedToId: searchParams.get('replacedToId') }
+                : {}),
             });
           }}
         />

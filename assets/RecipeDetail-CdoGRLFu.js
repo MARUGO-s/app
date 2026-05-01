@@ -284,7 +284,7 @@ const UI_TEXT_DEFAULT = Object.freeze({
 
 const UI_TEXT_KEYS = Object.keys(UI_TEXT_DEFAULT);
 
-export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onHardDelete, isDeleted, onView, onDuplicate, onOpenCompositeCost, backLabel, onList }) => {
+export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onHardDelete, isDeleted, onView, onDuplicate, onOpenCompositeCost, backLabel, onList, forceEditEnabled = false }) => {
     const { user } = useAuth();
     const toast = useToast();
     const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
@@ -1592,7 +1592,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                 </div>
                             )}
 
-                            {!canEdit && (
+                            {!canEdit && !forceEditEnabled && (
                                 <span style={{
                                     padding: '4px 8px',
                                     backgroundColor: '#e0e0e0',
@@ -1637,11 +1637,11 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                 <Button variant="secondary" size="sm" onClick={onOpenCompositeCost}>🥪 合成原価</Button>
                             )}
 
+                            {(canEdit || forceEditEnabled) && (
+                                <Button variant="secondary" size="sm" onClick={onEdit}>編集</Button>
+                            )}
                             {canEdit && (
-                                <>
-                                    <Button variant="secondary" size="sm" onClick={onEdit}>編集</Button>
-                                    <Button variant="danger" size="sm" onClick={handleDeleteClick} style={{ marginLeft: '0.5rem' }}>削除</Button>
-                                </>
+                                <Button variant="danger" size="sm" onClick={handleDeleteClick} style={{ marginLeft: '0.5rem' }}>削除</Button>
                             )}
 
                         </div>

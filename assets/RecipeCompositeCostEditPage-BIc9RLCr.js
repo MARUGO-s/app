@@ -8,7 +8,13 @@ import { useToast } from '../contexts/useToast';
 import { useAuth } from '../contexts/useAuth';
 import './RecipeCompositeCostPage.css';
 
-export const RecipeCompositeCostEditPage = ({ compositeId, onBack, onOpenRecipeDetail }) => {
+export const RecipeCompositeCostEditPage = ({
+    compositeId,
+    onBack,
+    onOpenRecipeDetail,
+    replaceFromRecipeId = '',
+    replaceToRecipeId = '',
+}) => {
     const toast = useToast();
     const { user } = useAuth();
     const [loading, setLoading] = React.useState(true);
@@ -30,7 +36,14 @@ export const RecipeCompositeCostEditPage = ({ compositeId, onBack, onOpenRecipeD
             try {
                 const detail = await compositeRecipeService.getSetDetail(compositeId);
                 if (cancelled) return;
-                const recipe = await recipeService.getRecipe(detail.base_recipe_id);
+                const fromId = String(replaceFromRecipeId || '').trim();
+                const toId = String(replaceToRecipeId || '').trim();
+                const shouldReplace = !!fromId && !!toId;
+                const effectiveBaseRecipeId = shouldReplace && String(detail.base_recipe_id || '') === fromId
+                    ? toId
+                    : detail.base_recipe_id;
+
+                const recipe = await recipeService.getRecipe(effectiveBaseRecipeId);
                 if (cancelled) return;
                 setBaseRecipe(recipe);
                 setDishName(detail.dish_name || '');
@@ -42,7 +55,13 @@ export const RecipeCompositeCostEditPage = ({ compositeId, onBack, onOpenRecipeD
                     salesCount: detail.sales_count == null ? '' : String(detail.sales_count),
                     rows: (detail.items || []).map((item) => ({
                         itemType: item.item_type === 'ingredient' ? 'ingredient' : 'recipe',
-                        recipeId: item.recipe_id == null ? '' : String(item.recipe_id),
+                        recipeId: item.recipe_id == null
+                            ? ''
+                            : (
+                                shouldReplace && String(item.recipe_id) === fromId
+                                    ? toId
+                                    : String(item.recipe_id)
+                            ),
                         ingredient: item.ingredient_payload || null,
                         usageAmount: item.usage_amount == null ? '' : String(item.usage_amount),
                         usageUnit: item.ingredient_payload?.unit || '',
@@ -59,7 +78,7 @@ export const RecipeCompositeCostEditPage = ({ compositeId, onBack, onOpenRecipeD
         return () => {
             cancelled = true;
         };
-    }, [compositeId]);
+    }, [compositeId, replaceFromRecipeId, replaceToRecipeId]);
 
     const handleUpdate = async () => {
         const name = String(dishName || '').trim();

@@ -1081,66 +1081,49 @@ export const recipeService = {
         if (!userId || !recipeId) return false;
 
         const viewedAt = new Date().toISOString();
+        const byKeys = (query) => query
+            .eq('viewer_user_id', userId)
+            .eq('recipe_id', recipeId);
 
-        const { error } = await withTimeout(
-            supabase
-                .from('recent_views')
-                .upsert({
-                    viewer_user_id: userId,
-                    recipe_id: recipeId,
-                    viewed_at: viewedAt
-                }, { onConflict: 'viewer_user_id,recipe_id' }),
-            10000,
-            'recent_views.upsert'
-        );
-        if (!error) return true;
-
-        // Fallback path: some environments fail ON CONFLICT inference
-        // against partial unique indexes. Keep history resilient anyway.
-        console.error('[recent_views] upsert failed; falling back to select/update/insert', {
-            userId,
-            recipeId,
-            error: toLoggableError(error),
-        });
-
+        // Prefer select -> update/insert to avoid noisy 409 duplicate logs in browser.
         const { data: existing, error: selectError } = await withTimeout(
-            supabase
-                .from('recent_views')
-                .select('id')
-                .eq('viewer_user_id', userId)
-                .eq('recipe_id', recipeId)
-                .maybeSingle(),
+            byKeys(
+                supabase
+                    .from('recent_views')
+                    .select('id')
+                    .limit(1)
+                    .maybeSingle()
+            ),
             10000,
             'recent_views.select(existing)'
         );
         if (selectError) {
-            console.error('[recent_views] fallback select failed', {
+            console.error('[recent_views] select failed', {
                 userId,
                 recipeId,
                 error: toLoggableError(selectError),
             });
-            throw selectError;
+            return false;
         }
 
         if (existing?.id) {
             const { error: updateError } = await withTimeout(
-                supabase
-                    .from('recent_views')
-                    .update({ viewed_at: viewedAt })
-                    .eq('id', existing.id),
+                byKeys(
+                    supabase
+                        .from('recent_views')
+                        .update({ viewed_at: viewedAt })
+                ),
                 10000,
                 'recent_views.update(existing)'
             );
-            if (updateError) {
-                console.error('[recent_views] fallback update failed', {
-                    userId,
-                    recipeId,
-                    existingId: existing.id,
-                    error: toLoggableError(updateError),
-                });
-                throw updateError;
-            }
-            return true;
+            if (!updateError) return true;
+            console.error('[recent_views] update failed', {
+                userId,
+                recipeId,
+                existingId: existing.id,
+                error: toLoggableError(updateError),
+            });
+            return false;
         }
 
         const { error: insertError } = await withTimeout(
@@ -1149,21 +1132,38 @@ export const recipeService = {
                 .insert({
                     viewer_user_id: userId,
                     recipe_id: recipeId,
-                    viewed_at: viewedAt
+                    viewed_at: viewedAt,
                 }),
             10000,
             'recent_views.insert(new)'
         );
-        if (insertError) {
-            console.error('[recent_views] fallback insert failed', {
+        if (!insertError) return true;
+
+        if (String(insertError?.code || '') === '23505') {
+            const { error: raceUpdateError } = await withTimeout(
+                byKeys(
+                    supabase
+                        .from('recent_views')
+                        .update({ viewed_at: viewedAt })
+                ),
+                10000,
+                'recent_views.update(race-duplicate)'
+            );
+            if (!raceUpdateError) return true;
+            console.error('[recent_views] race duplicate update failed', {
                 userId,
                 recipeId,
-                error: toLoggableError(insertError),
+                error: toLoggableError(raceUpdateError),
             });
-            throw insertError;
+            return false;
         }
 
-        return true;
+        console.error('[recent_views] insert failed', {
+            userId,
+            recipeId,
+            error: toLoggableError(insertError),
+        });
+        return false;
     },
 
     async updateOrder(items) {
