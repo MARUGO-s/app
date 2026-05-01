@@ -64,6 +64,29 @@ const normalizeRecipeTags = (rawTags) => {
     return [];
 };
 
+const getCurrentUserOwnerKeys = (currentUser) => {
+    const keys = new Set();
+    if (currentUser?.id) keys.add(\`owner:\${String(currentUser.id)}\`);
+    if (currentUser?.displayId) keys.add(\`owner:\${String(currentUser.displayId)}\`);
+    return keys;
+};
+
+const canCurrentUserAccessDeletedRecipe = (recipe, currentUser) => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'admin') return true;
+
+    const deletedBy = recipe?.deleted_by_user_id || recipe?.deletedByUserId || null;
+    if (deletedBy && currentUser.id && String(deletedBy) === String(currentUser.id)) {
+        return true;
+    }
+
+    const ownerKeys = getCurrentUserOwnerKeys(currentUser);
+    if (ownerKeys.size === 0) return false;
+
+    const ownerTags = normalizeRecipeTags(recipe?.tags).filter(tag => tag.startsWith('owner:'));
+    return ownerTags.some(tag => ownerKeys.has(tag));
+};
+
 const shouldUseLocalRecipeFallback = (error) => {
     if (!error) return false;
 
@@ -920,23 +943,30 @@ export const recipeService = {
         return await this.createRecipe(recipeData, currentUser);
     },
 
-    async fetchDeletedRecipes() {
+    async fetchDeletedRecipes(currentUser = null) {
+        if (!currentUser) return [];
+
         const { data, error } = await supabase
             .from('deleted_recipes')
             .select('*')
             .order('deleted_at', { ascending: false })
 
         if (error) throw error
-        return data.map(fromDeletedDbFormat)
+        return (data || [])
+            .filter(recipe => canCurrentUserAccessDeletedRecipe(recipe, currentUser))
+            .map(fromDeletedDbFormat)
     },
 
-    async getDeletedCount() {
-        const { count, error } = await supabase
+    async getDeletedCount(currentUser = null) {
+        if (!currentUser) return 0;
+
+        const { data, error, count } = await supabase
             .from('deleted_recipes')
-            .select('*', { count: 'exact', head: true })
+            .select('*', { count: 'exact' })
 
         if (error) throw error
-        return count
+        if (currentUser.role === 'admin') return count ?? (data || []).length;
+        return (data || []).filter(recipe => canCurrentUserAccessDeletedRecipe(recipe, currentUser)).length;
     },
 
     async deleteRecipe(id) {
