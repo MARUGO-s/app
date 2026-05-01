@@ -34,6 +34,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Enable maintenance mode
+        continue-on-error: true
+        run: node scripts/set_maintenance.js on
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
       - name: Clean dist
         run: rm -rf dist
 
@@ -66,10 +73,17 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-        
+
       - name: Install dependencies for script
         run: npm install @supabase/supabase-js
-        
+
+      - name: Disable maintenance mode
+        continue-on-error: true
+        run: node scripts/set_maintenance.js off
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
       - name: Record deployment to Supabase
         continue-on-error: true
         run: node scripts/record_deploy.js frontend deploy "フロントエンド (GitHub Pages) の自動デプロイ完了 (${{ github.sha }})" "${{ github.actor }}"

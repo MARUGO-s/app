@@ -37,6 +37,7 @@ import { ToastProvider } from './contexts/ToastContext.jsx';
 import { useToast } from './contexts/useToast';
 import { LoginPage } from './components/LoginPage';
 import { PasswordResetPage } from './components/PasswordResetPage';
+import { MaintenancePage } from './components/MaintenancePage';
 import { Modal } from './components/Modal';
 import './App.css';
 
@@ -1598,11 +1599,44 @@ function AppContent() {
   );
 }
 
+function AppWithMaintenance() {
+  const { user } = useAuth();
+  const [maintenance, setMaintenance] = useState(null); // null=loading, false=off, true=on
+  const isAdmin = user?.role === 'admin';
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.rpc('get_maintenance_mode')
+      .then(({ data }) => { if (!cancelled) setMaintenance(data === true); })
+      .catch(() => { if (!cancelled) setMaintenance(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (maintenance === null) return null; // 初回チェック中は何も表示しない（一瞬）
+
+  if (maintenance && !isAdmin) return <MaintenancePage />;
+
+  return (
+    <>
+      {maintenance && isAdmin && (
+        <div className="maintenance-admin-banner">
+          🔧 メンテナンスモード ON（管理者のみ閲覧中）
+          <button onClick={async () => {
+            await supabase.rpc('admin_set_feature_flag', { p_key: 'maintenance_mode', p_enabled: false });
+            setMaintenance(false);
+          }}>解除する</button>
+        </div>
+      )}
+      <AppContent />
+    </>
+  );
+}
+
 function App() {
   return (
     <ToastProvider>
       <AuthProvider>
-        <AppContent />
+        <AppWithMaintenance />
       </AuthProvider>
     </ToastProvider>
   );

@@ -6,6 +6,7 @@ import { Modal } from './Modal';
 import { useAuth } from '../contexts/useAuth';
 import { formatDisplayId } from '../utils/formatUtils';
 import { STORE_LIST } from '../constants';
+import { supabase } from '../supabase';
 import './UserManagement.css';
 
 const NARROW_BREAKPOINT = 480;
@@ -129,6 +130,8 @@ export const UserManagement = ({ onBack }) => {
     const [dailyApiLogsError, setDailyApiLogsError] = useState('');
     const [presenceMap, setPresenceMap] = useState({});
     const [isLoadingPresence, setIsLoadingPresence] = useState(false);
+    const [maintenanceMode, setMaintenanceMode] = useState(null);
+    const [isTogglingMaintenance, setIsTogglingMaintenance] = useState(false);
     const [isPresenceFeatureAvailable, setIsPresenceFeatureAvailable] = useState(true);
     const [presenceError, setPresenceError] = useState('');
     const [dailyActivityMap, setDailyActivityMap] = useState({});
@@ -264,6 +267,25 @@ export const UserManagement = ({ onBack }) => {
         setIsNarrow(el.getBoundingClientRect().width < NARROW_BREAKPOINT);
         return () => ro.disconnect();
     }, []);
+
+    useEffect(() => {
+        supabase.rpc('get_maintenance_mode')
+            .then(({ data }) => setMaintenanceMode(data === true))
+            .catch(() => setMaintenanceMode(false));
+    }, []);
+
+    const toggleMaintenance = async () => {
+        setIsTogglingMaintenance(true);
+        try {
+            const next = !maintenanceMode;
+            await supabase.rpc('admin_set_feature_flag', { p_key: 'maintenance_mode', p_enabled: next });
+            setMaintenanceMode(next);
+        } catch (e) {
+            console.error('maintenance toggle failed:', e);
+        } finally {
+            setIsTogglingMaintenance(false);
+        }
+    };
 
     const admins = users.filter(u => u.role === 'admin');
     const regulars = users.filter(u => u.role !== 'admin');
@@ -652,6 +674,20 @@ export const UserManagement = ({ onBack }) => {
                 <div className="user-management__header">
                     <h2>ユーザー管理</h2>
                     <Button variant="ghost" onClick={onBack}>戻る</Button>
+                </div>
+
+                <div className="user-management__maintenance-toggle">
+                    <span className="user-management__maintenance-label">
+                        🔧 メンテナンスモード
+                    </span>
+                    <button
+                        className={`maintenance-toggle-btn${maintenanceMode ? ' maintenance-toggle-btn--on' : ''}`}
+                        onClick={toggleMaintenance}
+                        disabled={isTogglingMaintenance || maintenanceMode === null}
+                        title={maintenanceMode ? 'クリックして解除' : 'クリックして有効化'}
+                    >
+                        {isTogglingMaintenance ? '...' : maintenanceMode ? 'ON（工事中）' : 'OFF'}
+                    </button>
                 </div>
 
                 <div className="user-management__daily-note">
