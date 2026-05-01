@@ -1615,7 +1615,11 @@ function AppWithMaintenance() {
   // 認証状態とメンテナンスフラグの両方が確定するまで待つ
   if (maintenance === null || authLoading) return null;
 
-  if (maintenance && !isAdmin) return <MaintenancePage />;
+  // メンテナンス中でも未ログインならログイン画面を表示（管理者がログインできるように）
+  if (maintenance && !isAdmin) {
+    if (!user) return <LoginPage />;
+    return <MaintenancePage />;
+  }
 
   return (
     <>
