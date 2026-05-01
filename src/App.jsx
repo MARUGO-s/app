@@ -628,7 +628,7 @@ function AppContent() {
       const storeKey = normalizeKey(recipe.storeName);
       const matchesTag =
         selectedTag === 'すべて' ||
-        (selectedTag === 'recent' && recentIds.includes(recipe.id)) ||
+        (selectedTag === 'recent' && recentIds.some(id => String(id) === String(recipe.id))) ||
         (recipe.tags && recipe.tags.includes(selectedTag)) ||
         (selectedTag === NO_STORE_VALUE && !storeKey) ||
         (selectedTag === OTHER_STORE_VALUE && storeKey && !KNOWN_STORE_KEYS.has(storeKey)) ||
