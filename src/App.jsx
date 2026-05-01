@@ -102,7 +102,8 @@ function AppContent() {
   const [authStuckFallback, setAuthStuckFallback] = useState(false);
   const [profilesById, setProfilesById] = useState({});
   const [profilesByDisplayId, setProfilesByDisplayId] = useState({});
-  const [isFromCache, setIsFromCache] = useState(false); // true when showing cached data
+  const [isFromCache, setIsFromCache] = useState(false);
+  const [maintenance, setMaintenance] = useState(null); // null=loading, true=on, false=off
   const recipeLoadRequestRef = useRef(0);
 
   // Derived State from URL
@@ -271,6 +272,14 @@ function AppContent() {
     const t = setTimeout(() => setAuthStuckFallback(true), 3500);
     return () => clearTimeout(t);
   }, [authLoading]);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.rpc('get_maintenance_mode')
+      .then(({ data }) => { if (!cancelled) setMaintenance(!!data); })
+      .catch(() => { if (!cancelled) setMaintenance(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   // FAST PATH: Load cached recipes immediately while auth is still resolving.
   // This eliminates the perceived wait time after login.
@@ -901,9 +910,22 @@ function AppContent() {
   if (!user) return <LoginPage />;
   if (isPasswordRecovery) return <PasswordResetPage />;
 
+  // メンテナンスチェック（認証確定後に実行）
+  if (maintenance === null) return null;
+  if (maintenance && user.role !== 'admin') return <MaintenancePage />;
+
   return (
 
     <Layout>
+      {maintenance && user.role === 'admin' && (
+        <div className="maintenance-admin-banner">
+          🔧 メンテナンスモード ON（管理者のみ閲覧中）
+          <button onClick={async () => {
+            await supabase.rpc('admin_set_feature_flag', { p_key: 'maintenance_mode', p_enabled: false });
+            setMaintenance(false);
+          }}>解除する</button>
+        </div>
+      )}
       {showBulkDeleteConfirm && (
         <div className="modal-overlay" style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -1599,49 +1621,11 @@ function AppContent() {
   );
 }
 
-function AppWithMaintenance() {
-  const { user, loading: authLoading } = useAuth();
-  const [maintenance, setMaintenance] = useState(null); // null=loading, false=off, true=on
-  const isAdmin = user?.role === 'admin';
-
-  useEffect(() => {
-    let cancelled = false;
-    supabase.rpc('get_maintenance_mode')
-      .then(({ data }) => { if (!cancelled) setMaintenance(data === true); })
-      .catch(() => { if (!cancelled) setMaintenance(false); });
-    return () => { cancelled = true; };
-  }, []);
-
-  // 認証状態とメンテナンスフラグの両方が確定するまで待つ
-  if (maintenance === null || authLoading) return null;
-
-  // メンテナンス中でも未ログインならログイン画面を表示（管理者がログインできるように）
-  if (maintenance && !isAdmin) {
-    if (!user) return <LoginPage />;
-    return <MaintenancePage />;
-  }
-
-  return (
-    <>
-      {maintenance && isAdmin && (
-        <div className="maintenance-admin-banner">
-          🔧 メンテナンスモード ON（管理者のみ閲覧中）
-          <button onClick={async () => {
-            await supabase.rpc('admin_set_feature_flag', { p_key: 'maintenance_mode', p_enabled: false });
-            setMaintenance(false);
-          }}>解除する</button>
-        </div>
-      )}
-      <AppContent />
-    </>
-  );
-}
-
 function App() {
   return (
     <ToastProvider>
       <AuthProvider>
-        <AppWithMaintenance />
+        <AppContent />
       </AuthProvider>
     </ToastProvider>
   );
