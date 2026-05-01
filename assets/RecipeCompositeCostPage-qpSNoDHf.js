@@ -33,6 +33,7 @@ export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack, onOpenSa
     const [queuedRecipeId, setQueuedRecipeId] = React.useState('');
     const [loadingRecipe, setLoadingRecipe] = React.useState(false);
     const [errorMessage, setErrorMessage] = React.useState('');
+    const [isPublic, setIsPublic] = React.useState(false);
     const showSearchCards = String(searchQuery || '').trim().length > 0;
 
     const filteredRecipeOptions = React.useMemo(() => {
@@ -147,10 +148,12 @@ export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack, onOpenSa
             await compositeRecipeService.createSet({
                 dishName: name,
                 baseRecipeId: selectedRecipe.id,
+                isPublic,
                 ...calculatorState,
             });
             toast.success('合成レシピを保存しました。');
             setDishName('');
+            setIsPublic(false);
         } catch (error) {
             toast.error(\`保存に失敗しました: \${error?.message || 'unknown error'}\`);
         } finally {
@@ -186,6 +189,9 @@ export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack, onOpenSa
                     <p className="composite-cost-page__desc">
                         レシピを自由に組み合わせて、使用量ごとの合成原価と原価率をこのページで試算できます。
                     </p>
+                <p className="composite-cost-page__desc" style={{ marginTop: '6px' }}>
+                    保存時に「他ユーザーへ共有」をONにすると、他ユーザーの保存一覧にも表示されます。
+                </p>
                 </div>
 
                 <div className="composite-cost-page__selector">
@@ -297,6 +303,14 @@ export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack, onOpenSa
                                 onChange={(e) => setDishName(e.target.value)}
                                 placeholder="保存する料理名（例: バゲットポテサラパン）"
                             />
+                            <label className="composite-cost-page__share-toggle">
+                                <input
+                                    type="checkbox"
+                                    checked={isPublic}
+                                    onChange={(e) => setIsPublic(e.target.checked)}
+                                />
+                                他ユーザーへ共有
+                            </label>
                             <Button type="button" variant="primary" onClick={handleSaveComposite} disabled={isSaving}>
                                 {isSaving ? '保存中...' : 'この組み合わせを保存'}
                             </Button>

@@ -53,6 +53,7 @@ export const compositeRecipeService = {
             sales_price: toFiniteNumber(payload?.salesPrice),
             sales_count: toFiniteNumber(payload?.salesCount),
             total_cost_tax_included: toFiniteNumber(payload?.totalCompositeCost),
+            is_public: payload?.isPublic === true,
         };
         const { data: header, error: headerError } = await supabase
             .from('recipe_composite_sets')
@@ -84,6 +85,7 @@ export const compositeRecipeService = {
                 sales_price: toFiniteNumber(payload?.salesPrice),
                 sales_count: toFiniteNumber(payload?.salesCount),
                 total_cost_tax_included: toFiniteNumber(payload?.totalCompositeCost),
+                is_public: payload?.isPublic === true,
                 updated_at: now,
             })
             .eq('id', id);
@@ -110,7 +112,7 @@ export const compositeRecipeService = {
     async listSets() {
         const { data, error } = await supabase
             .from('recipe_composite_sets')
-            .select('id,dish_name,base_recipe_id,total_cost_tax_included,updated_at,created_at')
+            .select('id,dish_name,base_recipe_id,total_cost_tax_included,updated_at,created_at,is_public,created_by')
             .order('updated_at', { ascending: false });
         if (error) throw error;
         return data || [];
@@ -141,6 +143,14 @@ export const compositeRecipeService = {
         const { error } = await supabase
             .from('recipe_composite_sets')
             .delete()
+            .eq('id', id);
+        if (error) throw error;
+    },
+
+    async setPublicVisibility(id, isPublic) {
+        const { error } = await supabase
+            .from('recipe_composite_sets')
+            .update({ is_public: isPublic === true, updated_at: new Date().toISOString() })
             .eq('id', id);
         if (error) throw error;
     },

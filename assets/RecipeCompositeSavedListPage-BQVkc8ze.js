@@ -2,6 +2,7 @@ const e=`import React from 'react';
 import { Card } from './Card';
 import { Button } from './Button';
 import { compositeRecipeService } from '../services/compositeRecipeService';
+import { useAuth } from '../contexts/useAuth';
 import './RecipeCompositeCostPage.css';
 
 const formatYen = (value) => {
@@ -11,6 +12,7 @@ const formatYen = (value) => {
 };
 
 export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }) => {
+    const { user } = useAuth();
     const [rows, setRows] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState('');
@@ -52,6 +54,24 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }
         }
     };
 
+    const handleToggleShare = async (row) => {
+        const isOwner = String(row?.created_by || '') === String(user?.id || '');
+        if (!isOwner) return;
+        try {
+            setDeletingId(row.id);
+            await compositeRecipeService.setPublicVisibility(row.id, !(row.is_public === true));
+            setRows((prev) => prev.map((item) => (
+                item.id === row.id
+                    ? { ...item, is_public: !(row.is_public === true) }
+                    : item
+            )));
+        } catch (e) {
+            setError(e?.message || '共有設定の更新に失敗しました。');
+        } finally {
+            setDeletingId(null);
+        }
+    };
+
     return (
         <div className="composite-cost-page">
             <div className="composite-cost-page__header">
@@ -88,14 +108,16 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }
 
             {!loading && !error && rows.length > 0 && (
                 <div className="composite-cost-page__saved-list">
-                    {rows.map((row) => (
+                    {rows.map((row) => {
+                        const isOwner = String(row?.created_by || '') === String(user?.id || '');
+                        return (
                         <Card
                             key={row.id}
-                            className="composite-cost-page__saved-item composite-cost-page__saved-item--clickable"
-                            onClick={() => onOpenEditor?.(row.id)}
+                            className={\`composite-cost-page__saved-item \${isOwner ? 'composite-cost-page__saved-item--clickable' : ''}\`}
+                            onClick={() => { if (isOwner) onOpenEditor?.(row.id); }}
                             role="button"
-                            tabIndex={0}
-                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onOpenEditor?.(row.id); }}
+                            tabIndex={isOwner ? 0 : -1}
+                            onKeyDown={(e) => { if (isOwner && (e.key === 'Enter' || e.key === ' ')) onOpenEditor?.(row.id); }}
                         >
                             <div className="composite-cost-page__saved-main">
                                 <strong>{row.dish_name}</strong>
@@ -108,23 +130,50 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }
                                         <em>更新</em>
                                         <b>{new Date(row.updated_at || row.created_at).toLocaleString()}</b>
                                     </span>
+                                    <span className="composite-cost-page__saved-chip composite-cost-page__saved-chip--updated">
+                                        <em>共有</em>
+                                        <b>{row.is_public ? 'ON' : 'OFF'}</b>
+                                    </span>
+                                    {!isOwner && (
+                                        <span className="composite-cost-page__saved-chip composite-cost-page__saved-chip--updated">
+                                            <em>権限</em>
+                                            <b>閲覧のみ</b>
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                             <div className="composite-cost-page__saved-actions">
-                                <Button type="button" variant="secondary" onClick={(e) => { e.stopPropagation(); onOpenEditor?.(row.id); }}>
-                                    編集を開く
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="danger"
-                                    onClick={(e) => { e.stopPropagation(); handleDelete(row.id); }}
-                                    disabled={deletingId === row.id}
-                                >
-                                    {deletingId === row.id ? '削除中...' : '削除'}
-                                </Button>
+                                {isOwner ? (
+                                    <>
+                                        <Button type="button" variant="secondary" onClick={(e) => { e.stopPropagation(); onOpenEditor?.(row.id); }}>
+                                            編集を開く
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            onClick={(e) => { e.stopPropagation(); handleToggleShare(row); }}
+                                            disabled={deletingId === row.id}
+                                        >
+                                            {row.is_public ? '共有をOFF' : '共有をON'}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="danger"
+                                            onClick={(e) => { e.stopPropagation(); handleDelete(row.id); }}
+                                            disabled={deletingId === row.id}
+                                        >
+                                            {deletingId === row.id ? '削除中...' : '削除'}
+                                        </Button>
+                                    </>
+                                ) : (
+                                    <Button type="button" variant="secondary" disabled>
+                                        編集不可（共有表示）
+                                    </Button>
+                                )}
                             </div>
                         </Card>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
         </div>

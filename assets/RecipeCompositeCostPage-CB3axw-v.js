@@ -380,6 +380,20 @@ const n=`.composite-cost-page {
   align-items: center;
 }
 
+.composite-cost-page__share-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+  color: #5a3b12;
+  white-space: nowrap;
+}
+
+.composite-cost-page__share-toggle input[type="checkbox"] {
+  inline-size: 16px;
+  block-size: 16px;
+}
+
 .composite-cost-page__saved-list {
   display: grid;
   gap: 12px;

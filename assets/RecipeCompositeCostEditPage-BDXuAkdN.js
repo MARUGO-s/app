@@ -13,6 +13,7 @@ export const RecipeCompositeCostEditPage = ({ compositeId, onBack }) => {
     const [saving, setSaving] = React.useState(false);
     const [error, setError] = React.useState('');
     const [dishName, setDishName] = React.useState('');
+    const [isPublic, setIsPublic] = React.useState(false);
     const [baseRecipe, setBaseRecipe] = React.useState(null);
     const [initialState, setInitialState] = React.useState(null);
     const [calculatorState, setCalculatorState] = React.useState(null);
@@ -30,6 +31,7 @@ export const RecipeCompositeCostEditPage = ({ compositeId, onBack }) => {
                 if (cancelled) return;
                 setBaseRecipe(recipe);
                 setDishName(detail.dish_name || '');
+                setIsPublic(detail.is_public === true);
                 setInitialState({
                     currentUsageAmount: detail.base_usage_amount == null ? '' : String(detail.base_usage_amount),
                     salesPrice: detail.sales_price == null ? '' : String(detail.sales_price),
@@ -71,6 +73,7 @@ export const RecipeCompositeCostEditPage = ({ compositeId, onBack }) => {
             await compositeRecipeService.updateSet(compositeId, {
                 dishName: name,
                 baseRecipeId: baseRecipe.id,
+                isPublic,
                 ...calculatorState,
             });
             toast.success('合成レシピを更新しました。');
@@ -119,6 +122,14 @@ export const RecipeCompositeCostEditPage = ({ compositeId, onBack }) => {
                         onChange={(e) => setDishName(e.target.value)}
                         placeholder="料理名（例: バゲットポテサラパン）"
                     />
+                    <label className="composite-cost-page__share-toggle">
+                        <input
+                            type="checkbox"
+                            checked={isPublic}
+                            onChange={(e) => setIsPublic(e.target.checked)}
+                        />
+                        他ユーザーへ共有
+                    </label>
                     <Button type="button" variant="primary" onClick={handleUpdate} disabled={saving}>
                         {saving ? '更新中...' : '更新を保存'}
                     </Button>
