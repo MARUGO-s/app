@@ -737,6 +737,17 @@ function AppContent() {
     setDisplayMode('normal');
   };
 
+  const getDetailReturnParams = () => {
+    const from = searchParams.get('from');
+    const compositeId = searchParams.get('compositeId');
+    const baseId = searchParams.get('baseId');
+    const params = {};
+    if (from) params.from = from;
+    if (compositeId) params.compositeId = compositeId;
+    if (baseId) params.baseId = baseId;
+    return params;
+  };
+
   const handleSelectRecipe = (recipe, extraParams = {}) => {
     if (recipe?.id) {
       // Record history at selection time as a reliable primary trigger.
@@ -869,11 +880,11 @@ function AppContent() {
       }
       // Navigate
       if (effectiveIsEdit) {
-        setSearchParams({ view: 'detail', id: savedRecipe.id });
+        setSearchParams({ view: 'detail', id: savedRecipe.id, ...getDetailReturnParams() });
       } else {
         // Even if originally edit, if we created new, go to list or detail of NEW one
         // User probably expects to see the new one.
-        setSearchParams({ view: 'detail', id: savedRecipe.id }); // Better UX: Show the new recipe
+        setSearchParams({ view: 'detail', id: savedRecipe.id, ...getDetailReturnParams() }); // Better UX: Show the new recipe
       }
 
     } catch (error) {
@@ -1606,17 +1617,33 @@ function AppContent() {
           isDeleted={!!selectedRecipe.deletedAt}
           onBack={() => {
             const from = searchParams.get('from');
+            const compositeId = searchParams.get('compositeId');
+            const baseId = searchParams.get('baseId');
             if (from === 'planner') {
               setSearchParams({ view: 'planner' });
+            } else if (from === 'composite-cost-edit' && compositeId) {
+              setSearchParams({ view: 'composite-cost-edit', compositeId });
+            } else if (from === 'composite-cost') {
+              setSearchParams({ view: 'composite-cost', ...(baseId ? { baseId } : {}) });
             } else if (selectedRecipe.deletedAt) {
               handleSwitchToTrash();
             } else {
               handleSwitchToMain();
             }
           }}
-          backLabel={searchParams.get('from') === 'planner' ? '← カレンダーに戻る' : undefined}
+          backLabel={searchParams.get('from') === 'planner'
+            ? '← カレンダーに戻る'
+            : (searchParams.get('from') === 'composite-cost-edit'
+              ? '← 合成レシピ編集に戻る'
+              : (searchParams.get('from') === 'composite-cost' ? '← 合成原価に戻る' : undefined))}
           onList={searchParams.get('from') === 'planner' ? handleSwitchToMain : undefined}
-          onEdit={() => setSearchParams({ view: 'edit', id: selectedRecipe.id, from: searchParams.get('from') })}
+          onEdit={() => setSearchParams({
+            view: 'edit',
+            id: selectedRecipe.id,
+            ...(searchParams.get('from') ? { from: searchParams.get('from') } : {}),
+            ...(searchParams.get('compositeId') ? { compositeId: searchParams.get('compositeId') } : {}),
+            ...(searchParams.get('baseId') ? { baseId: searchParams.get('baseId') } : {}),
+          })}
           onDelete={handleDeleteRecipe}
           onView={addToHistory}
           onHardDelete={handleHardDeleteRecipe}
@@ -1640,7 +1667,7 @@ function AppContent() {
             <RecipeForm
               key={\`edit-\${selectedRecipeId}\`}
               initialData={editRecipe}
-              onCancel={() => setSearchParams({ view: 'detail', id: selectedRecipeId })}
+              onCancel={() => setSearchParams({ view: 'detail', id: selectedRecipeId, ...getDetailReturnParams() })}
               onSave={(updatedRecipe) => handleSaveRecipe(updatedRecipe, true)}
             />
           )
@@ -1700,6 +1727,16 @@ function AppContent() {
             setSearchParams({ view: 'list' });
           }}
           onOpenSavedList={() => setSearchParams({ view: 'composite-cost-saved' })}
+          onOpenRecipeDetail={(recipeId) => {
+            const normalizedId = String(recipeId || '').trim();
+            if (!normalizedId) return;
+            setSearchParams({
+              view: 'detail',
+              id: normalizedId,
+              from: 'composite-cost',
+              ...(searchParams.get('baseId') ? { baseId: searchParams.get('baseId') } : {}),
+            });
+          }}
         />
       )}
 
@@ -1715,6 +1752,17 @@ function AppContent() {
         <RecipeCompositeCostEditPage
           compositeId={searchParams.get('compositeId') || ''}
           onBack={() => setSearchParams({ view: 'composite-cost-saved' })}
+          onOpenRecipeDetail={(recipeId) => {
+            const normalizedId = String(recipeId || '').trim();
+            const compositeId = String(searchParams.get('compositeId') || '').trim();
+            if (!normalizedId || !compositeId) return;
+            setSearchParams({
+              view: 'detail',
+              id: normalizedId,
+              from: 'composite-cost-edit',
+              compositeId,
+            });
+          }}
         />
       )}
 

@@ -8,7 +8,7 @@ import { useToast } from '../contexts/useToast';
 import { useAuth } from '../contexts/useAuth';
 import './RecipeCompositeCostPage.css';
 
-export const RecipeCompositeCostEditPage = ({ compositeId, onBack }) => {
+export const RecipeCompositeCostEditPage = ({ compositeId, onBack, onOpenRecipeDetail }) => {
     const toast = useToast();
     const { user } = useAuth();
     const [loading, setLoading] = React.useState(true);
@@ -167,6 +167,7 @@ export const RecipeCompositeCostEditPage = ({ compositeId, onBack }) => {
                 initialState={initialState}
                 initialStateKey={String(compositeId)}
                 onStateChange={setCalculatorState}
+                onOpenRecipeDetail={onOpenRecipeDetail}
             />
         </div>
     );

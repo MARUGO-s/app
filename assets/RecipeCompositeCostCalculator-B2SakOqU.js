@@ -188,6 +188,19 @@ const n=`.composite-cost {
   overflow-wrap: anywhere;
 }
 
+.composite-cost__recipe-select-group {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.composite-cost__detail-btn {
+  min-height: 42px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
 .composite-cost__usage-group {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(74px, 0.45fr);
@@ -437,6 +450,14 @@ const n=`.composite-cost {
     font-size: 0.87rem;
   }
 
+  .composite-cost__recipe-select-group {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .composite-cost__detail-btn {
+    width: fit-content;
+  }
+
   .composite-cost__usage-group {
     grid-template-columns: minmax(0, 1fr) 96px;
   }
@@ -460,6 +481,14 @@ const n=`.composite-cost {
   .composite-cost__profit-grid,
   .composite-cost__profit-cards {
     grid-template-columns: 1fr;
+  }
+
+  .composite-cost__recipe-select-group {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .composite-cost__detail-btn {
+    width: fit-content;
   }
 }
 

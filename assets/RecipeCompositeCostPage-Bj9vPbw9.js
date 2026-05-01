@@ -19,7 +19,7 @@ const getCategoryToneClass = (category) => {
     return \`composite-cost-page__search-card--tone-\${tone}\`;
 };
 
-export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack, onOpenSavedList }) => {
+export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack, onOpenSavedList, onOpenRecipeDetail }) => {
     const { user } = useAuth();
     const toast = useToast();
     const [recipeOptions, setRecipeOptions] = React.useState([]);
@@ -320,6 +320,7 @@ export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack, onOpenSa
                         currentRecipe={selectedRecipe}
                         showHeader={false}
                         onStateChange={setCalculatorState}
+                        onOpenRecipeDetail={onOpenRecipeDetail}
                         queuedRecipeId={queuedRecipeId}
                         onQueuedRecipeHandled={() => setQueuedRecipeId('')}
                         onBaseRecipeChange={(nextId) => {

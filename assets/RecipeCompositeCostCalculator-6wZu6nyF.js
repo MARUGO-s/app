@@ -140,6 +140,7 @@ export const RecipeCompositeCostCalculator = ({
     onQueuedRecipeHandled,
     onBaseRecipeChange,
     onBaseRecipeRemove,
+    onOpenRecipeDetail,
 }) => {
     const { user } = useAuth();
     const [candidateRecipes, setCandidateRecipes] = React.useState([]);
@@ -708,21 +709,35 @@ export const RecipeCompositeCostCalculator = ({
                 </div>
 
                 <div className="composite-cost__row">
-                    <select
-                        className="composite-cost__input"
-                        value={currentMetrics.recipeId}
-                        onChange={(e) => {
-                            if (typeof onBaseRecipeChange !== 'function') return;
-                            onBaseRecipeChange(String(e.target.value || ''));
-                        }}
-                    >
-                        <option value={String(currentRecipe?.id || '')}>{currentMetrics.title}</option>
-                        {candidateRecipes
-                            .filter((r) => String(r.id) !== String(currentRecipe?.id || ''))
-                            .map((r) => (
-                                <option key={r.id} value={String(r.id)}>{r.title}</option>
-                            ))}
-                    </select>
+                    <div className="composite-cost__recipe-select-group">
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            className="composite-cost__detail-btn"
+                            onClick={() => {
+                                if (typeof onOpenRecipeDetail !== 'function') return;
+                                onOpenRecipeDetail(String(currentRecipe?.id || ''));
+                            }}
+                            disabled={!currentRecipe?.id}
+                        >
+                            詳細
+                        </Button>
+                        <select
+                            className="composite-cost__input"
+                            value={currentMetrics.recipeId}
+                            onChange={(e) => {
+                                if (typeof onBaseRecipeChange !== 'function') return;
+                                onBaseRecipeChange(String(e.target.value || ''));
+                            }}
+                        >
+                            <option value={String(currentRecipe?.id || '')}>{currentMetrics.title}</option>
+                            {candidateRecipes
+                                .filter((r) => String(r.id) !== String(currentRecipe?.id || ''))
+                                .map((r) => (
+                                    <option key={r.id} value={String(r.id)}>{r.title}</option>
+                                ))}
+                        </select>
+                    </div>
                     <div className="composite-cost__fixed-batch">{formatBatch(currentMetrics.defaultBatchAmount, currentMetrics.defaultUnit)}</div>
                     <input
                         className="composite-cost__input"
@@ -786,16 +801,30 @@ export const RecipeCompositeCostCalculator = ({
 
                     return (
                         <div key={row.id} className="composite-cost__row composite-cost__row--with-remove">
-                            <select
-                                className="composite-cost__input"
-                                value={row.recipeId}
-                                onChange={(e) => handleRecipeChange(row.id, e.target.value)}
-                            >
-                                <option value="">レシピを選択</option>
-                                {candidateRecipes.map((r) => (
-                                    <option key={r.id} value={r.id}>{r.title}</option>
-                                ))}
-                            </select>
+                            <div className="composite-cost__recipe-select-group">
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="composite-cost__detail-btn"
+                                    onClick={() => {
+                                        if (typeof onOpenRecipeDetail !== 'function') return;
+                                        onOpenRecipeDetail(String(row.recipeId || ''));
+                                    }}
+                                    disabled={!row.recipeId}
+                                >
+                                    詳細
+                                </Button>
+                                <select
+                                    className="composite-cost__input"
+                                    value={row.recipeId}
+                                    onChange={(e) => handleRecipeChange(row.id, e.target.value)}
+                                >
+                                    <option value="">レシピを選択</option>
+                                    {candidateRecipes.map((r) => (
+                                        <option key={r.id} value={r.id}>{r.title}</option>
+                                    ))}
+                                </select>
+                            </div>
                             <div className="composite-cost__fixed-batch">
                                 {row.recipeId
                                     ? formatBatch(line?.metrics?.defaultBatchAmount, line?.metrics?.defaultUnit)
