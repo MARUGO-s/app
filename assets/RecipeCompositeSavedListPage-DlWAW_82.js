@@ -151,6 +151,7 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }
                                         <Button
                                             type="button"
                                             variant="secondary"
+                                            className={row.is_public ? 'composite-share-btn composite-share-btn--on' : 'composite-share-btn composite-share-btn--off'}
                                             onClick={(e) => { e.stopPropagation(); handleToggleShare(row); }}
                                             disabled={deletingId === row.id}
                                         >

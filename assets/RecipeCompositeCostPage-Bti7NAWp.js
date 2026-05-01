@@ -554,6 +554,28 @@ const n=`.composite-cost-page {
   box-shadow: 0 3px 0 rgba(153, 27, 27, 0.3);
 }
 
+.composite-cost-page__saved-actions .composite-share-btn.btn--secondary {
+  font-weight: 800;
+}
+
+.composite-cost-page__saved-actions .composite-share-btn--on.btn--secondary {
+  background-color: #0f766e !important;
+  border-color: #0f766e !important;
+  color: #ffffff !important;
+  box-shadow: 0 3px 0 rgba(15, 118, 110, 0.35);
+}
+
+.composite-cost-page__saved-actions .composite-share-btn--on.btn--secondary:not(:disabled):hover {
+  background-color: #0d9488 !important;
+  border-color: #0d9488 !important;
+}
+
+.composite-cost-page__saved-actions .composite-share-btn--off.btn--secondary {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+
 @media (max-width: 700px) {
   .composite-cost-page__hero {
     padding: 18px;
