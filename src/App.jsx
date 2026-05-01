@@ -136,6 +136,9 @@ function AppContent() {
     if (typeof window === 'undefined') return false;
     return window.matchMedia?.('(max-width: 700px)')?.matches ?? false;
   });
+  const [maintenanceAdminAccessUserId, setMaintenanceAdminAccessUserId] = useState(null);
+  const [maintenanceAdminLoginError, setMaintenanceAdminLoginError] = useState('');
+  const [isMaintenanceAdminLoggingIn, setIsMaintenanceAdminLoggingIn] = useState(false);
 
   const PC_RECOMMEND_VIEWS = {
     inventory: '在庫管理',
@@ -276,11 +279,6 @@ function AppContent() {
 
   useEffect(() => {
     let cancelled = false;
-    if (authLoading || !user?.id) {
-      setMaintenance(null);
-      return () => { cancelled = true; };
-    }
-
     featureFlagService.getMaintenanceMode({ force: true })
       .then((enabled) => { if (!cancelled) setMaintenance(enabled === true); })
       .catch((error) => {
@@ -288,7 +286,65 @@ function AppContent() {
         if (!cancelled) setMaintenance(false);
       });
     return () => { cancelled = true; };
-  }, [authLoading, user?.id]);
+  }, []);
+
+  useEffect(() => {
+    if (maintenance !== false) return;
+    setMaintenanceAdminAccessUserId(null);
+    setMaintenanceAdminLoginError('');
+  }, [maintenance]);
+
+  useEffect(() => {
+    if (!maintenanceAdminAccessUserId) return;
+    if (!user?.id || user.id !== maintenanceAdminAccessUserId) return;
+    if (user.profileVerified !== true) return;
+    if (user.role === 'admin') return;
+    setMaintenanceAdminAccessUserId(null);
+    setMaintenanceAdminLoginError('管理者権限のあるアカウントでログインしてください。');
+  }, [maintenanceAdminAccessUserId, user?.id, user?.profileVerified, user?.role]);
+
+  const handleMaintenanceAdminLogin = useCallback(async ({ email, password }) => {
+    const normalizedEmail = String(email || '').trim();
+    if (!normalizedEmail || !password) {
+      throw new Error('ログインIDとパスワードを入力してください。');
+    }
+
+    setIsMaintenanceAdminLoggingIn(true);
+    setMaintenanceAdminLoginError('');
+    try {
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      });
+      if (signInError) throw new Error('ログインIDまたはパスワードが違います。');
+
+      const adminUserId = signInData?.user?.id;
+      if (!adminUserId) throw new Error('ログイン情報を確認できませんでした。');
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', adminUserId)
+        .single();
+      if (profileError) throw profileError;
+
+      if (String(profile?.role || '').trim().toLowerCase() !== 'admin') {
+        try { await supabase.auth.signOut({ scope: 'local' }); } catch { /* ignore */ }
+        try { localStorage.removeItem('auth_user_cache'); } catch { /* ignore */ }
+        throw new Error('管理者権限のあるアカウントでログインしてください。');
+      }
+
+      setMaintenanceAdminAccessUserId(adminUserId);
+      toast.success('管理者としてログインしました');
+    } catch (error) {
+      const message = error?.message || '管理者ログインに失敗しました。';
+      setMaintenanceAdminAccessUserId(null);
+      setMaintenanceAdminLoginError(message);
+      throw new Error(message);
+    } finally {
+      setIsMaintenanceAdminLoggingIn(false);
+    }
+  }, [toast]);
 
   // FAST PATH: Load cached recipes immediately while auth is still resolving.
   // This eliminates the perceived wait time after login.
@@ -896,6 +952,32 @@ function AppContent() {
     else if (currentView === 'list') loadRecipes();
   }, [currentView, authLoading, user?.id]);
 
+  const maintenanceAdminAccessVerified = Boolean(
+    maintenance
+    && maintenanceAdminAccessUserId
+    && user?.id === maintenanceAdminAccessUserId
+    && user?.profileVerified === true
+    && user?.role === 'admin'
+  );
+
+  if (maintenance === null) {
+    return <LoadingScreen label="起動状態を確認中" subLabel="メンテナンスモードの状態を確認しています" />;
+  }
+
+  if (maintenance && !maintenanceAdminAccessUserId) {
+    return (
+      <MaintenancePage
+        onAdminLogin={handleMaintenanceAdminLogin}
+        adminLoginError={maintenanceAdminLoginError}
+        isAdminLoggingIn={isMaintenanceAdminLoggingIn}
+      />
+    );
+  }
+
+  if (maintenance && !maintenanceAdminAccessVerified) {
+    return <LoadingScreen label="権限を確認中" subLabel="管理者ログインを確認しています" />;
+  }
+
   if (authLoading && !authStuckFallback) {
     // Check if we have cached recipes to show (if so, we'll skip this full-screen loading)
     let hasCachedData = false;
@@ -918,13 +1000,6 @@ function AppContent() {
   }
   if (!user) return <LoginPage />;
   if (isPasswordRecovery) return <PasswordResetPage />;
-
-  // メンテナンスチェック（認証確定後に実行）
-  if (maintenance === null) return <LoadingScreen label="起動状態を確認中" subLabel="メンテナンスモードの状態を確認しています" />;
-  if (maintenance && user.profileVerified !== true) {
-    return <LoadingScreen label="権限を確認中" subLabel="メンテナンス中のアクセス権限を確認しています" />;
-  }
-  if (maintenance && user.role !== 'admin') return <MaintenancePage />;
 
   return (
 

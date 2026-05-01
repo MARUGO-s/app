@@ -37,6 +37,12 @@ const fetchByTableFallback = async (key) => {
     return data?.enabled === true;
 };
 
+const fetchMaintenanceModeByRpc = async () => {
+    const { data, error } = await supabase.rpc('get_maintenance_mode');
+    if (error) throw error;
+    return data === true;
+};
+
 export const featureFlagService = {
     async getFlag(key, { force = false } = {}) {
         if (!force) {
@@ -97,8 +103,20 @@ export const featureFlagService = {
         return this.setFlag(VOICE_INPUT_FLAG_KEY, enabled);
     },
 
-    async getMaintenanceMode(options) {
-        return this.getFlag(MAINTENANCE_MODE_FLAG_KEY, options);
+    async getMaintenanceMode({ force = false } = {}) {
+        if (!force) {
+            const cached = getCached(MAINTENANCE_MODE_FLAG_KEY);
+            if (cached !== null) return cached;
+        }
+
+        try {
+            const enabled = await fetchMaintenanceModeByRpc();
+            setCache(MAINTENANCE_MODE_FLAG_KEY, enabled);
+            return enabled;
+        } catch (rpcError) {
+            console.warn('[featureFlagService] RPC get_maintenance_mode failed, fallback to feature flag:', rpcError);
+            return this.getFlag(MAINTENANCE_MODE_FLAG_KEY, { force: true });
+        }
     },
 
     async setMaintenanceMode(enabled) {
