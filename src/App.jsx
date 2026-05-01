@@ -448,7 +448,7 @@ function AppContent() {
 
   const loadTrashCount = async () => {
     try {
-      const count = await recipeService.getDeletedCount();
+      const count = await recipeService.getDeletedCount(user);
       setTrashCount(count || 0);
     } catch (error) {
       console.error("Failed to load trash count:", error);
@@ -710,10 +710,12 @@ function AppContent() {
   };
 
   const loadDeletedRecipes = async () => {
+    if (!user) return;
+
     try {
       recipeLoadRequestRef.current += 1; // Cancel any in-flight incremental list loading.
       setLoading(true);
-      const data = await recipeService.fetchDeletedRecipes();
+      const data = await recipeService.fetchDeletedRecipes(user);
       setRecipes(data || []);
       setSelectedTag('すべて'); // Reset filter
     } catch (error) {
