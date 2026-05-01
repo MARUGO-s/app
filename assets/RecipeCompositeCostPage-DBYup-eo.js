@@ -34,6 +34,7 @@ export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack, onOpenSa
     const [loadingRecipe, setLoadingRecipe] = React.useState(false);
     const [errorMessage, setErrorMessage] = React.useState('');
     const [isPublic, setIsPublic] = React.useState(false);
+    const [sharePermission, setSharePermission] = React.useState('viewer');
     const showSearchCards = String(searchQuery || '').trim().length > 0;
 
     const filteredRecipeOptions = React.useMemo(() => {
@@ -149,11 +150,13 @@ export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack, onOpenSa
                 dishName: name,
                 baseRecipeId: selectedRecipe.id,
                 isPublic,
+                sharePermission,
                 ...calculatorState,
             });
             toast.success('合成レシピを保存しました。');
             setDishName('');
             setIsPublic(false);
+            setSharePermission('viewer');
         } catch (error) {
             toast.error(\`保存に失敗しました: \${error?.message || 'unknown error'}\`);
         } finally {
@@ -311,6 +314,17 @@ export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack, onOpenSa
                                 />
                                 他ユーザーへ共有
                             </label>
+                            <select
+                                className="composite-cost-page__select"
+                                value={sharePermission}
+                                onChange={(e) => setSharePermission(e.target.value)}
+                                disabled={!isPublic}
+                                aria-label="共有権限"
+                            >
+                                <option value="viewer">共有権限: 閲覧のみ</option>
+                                <option value="copier">共有権限: 複製して保存</option>
+                                <option value="editor">共有権限: 直接編集</option>
+                            </select>
                             <Button type="button" variant="primary" onClick={handleSaveComposite} disabled={isSaving}>
                                 {isSaving ? '保存中...' : 'この組み合わせを保存'}
                             </Button>

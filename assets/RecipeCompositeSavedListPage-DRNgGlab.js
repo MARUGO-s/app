@@ -11,6 +11,20 @@ const formatYen = (value) => {
     return \`¥\${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}\`;
 };
 
+const normalizeSharePermission = (value) => {
+    const v = String(value || '').trim().toLowerCase();
+    if (v === 'editor') return 'editor';
+    if (v === 'copier') return 'copier';
+    return 'viewer';
+};
+
+const sharePermissionLabel = (value) => {
+    const normalized = normalizeSharePermission(value);
+    if (normalized === 'editor') return '直接編集可';
+    if (normalized === 'copier') return '複製保存可';
+    return '閲覧のみ';
+};
+
 export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }) => {
     const { user } = useAuth();
     const [rows, setRows] = React.useState([]);
@@ -59,7 +73,10 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }
         if (!isOwner) return;
         try {
             setDeletingId(row.id);
-            await compositeRecipeService.setPublicVisibility(row.id, !(row.is_public === true));
+            await compositeRecipeService.setShareSettings(row.id, {
+                isPublic: !(row.is_public === true),
+                sharePermission: row.share_permission || 'viewer',
+            });
             setRows((prev) => prev.map((item) => (
                 item.id === row.id
                     ? { ...item, is_public: !(row.is_public === true) }
@@ -67,6 +84,27 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }
             )));
         } catch (e) {
             setError(e?.message || '共有設定の更新に失敗しました。');
+        } finally {
+            setDeletingId(null);
+        }
+    };
+
+    const handleChangeSharePermission = async (row, nextPermission) => {
+        const isOwner = String(row?.created_by || '') === String(user?.id || '');
+        if (!isOwner) return;
+        try {
+            setDeletingId(row.id);
+            await compositeRecipeService.setShareSettings(row.id, {
+                isPublic: row.is_public === true,
+                sharePermission: nextPermission,
+            });
+            setRows((prev) => prev.map((item) => (
+                item.id === row.id
+                    ? { ...item, share_permission: normalizeSharePermission(nextPermission) }
+                    : item
+            )));
+        } catch (e) {
+            setError(e?.message || '共有権限の更新に失敗しました。');
         } finally {
             setDeletingId(null);
         }
@@ -139,10 +177,18 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }
                                         <em>共有</em>
                                         <b>{row.is_public ? 'ON' : 'OFF'}</b>
                                     </span>
+                                    <span className="composite-cost-page__saved-chip composite-cost-page__saved-chip--updated">
+                                        <em>共有権限</em>
+                                        <b>{sharePermissionLabel(row.share_permission)}</b>
+                                    </span>
+                                    <span className="composite-cost-page__saved-chip composite-cost-page__saved-chip--updated">
+                                        <em>版</em>
+                                        <b>v{Number(row.current_version_no || 1)}</b>
+                                    </span>
                                     {!isOwner && (
                                         <span className="composite-cost-page__saved-chip composite-cost-page__saved-chip--updated">
                                             <em>権限</em>
-                                            <b>閲覧のみ</b>
+                                            <b>{sharePermissionLabel(row.share_permission)}</b>
                                         </span>
                                     )}
                                 </div>
@@ -162,6 +208,21 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }
                                         >
                                             {row.is_public ? '共有をOFF' : '共有をON'}
                                         </Button>
+                                        <select
+                                            className="composite-cost-page__select"
+                                            value={normalizeSharePermission(row.share_permission)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            onChange={(e) => {
+                                                e.stopPropagation();
+                                                handleChangeSharePermission(row, e.target.value);
+                                            }}
+                                            disabled={deletingId === row.id || !(row.is_public === true)}
+                                            aria-label="共有権限の変更"
+                                        >
+                                            <option value="viewer">閲覧のみ</option>
+                                            <option value="copier">複製保存可</option>
+                                            <option value="editor">直接編集可</option>
+                                        </select>
                                         <Button
                                             type="button"
                                             variant="danger"
@@ -173,7 +234,11 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }
                                     </>
                                 ) : (
                                     <Button type="button" variant="secondary" onClick={(e) => { e.stopPropagation(); onOpenEditor?.(row.id); }}>
-                                        閲覧を開く（共有表示）
+                                        {normalizeSharePermission(row.share_permission) === 'editor'
+                                            ? '編集を開く（共有）'
+                                            : (normalizeSharePermission(row.share_permission) === 'copier'
+                                                ? '複製編集を開く'
+                                                : '閲覧を開く（共有）')}
                                     </Button>
                                 )}
                             </div>
