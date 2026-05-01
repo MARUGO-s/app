@@ -8,12 +8,40 @@ const toFiniteNumber = (value) => {
 const sanitizeRows = (rows) => {
     if (!Array.isArray(rows)) return [];
     return rows
-        .map((row, index) => ({
-            recipe_id: row?.recipeId ? Number(row.recipeId) : null,
-            usage_amount: toFiniteNumber(row?.usageAmount),
-            sort_order: index,
-        }))
-        .filter((row) => Number.isFinite(row.recipe_id));
+        .map((row, index) => {
+            if (row?.itemType === 'ingredient' || row?.ingredient) {
+                const ingredient = row?.ingredient || {};
+                const name = String(ingredient?.name || '').trim();
+                if (!name) return null;
+                return {
+                    item_type: 'ingredient',
+                    recipe_id: null,
+                    usage_amount: toFiniteNumber(row?.usageAmount),
+                    sort_order: index,
+                    ingredient_payload: {
+                        name,
+                        source: ingredient.source || '',
+                        displaySource: ingredient.displaySource || '',
+                        price: toFiniteNumber(ingredient.price),
+                        packetSize: toFiniteNumber(ingredient.packetSize),
+                        packetUnit: ingredient.packetUnit || '',
+                        unit: row?.usageUnit || ingredient.unit || ingredient.defaultUsageUnit || '',
+                        defaultUsageUnit: ingredient.defaultUsageUnit || ingredient.unit || '',
+                        unitCostTaxExcluded: toFiniteNumber(ingredient.unitCostTaxExcluded),
+                        itemCategory: ingredient.itemCategory || null,
+                    },
+                };
+            }
+
+            return {
+                item_type: 'recipe',
+                recipe_id: row?.recipeId ? Number(row.recipeId) : null,
+                usage_amount: toFiniteNumber(row?.usageAmount),
+                sort_order: index,
+                ingredient_payload: null,
+            };
+        })
+        .filter((row) => row && (row.item_type === 'ingredient' || Number.isFinite(row.recipe_id)));
 };
 
 export const compositeRecipeService = {
@@ -98,7 +126,7 @@ export const compositeRecipeService = {
 
         const { data: items, error: itemsError } = await supabase
             .from('recipe_composite_set_items')
-            .select('recipe_id,usage_amount,sort_order')
+            .select('recipe_id,usage_amount,sort_order,item_type,ingredient_payload')
             .eq('composite_set_id', id)
             .order('sort_order', { ascending: true });
         if (itemsError) throw itemsError;

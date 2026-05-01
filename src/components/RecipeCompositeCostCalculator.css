@@ -29,6 +29,68 @@
   padding: 2px;
 }
 
+.composite-cost__add-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.composite-cost__add-box {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #d5e5dc;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+}
+
+.composite-cost__add-box label {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #334155;
+}
+
+.composite-cost__quick-results {
+  display: grid;
+  gap: 7px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.composite-cost__quick-result {
+  appearance: none;
+  border: 1px solid #dde8ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #0f172a;
+  text-align: left;
+  padding: 9px 10px;
+  display: grid;
+  gap: 3px;
+  cursor: pointer;
+  transition: border-color 0.14s ease, background-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.composite-cost__quick-result:hover {
+  border-color: #68b98f;
+  background: #f0fdf4;
+  box-shadow: 0 4px 10px rgba(22, 101, 52, 0.08);
+}
+
+.composite-cost__quick-result strong {
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.composite-cost__quick-result span,
+.composite-cost__quick-empty {
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: #64748b;
+}
+
 .composite-cost__head-row {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 0.8fr) 34px;
@@ -104,6 +166,38 @@
   color: #1f2937;
   line-height: 1.35;
   word-break: break-word;
+}
+
+.composite-cost__ingredient-name {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.composite-cost__ingredient-name strong {
+  color: #1f2937;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.composite-cost__ingredient-name span {
+  color: #64748b;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.composite-cost__usage-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(74px, 0.45fr);
+  gap: 7px;
+  min-width: 0;
+}
+
+.composite-cost__unit-select {
+  padding-left: 8px;
+  padding-right: 8px;
 }
 
 .composite-cost__line-total {
@@ -318,6 +412,10 @@
     background: #ffffff;
   }
 
+  .composite-cost__add-panel {
+    grid-template-columns: 1fr;
+  }
+
   .composite-cost__recipe-name {
     font-size: 0.81rem;
   }
@@ -332,6 +430,10 @@
   .composite-cost__line-total {
     text-align: right;
     font-size: 0.87rem;
+  }
+
+  .composite-cost__usage-group {
+    grid-template-columns: minmax(0, 1fr) 96px;
   }
 
   .composite-cost__remove-btn {
@@ -369,6 +471,10 @@
     border: 1px solid #dde7f7;
     border-radius: 6px;
     background: #ffffff;
+  }
+
+  .composite-cost__add-panel {
+    grid-template-columns: 1fr;
   }
 
   .composite-cost__line-total {
