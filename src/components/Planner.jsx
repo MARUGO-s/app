@@ -266,9 +266,15 @@ export const Planner = ({ onBack, onSelectRecipe, onNavigateToOrderList }) => {
                         totalWeight: meal.totalWeight
                     };
 
-                    await plannerService.addMeal(user.id, targetDateStr, meal.recipeId, meal.type || 'dinner', options);
-                    await plannerService.removeMeal(user.id, sourceDateStr, meal.id);
-                    loadData();
+                    try {
+                        await plannerService.addMeal(user.id, targetDateStr, meal.recipeId, meal.type || 'dinner', options);
+                        await plannerService.removeMeal(user.id, sourceDateStr, meal.id);
+                        loadData();
+                    } catch (moveError) {
+                        console.error('Move meal error:', moveError);
+                        toast.error('移動に失敗しました');
+                        loadData();
+                    }
                 }
             }
         } finally {
@@ -292,7 +298,12 @@ export const Planner = ({ onBack, onSelectRecipe, onNavigateToOrderList }) => {
                 options.totalWeight = null;
             }
 
-            await plannerService.addMeal(user.id, targetDateStr, recipe.id, 'dinner', options);
+            try {
+                await plannerService.addMeal(user.id, targetDateStr, recipe.id, 'dinner', options);
+            } catch (addError) {
+                console.error('Add meal error:', addError);
+                toast.error('追加に失敗しました');
+            }
         }
 
         setShowQuantityModal(false);

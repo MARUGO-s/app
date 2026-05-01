@@ -396,6 +396,7 @@ export const plannerService = {
             totalWeight: toNumberOr(options?.totalWeight, null),
         };
 
+        // Optimistic localStorage update so the UI responds immediately.
         const localPlans = readPlansFromLocal(userId);
         const nextPlans = addMealToLocalPlans(localPlans, dateStr, localMeal);
         savePlansToLocal(userId, nextPlans);
@@ -413,30 +414,28 @@ export const plannerService = {
             await insertPlanRows([payload]);
             return localMeal;
         } catch (error) {
-            console.warn('plannerService.addMeal: insert fallback to localStorage', error);
-            queueWarning(LOCAL_FALLBACK_WARNING);
-            return localMeal;
+            // Roll back the optimistic localStorage update so state stays
+            // consistent with the DB, then surface the error to the caller.
+            const currentPlans = readPlansFromLocal(userId);
+            savePlansToLocal(userId, removeMealFromLocalPlans(currentPlans, dateStr, localMeal.id));
+            throw error;
         }
     },
 
     removeMeal: async (userId, dateStr, mealId) => {
         if (!userId) return;
 
-        try {
-            const { error } = await supabase
-                .from(TABLE_NAME)
-                .delete()
-                .eq('id', String(mealId))
-                .eq('user_id', userId);
-            if (error) throw error;
-        } catch (error) {
-            console.warn('plannerService.removeMeal: delete fallback to localStorage', error);
-            queueWarning(LOCAL_FALLBACK_WARNING);
-        }
+        // Delete from DB first; only update localStorage on success so the
+        // item is not silently dropped when the DB operation fails.
+        const { error } = await supabase
+            .from(TABLE_NAME)
+            .delete()
+            .eq('id', String(mealId))
+            .eq('user_id', userId);
+        if (error) throw error;
 
         const localPlans = readPlansFromLocal(userId);
-        const nextPlans = removeMealFromLocalPlans(localPlans, dateStr, mealId);
-        savePlansToLocal(userId, nextPlans);
+        savePlansToLocal(userId, removeMealFromLocalPlans(localPlans, dateStr, mealId));
     },
 
     updateMeal: async (userId, dateStr, mealId, updates) => {
@@ -452,54 +451,44 @@ export const plannerService = {
         if (Object.prototype.hasOwnProperty.call(updates, 'multiplier')) patch.multiplier = toNumberOr(updates.multiplier, 1);
         if (Object.prototype.hasOwnProperty.call(updates, 'totalWeight')) patch.total_weight = toNumberOr(updates.totalWeight, null);
 
-        try {
-            if (Object.keys(patch).length > 0) {
-                let { error } = await supabase
+        // Update DB first; only mirror to localStorage on success to prevent
+        // the next getAll() from overwriting the local state with stale DB data.
+        if (Object.keys(patch).length > 0) {
+            let { error } = await supabase
+                .from(TABLE_NAME)
+                .update(patch)
+                .eq('id', String(mealId))
+                .eq('user_id', userId);
+
+            if (error && isMissingColumnError(error, 'type')) {
+                const { type: _legacyType, ...fallbackPatch } = patch;
+                ({ error } = await supabase
                     .from(TABLE_NAME)
-                    .update(patch)
+                    .update(fallbackPatch)
                     .eq('id', String(mealId))
-                    .eq('user_id', userId);
-
-                if (error && isMissingColumnError(error, 'type')) {
-                    const { type: _legacyType, ...fallbackPatch } = patch;
-                    ({ error } = await supabase
-                        .from(TABLE_NAME)
-                        .update(fallbackPatch)
-                        .eq('id', String(mealId))
-                        .eq('user_id', userId));
-                }
-
-                if (error) throw error;
+                    .eq('user_id', userId));
             }
-        } catch (error) {
-            console.warn('plannerService.updateMeal: update fallback to localStorage', error);
-            queueWarning(LOCAL_FALLBACK_WARNING);
+
+            if (error) throw error;
         }
 
         const localPlans = readPlansFromLocal(userId);
-        const nextPlans = updateMealInLocalPlans(localPlans, dateStr, mealId, updates);
-        savePlansToLocal(userId, nextPlans);
+        savePlansToLocal(userId, updateMealInLocalPlans(localPlans, dateStr, mealId, updates));
     },
 
     clearPeriod: async (userId, startDate, endDate) => {
         if (!userId) return;
 
-        try {
-            const { error } = await supabase
-                .from(TABLE_NAME)
-                .delete()
-                .eq('user_id', userId)
-                .gte('plan_date', startDate)
-                .lte('plan_date', endDate);
-
-            if (error) throw error;
-        } catch (error) {
-            console.warn('plannerService.clearPeriod: delete fallback to localStorage', error);
-            queueWarning(LOCAL_FALLBACK_WARNING);
-        }
+        // Delete from DB first; only update localStorage on success.
+        const { error } = await supabase
+            .from(TABLE_NAME)
+            .delete()
+            .eq('user_id', userId)
+            .gte('plan_date', startDate)
+            .lte('plan_date', endDate);
+        if (error) throw error;
 
         const localPlans = readPlansFromLocal(userId);
-        const nextPlans = clearPeriodFromLocalPlans(localPlans, startDate, endDate);
-        savePlansToLocal(userId, nextPlans);
+        savePlansToLocal(userId, clearPeriodFromLocalPlans(localPlans, startDate, endDate));
     }
 };

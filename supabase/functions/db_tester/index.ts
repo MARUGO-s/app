@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getAuthToken, verifySupabaseJWT } from '../_shared/jwt.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,6 +10,22 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
+  }
+
+  const token = getAuthToken(req);
+  if (!token) {
+    return new Response(JSON.stringify({ error: '認証が必要です。再ログインしてください。' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+  try {
+    await verifySupabaseJWT(token);
+  } catch {
+    return new Response(JSON.stringify({ error: 'トークンが無効または期限切れです。再ログインしてください。' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   try {

@@ -44,62 +44,36 @@ export class RateLimiter {
 
     /**
      * レート制限をチェックし、制限を超えている場合はエラーをスロー
+     *
+     * PostgreSQL の INSERT ... ON CONFLICT DO UPDATE RETURNING を使って
+     * チェックとインクリメントを1つのアトミックな操作で行います。
+     * これにより、並行リクエストが両方ともチェックを通過してしまう
+     * TOCTOU（Time-of-Check/Time-of-Use）競合状態を防止します。
      */
     async check(): Promise<void> {
-        const now = new Date()
-        const windowStart = new Date(now.getTime() - this.config.windowMinutes * 60 * 1000)
+        const { data, error } = await this.supabase.rpc('check_and_increment_rate_limit', {
+            p_user_id:       this.userId,
+            p_endpoint:      this.endpoint,
+            p_max_requests:  this.config.maxRequests,
+            p_window_minutes: this.config.windowMinutes,
+        })
 
-        // 現在の時間窓内のリクエスト数を取得
-        const { data: records, error: fetchError } = await this.supabase
-            .from('api_rate_limits')
-            .select('*')
-            .eq('user_id', this.userId)
-            .eq('endpoint', this.endpoint)
-            .gte('window_start', windowStart.toISOString())
-            .order('window_start', { ascending: false })
-            .limit(1)
-
-        if (fetchError) {
-            console.error('レート制限チェックエラー:', fetchError)
+        if (error) {
+            console.error('レート制限チェックエラー:', error)
             // エラー時はレート制限をスキップ（サービス継続優先）
             return
         }
 
-        // レコードが存在し、制限を超えている場合
-        if (records && records.length > 0) {
-            const currentRecord = records[0] as RateLimitRecord
-            if (currentRecord.request_count >= this.config.maxRequests) {
-                const resetTime = new Date(
-                    new Date(currentRecord.window_start).getTime() +
-                    this.config.windowMinutes * 60 * 1000
-                )
-                const minutesRemaining = Math.ceil((resetTime.getTime() - now.getTime()) / 60000)
+        const result = Array.isArray(data) ? data[0] : data
+        if (!result?.allowed) {
+            const windowStart = new Date(result.window_start)
+            const resetTime = new Date(windowStart.getTime() + this.config.windowMinutes * 60 * 1000)
+            const minutesRemaining = Math.ceil((resetTime.getTime() - Date.now()) / 60000)
 
-                throw new Error(
-                    `レート制限を超えました。${minutesRemaining}分後に再試行してください。` +
-                    `（制限: ${this.config.maxRequests}回/${this.config.windowMinutes}分）`
-                )
-            }
-
-            // カウントを増やす
-            await this.supabase
-                .from('api_rate_limits')
-                .update({
-                    request_count: currentRecord.request_count + 1,
-                    updated_at: now.toISOString()
-                })
-                .eq('id', (currentRecord as any).id)
-        } else {
-            // 新しい時間窓の開始
-            await this.supabase
-                .from('api_rate_limits')
-                .insert({
-                    user_id: this.userId,
-                    endpoint: this.endpoint,
-                    request_count: 1,
-                    window_start: now.toISOString(),
-                    updated_at: now.toISOString()
-                })
+            throw new Error(
+                `レート制限を超えました。${minutesRemaining}分後に再試行してください。` +
+                `（制限: ${this.config.maxRequests}回/${this.config.windowMinutes}分）`
+            )
         }
     }
 
@@ -107,16 +81,19 @@ export class RateLimiter {
      * ユーザーの残りリクエスト数を取得
      */
     async getRemaining(): Promise<number> {
-        const now = new Date()
-        const windowStart = new Date(now.getTime() - this.config.windowMinutes * 60 * 1000)
+        // Use the same fixed-window bucket calculation as the RPC so we read
+        // the row that check() will actually upsert into.
+        const nowEpoch = Date.now() / 1000
+        const bucketSeconds = this.config.windowMinutes * 60
+        const windowStartEpoch = Math.floor(nowEpoch / bucketSeconds) * bucketSeconds
+        const windowStart = new Date(windowStartEpoch * 1000).toISOString()
 
         const { data: records } = await this.supabase
             .from('api_rate_limits')
-            .select('*')
+            .select('request_count')
             .eq('user_id', this.userId)
             .eq('endpoint', this.endpoint)
-            .gte('window_start', windowStart.toISOString())
-            .order('window_start', { ascending: false })
+            .eq('window_start', windowStart)
             .limit(1)
 
         if (!records || records.length === 0) {
