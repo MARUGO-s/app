@@ -1600,7 +1600,7 @@ function AppContent() {
 }
 
 function AppWithMaintenance() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [maintenance, setMaintenance] = useState(null); // null=loading, false=off, true=on
   const isAdmin = user?.role === 'admin';
 
@@ -1612,7 +1612,8 @@ function AppWithMaintenance() {
     return () => { cancelled = true; };
   }, []);
 
-  if (maintenance === null) return null; // 初回チェック中は何も表示しない（一瞬）
+  // 認証状態とメンテナンスフラグの両方が確定するまで待つ
+  if (maintenance === null || authLoading) return null;
 
   if (maintenance && !isAdmin) return <MaintenancePage />;
 
