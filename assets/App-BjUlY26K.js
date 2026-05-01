@@ -372,18 +372,40 @@ function AppContent() {
   }, [user?.id]); // Run once when user becomes available (or from cache)
 
   // Load lightweight side data once auth is ready.
+  // NOTE: この1つのeffectで「ユーザー切替時のクリア」と「履歴ロード」を両方担う。
+  // 旧コードは2つのeffectが競合し、setRecentIds([])がloadRecentHistoryの結果を
+  // 上書きするrace conditionが存在した。
+  const prevUserIdRef = useRef(null);
   useEffect(() => {
     if (authLoading) return;
+
+    const currentUserId = user?.id || null;
+    const prevUserId = prevUserIdRef.current;
+
+    // ユーザーが切り替わった場合（ログアウト or アカウント切替）は即時クリア
+    if (prevUserId !== null && prevUserId !== currentUserId) {
+      setRecentIds([]);
+    }
+    prevUserIdRef.current = currentUserId;
+
     if (!user) return;
+
+    // localStorage から即座に表示（Supabase取得前にキャッシュを先出し）
+    try {
+      const key = \`recent_ids:\${user.id}\`;
+      const cached = localStorage.getItem(key);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setRecentIds(parsed);
+        }
+      }
+    } catch { /* ignore */ }
 
     loadTrashCount();
     loadRecentHistory();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user?.id]);
-
-  // Clear cross-account residue immediately on account switch/logout.
-  useEffect(() => {
-    setRecentIds([]);
-  }, [user?.id]);
 
   // Admin helper: load all profiles so we can show "which user's recipe" in UI.
   useEffect(() => {
@@ -423,26 +445,39 @@ function AppContent() {
     return raw.length > 12 ? \`\${raw.slice(0, 8)}…\` : raw;
   };
 
+  const saveRecentToLocal = useCallback((ids, uid) => {
+    try {
+      if (!uid || !Array.isArray(ids)) return;
+      localStorage.setItem(\`recent_ids:\${uid}\`, JSON.stringify(ids.slice(0, 20)));
+    } catch { /* ignore */ }
+  }, []);
+
   const loadRecentHistory = async () => {
     try {
-      const ids = await recipeService.fetchRecentRecipes();
-      setRecentIds(ids || []);
+      const ids = await recipeService.fetchRecentRecipes(user?.id);
+      const result = ids || [];
+      setRecentIds(result);
+      // Supabaseから取得した最新をlocalStorageにも保存
+      saveRecentToLocal(result, user?.id);
     } catch (error) {
       console.error("Failed to load history:", error);
+      // Supabaseが失敗しても、localStorageのキャッシュはすでに先出し表示済み
     }
   };
 
   const addToHistory = async (id) => {
-    // ... same ...
-    // Optimistic update
+    if (!id) return;
+    // Optimistic update（React state + localStorage 両方に即反映）
     const newHistory = [id, ...recentIds.filter(rId => rId !== id)].slice(0, 20);
     setRecentIds(newHistory);
+    saveRecentToLocal(newHistory, user?.id);
 
-    // Server update
+    // Supabase に非同期で書き込み（失敗してもlocalStorageは保持）
     try {
-      await recipeService.addToHistory(id);
+      await recipeService.addToHistory(id, user?.id);
     } catch (e) {
-      console.error("Failed to sync history", e);
+      console.error("Failed to sync history to Supabase:", e);
+      // localStorageにはすでに保存済みなので閲覧継続中は履歴が残る
     }
   };
 

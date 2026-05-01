@@ -283,4 +283,121 @@ const n=`.operation-qa-logs {
         min-width: 100%;
     }
 }
+
+/* ── 回答セル ───────────────────────────────────────────── */
+.operation-qa-logs__answer-hint {
+    font-size: 10px;
+    font-weight: 400;
+    color: #9ca3af;
+    margin-left: 2px;
+}
+
+.operation-qa-logs__answer-cell {
+    cursor: pointer;
+    user-select: none;
+}
+
+.operation-qa-logs__answer-cell:hover {
+    background: #f0f9ff;
+}
+
+.operation-qa-logs__answer-short {
+    display: inline;
+    color: #1f2937;
+}
+
+.operation-qa-logs__answer-expand-btn {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 10px;
+    color: #6b7280;
+    vertical-align: middle;
+}
+
+/* ── 展開行 ─────────────────────────────────────────────── */
+.operation-qa-logs__expanded-row td {
+    background: #f8fafc;
+    border-top: none;
+    padding: 0;
+}
+
+.operation-qa-logs__expanded-content {
+    padding: 14px 20px 16px;
+    border-top: 2px solid #e0f2fe;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.operation-qa-logs__expanded-section {
+    flex: 1;
+    min-width: 220px;
+}
+
+.operation-qa-logs__expanded-label {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #6b7280;
+    text-transform: uppercase;
+    background: #e5e7eb;
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-bottom: 6px;
+}
+
+.operation-qa-logs__expanded-section > p {
+    margin: 0;
+    font-size: 13px;
+    color: #374151;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ── 回答詳細（パース済み） ─────────────────────────────── */
+.operation-qa-logs__answer-detail {
+    font-size: 13px;
+    color: #1f2937;
+    line-height: 1.65;
+}
+
+.operation-qa-logs__answer-title {
+    font-weight: 700;
+    font-size: 14px;
+    color: #0f172a;
+    margin: 0 0 6px;
+}
+
+.operation-qa-logs__answer-desc {
+    color: #374151;
+    margin: 0 0 8px;
+}
+
+.operation-qa-logs__answer-steps {
+    margin: 0 0 8px;
+    padding-left: 20px;
+    color: #374151;
+}
+
+.operation-qa-logs__answer-steps li {
+    margin-bottom: 4px;
+}
+
+.operation-qa-logs__answer-notes {
+    font-size: 12px;
+    color: #6b7280;
+    border-left: 3px solid #d1d5db;
+    padding-left: 8px;
+    margin: 4px 0 0;
+}
+
+.operation-qa-logs__answer-plain {
+    margin: 0;
+    font-size: 13px;
+    color: #374151;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
 `;export{n as default};

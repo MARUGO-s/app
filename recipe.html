@@ -717,6 +717,7 @@
     <button class="cat-btn" data-cat="recipe">レシピ</button>
     <button class="cat-btn" data-cat="ingredient">材料入力</button>
     <button class="cat-btn" data-cat="cost">原価計算</button>
+    <button class="cat-btn" data-cat="composite">合成原価</button>
     <button class="cat-btn" data-cat="data">データ管理</button>
     <button class="cat-btn" data-cat="inventory">在庫管理</button>
     <button class="cat-btn" data-cat="planner">仕込み・発注</button>
@@ -809,8 +810,12 @@
                 <td><strong>海外サイトURLからレシピを翻訳取り込み、自作レシピの多言語翻訳、原文併記で語学学習にも</strong></td>
               </tr>
               <tr>
+                <td style="color:#7A5230"><strong>合成原価計算</strong></td>
+                <td><strong>複数レシピを組み合わせて1皿の原価を算出。売値・利益率・利益額を自動計算。結果を保存・編集・管理できる</strong></td>
+              </tr>
+              <tr>
                 <td>共有・管理</td>
-                <td>公開レシピ、ユーザー管理、データコピー</td>
+                <td>公開レシピ、ユーザー管理、データコピー、メンテナンスモード</td>
               </tr>
             </table>
           </div>
@@ -871,7 +876,10 @@
               <li>仕込みカレンダー</li>
               <li>データ管理</li>
               <li>発注リスト</li>
+              <li>🥪 合成原価（複数レシピを組み合わせた原価計算）</li>
+              <li>📚 合成レシピ保存一覧</li>
               <li>ゴミ箱</li>
+              <li>Q&A・アプリガイド</li>
               <li>ユーザー管理（管理者のみ）</li>
             </ul>
           </div>
@@ -1313,6 +1321,56 @@
       </div>
     </div>
 
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">レシピ一覧のセクション（パン・デザートなど）は何ですか？「もっと見る」とは？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>レシピはカテゴリーやタグをもとに自動でセクション分けされます。</p>
+            <table>
+              <tr><th>セクション</th><th>判定条件</th></tr>
+              <tr><td>🍽️ 料理</td><td>上記以外の一般レシピ</td></tr>
+              <tr><td>🍞 パン</td><td>タグに「パン」「Bread」を含む</td></tr>
+              <tr><td>🍰 デザート</td><td>カテゴリーまたはタグに「デザート」</td></tr>
+              <tr><td>🥣 ソース</td><td>カテゴリーに「ソース」</td></tr>
+              <tr><td>🥗 ドレッシング</td><td>カテゴリーに「ドレッシング」</td></tr>
+              <tr><td>✨ 飾り</td><td>カテゴリーに「飾り」</td></tr>
+            </table>
+            <p>各セクションの表示件数を超えると「▼ もっと見る」が出ます。押すと全件表示になり、「▲ 閉じる」で折りたたまれます（PC: 9件, スマホ: 8件が初期表示）。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">調理中に手順・材料をチェックしながら使えますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>はい。レシピ詳細の「作り方」セクションで各工程を<strong>タップ/クリック</strong>するとチェックON/OFFができます。材料行もタップして「投入済み」チェックが付けられます。</p>
+            <div class="tip">チェック状態はページを閉じるとリセットされます（DB保存はされません）。プレビューモーダルでも同様に使えます。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">スマホでレシピ詳細画面を「戻る」できないときは？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>スマホでは<strong>画面左端から右へスワイプ</strong>すると前の画面に戻れます（左端からスワイプ開始）。スワイプ距離 100px 以上で「戻る」として認識されます。「← 戻る」ボタンと同じ動作です。</p>
+          </div>
+        </div>
+      </div>
+
     <!-- ==================== レシピ作成 ==================== -->
     <div class="cat-group" data-category="recipe">
       <div class="cat-title"><span class="cat-icon">✏️</span>レシピ作成・編集</div>
@@ -1376,6 +1434,38 @@
         <div class="qa-a">
           <div class="qa-a-inner">
             <p>作り方もグループ化できます（セクションを分けたい場合）。手順はチェックして進捗管理できます（現場での使用を想定）。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「通常レシピ」と「パンレシピ」の違いは？どう切り替えますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <table>
+              <tr><th>種別</th><th>特徴</th></tr>
+              <tr><td>通常レシピ</td><td>一般的な料理レシピ。倍率で全材料を按分計算</td></tr>
+              <tr><td>パンレシピ</td><td>粉グループ／その他材料の2段構成。Baker's % で管理</td></tr>
+            </table>
+            <p>作成画面の上部にある切り替えボタンで選びます。編集中に変更した場合は材料データが再配置されることがあります。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">編集途中に戻ると入力内容が消えますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p><strong>自動保存機能はありません。</strong>「← 戻る」やブラウザの戻るボタンを押すと、未保存の内容はすべて失われます。こまめに「レシピを保存」を押す習慣をつけてください。</p>
+            <div class="warn">長い作業は区切りごとに保存。保存後も引き続き編集できます。</div>
           </div>
         </div>
       </div>
@@ -1472,6 +1562,39 @@
           </div>
         </div>
       </div>
+
+      <div class="qa-item" data-cat="ingredient">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">使える単位の一覧を教えてください。</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>材料行の単位ドロップダウンで以下から選択できます。</p>
+            <table>
+              <tr><th>原価計算あり</th><td>g / kg / ml / cc / cl / L<br>（大さじ=15ml、小さじ=5ml、カップ=200ml として換算）</td></tr>
+              <tr><th>原価計算なし</th><td>個 / 本 / 枚 / 袋 / PC / 箱 / 缶 / 包 / パック</td></tr>
+              <tr><th>量が不定</th><td>適量 / 少々（原価¥0として扱われます）</td></tr>
+            </table>
+            <div class="tip">🧮 原価計算アシストを使うと、容量・価格から自動換算できます。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="ingredient">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">材料や手順の順番を変えるにはどうしますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>各行の左端にある<strong>ドラッグハンドル（⋮⋮）</strong>をつかんでドラッグします。グループ間の移動も可能です。スマホでは<strong>長押ししてからドラッグ</strong>します。</p>
+            <div class="note">並び替えは「保存」するまで DB には書き込まれません。</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ==================== 原価計算・データ管理 ==================== -->
@@ -1507,6 +1630,182 @@
             </ol>
             <p>複数のCSVがある場合、データはマージされます（基本は最新が優先）。</p>
             <div class="note">CSVはインフォマートの「FIM標準 取引明細」のみ解析ができます。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 合成原価計算 ==================== -->
+    <div class="cat-group" data-category="composite">
+      <div class="cat-title"><span class="cat-icon">🥪</span>合成原価計算</div>
+
+      <div class="qa-item highlight" data-cat="composite">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「合成原価」とは何ですか？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p><strong>複数のレシピを組み合わせて、1皿・1品の合計原価を計算する機能です。</strong></p>
+            <p>例えば「かき氷」を提供する際に、</p>
+            <ul>
+              <li>かき氷シロップ（別レシピ）</li>
+              <li>コンデンスミルク（別レシピ）</li>
+              <li>氷（個別食材）</li>
+            </ul>
+            <p>…といった複数の構成要素をそれぞれのレシピから引用し、<strong>1品あたりのトータル原価</strong>をまとめて計算できます。</p>
+            <div class="tip">各レシピの単価（1バッチ原価 ÷ 使用グラム数）を自動で計算するため、複雑な組み合わせでも正確な原価把握が可能です。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item highlight" data-cat="composite">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">合成原価計算の基本的な使い方は？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <ol class="steps">
+              <li>メニューの <strong>「🥪 合成原価」</strong> を開く</li>
+              <li>上部の「レシピを検索」欄で追加したいレシピ名を入力して選択</li>
+              <li>選択したレシピが行として追加される</li>
+              <li>各行に <strong>「使用量（g / ml など）」</strong> を入力</li>
+              <li>行ごとの原価（ライン原価）と合計原価が自動で表示される</li>
+              <li>必要に応じて <strong>「売値」</strong> と <strong>「税率」</strong> を入力すると、利益額・コスト率も計算される</li>
+              <li>「料理名」を入力して <strong>「保存」</strong> すると合成レシピとして記録できる</li>
+            </ol>
+            <div class="note">各レシピには「バッチ量（1バッチ何g/mlで作るか）」が設定されており、使用量に応じて按分計算されます。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="composite">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「バッチ量」とは何ですか？使用量はどう入力すればいいですか？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>バッチ量とは、<strong>そのレシピを1回作ったときの総量</strong>です（例: シロップ 500ml、ソース 300g など）。</p>
+            <table>
+              <tr>
+                <th>項目</th>
+                <th>説明</th>
+              </tr>
+              <tr>
+                <td>バッチ量</td>
+                <td>レシピ詳細で設定された1回分の量。自動表示される（編集不可）</td>
+              </tr>
+              <tr>
+                <td>使用量</td>
+                <td>この1品に使う量を入力（例: 30ml）</td>
+              </tr>
+              <tr>
+                <td>ライン原価</td>
+                <td>（1バッチ原価 ÷ バッチ量）×使用量 で自動計算</td>
+              </tr>
+            </table>
+            <div class="tip">使用量の単位はバッチ量と合わせてください（g なら g、ml なら ml）。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="composite">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">利益・コスト率はどうやって確認しますか？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>合計原価欄の下にある<strong>「利益計算」エリア</strong>に売値と税率を入力すると、以下が自動で算出されます。</p>
+            <table>
+              <tr>
+                <th>表示項目</th>
+                <th>内容</th>
+              </tr>
+              <tr>
+                <td>合計原価（税込）</td>
+                <td>各ライン原価の合計</td>
+              </tr>
+              <tr>
+                <td>利益額</td>
+                <td>売値（税抜）− 合計原価</td>
+              </tr>
+              <tr>
+                <td>コスト率</td>
+                <td>合計原価 ÷ 売値（税抜）× 100（%）</td>
+              </tr>
+            </table>
+            <div class="tip">コスト率が高すぎる（赤字に近い）場合は赤系の表示で警告されます。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="composite">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">計算結果を保存・管理するには？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>「料理名」を入力して<strong>「保存」ボタン</strong>を押すと、合成レシピとして保存されます。</p>
+            <p>保存済みの合成レシピは <strong>「📚 合成レシピ保存一覧」</strong> から確認・管理できます。</p>
+            <table>
+              <tr>
+                <th>操作</th>
+                <th>内容</th>
+              </tr>
+              <tr>
+                <td>一覧カードをクリック</td>
+                <td>編集画面を開く（料理名・使用量の変更が可能）</td>
+              </tr>
+              <tr>
+                <td>「編集を開く」ボタン</td>
+                <td>同様に編集画面を開く</td>
+              </tr>
+              <tr>
+                <td>「削除」ボタン</td>
+                <td>保存済み合成レシピを削除（確認あり）</td>
+              </tr>
+            </table>
+            <div class="tip">一覧カードのどこをクリックしても編集画面が開きます。削除ボタンだけは独立して動作します。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="composite">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">合成原価計算はどのレシピでも使えますか？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>自分が登録しているすべてのレシピが対象です。レシピ検索欄でキーワードを入力すると候補が表示されます。</p>
+            <div class="note">原価計算には<strong>材料マスターへの登録</strong>と<strong>価格データ（CSV）のアップロード</strong>が必要です。材料が未登録・価格未設定の場合、その材料の原価は¥0として計算されます。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="composite">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">合成原価でレシピを検索しても見つかりません。どうすれば？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <ul>
+              <li>部分一致で検索されます。表記ゆれ（全角/半角、スペースの有無）を確認してください。</li>
+              <li>他ユーザーの公開レシピは対象外です。自分のレシピのみ追加できます。</li>
+              <li>候補に出ても追加できない場合は、そのレシピのバッチ量（分量）が設定されているか確認してください。</li>
+            </ul>
           </div>
         </div>
       </div>
@@ -1701,6 +2000,44 @@
       <div class="qa-item" data-cat="data">
         <div class="qa-q" onclick="toggle(this)">
           <span class="q-badge">Q</span>
+          <span class="q-text">価格データCSVのフォーマット（形式）に決まりはありますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>インフォマートの<strong>「FIM標準 取引明細」</strong>形式のみ解析できます。</p>
+            <ul>
+              <li>文字コード: <strong>Shift-JIS</strong>（UTF-8 では文字化けする場合があります）</li>
+              <li>拡張子: <code>.csv</code></li>
+              <li>インフォマートからのダウンロード: 帳票・明細 → FIM標準フォーマットで出力</li>
+            </ul>
+            <div class="note">インフォマート以外のシステムのCSVは直接使用できません。対応追加が必要な場合は管理者へ要望をお送りください。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="data">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">CSVをアップロードしたら「原価更新結果」が出ました。これは何ですか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>CSVアップロード後に自動表示されるモーダルで、<strong>価格変動の確認</strong>ができます。</p>
+            <table>
+              <tr><th>タブ</th><th>内容</th></tr>
+              <tr><td>材料</td><td>価格が変わった材料の一覧（旧価格→新価格）</td></tr>
+              <tr><td>レシピ</td><td>原価が更新されたレシピの一覧（旧原価→新原価）</td></tr>
+            </table>
+            <div class="tip">大幅な原価変動があった場合は売値の見直し時期です。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="data">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
           <span class="q-text">レシピのバックアップはどうやって取りますか？</span>
           <span class="q-arrow">▼</span>
         </div>
@@ -1861,6 +2198,86 @@
       <div class="qa-item" data-cat="inventory">
         <div class="qa-q" onclick="toggle(this)">
           <span class="q-badge">Q</span>
+          <span class="q-text">在庫一覧にグレーアウトしたアイテムが表示されるのですが？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>これは<strong>「ファントムアイテム（仮）」</strong>です。CSVには含まれているが、まだ在庫として登録されていない材料が薄く表示されます。横の<strong>「+ 追加」ボタン</strong>を押すと正式な在庫アイテムとして登録され、在庫数の入力ができるようになります。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="inventory">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「パックサイズ」「パック情報」とは何ですか？（1PC = 400g など）</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>在庫アイテムの編集画面で設定できる<strong>パック換算情報</strong>です。例: パックサイズ=400 / パック単位=g に設定すると「1PC = 400g」として扱われます。在庫数をPC（袋数）で入力しても発注計算にはg換算が使われます。</p>
+            <div class="tip">配送単位が「袋」「ケース」「PC」など重量と異なる材料に便利な設定です。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="inventory">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">在庫アイテムの税率（10%）はどこで変えますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>在庫一覧の各アイテム行にある<strong>「10%」トグル</strong>をONにすると10%税率が適用されます。<br>8% → 10% の変更時のみ確認ダイアログが表示されます。10% → 8% は確認なしで切り替わります。</p>
+            <div class="note">アルコール・備品などは10%課税が適切です。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="inventory">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">棚卸し履歴のCSV出力・復元・完全削除はどうしますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>「📜 履歴」タブで各スナップショットの操作ができます。</p>
+            <table>
+              <tr><th>操作</th><th>内容</th></tr>
+              <tr><td>📥 CSV</td><td>その棚卸しのCSVをダウンロード</td></tr>
+              <tr><td>復元</td><td>その数量を現在の在庫に上書き</td></tr>
+              <tr><td>削除</td><td>ゴミ箱へ移動（復元可能）</td></tr>
+              <tr><td>完全削除</td><td>テキスト欄に「<code>delete</code>」と入力して確定（取り消し不可）</td></tr>
+            </table>
+            <div class="warn">「完全削除」は誤操作防止のため「delete」の入力確認があります。通常はゴミ箱移動をお勧めします。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="inventory">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">在庫のCSVはどこからダウンロードできますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <ul>
+              <li><strong>現在の棚卸し一覧:</strong> 在庫管理画面上部の「📥 CSV出力」ボタン</li>
+              <li><strong>月次統合CSV:</strong> 「📊 統合」タブ → 月を選択 → 「CSV出力」</li>
+              <li><strong>業者別CSV:</strong> 統合タブの各業者欄右端にある「CSV」ボタン</li>
+              <li><strong>棚卸し履歴のCSV:</strong> 「📜 履歴」タブ → 各スナップショットの「📥 CSV」ボタン</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="inventory">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
           <span class="q-text">「月次統合」とは何ですか？</span>
           <span class="q-arrow">▼</span>
         </div>
@@ -1892,6 +2309,52 @@
               <li>既存予定をドラッグして<strong>別日に移動</strong></li>
               <li>予定の<strong>削除</strong>（確認あり）</li>
             </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="planner">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">カレンダーに登録するとき「仕込み量」はどこで入力しますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>レシピをカレンダーへドラッグ&ドロップすると<strong>仕込み量入力モーダル</strong>が開きます。</p>
+            <table>
+              <tr><th>レシピ種別</th><th>入力内容</th></tr>
+              <tr><td>通常レシピ</td><td>仕込み倍率（例: 2.0 = 2倍量）</td></tr>
+              <tr><td>パンレシピ</td><td>仕上がり総重量 g で入力</td></tr>
+            </table>
+            <p>カレンダー上には倍率（例: ×2.0）または総重量（例: 500g）が表示されます。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="planner">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">仕込みカレンダーで月を移動したり「今日」に戻るにはどうしますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>「← 前月」「翌月 →」ボタンで月を切り替えます。今日の日付はカレンダー上でハイライト（色付き）表示されます。月外（灰色）のセルも表示されますが、基本的に予定登録は当月で管理します。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="planner">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">カレンダーの仕込み予定をクリックするとどうなりますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>登録されている予定（レシピ名）をクリック/タップすると、<strong>そのレシピの詳細画面</strong>が開きます。材料・手順・原価を確認したらブラウザの戻るボタンまたはスワイプでカレンダーに戻れます。</p>
+            <div class="note">「×」削除ボタンとタップ判定が独立しているため、誤削除しにくい設計です。</div>
           </div>
         </div>
       </div>
@@ -1975,6 +2438,87 @@
               <li>再設定メールを送信</li>
               <li>管理者が新しいパスワードを直接設定</li>
             </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item highlight" data-cat="admin">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">メンテナンスモードとは何ですか？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>管理者がアプリを<strong>一時的に利用停止状態</strong>にできる機能です。メンテナンスモードがONの間、一般ユーザーはアプリにアクセスできず、メンテナンス中の案内画面が表示されます。</p>
+            <table>
+              <tr>
+                <th>状態</th>
+                <th>表示</th>
+              </tr>
+              <tr>
+                <td>一般ユーザー</td>
+                <td>「メンテナンス中」の案内画面のみ表示（ログイン不可）</td>
+              </tr>
+              <tr>
+                <td>管理者</td>
+                <td>「管理者ログイン」からログインするとアプリを閲覧・操作可能</td>
+              </tr>
+            </table>
+            <div class="note">メンテナンスモード中でも、管理者は「管理者ログイン」ボタンからIDとパスワードでログインしてアプリにアクセスできます。画面上部にはオレンジのバナーが表示され、メンテナンスモード中であることがわかります。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="admin">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">メンテナンスモードのON/OFFはどうやって切り替えますか？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <h4 style="margin-top:0">メンテナンスモードをONにする</h4>
+            <p>Supabaseの管理画面、または管理者専用の設定からONにします。アプリ内からは管理者がログイン中の場合、画面上部のバナーに「メンテナンスモードを解除」ボタンが表示されます。</p>
+            <h4>メンテナンスモードを解除する</h4>
+            <ol class="steps">
+              <li>メンテナンス画面の「管理者ログイン」ボタンを押す</li>
+              <li>管理者のメールアドレスとパスワードでログイン</li>
+              <li>画面上部のオレンジバナーにある <strong>「メンテナンスモードを解除」</strong> ボタンを押す</li>
+            </ol>
+            <div class="tip">解除後は一般ユーザーもすぐにアクセスできるようになります。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="admin">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">ユーザーがいつログインしたか・今ログイン中かを確認できますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>ユーザー管理画面で各ユーザーカードに<strong>「ログイン中」または「オフライン」</strong>が表示されます（最終更新が5分以内なら「ログイン中」）。</p>
+            <p>「<strong>アクティブ履歴</strong>」ボタンを押すと：</p>
+            <ul>
+              <li>「アクティブ履歴」タブ: 過去のログイン日時一覧</li>
+              <li>「API利用履歴」タブ: AI機能等のAPI利用日時・エンドポイント・ステータス</li>
+            </ul>
+            <div class="note">ログイン日数バッジの色: 1日=赤 / 3日=オレンジ / 7日=緑 / 30日=青 / 30日超=グレー</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="admin">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">ユーザーに店舗名を割り当てるには？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>ユーザー管理でユーザーカードの<strong>「店舗配属」ボタン</strong>を押します。店舗名を入力（既存店舗のオートコンプリートあり）して保存します。空欄で保存すると「未設定」に戻ります。設定した店舗名はレシピカードの🏢表示・フィルタに使われます。</p>
           </div>
         </div>
       </div>
@@ -2090,6 +2634,37 @@
         <div class="qa-a">
           <div class="qa-a-inner">
             <p>材料マスターの<strong>「手入力」タブ</strong>にまとまって表示されます。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="trouble">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">ログアウトはどこからできますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <ol class="steps">
+              <li>画面上部のメニューボタン（☰）を押す</li>
+              <li>メニュー最下部の「ログアウト」を押す</li>
+            </ol>
+            <p>ログアウト後はログイン画面に戻ります。アカウントを切り替える場合も同様の手順でログアウトしてから別のアカウントでログインしてください。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="trouble">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">スマホで一部の画面が使いにくい（PC推奨モーダルが表示される）</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>データ管理・在庫管理・仕込みカレンダー・発注リスト・ユーザー管理は<strong>PC推奨</strong>画面です。スマホで開くと推奨モーダルが表示されますが「今回は続ける」を選ぶとそのまま使えます（横スクロールが必要な場合があります）。</p>
+            <div class="tip">レシピ一覧・詳細・プレビュー・合成原価はスマホでも快適に使えます。</div>
           </div>
         </div>
       </div>
