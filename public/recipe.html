@@ -717,6 +717,7 @@
     <button class="cat-btn" data-cat="recipe">レシピ</button>
     <button class="cat-btn" data-cat="ingredient">材料入力</button>
     <button class="cat-btn" data-cat="cost">原価計算</button>
+    <button class="cat-btn" data-cat="composite">合成原価</button>
     <button class="cat-btn" data-cat="data">データ管理</button>
     <button class="cat-btn" data-cat="inventory">在庫管理</button>
     <button class="cat-btn" data-cat="planner">仕込み・発注</button>
@@ -809,8 +810,12 @@
                 <td><strong>海外サイトURLからレシピを翻訳取り込み、自作レシピの多言語翻訳、原文併記で語学学習にも</strong></td>
               </tr>
               <tr>
+                <td style="color:#7A5230"><strong>合成原価計算</strong></td>
+                <td><strong>複数レシピを組み合わせて1皿の原価を算出。売値・利益率・利益額を自動計算。結果を保存・編集・管理できる</strong></td>
+              </tr>
+              <tr>
                 <td>共有・管理</td>
-                <td>公開レシピ、ユーザー管理、データコピー</td>
+                <td>公開レシピ、ユーザー管理、データコピー、メンテナンスモード</td>
               </tr>
             </table>
           </div>
@@ -871,7 +876,10 @@
               <li>仕込みカレンダー</li>
               <li>データ管理</li>
               <li>発注リスト</li>
+              <li>🥪 合成原価（複数レシピを組み合わせた原価計算）</li>
+              <li>📚 合成レシピ保存一覧</li>
               <li>ゴミ箱</li>
+              <li>Q&A・アプリガイド</li>
               <li>ユーザー管理（管理者のみ）</li>
             </ul>
           </div>
@@ -1512,6 +1520,165 @@
       </div>
     </div>
 
+    <!-- ==================== 合成原価計算 ==================== -->
+    <div class="cat-group" data-category="composite">
+      <div class="cat-title"><span class="cat-icon">🥪</span>合成原価計算</div>
+
+      <div class="qa-item highlight" data-cat="composite">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「合成原価」とは何ですか？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p><strong>複数のレシピを組み合わせて、1皿・1品の合計原価を計算する機能です。</strong></p>
+            <p>例えば「かき氷」を提供する際に、</p>
+            <ul>
+              <li>かき氷シロップ（別レシピ）</li>
+              <li>コンデンスミルク（別レシピ）</li>
+              <li>氷（個別食材）</li>
+            </ul>
+            <p>…といった複数の構成要素をそれぞれのレシピから引用し、<strong>1品あたりのトータル原価</strong>をまとめて計算できます。</p>
+            <div class="tip">各レシピの単価（1バッチ原価 ÷ 使用グラム数）を自動で計算するため、複雑な組み合わせでも正確な原価把握が可能です。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item highlight" data-cat="composite">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">合成原価計算の基本的な使い方は？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <ol class="steps">
+              <li>メニューの <strong>「🥪 合成原価」</strong> を開く</li>
+              <li>上部の「レシピを検索」欄で追加したいレシピ名を入力して選択</li>
+              <li>選択したレシピが行として追加される</li>
+              <li>各行に <strong>「使用量（g / ml など）」</strong> を入力</li>
+              <li>行ごとの原価（ライン原価）と合計原価が自動で表示される</li>
+              <li>必要に応じて <strong>「売値」</strong> と <strong>「税率」</strong> を入力すると、利益額・コスト率も計算される</li>
+              <li>「料理名」を入力して <strong>「保存」</strong> すると合成レシピとして記録できる</li>
+            </ol>
+            <div class="note">各レシピには「バッチ量（1バッチ何g/mlで作るか）」が設定されており、使用量に応じて按分計算されます。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="composite">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「バッチ量」とは何ですか？使用量はどう入力すればいいですか？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>バッチ量とは、<strong>そのレシピを1回作ったときの総量</strong>です（例: シロップ 500ml、ソース 300g など）。</p>
+            <table>
+              <tr>
+                <th>項目</th>
+                <th>説明</th>
+              </tr>
+              <tr>
+                <td>バッチ量</td>
+                <td>レシピ詳細で設定された1回分の量。自動表示される（編集不可）</td>
+              </tr>
+              <tr>
+                <td>使用量</td>
+                <td>この1品に使う量を入力（例: 30ml）</td>
+              </tr>
+              <tr>
+                <td>ライン原価</td>
+                <td>（1バッチ原価 ÷ バッチ量）×使用量 で自動計算</td>
+              </tr>
+            </table>
+            <div class="tip">使用量の単位はバッチ量と合わせてください（g なら g、ml なら ml）。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="composite">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">利益・コスト率はどうやって確認しますか？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>合計原価欄の下にある<strong>「利益計算」エリア</strong>に売値と税率を入力すると、以下が自動で算出されます。</p>
+            <table>
+              <tr>
+                <th>表示項目</th>
+                <th>内容</th>
+              </tr>
+              <tr>
+                <td>合計原価（税込）</td>
+                <td>各ライン原価の合計</td>
+              </tr>
+              <tr>
+                <td>利益額</td>
+                <td>売値（税抜）− 合計原価</td>
+              </tr>
+              <tr>
+                <td>コスト率</td>
+                <td>合計原価 ÷ 売値（税抜）× 100（%）</td>
+              </tr>
+            </table>
+            <div class="tip">コスト率が高すぎる（赤字に近い）場合は赤系の表示で警告されます。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="composite">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">計算結果を保存・管理するには？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>「料理名」を入力して<strong>「保存」ボタン</strong>を押すと、合成レシピとして保存されます。</p>
+            <p>保存済みの合成レシピは <strong>「📚 合成レシピ保存一覧」</strong> から確認・管理できます。</p>
+            <table>
+              <tr>
+                <th>操作</th>
+                <th>内容</th>
+              </tr>
+              <tr>
+                <td>一覧カードをクリック</td>
+                <td>編集画面を開く（料理名・使用量の変更が可能）</td>
+              </tr>
+              <tr>
+                <td>「編集を開く」ボタン</td>
+                <td>同様に編集画面を開く</td>
+              </tr>
+              <tr>
+                <td>「削除」ボタン</td>
+                <td>保存済み合成レシピを削除（確認あり）</td>
+              </tr>
+            </table>
+            <div class="tip">一覧カードのどこをクリックしても編集画面が開きます。削除ボタンだけは独立して動作します。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="composite">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">合成原価計算はどのレシピでも使えますか？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>自分が登録しているすべてのレシピが対象です。レシピ検索欄でキーワードを入力すると候補が表示されます。</p>
+            <div class="note">原価計算には<strong>材料マスターへの登録</strong>と<strong>価格データ（CSV）のアップロード</strong>が必要です。材料が未登録・価格未設定の場合、その材料の原価は¥0として計算されます。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ==================== データ管理 ==================== -->
     <div class="cat-group" data-category="data">
       <div class="cat-title"><span class="cat-icon">🗄️</span>データ管理</div>
@@ -1975,6 +2142,55 @@
               <li>再設定メールを送信</li>
               <li>管理者が新しいパスワードを直接設定</li>
             </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item highlight" data-cat="admin">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">メンテナンスモードとは何ですか？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>管理者がアプリを<strong>一時的に利用停止状態</strong>にできる機能です。メンテナンスモードがONの間、一般ユーザーはアプリにアクセスできず、メンテナンス中の案内画面が表示されます。</p>
+            <table>
+              <tr>
+                <th>状態</th>
+                <th>表示</th>
+              </tr>
+              <tr>
+                <td>一般ユーザー</td>
+                <td>「メンテナンス中」の案内画面のみ表示（ログイン不可）</td>
+              </tr>
+              <tr>
+                <td>管理者</td>
+                <td>「管理者ログイン」からログインするとアプリを閲覧・操作可能</td>
+              </tr>
+            </table>
+            <div class="note">メンテナンスモード中でも、管理者は「管理者ログイン」ボタンからIDとパスワードでログインしてアプリにアクセスできます。画面上部にはオレンジのバナーが表示され、メンテナンスモード中であることがわかります。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="admin">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">メンテナンスモードのON/OFFはどうやって切り替えますか？<span class="new-badge">NEW</span></span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <h4 style="margin-top:0">メンテナンスモードをONにする</h4>
+            <p>Supabaseの管理画面、または管理者専用の設定からONにします。アプリ内からは管理者がログイン中の場合、画面上部のバナーに「メンテナンスモードを解除」ボタンが表示されます。</p>
+            <h4>メンテナンスモードを解除する</h4>
+            <ol class="steps">
+              <li>メンテナンス画面の「管理者ログイン」ボタンを押す</li>
+              <li>管理者のメールアドレスとパスワードでログイン</li>
+              <li>画面上部のオレンジバナーにある <strong>「メンテナンスモードを解除」</strong> ボタンを押す</li>
+            </ol>
+            <div class="tip">解除後は一般ユーザーもすぐにアクセスできるようになります。</div>
           </div>
         </div>
       </div>
