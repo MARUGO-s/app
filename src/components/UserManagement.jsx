@@ -6,7 +6,7 @@ import { Modal } from './Modal';
 import { useAuth } from '../contexts/useAuth';
 import { formatDisplayId } from '../utils/formatUtils';
 import { STORE_LIST } from '../constants';
-import { supabase } from '../supabase';
+import { featureFlagService } from '../services/featureFlagService';
 import './UserManagement.css';
 
 const NARROW_BREAKPOINT = 480;
@@ -100,7 +100,7 @@ const isPresenceUnavailableError = (error) => {
     );
 };
 
-export const UserManagement = ({ onBack }) => {
+export const UserManagement = ({ onBack, onMaintenanceModeChange }) => {
     const { user: currentUser, patchCurrentUserProfile } = useAuth();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -143,7 +143,7 @@ export const UserManagement = ({ onBack }) => {
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const isSuperAdmin = (_u) => false;
+    const isSuperAdmin = () => false;
 
     const loadUsers = React.useCallback(async () => {
         try {
@@ -269,19 +269,29 @@ export const UserManagement = ({ onBack }) => {
     }, []);
 
     useEffect(() => {
-        supabase.rpc('get_maintenance_mode')
-            .then(({ data }) => setMaintenanceMode(data === true))
-            .catch(() => setMaintenanceMode(false));
+        let cancelled = false;
+        featureFlagService.getMaintenanceMode({ force: true })
+            .then((enabled) => {
+                if (!cancelled) setMaintenanceMode(enabled === true);
+            })
+            .catch((error) => {
+                console.warn('maintenance mode load failed:', error);
+                if (!cancelled) setMaintenanceMode(false);
+            });
+        return () => { cancelled = true; };
     }, []);
 
     const toggleMaintenance = async () => {
         setIsTogglingMaintenance(true);
+        setError(null);
         try {
             const next = !maintenanceMode;
-            await supabase.rpc('admin_set_feature_flag', { p_key: 'maintenance_mode', p_enabled: next });
-            setMaintenanceMode(next);
+            const enabled = await featureFlagService.setMaintenanceMode(next);
+            setMaintenanceMode(enabled);
+            onMaintenanceModeChange?.(enabled);
         } catch (e) {
             console.error('maintenance toggle failed:', e);
+            setError('メンテナンスモードの切り替えに失敗しました。権限または通信状態を確認してください。');
         } finally {
             setIsTogglingMaintenance(false);
         }

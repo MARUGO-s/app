@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.admin_audit_logs (
 ALTER TABLE public.admin_audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Only admins can read audit logs.
+DROP POLICY IF EXISTS "admin_audit_logs_select_admin" ON public.admin_audit_logs;
 CREATE POLICY "admin_audit_logs_select_admin"
 ON public.admin_audit_logs
 FOR SELECT

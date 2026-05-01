@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>レシピ管理アプリ 解析プレゼン – 合成レシピを中心に</title>
+<style>
+  :root {
+    --bg: #f7f1e6;
+    --paper: #fffaf2;
+    --ink: #2b2118;
+    --ink-soft: #5a4a3a;
+    --gold: #b08641;
+    --gold-deep: #7a5a23;
+    --accent: #a93326;
+    --accent-soft: #c47a6e;
+    --green: #4d6b3b;
+    --rule: #d9c8a8;
+    --code-bg: #2b2118;
+    --code-fg: #f5e8d0;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Hiragino Mincho ProN","YuMincho","Times New Roman",serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .deck {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 48px 72px 72px 72px;
+    display: none;
+    flex-direction: column;
+    justify-content: flex-start;
+    background: var(--paper);
+    border-left: 14px solid var(--gold);
+    box-shadow: inset 0 0 0 1px var(--rule);
+    overflow: auto;
+  }
+  .slide.active { display: flex; }
+  .slide h1 {
+    font-size: 44px;
+    line-height: 1.25;
+    margin: 0 0 8px 0;
+    color: var(--gold-deep);
+    letter-spacing: 0.02em;
+  }
+  .slide h2 {
+    font-size: 30px;
+    line-height: 1.3;
+    margin: 0 0 18px 0;
+    color: var(--gold-deep);
+    border-bottom: 2px solid var(--rule);
+    padding-bottom: 8px;
+  }
+  .slide h3 {
+    font-size: 22px;
+    margin: 18px 0 8px 0;
+    color: var(--accent);
+    font-family: "Hiragino Sans","Yu Gothic","Meiryo",sans-serif;
+  }
+  .slide p, .slide li {
+    font-size: 19px;
+    line-height: 1.7;
+    color: var(--ink-soft);
+    font-family: "Hiragino Sans","Yu Gothic","Meiryo",sans-serif;
+  }
+  .slide ul { padding-left: 1.2em; margin: 8px 0; }
+  .slide li { margin: 6px 0; }
+  .slide strong { color: var(--ink); }
+  .slide code, .slide pre {
+    font-family: "JetBrains Mono","Menlo","Consolas",monospace;
+    background: var(--code-bg);
+    color: var(--code-fg);
+    border-radius: 6px;
+  }
+  .slide code { padding: 2px 6px; font-size: 0.9em; }
+  .slide pre {
+    padding: 16px 20px;
+    overflow-x: auto;
+    font-size: 14.5px;
+    line-height: 1.55;
+    margin: 10px 0;
+  }
+  .pre-light {
+    background: #fff8ec !important;
+    color: var(--ink) !important;
+    border: 1px solid var(--rule);
+  }
+  .meta {
+    position: absolute;
+    bottom: 18px;
+    left: 86px;
+    right: 28px;
+    display: flex;
+    justify-content: space-between;
+    font-family: "Hiragino Sans","Yu Gothic",sans-serif;
+    font-size: 13px;
+    color: var(--gold-deep);
+    letter-spacing: 0.06em;
+  }
+  .controls {
+    position: fixed;
+    bottom: 14px;
+    right: 18px;
+    background: rgba(43,33,24,0.85);
+    color: #fff8ec;
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-family: "Hiragino Sans",sans-serif;
+    font-size: 13px;
+    z-index: 999;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .controls button {
+    background: transparent;
+    color: #fff8ec;
+    border: 1px solid #fff8ec;
+    border-radius: 999px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .controls button:hover { background: #fff8ec; color: var(--ink); }
+  /* Title slide */
+  .title-slide {
+    align-items: flex-start;
+    justify-content: center;
+    background:
+      radial-gradient(circle at 20% 20%, #fff5dc 0%, transparent 60%),
+      linear-gradient(135deg, #f7e8ca 0%, #efd7a3 100%);
+    border-left-color: var(--accent);
+  }
+  .title-slide .badge {
+    display: inline-block;
+    border: 1px solid var(--gold-deep);
+    color: var(--gold-deep);
+    padding: 4px 14px;
+    border-radius: 999px;
+    font-family: "Hiragino Sans",sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.2em;
+    margin-bottom: 32px;
+  }
+  .title-slide h1 {
+    font-size: 64px;
+    line-height: 1.15;
+    margin-bottom: 20px;
+    color: var(--ink);
+    border: none;
+  }
+  .title-slide .sub {
+    font-size: 24px;
+    color: var(--gold-deep);
+    margin-bottom: 64px;
+  }
+  .title-slide .footer-meta {
+    font-family: "Hiragino Sans",sans-serif;
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+  /* Two columns */
+  .cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-top: 8px;
+  }
+  .cols-3 {
+    display: grid;
+    grid-template-columns: repeat(3,1fr);
+    gap: 18px;
+  }
+  .card {
+    background: #fff8ec;
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--gold);
+    padding: 14px 18px;
+    border-radius: 8px;
+  }
+  .card h4 {
+    margin: 0 0 6px 0;
+    font-size: 17px;
+    color: var(--gold-deep);
+    font-family: "Hiragino Sans",sans-serif;
+  }
+  .card p { margin: 0; font-size: 16px; }
+  .accent-card { border-left-color: var(--accent); }
+  .green-card { border-left-color: var(--green); }
+  /* Formula */
+  .formula {
+    background: #fff;
+    border: 1px dashed var(--gold);
+    padding: 14px 22px;
+    margin: 12px 0;
+    border-radius: 6px;
+    font-family: "JetBrains Mono","Menlo",monospace;
+    font-size: 17px;
+    color: var(--ink);
+    line-height: 1.7;
+  }
+  .formula em {
+    color: var(--accent);
+    font-style: normal;
+  }
+  table.tbl {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-family: "Hiragino Sans",sans-serif;
+    font-size: 16px;
+  }
+  table.tbl th, table.tbl td {
+    border: 1px solid var(--rule);
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  table.tbl th {
+    background: #f3e6c7;
+    color: var(--gold-deep);
+  }
+  .pill {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-family: "Hiragino Sans",sans-serif;
+    margin-right: 6px;
+  }
+  .pill.green { background: var(--green); }
+  .pill.gold { background: var(--gold-deep); }
+  .arrow {
+    font-size: 28px;
+    color: var(--gold);
+    text-align: center;
+    margin: 8px 0;
+  }
+  .quote {
+    border-left: 4px solid var(--accent);
+    padding: 8px 16px;
+    background: #fff5ef;
+    color: var(--ink);
+    font-size: 17px;
+    margin: 14px 0;
+    font-family: "Hiragino Sans",sans-serif;
+  }
+  .small { font-size: 15px !important; color: var(--ink-soft); }
+  .num-list { counter-reset: step; padding-left: 0; list-style: none; }
+  .num-list li {
+    counter-increment: step;
+    padding-left: 44px;
+    position: relative;
+    margin: 10px 0;
+  }
+  .num-list li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 0;
+    width: 30px; height: 30px;
+    background: var(--gold);
+    color: #fff;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 30px;
+    font-family: "Hiragino Sans",sans-serif;
+    font-size: 15px;
+  }
+  .toc-list {
+    columns: 2;
+    column-gap: 32px;
+    list-style: none;
+    padding: 0;
+  }
+  .toc-list li {
+    margin: 6px 0;
+    padding-left: 22px;
+    position: relative;
+    break-inside: avoid;
+  }
+  .toc-list li::before {
+    content: "▸";
+    position: absolute; left: 0;
+    color: var(--gold);
+  }
+  @media print {
+    .controls { display: none !important; }
+    .slide { display: flex !important; page-break-after: always; height: auto; min-height: 100vh; }
+    .deck { height: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+<!-- =========================== SLIDE 1: TITLE =========================== -->
+<section class="slide title-slide active">
+  <div class="badge">RECIPE MANAGEMENT — TECHNICAL & OPERATIONAL DECK</div>
+  <h1>レシピ管理アプリ<br/>解析と「合成レシピ」徹底解説</h1>
+  <div class="sub">原価計算ロジック・データモデル・運用フローを科学的に読み解く</div>
+  <div class="footer-meta">
+    対象: 飲食業務（レストラン・ベーカリー）／ 作成日: 2026-05-01<br/>
+    対象アプリ: recipe-management（React + Vite + Supabase）
+  </div>
+</section>
+
+<!-- =========================== SLIDE 2: TOC =========================== -->
+<section class="slide">
+  <h2>目次 / Sommaire</h2>
+  <p>本資料は「アプリ全体像 → 個別機能 → 合成レシピ詳細 → 技術基盤」の順で構成しています。</p>
+  <ul class="toc-list">
+    <li>1. アプリ概要</li>
+    <li>2. システムアーキテクチャ</li>
+    <li>3. レシピ管理機能</li>
+    <li>4. パン用 Baker's % モード</li>
+    <li>5. 原価計算（自動化）</li>
+    <li>6. カテゴリ別原価</li>
+    <li>7. 在庫管理（棚卸し）</li>
+    <li>8. 仕込みカレンダー & 発注リスト</li>
+    <li>9. 単位の優先順位（核心）</li>
+    <li>10. 多言語翻訳</li>
+    <li>11. データ管理・CSV取込</li>
+    <li>12. ユーザー管理・セキュリティ</li>
+    <li>13. <strong>合成レシピとは何か</strong></li>
+    <li>14. <strong>UI: 合成原価シミュレーター</strong></li>
+    <li>15. <strong>計算ロジック ①〜④</strong></li>
+    <li>16. <strong>データモデル</strong></li>
+    <li>17. <strong>保存・編集フロー</strong></li>
+    <li>18. <strong>カテゴリ原価との連携</strong></li>
+    <li>19. <strong>2026/05 改善点</strong></li>
+    <li>20. シェフ視点での価値</li>
+    <li>21. 技術的ポイント</li>
+    <li>22. 運用上の落とし穴</li>
+    <li>23. 課題と今後の展望</li>
+    <li>24. まとめ</li>
+  </ul>
+</section>
+
+<!-- =========================== SLIDE 3: APP OVERVIEW =========================== -->
+<section class="slide">
+  <h2>1. アプリ概要 — 飲食業務をひとつにまとめる</h2>
+  <p>本アプリは「レシピ」「原価」「在庫」「仕込み」「発注」を統合管理する Web アプリケーションです。PC・タブレット・スマホ対応。</p>
+  <div class="cols-3">
+    <div class="card"><h4>🍳 レシピ管理</h4><p>通常モード / Baker's % モード、並び替え、タグ、画像、削除→ゴミ箱→復元の2段階。</p></div>
+    <div class="card accent-card"><h4>💴 原価管理</h4><p>仕入れCSV連携で材料費を自動計算、税率8/10%自動判定、歩留まり対応。</p></div>
+    <div class="card green-card"><h4>📦 在庫・発注</h4><p>棚卸し、月次統合、CSV入出力、2割ルール自動発注。</p></div>
+    <div class="card"><h4>📅 仕込み計画</h4><p>仕込みカレンダー、発注リスト自動生成。</p></div>
+    <div class="card accent-card"><h4>🥪 合成レシピ</h4><p>複数レシピを組み合わせた商品の原価試算（本資料の主題）。</p></div>
+    <div class="card green-card"><h4>🌐 多言語</h4><p>日本語 / 英語 / フランス語 / イタリア語の AI 自動翻訳。</p></div>
+  </div>
+  <div class="meta"><span>recipe-app-deck</span><span>1 / 30</span></div>
+</section>
+
+<!-- =========================== SLIDE 4: ARCHITECTURE =========================== -->
+<section class="slide">
+  <h2>2. システムアーキテクチャ</h2>
+  <p>SPA（React）+ BaaS（Supabase）の構成。フロントは GitHub Pages にデプロイ、認証・DB・ストレージ・RPC は Supabase で完結します。</p>
+  <pre class="pre-light">┌──────────────────────────────────────┐
+│ Frontend  React 19 + Vite 7          │
+│ ├─ components / pages / contexts     │
+│ ├─ services（ビジネスロジック層）      │
+│ └─ utils（unit / format）            │
+└────────────── REST / RPC ─────────────┘
+              │
+┌──────────────────────────────────────┐
+│ Supabase                             │
+│ ├─ Auth（メール+パスワード, JWT）       │
+│ ├─ PostgreSQL + RLS                  │
+│ │   recipes / recipe_contents        │
+│ │   inventory_items / snapshots      │
+│ │   unit_conversions（材料マスター）   │
+│ │   csv_unit_overrides                │
+│ │   recipe_composite_sets ★          │
+│ │   recipe_composite_set_items ★      │
+│ │   recipe_category_cost_overrides ★  │
+│ ├─ Storage（CSV / 画像）              │
+│ └─ Edge Functions（Gemini API 中継） │
+└──────────────────────────────────────┘</pre>
+  <p class="small">★ は合成レシピ機能で追加されたテーブル。RLS により <code>created_by = auth.uid()</code> でユーザーごとに完全分離。</p>
+</section>
+
+<!-- =========================== SLIDE 5: RECIPE MGMT =========================== -->
+<section class="slide">
+  <h2>3. レシピ管理機能</h2>
+  <h3>入力モード</h3>
+  <ul>
+    <li><strong>通常モード</strong>: 一般料理用。材料名 / 分量 / 単位 / 単価を入力し、仕入れマスタから原価が自動入力。</li>
+    <li><strong>パン Baker's % モード</strong>: 粉を 100% としてその他の材料を比率で管理。狙いの総重量 (g) を入れると全材料が再計算される。</li>
+  </ul>
+  <h3>整理と共有</h3>
+  <ul>
+    <li>ドラッグ&ドロップ並び替え（PC: マウス、スマホ: 1秒長押し）</li>
+    <li>タグ・カテゴリ・店舗・コースで多軸フィルタリング</li>
+    <li><strong>共有レシピの安全設計</strong>: 他人のレシピを編集して保存すると、元を壊さないよう <em>自動的にコピー</em> が作成される</li>
+    <li>削除はゴミ箱経由の2段階（誤操作対策）</li>
+  </ul>
+</section>
+
+<!-- =========================== SLIDE 6: BAKER'S % =========================== -->
+<section class="slide">
+  <h2>4. パン用 Baker's % モード</h2>
+  <p>粉重量を基準（100%）として、他の材料を粉に対する百分率で記録するパン業界標準の方式。</p>
+  <div class="formula">
+    各材料量 (g) = 粉総量 (g) × <em>その材料の Baker's %</em><br/>
+    総生地量 (g) = 粉 × (1 + Σ 各材料の比率)
+  </div>
+  <h3>具体例：バゲット生地</h3>
+  <table class="tbl">
+    <tr><th>材料</th><th>Baker's %</th><th>粉1000gのとき</th><th>粉1500gのとき</th></tr>
+    <tr><td>強力粉</td><td>100%</td><td>1000 g</td><td>1500 g</td></tr>
+    <tr><td>水</td><td>68%</td><td>680 g</td><td>1020 g</td></tr>
+    <tr><td>塩</td><td>2%</td><td>20 g</td><td>30 g</td></tr>
+    <tr><td>イースト</td><td>0.4%</td><td>4 g</td><td>6 g</td></tr>
+  </table>
+  <p class="small">アプリでは「狙いの総重量 (g)」を入れると逆算で粉量・全材料を自動計算。日々レシピをスケールさせるパン職人にとって不可欠な機能。</p>
+</section>
+
+<!-- =========================== SLIDE 7: COST CALC =========================== -->
+<section class="slide">
+  <h2>5. 原価計算（自動化）</h2>
+  <p>仕入れマスタ（CSV）と材料マスター（unit_conversions）が単価と内容量を保持。レシピ入力時に名称マッチで自動取得。</p>
+  <h3>kg/L単価への正規化（桁違い防止の核心）</h3>
+  <div class="formula">
+    単位あたり単価 = lastPrice ÷ packetSize<br/>
+    例: 25,000 g / 袋, 10,900 円 / 袋 → <em>0.436 円 / g</em>
+  </div>
+  <h3>税率の自動判定</h3>
+  <ul>
+    <li>区分が <code>alcohol</code>（アルコール）/ <code>supplies</code>（備品）→ 10%</li>
+    <li>それ以外（食材）→ 8%</li>
+  </ul>
+  <h3>歩留まり（可食率）</h3>
+  <p>魚・肉などの 100% 未満材料は <code>cost × 1/yield</code> で実質原価を上げて計算。原価欄下に「歩留まり: 50%」のように表示。</p>
+</section>
+
+<!-- =========================== SLIDE 8: CATEGORY COST =========================== -->
+<section class="slide">
+  <h2>6. カテゴリ別原価</h2>
+  <p>レシピ内の材料は <strong>グループ（ソース、生地、仕上げ等）</strong> に分けられ、カテゴリ単位で原価を確認・上書きできます。</p>
+  <h3>ロジック（categoryCostOverrideService.js）</h3>
+  <pre>const buildGroupEntry = (categoryKey, categoryName, ingredients, multiplier) => {
+  const costTaxIncluded = ingredients.reduce(
+    (sum, item) => sum + getScaledCostTaxIncluded(item, multiplier),
+    0
+  );
+  return { categoryKey, categoryName, ingredients, costTaxIncluded };
+};
+
+// 上書き（override）があればそちらを優先
+const total = categories.reduce((sum, c) => {
+  const overridden = overrideMap.get(c.categoryKey);
+  return sum + (Number.isFinite(overridden) ? overridden : c.costTaxIncluded);
+}, 0);</pre>
+  <p class="small">「ムースを 20g 使ったときの原価」のような<strong>カテゴリ使用量シミュレーション</strong>がここから派生します。後述する合成レシピの計算とも連携。</p>
+</section>
+
+<!-- =========================== SLIDE 9: INVENTORY =========================== -->
+<section class="slide">
+  <h2>7. 在庫管理（棚卸し）</h2>
+  <h3>機能</h3>
+  <ul>
+    <li>業者・品名検索、業者名でのソート、税率10%チェック、発注推奨バッジ</li>
+    <li>棚卸し完了 → スナップショット保存（<code>inventory_snapshots</code>）</li>
+    <li>棚卸し後の在庫数を「0リセット / そのまま保持」選択可</li>
+    <li>月次統合（同名品目は月内最新を採用して集計）、CSV出力、印刷</li>
+  </ul>
+  <h3>素早い入力のためのキー操作</h3>
+  <table class="tbl">
+    <tr><th>キー</th><th>動作</th></tr>
+    <tr><td><code>Enter</code> / <code>Tab</code></td><td>次の在庫数入力欄へ移動</td></tr>
+    <tr><td><code>Shift + Enter</code> / <code>Shift + Tab</code></td><td>前の入力欄へ戻る</td></tr>
+    <tr><td>クリック</td><td>数値全選択（即時打ち替え可）</td></tr>
+  </table>
+  <p class="small">スピナー（▲▼）は誤タップ防止のため非表示。現場は数百行を素早く入力するため、キー設計が重要。</p>
+</section>
+
+<!-- =========================== SLIDE 10: PLANNER & ORDERLIST =========================== -->
+<section class="slide">
+  <h2>8. 仕込みカレンダー & 発注リスト</h2>
+  <h3>仕込みカレンダー（Planner）</h3>
+  <ul>
+    <li>日付にレシピをドラッグ&ドロップで予定登録</li>
+    <li>予定の日付移動・削除、複数レシピの同日管理、オーバーワーク警告</li>
+  </ul>
+  <h3>発注リスト（OrderList）— 2割ルール</h3>
+  <div class="formula">
+    必要量 = Σ（仕込み予定のレシピごとに必要な材料量）<br/>
+    残在庫 = max(0, 在庫 − 必要量)<br/>
+    発注対象 ⇔ 残在庫 &lt; <em>1発注単位 × 0.2（2割）</em><br/>
+    発注量 = ⌈不足量 ÷ packetSize⌉ （袋・本単位で切り上げ）
+  </div>
+  <p class="small">例: ビネガー 1本=750ml、2割=150ml を切ったら発注対象。発注量は ml ではなく <strong>1本</strong>として表示。</p>
+</section>
+
+<!-- =========================== SLIDE 11: UNIT PRIORITY =========================== -->
+<section class="slide">
+  <h2>9. 単位の優先順位（運用の核心）</h2>
+  <p>原価・在庫・発注の桁違いはほぼ「単価の意味」と「単位の優先順位」の崩れで起きる。本アプリは次の階層で正規化します。</p>
+  <ol class="num-list">
+    <li><strong>材料マスター（unit_conversions）</strong> — packetSize, packetUnit, lastPrice。最優先。</li>
+    <li><strong>元の単位（CSV）上書き（csv_unit_overrides）</strong> — 「袋・本・箱」など発注単位の補正。</li>
+    <li><strong>仕入れCSV（仕入れマスタ）</strong> — 単価と業者情報。</li>
+    <li><strong>手入力</strong> — レシピ・在庫の最終フォールバック。</li>
+  </ol>
+  <div class="quote">
+    在庫画面で材料マスターがある場合、単価は <code>lastPrice / packetSize</code> に正規化、本/袋を g/ml に換算。これにより「在庫金額が壊れない」設計。
+  </div>
+</section>
+
+<!-- =========================== SLIDE 12: TRANSLATION =========================== -->
+<section class="slide">
+  <h2>10. 多言語翻訳</h2>
+  <p>レシピを日本語・英語・<strong>フランス語</strong>・イタリア語に AI 自動翻訳。多国籍スタッフ・国際共有に対応。</p>
+  <h3>セキュリティ</h3>
+  <ul>
+    <li>Edge Functions（<code>call-gemini-api</code>, <code>analyze-image</code>）は <strong>JWT検証</strong>でログイン済みユーザーのみ実行可能。401 で外部ボットを完全ブロック。</li>
+    <li>Google Cloud 側で API キーに「Generative Language API のみ」の制限を付与し、流用を 403 で強制ブロック。</li>
+  </ul>
+  <p class="small">フランス語シェフが日本人スタッフに「pâte feuilletée」のレシピを共有する、といったユースケースを想定。原文併記も可能。</p>
+</section>
+
+<!-- =========================== SLIDE 13: DATA MGMT =========================== -->
+<section class="slide">
+  <h2>11. データ管理・CSV取込</h2>
+  <h3>データ管理画面のタブ</h3>
+  <ul>
+    <li><strong>価格データ</strong>: 仕入れCSVのアップロード・マージ・検索・ファイル管理</li>
+    <li><strong>材料マスター</strong>: 内容量 / 単位 / 仕入れ値 / 歩留まり / 区分</li>
+    <li><strong>CSV取込</strong>: 価格CSV → 材料マスター一括登録</li>
+    <li><strong>重複アイテム</strong>: 同名材料の価格履歴・表記揺れ確認</li>
+  </ul>
+  <h3>レシピのバックアップ</h3>
+  <ul>
+    <li>JSON形式でダウンロード / 復元（復元は<strong>追加</strong>であり上書きではない点に注意）</li>
+    <li>管理者は「他アカウントへコピー」で価格データ・材料マスターを別ユーザーへ複製可能（同期はされない、1回限り）</li>
+  </ul>
+</section>
+
+<!-- =========================== SLIDE 14: USER & SECURITY =========================== -->
+<section class="slide">
+  <h2>12. ユーザー管理・セキュリティ</h2>
+  <h3>ロール</h3>
+  <table class="tbl">
+    <tr><th>ロール</th><th>主な権限</th></tr>
+    <tr><td>一般スタッフ</td><td>レシピ閲覧・編集（自分のみ）、在庫照会、発注閲覧</td></tr>
+    <tr><td>シェフ</td><td>レシピ作成・編集・公開、オリジナル保護</td></tr>
+    <tr><td>管理者</td><td>全データ閲覧、ユーザー管理、コピー機能、パスワード再設定</td></tr>
+  </table>
+  <h3>RLS（Row-Level Security）</h3>
+  <pre>CREATE POLICY recipes_update_own_or_admin
+  ON recipes FOR UPDATE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+    OR tags @&gt; ARRAY['owner:' || auth.uid()::text]
+    OR EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid()
+        AND display_id IS NOT NULL
+        AND tags @&gt; ARRAY['owner:' || display_id]
+    )
+  )
+  WITH CHECK (
+    char_length(title) &lt;= 200
+    AND jsonb_array_length(coalesce(ingredients, '[]'::jsonb)) &lt;= 200
+  );</pre>
+  <p class="small">PostgreSQL レベルで権限を強制するため、フロントの実装ミスでもデータは漏れない設計。</p>
+</section>
+
+<!-- =========================== SLIDE 15: COMPOSITE INTRO =========================== -->
+<section class="slide">
+  <h2>13. 合成レシピとは何か</h2>
+  <p class="quote">複数のレシピを組み合わせて作る商品（惣菜パン、プレート料理、デザート盛り合わせ等）について、「どのレシピを何 g 使うか」を入力すると<strong>原価・原価率・粗利が一発で出る</strong>機能。</p>
+  <h3>解決する課題</h3>
+  <ul>
+    <li>ベーカリーで「バゲット + ポテサラ + バター」のような<strong>複合商品</strong>の原価がどんぶり勘定になる</li>
+    <li>1つのソース仕込みから<strong>一部だけ使う</strong>場合の原価計算が手計算で煩雑</li>
+    <li>レシピごとに「総出来上がり量」と「使用量」が違うため<strong>単位原価への分解</strong>が必要</li>
+  </ul>
+  <h3>提供する価値</h3>
+  <ul>
+    <li>商品設計時に <strong>原価率を見ながら販売価格を決定</strong>できる</li>
+    <li>組み合わせを保存→再編集→再保存できるので、<strong>季節メニューの試作管理</strong>に最適</li>
+  </ul>
+</section>
+
+<!-- =========================== SLIDE 16: COMPOSITE UI =========================== -->
+<section class="slide">
+  <h2>14. UI: 合成原価シミュレーター</h2>
+  <p>画面構成: ヘッダー → レシピ検索カード → 行（レシピ・総出来上がり量・使用量・使用原価）→ 合計 → 原価率シミュレーター</p>
+  <pre class="pre-light">┌─ レシピ合成原価シミュレーター ──────────────────────┐
+│ レシピ検索: [ バゲット            ] 12件 表示中     │
+│ ┌─ 検索カード ─────────────────────────────┐    │
+│ │ 🥖 バゲット   ｜ 🥔 ポテトサラダ ｜ 🧈 バター  │    │
+│ └─────────────────────────────────────────┘    │
+│                                                  │
+│ レシピ            総量(固定)  使用量   使用原価    │
+│ ─────────────────────────────────────────       │
+│ バゲット          800 g        80     ¥30        │
+│ ポテトサラダ      1500 g       40     ¥45        │
+│ バター            200 g         5     ¥18        │
+│ ─────────────────────────────────────────       │
+│ 合成原価合計（税込）                ¥93.00       │
+│                                                  │
+│ 販売価格 ¥420   販売数 10                         │
+│ 1個原価 ¥93 ／ 売上 ¥4,200 ／ 粗利 ¥3,270        │
+│ 合成原価率 22.1 %                                 │
+└──────────────────────────────────────────────┘</pre>
+  <p class="small">先頭レシピもプルダウンで入れ替え可、カードを押すと組み合わせに追加。検索→選択を繰り返すだけで合成商品が組める。</p>
+</section>
+
+<!-- =========================== SLIDE 17: LOGIC 1 =========================== -->
+<section class="slide">
+  <h2>15-① 計算ロジック: 出来上がり量の集計</h2>
+  <p>レシピは材料の単位がバラバラ（g, kg, ml, cl, l, 個, 本…）。これを「総出来上がり量」に統一する関数が <code>computeBatchStats()</code>。</p>
+  <pre>const computeBatchStats = (ingredients) => {
+  let totalWeightGrams = 0;
+  let totalVolumeMl   = 0;
+  for (const item of ingredients) {
+    const qty  = parseFloat(item.quantity);
+    const unit = normalizeUnit(item.unit || '');
+    if (unit === 'g')             totalWeightGrams += qty;
+    if (unit === 'kg')            totalWeightGrams += qty * 1000;
+    if (unit === 'ml' || unit === 'cc') totalVolumeMl += qty;
+    if (unit === 'cl')            totalVolumeMl    += qty * 10;
+    if (unit === 'l')             totalVolumeMl    += qty * 1000;
+  }
+  const defaultBatchAmount = totalWeightGrams + totalVolumeMl; // 1ml ≈ 1g 概算
+  const defaultUnit        = totalWeightGrams &gt; 0 ? 'g' : 'ml';
+  return { totalWeightGrams, totalVolumeMl, defaultBatchAmount, defaultUnit };
+};</pre>
+  <p class="small">★ <strong>個 / 本などの個数単位は意図的に除外</strong>。重量と液量が混在する場合は <code>1 ml ≈ 1 g</code> の概算で合算するのが現場的な妥協点。手動調整も可能。</p>
+</section>
+
+<!-- =========================== SLIDE 18: LOGIC 2 =========================== -->
+<section class="slide">
+  <h2>15-② 計算ロジック: 単位原価と使用原価</h2>
+  <p>各レシピを「1g（または1ml）あたりいくら」に分解し、使用量を掛けて使用原価を出します。</p>
+  <div class="formula">
+    単位原価 = レシピの税込総原価 ÷ 総出来上がり量<br/>
+    使用原価 = 単位原価 × 使用量<br/>
+    合成原価合計 = Σ 各レシピの使用原価
+  </div>
+  <h3>該当コード（RecipeCompositeCostCalculator.jsx）</h3>
+  <pre>const unitCost = batch &gt; 0
+  ? (totalCostTaxIncluded / batch)
+  : NaN;
+const lineCost = (Number.isFinite(unitCost) &amp;&amp; use &gt;= 0)
+  ? (unitCost * use)
+  : NaN;
+
+// 合計
+const totalCompositeCost = currentLine.lineCost
+  + sum(otherLines.map(l =&gt; l.lineCost));</pre>
+  <p class="small">税込原価は <code>computeRecipeTotalCostTaxIncluded()</code>（categoryCostOverrideService）から取得。<strong>カテゴリ別の原価上書き</strong>があれば自動的に反映。</p>
+</section>
+
+<!-- =========================== SLIDE 19: LOGIC 3 =========================== -->
+<section class="slide">
+  <h2>15-③ 計算ロジック: 販売価格・粗利・原価率</h2>
+  <div class="formula">
+    1個あたり原価 (税込) = 合成原価合計<br/>
+    予想売上 = 販売価格 × 販売数<br/>
+    粗利益 = 予想売上 − (1個あたり原価 × 販売数)<br/>
+    <em>合成原価率</em> = 1個あたり原価 ÷ 販売価格
+  </div>
+  <h3>2026/05 修正のポイント</h3>
+  <div class="quote">
+    旧版では原価率に販売数が混入し「販売数を変えると原価率が動く」という不合理が発生。新版は「<strong>1個あたりの原価率は販売数に依存しない</strong>」という当たり前の数学に修正。
+  </div>
+  <pre>// totalCompositeCost は「1個あたりの原価」
+// したがって costRate は count に依存しない
+const costRate = hasPrice &amp;&amp; Number.isFinite(unitCost)
+  ? (unitCost / price) * 100
+  : NaN;</pre>
+</section>
+
+<!-- =========================== SLIDE 20: LOGIC 4 =========================== -->
+<section class="slide">
+  <h2>15-④ 計算ロジック: 数値例</h2>
+  <p>バゲットポテサラパン（バゲット + ポテトサラダ + バター）の試算。</p>
+  <table class="tbl">
+    <tr><th>レシピ</th><th>税込総原価</th><th>総出来上がり量</th><th>単位原価</th><th>使用量</th><th>使用原価</th></tr>
+    <tr><td>バゲット</td><td>¥300</td><td>800 g</td><td>0.375 円/g</td><td>80 g</td><td>¥30.00</td></tr>
+    <tr><td>ポテトサラダ</td><td>¥1,680</td><td>1,500 g</td><td>1.120 円/g</td><td>40 g</td><td>¥44.80</td></tr>
+    <tr><td>バター</td><td>¥720</td><td>200 g</td><td>3.600 円/g</td><td>5 g</td><td>¥18.00</td></tr>
+    <tr><th colspan="5">合成原価合計（1個あたり）</th><th>¥92.80</th></tr>
+  </table>
+  <h3>販売シミュレーション</h3>
+  <table class="tbl">
+    <tr><th>販売価格</th><th>販売数</th><th>予想売上</th><th>粗利益</th><th>合成原価率</th></tr>
+    <tr><td>¥420</td><td>10</td><td>¥4,200</td><td>¥3,272</td><td><strong>22.1 %</strong></td></tr>
+    <tr><td>¥420</td><td>20</td><td>¥8,400</td><td>¥6,544</td><td><strong>22.1 %</strong></td></tr>
+  </table>
+  <p class="small">販売数を変えても 1個あたりの原価率は不変。粗利は販売数に比例して増えるのが正しい挙動。</p>
+</section>
+
+<!-- =========================== SLIDE 21: DATA MODEL =========================== -->
+<section class="slide">
+  <h2>16. データモデル（合成レシピ）</h2>
+  <p>2テーブル構成。ヘッダー（合成商品の本体）と明細（各レシピの使用量行）に分離。</p>
+  <h3>recipe_composite_sets（ヘッダー）</h3>
+  <pre>id                       bigint  PK
+created_by               uuid    auth.uid() default
+dish_name                text    NOT NULL  -- 例: バゲットポテサラパン
+base_recipe_id           bigint  → recipes(id)  -- 先頭レシピ
+base_usage_amount        numeric -- 先頭レシピの使用量
+sales_price              numeric -- 販売価格
+sales_count              numeric -- 販売数
+total_cost_tax_included  numeric -- 合成原価合計（保存時点）
+created_at, updated_at   timestamptz</pre>
+  <h3>recipe_composite_set_items（明細）</h3>
+  <pre>id                composite_set_id (→ sets ON DELETE CASCADE)
+recipe_id         (→ recipes)
+usage_amount      numeric  -- そのレシピを何g使うか
+sort_order        integer  -- 並び順</pre>
+  <p class="small">RLS は created_by = auth.uid() で完全分離。明細側は「親 set が自分のもの」であることを EXISTS で確認するポリシー。</p>
+</section>
+
+<!-- =========================== SLIDE 22: SAVE FLOW =========================== -->
+<section class="slide">
+  <h2>17. 保存・編集フロー</h2>
+  <h3>保存（compositeRecipeService.createSet）</h3>
+  <ol class="num-list">
+    <li><code>recipe_composite_sets</code> にヘッダー INSERT → 採番された <code>id</code> を取得</li>
+    <li>計算機の <code>rows</code> を <code>recipe_composite_set_items</code> へ一括 INSERT（<code>composite_set_id</code> に親IDを差し込む）</li>
+    <li>失敗時は例外を Toast で通知。RLS違反は 401/403 として現れる</li>
+  </ol>
+  <h3>更新（updateSet）</h3>
+  <ol class="num-list">
+    <li>ヘッダーを UPDATE（<code>updated_at = now()</code>）</li>
+    <li>明細を <strong>一旦全削除</strong>してから再 INSERT（差分更新ではなく置き換え）</li>
+    <li>明細の並び順は <code>sort_order</code> で保持</li>
+  </ol>
+  <h3>編集ページ（RecipeCompositeCostEditPage）</h3>
+  <p class="small">保存済み合成レシピを開くと、<code>getSetDetail</code> でヘッダー＋明細を取得し、<code>recipeService.getRecipe</code> でベースレシピも引き直す。これにより「<code>—</code> 表示」で原価が出ない問題を解消。</p>
+</section>
+
+<!-- =========================== SLIDE 23: CATEGORY OVERRIDE =========================== -->
+<section class="slide">
+  <h2>18. カテゴリ原価との連携</h2>
+  <p>合成原価の計算で参照する「各レシピの税込総原価」は、単純な合算ではなく <strong>カテゴリ別原価の上書き</strong>を尊重します。</p>
+  <h3>処理フロー</h3>
+  <ol class="num-list">
+    <li>合成計算機が各レシピをロードする際、<code>categoryCostOverrideService.fetchByRecipeId</code> で <code>recipe_category_cost_overrides</code> から上書きMapを取得</li>
+    <li><code>computeRecipeTotalCostTaxIncluded(recipe, overrideMap)</code> で総原価を再計算</li>
+    <li>カテゴリごとに override があればそれを採用、無ければ元材料から再計算</li>
+  </ol>
+  <div class="quote">
+    例: ムースの「ベース」カテゴリだけ業者変更で原価が下がった場合、ベースのみ上書きを設定すれば、合成レシピの計算にもその下げた原価が自動反映。
+  </div>
+  <p class="small">仕入れ価格の振れに対して柔軟に追従できる、運用上きわめて重要な設計。</p>
+</section>
+
+<!-- =========================== SLIDE 24: 2026-05 IMPROVEMENTS =========================== -->
+<section class="slide">
+  <h2>19. 2026/05 アップデートの改善点</h2>
+  <h3>新規追加</h3>
+  <ul>
+    <li><strong>合成レシピ保存・編集機能</strong>（料理名を付けて永続化、再利用、削除）</li>
+    <li><strong>保存済み合成レシピ一覧ページ</strong>（カードUI、合成原価・更新日時バッジ）</li>
+  </ul>
+  <h3>計算の修正</h3>
+  <ul>
+    <li>原価率: <code>1個あたり原価 ÷ 販売価格</code> に正規化（販売数の影響を排除）</li>
+    <li>粗利: <code>(販売価格 × 販売数) − (1個あたり原価 × 販売数)</code></li>
+    <li>編集ページで <code>—</code> が出る問題を解消（保存後のレシピ詳細を再取得）</li>
+  </ul>
+  <h3>UX改善</h3>
+  <ul>
+    <li><strong>固定ベース廃止</strong>: 検索結果から連続して組み合わせ追加可能、先頭レシピも入れ替え・削除可</li>
+    <li>「ベースレシピ」プルダウンと「+ 組み合わせを追加」ボタンを廃止し、<strong>検索カード中心の操作</strong>に統一</li>
+    <li>保存済み一覧のカードデザインと視認性向上、トップページへの導線追加</li>
+  </ul>
+</section>
+
+<!-- =========================== SLIDE 25: CHEF VALUE =========================== -->
+<section class="slide">
+  <h2>20. シェフ・パン職人視点での価値</h2>
+  <h3>1. レシピを科学的に分解できる</h3>
+  <p>「ソース 1500 g 仕込み中 40 g 使用」のような状況を、感覚ではなく <strong>1 g 単位で原価化</strong>。フランス料理のコース構成、惣菜パンの構成それぞれで活躍。</p>
+  <h3>2. メニュー設計時の意思決定が速い</h3>
+  <p>販売価格を変えると原価率がリアルタイムに動く。<strong>FoodCost 30% を切る販売価格</strong>を逆算しながらメニューを組める。</p>
+  <h3>3. 季節商品の試作管理</h3>
+  <p>春の限定パン、秋のテリーヌ、クリスマスのデザートなど <strong>同じ「合成レシピ」をシーズンごとに保存</strong>しておけば、翌年の同時期にすぐ呼び出せる。</p>
+  <h3>4. パン職人の「組み合わせ商品」管理に最適</h3>
+  <p>バゲット生地 + クリーム + フルーツ といった構成を、<strong>使用量別の単位原価</strong>で正確に把握。仕込みロス削減にも直結。</p>
+</section>
+
+<!-- =========================== SLIDE 26: TECH HIGHLIGHT =========================== -->
+<section class="slide">
+  <h2>21. 技術的に押さえておきたいポイント</h2>
+  <div class="cols">
+    <div>
+      <h3>フロント</h3>
+      <ul>
+        <li>React 19 + Vite 7</li>
+        <li>@dnd-kit でドラッグ&ドロップ並び替え</li>
+        <li>react-router-dom v7 で <code>?view=composite-cost</code> 等のクエリ駆動ナビ</li>
+        <li>状態は <code>useMemo</code> で派生計算を最小化（合成計算は O(n) で再計算）</li>
+      </ul>
+    </div>
+    <div>
+      <h3>バックエンド</h3>
+      <ul>
+        <li>Supabase（PostgreSQL + Auth + Storage + Edge Fn）</li>
+        <li>RLS による行レベルアクセス制御</li>
+        <li>RPC <code>search_ingredients</code> で材料名 ILIKE 検索を高速化</li>
+        <li>GIN インデックスで <code>tags</code> JSONB 検索を加速</li>
+      </ul>
+    </div>
+  </div>
+  <h3>パフォーマンス最適化</h3>
+  <ul>
+    <li><code>Promise.all</code> による並列フェッチ（15-43秒 → 5-8秒）</li>
+    <li>Query Pattern Caching（成功したクエリパターンをキャッシュ）</li>
+    <li>Debounce 150 ms でオートコンプリートのリクエスト削減</li>
+  </ul>
+</section>
+
+<!-- =========================== SLIDE 27: PITFALLS =========================== -->
+<section class="slide">
+  <h2>22. 運用上の落とし穴と対処</h2>
+  <table class="tbl">
+    <tr><th>症状</th><th>原因</th><th>対処</th></tr>
+    <tr><td>合成原価が <code>—</code></td><td>レシピの総出来上がり量が <strong>個・本</strong>のみ</td><td>g/ml 換算の材料を含めるか、手動で「総出来上がり量」を調整</td></tr>
+    <tr><td>原価率が異常</td><td>カテゴリ原価の override が古い値</td><td>レシピ詳細でカテゴリ原価を再設定（最新値で上書き）</td></tr>
+    <tr><td>在庫金額が桁違い</td><td><code>lastPrice</code> を単位単価として扱った</td><td><code>lastPrice / packetSize</code> に正規化</td></tr>
+    <tr><td>「元の単位（CSV）」が保存できない</td><td><code>csv_unit_overrides</code> マイグレーション未適用</td><td><code>20260202160000_create_csv_unit_overrides.sql</code> を適用</td></tr>
+    <tr><td>合成レシピが一覧に出ない</td><td>RLS で <code>created_by ≠ auth.uid()</code></td><td>同じアカウントでログインしているか確認</td></tr>
+  </table>
+</section>
+
+<!-- =========================== SLIDE 28: FUTURE =========================== -->
+<section class="slide">
+  <h2>23. 課題と今後の展望</h2>
+  <h3>現状の制約</h3>
+  <ul>
+    <li>個・本などの個数単位を含むレシピは「総出来上がり量」に含まれず、合成計算が困難</li>
+    <li>合成レシピを「他者と共有」する仕組みは未実装（個人ライブラリのみ）</li>
+    <li>合成レシピを <strong>1つの新レシピ</strong>として登録する自動化はない</li>
+    <li>履歴・バージョン管理が無く、過去の構成変更を遡れない</li>
+  </ul>
+  <h3>提案する改善案</h3>
+  <ol class="num-list">
+    <li>個数単位の<strong>1個あたり重量</strong>をレシピに保持し、自動換算可能にする</li>
+    <li>合成レシピ → 通常レシピへの「展開保存」機能（材料を全部足し合わせて1レシピ化）</li>
+    <li>カテゴリ原価 override の<strong>有効期限</strong>を設定（仕入れ価格が変わったら自動失効）</li>
+    <li>合成レシピの<strong>店舗共有</strong>（is_shared フラグ追加）</li>
+    <li>変更履歴テーブルで「2026年4月の構成」「5月の構成」を比較可能にする</li>
+  </ol>
+</section>
+
+<!-- =========================== SLIDE 29: SUMMARY =========================== -->
+<section class="slide">
+  <h2>24. まとめ</h2>
+  <div class="cols">
+    <div class="card accent-card">
+      <h4>アプリ全体</h4>
+      <p>レシピ・原価・在庫・仕込み・発注を統合管理する飲食業向け Web アプリ。React + Supabase + RLS で安全とパフォーマンスを両立。</p>
+    </div>
+    <div class="card">
+      <h4>合成レシピの本質</h4>
+      <p>各レシピを「1 g（1 ml）あたりいくら」に分解し、使用量を掛け合わせて合計するという、シンプルだが現場で価値の高い計算機。</p>
+    </div>
+    <div class="card green-card">
+      <h4>計算式の核</h4>
+      <p>単位原価 = 税込原価 ÷ 出来上がり量／使用原価 = 単位原価 × 使用量／原価率 = 1個原価 ÷ 販売価格（販売数に依存しない）</p>
+    </div>
+    <div class="card">
+      <h4>データ設計</h4>
+      <p>ヘッダー＋明細の2テーブル＋RLS。<code>recipe_composite_sets</code> / <code>recipe_composite_set_items</code> でユーザーごとに完全分離。</p>
+    </div>
+    <div class="card accent-card">
+      <h4>2026/05の進化</h4>
+      <p>保存・編集・一覧化＋計算式の修正＋検索カード中心UIへの再設計。</p>
+    </div>
+    <div class="card green-card">
+      <h4>シェフへの提供価値</h4>
+      <p>感覚ではなく数式で「使った分だけの原価」を即時把握。メニュー設計と季節商品試作管理に直結。</p>
+    </div>
+  </div>
+  <p class="small" style="margin-top:24px;">フランス料理 / ベーカリーの現場では「仕込みは多めに、使うのは一部」という構造が日常。本機能はその構造を<strong>科学的に数値化</strong>するためのツールです。</p>
+</section>
+
+<!-- =========================== SLIDE 30: END =========================== -->
+<section class="slide title-slide">
+  <div class="badge">FIN — MERCI</div>
+  <h1>ありがとうございました</h1>
+  <div class="sub">レシピ管理アプリ ／ 合成レシピ 解析プレゼン</div>
+  <div class="footer-meta">
+    操作: <code>← / →</code> でスライド移動／<code>Home / End</code> で先頭・末尾へ／<code>F</code> 全画面／<code>P</code> 印刷
+  </div>
+</section>
+
+</div>
+
+<div class="controls">
+  <button id="prev">←</button>
+  <span id="counter">1 / 30</span>
+  <button id="next">→</button>
+  <button id="full">⛶ 全画面</button>
+</div>
+
+<script>
+(function() {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const counter = document.getElementById('counter');
+  let current = 0;
+
+  function show(i) {
+    if (i < 0) i = 0;
+    if (i >= slides.length) i = slides.length - 1;
+    slides[current].classList.remove('active');
+    slides[i].classList.add('active');
+    current = i;
+    counter.textContent = (i + 1) + ' / ' + slides.length;
+    slides[i].scrollTop = 0;
+  }
+
+  document.getElementById('prev').onclick = () => show(current - 1);
+  document.getElementById('next').onclick = () => show(current + 1);
+  document.getElementById('full').onclick = () => {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+    else document.exitFullscreen();
+  };
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); show(current + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); show(current - 1); }
+    else if (e.key === 'Home') show(0);
+    else if (e.key === 'End') show(slides.length - 1);
+    else if (e.key.toLowerCase() === 'f') document.getElementById('full').click();
+    else if (e.key.toLowerCase() === 'p') window.print();
+  });
+
+  show(0);
+})();
+</script>
+
+</body>
+</html>

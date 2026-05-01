@@ -30,6 +30,7 @@ import { recipeService } from './services/recipeService';
 import { formatDisplayId } from './utils/formatUtils';
 import { applyImportedRecipeType } from './utils/importRecipeType';
 import { userService } from './services/userService';
+import { featureFlagService } from './services/featureFlagService';
 import { STORE_LIST } from './constants';
 import { AuthProvider } from './contexts/AuthContext.jsx';
 import { useAuth } from './contexts/useAuth';
@@ -275,11 +276,19 @@ function AppContent() {
 
   useEffect(() => {
     let cancelled = false;
-    supabase.rpc('get_maintenance_mode')
-      .then(({ data }) => { if (!cancelled) setMaintenance(!!data); })
-      .catch(() => { if (!cancelled) setMaintenance(false); });
+    if (authLoading || !user?.id) {
+      setMaintenance(null);
+      return () => { cancelled = true; };
+    }
+
+    featureFlagService.getMaintenanceMode({ force: true })
+      .then((enabled) => { if (!cancelled) setMaintenance(enabled === true); })
+      .catch((error) => {
+        console.warn('メンテナンスモード確認に失敗:', error);
+        if (!cancelled) setMaintenance(false);
+      });
     return () => { cancelled = true; };
-  }, []);
+  }, [authLoading, user?.id]);
 
   // FAST PATH: Load cached recipes immediately while auth is still resolving.
   // This eliminates the perceived wait time after login.
@@ -911,7 +920,10 @@ function AppContent() {
   if (isPasswordRecovery) return <PasswordResetPage />;
 
   // メンテナンスチェック（認証確定後に実行）
-  if (maintenance === null) return null;
+  if (maintenance === null) return <LoadingScreen label="起動状態を確認中" subLabel="メンテナンスモードの状態を確認しています" />;
+  if (maintenance && user.profileVerified !== true) {
+    return <LoadingScreen label="権限を確認中" subLabel="メンテナンス中のアクセス権限を確認しています" />;
+  }
   if (maintenance && user.role !== 'admin') return <MaintenancePage />;
 
   return (
@@ -921,8 +933,14 @@ function AppContent() {
         <div className="maintenance-admin-banner">
           🔧 メンテナンスモード ON（管理者のみ閲覧中）
           <button onClick={async () => {
-            await supabase.rpc('admin_set_feature_flag', { p_key: 'maintenance_mode', p_enabled: false });
-            setMaintenance(false);
+            try {
+              await featureFlagService.setMaintenanceMode(false);
+              setMaintenance(false);
+              toast.success('メンテナンスモードを解除しました');
+            } catch (error) {
+              console.error('メンテナンスモード解除に失敗:', error);
+              toast.error('メンテナンスモードの解除に失敗しました');
+            }
           }}>解除する</button>
         </div>
       )}
@@ -1494,7 +1512,10 @@ function AppContent() {
       )}
 
       {currentView === 'users' && user?.role === 'admin' && (
-        <UserManagement onBack={() => setSearchParams({ view: 'list' })} />
+        <UserManagement
+          onBack={() => setSearchParams({ view: 'list' })}
+          onMaintenanceModeChange={setMaintenance}
+        />
       )}
 
       {currentView === 'inventory' && (

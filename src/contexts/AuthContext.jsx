@@ -196,8 +196,8 @@ export const AuthProvider = ({ children }) => {
                 const parsed = JSON.parse(cached);
                 // Verify it belongs to current user
                 if (parsed && parsed.id === uid) {
-                    cachedUser = parsed;
-                    setUser(parsed);
+                    cachedUser = { ...parsed, profileVerified: false };
+                    setUser(cachedUser);
                 }
             }
         } catch (e) {
@@ -269,14 +269,19 @@ export const AuthProvider = ({ children }) => {
                     const storeName = normalizeStoreName(p.store_name) || metaStoreName || normalizeStoreName(cachedUser.storeName) || '';
                     const role = String((p.role || 'user')).trim().toLowerCase();
                     const showMasterRecipes = p.show_master_recipes === true;
-                    setUser({ id: uid, email, displayId, storeName, role, showMasterRecipes });
+                    const verifiedUser = { id: uid, email, displayId, storeName, role, showMasterRecipes, profileVerified: true };
+                    setUser(verifiedUser);
                     try {
-                        localStorage.setItem('auth_user_cache', JSON.stringify({ id: uid, email, displayId, storeName, role, showMasterRecipes }));
+                        localStorage.setItem('auth_user_cache', JSON.stringify(verifiedUser));
                     } catch (e) {
                         console.warn('[Auth] Failed to save cache', e);
                     }
+                } else {
+                    setUser(prev => (prev?.id === uid ? { ...prev, profileVerified: true } : prev));
                 }
-            }).catch(() => { });
+            }).catch(() => {
+                setUser(prev => (prev?.id === uid ? { ...prev, profileVerified: true } : prev));
+            });
             return;
         }
 
@@ -311,6 +316,7 @@ export const AuthProvider = ({ children }) => {
             storeName: resolvedStoreName,
             role,
             showMasterRecipes,
+            profileVerified: true,
         };
 
         setUser(newUser);
