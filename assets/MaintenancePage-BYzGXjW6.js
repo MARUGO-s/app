@@ -1,0 +1,234 @@
+const n=`.maintenance-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  padding: 1.5rem;
+}
+
+.maintenance-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  padding: 3rem 2.5rem;
+  text-align: center;
+  max-width: 420px;
+  width: 100%;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+}
+
+.maintenance-logo {
+  width: 120px;
+  height: auto;
+  opacity: 0.9;
+  margin-bottom: 1.5rem;
+}
+
+.maintenance-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  animation: spin-slow 4s linear infinite;
+}
+
+@keyframes spin-slow {
+  0%   { transform: rotate(0deg); }
+  25%  { transform: rotate(-15deg); }
+  75%  { transform: rotate(15deg); }
+  100% { transform: rotate(0deg); }
+}
+
+.maintenance-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 1.25rem;
+  letter-spacing: 0.02em;
+}
+
+.maintenance-message {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.8;
+  white-space: pre-line;
+  margin: 0 0 2rem;
+}
+
+.maintenance-footer {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.4);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 1.25rem;
+}
+
+.maintenance-admin-login-button {
+  margin-top: 1.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 0.7rem 1.2rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.maintenance-admin-login-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+.maintenance-login-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.62);
+}
+
+.maintenance-login-dialog {
+  position: relative;
+  width: min(100%, 420px);
+  border-radius: 14px;
+  background: #ffffff;
+  color: #222222;
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.45);
+  padding: 1.8rem;
+  text-align: left;
+}
+
+.maintenance-login-close {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.8rem;
+  border: 0;
+  background: transparent;
+  color: #555555;
+  cursor: pointer;
+  font-size: 1.4rem;
+  line-height: 1;
+  padding: 0.25rem;
+}
+
+.maintenance-login-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.maintenance-login-dialog h2 {
+  color: #222222;
+  font-size: 1.3rem;
+  margin: 0 2rem 0.5rem 0;
+}
+
+.maintenance-login-note {
+  color: #666666;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin: 0 0 1rem;
+}
+
+.maintenance-login-error {
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin-bottom: 1rem;
+  padding: 0.75rem 0.9rem;
+}
+
+.maintenance-login-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.maintenance-login-form label {
+  display: grid;
+  gap: 0.45rem;
+  color: #333333;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.maintenance-login-form input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 1rem;
+  padding: 0.75rem 0.85rem;
+}
+
+.maintenance-login-form input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.maintenance-login-form input:disabled {
+  background: #f3f4f6;
+  cursor: not-allowed;
+}
+
+.maintenance-login-submit {
+  border: 0;
+  border-radius: 8px;
+  background: #1d4ed8;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding: 0.8rem 1rem;
+}
+
+.maintenance-login-submit:hover:not(:disabled) {
+  background: #1e40af;
+}
+
+.maintenance-login-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+/* 管理者向け：メンテナンス中バナー */
+.maintenance-admin-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #d97706;
+  color: #fff;
+  text-align: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.maintenance-admin-banner button {
+  background: rgba(255,255,255,0.25);
+  border: 1px solid rgba(255,255,255,0.5);
+  color: #fff;
+  border-radius: 4px;
+  padding: 0.2rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.maintenance-admin-banner button:hover {
+  background: rgba(255,255,255,0.4);
+}
+`;export{n as default};
