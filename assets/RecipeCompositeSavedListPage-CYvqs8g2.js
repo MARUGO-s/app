@@ -113,11 +113,16 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }
                         return (
                         <Card
                             key={row.id}
-                            className={\`composite-cost-page__saved-item \${isOwner ? 'composite-cost-page__saved-item--clickable' : ''}\`}
-                            onClick={() => { if (isOwner) onOpenEditor?.(row.id); }}
+                            className={\`composite-cost-page__saved-item composite-cost-page__saved-item--clickable \${!isOwner ? 'composite-cost-page__saved-item--shared' : ''}\`}
+                            onClick={() => { onOpenEditor?.(row.id); }}
                             role="button"
-                            tabIndex={isOwner ? 0 : -1}
-                            onKeyDown={(e) => { if (isOwner && (e.key === 'Enter' || e.key === ' ')) onOpenEditor?.(row.id); }}
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    onOpenEditor?.(row.id);
+                                }
+                            }}
                         >
                             <div className="composite-cost-page__saved-main">
                                 <strong>{row.dish_name}</strong>
@@ -167,8 +172,8 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }
                                         </Button>
                                     </>
                                 ) : (
-                                    <Button type="button" variant="secondary" disabled>
-                                        編集不可（共有表示）
+                                    <Button type="button" variant="secondary" onClick={(e) => { e.stopPropagation(); onOpenEditor?.(row.id); }}>
+                                        閲覧を開く（共有表示）
                                     </Button>
                                 )}
                             </div>

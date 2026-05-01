@@ -5,15 +5,18 @@ import { RecipeCompositeCostCalculator } from './RecipeCompositeCostCalculator';
 import { compositeRecipeService } from '../services/compositeRecipeService';
 import { recipeService } from '../services/recipeService';
 import { useToast } from '../contexts/useToast';
+import { useAuth } from '../contexts/useAuth';
 import './RecipeCompositeCostPage.css';
 
 export const RecipeCompositeCostEditPage = ({ compositeId, onBack }) => {
     const toast = useToast();
+    const { user } = useAuth();
     const [loading, setLoading] = React.useState(true);
     const [saving, setSaving] = React.useState(false);
     const [error, setError] = React.useState('');
     const [dishName, setDishName] = React.useState('');
     const [isPublic, setIsPublic] = React.useState(false);
+    const [createdBy, setCreatedBy] = React.useState('');
     const [baseRecipe, setBaseRecipe] = React.useState(null);
     const [initialState, setInitialState] = React.useState(null);
     const [calculatorState, setCalculatorState] = React.useState(null);
@@ -32,6 +35,7 @@ export const RecipeCompositeCostEditPage = ({ compositeId, onBack }) => {
                 setBaseRecipe(recipe);
                 setDishName(detail.dish_name || '');
                 setIsPublic(detail.is_public === true);
+                setCreatedBy(String(detail.created_by || ''));
                 setInitialState({
                     currentUsageAmount: detail.base_usage_amount == null ? '' : String(detail.base_usage_amount),
                     salesPrice: detail.sales_price == null ? '' : String(detail.sales_price),
@@ -70,6 +74,22 @@ export const RecipeCompositeCostEditPage = ({ compositeId, onBack }) => {
         }
         try {
             setSaving(true);
+            if (!isOwner) {
+                const shouldCreateCopy = window.confirm(
+                    'この保存は複製として新規保存されます。\\nオリジナルは変更されません。\\nこのまま保存しますか？'
+                );
+                if (!shouldCreateCopy) return;
+                await compositeRecipeService.createSet({
+                    dishName: name,
+                    baseRecipeId: baseRecipe.id,
+                    isPublic,
+                    ...calculatorState,
+                });
+                toast.success('複製として保存しました（オリジナルは変更していません）。');
+                onBack?.();
+                return;
+            }
+
             await compositeRecipeService.updateSet(compositeId, {
                 dishName: name,
                 baseRecipeId: baseRecipe.id,
@@ -104,6 +124,7 @@ export const RecipeCompositeCostEditPage = ({ compositeId, onBack }) => {
     }
 
     if (!baseRecipe) return null;
+    const isOwner = String(createdBy || '') === String(user?.id || '');
 
     return (
         <div className="composite-cost-page">
@@ -113,7 +134,11 @@ export const RecipeCompositeCostEditPage = ({ compositeId, onBack }) => {
 
             <Card className="composite-cost-page__hero">
                 <h2 className="section-title composite-cost-page__title">保存済み合成レシピ編集</h2>
-                <p className="composite-cost-page__desc">使用グラムや組み合わせを変更して、保存内容を更新できます。</p>
+                <p className="composite-cost-page__desc">
+                    {isOwner
+                        ? '使用グラムや組み合わせを変更して、保存内容を更新できます。'
+                        : '共有レシピの編集内容は、保存時に複製として新規保存されます（オリジナルは変更されません）。'}
+                </p>
                 <div className="composite-cost-page__save-row">
                     <input
                         className="composite-cost-page__search"
@@ -122,7 +147,7 @@ export const RecipeCompositeCostEditPage = ({ compositeId, onBack }) => {
                         onChange={(e) => setDishName(e.target.value)}
                         placeholder="料理名（例: バゲットポテサラパン）"
                     />
-                    <label className="composite-cost-page__share-toggle">
+                    <label className={\`composite-cost-page__share-toggle \${isPublic ? 'composite-cost-page__share-toggle--on' : 'composite-cost-page__share-toggle--off'}\`}>
                         <input
                             type="checkbox"
                             checked={isPublic}
@@ -131,7 +156,7 @@ export const RecipeCompositeCostEditPage = ({ compositeId, onBack }) => {
                         他ユーザーへ共有
                     </label>
                     <Button type="button" variant="primary" onClick={handleUpdate} disabled={saving}>
-                        {saving ? '更新中...' : '更新を保存'}
+                        {isOwner ? (saving ? '更新中...' : '更新を保存') : (saving ? '保存中...' : '複製して保存')}
                     </Button>
                 </div>
             </Card>

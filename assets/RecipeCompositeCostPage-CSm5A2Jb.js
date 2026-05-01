@@ -303,7 +303,7 @@ export const RecipeCompositeCostPage = ({ initialRecipeId = '', onBack, onOpenSa
                                 onChange={(e) => setDishName(e.target.value)}
                                 placeholder="保存する料理名（例: バゲットポテサラパン）"
                             />
-                            <label className="composite-cost-page__share-toggle">
+                            <label className={\`composite-cost-page__share-toggle \${isPublic ? 'composite-cost-page__share-toggle--on' : 'composite-cost-page__share-toggle--off'}\`}>
                                 <input
                                     type="checkbox"
                                     checked={isPublic}
