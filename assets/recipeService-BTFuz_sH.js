@@ -13,6 +13,16 @@ const withTimeout = async (promise, ms, label) => {
     }
 };
 
+const toLoggableError = (error) => {
+    if (!error) return null;
+    return {
+        message: error.message || String(error),
+        code: error.code || null,
+        details: error.details || null,
+        hint: error.hint || null,
+    };
+};
+
 const parseTextArrayMaybe = (value) => {
     if (Array.isArray(value)) return value.map(v => String(v)).filter(Boolean);
     if (typeof value !== 'string') return [];
@@ -1070,18 +1080,88 @@ export const recipeService = {
         const userId = explicitUserId || (await this._getCurrentUserId());
         if (!userId || !recipeId) return false;
 
+        const viewedAt = new Date().toISOString();
+
         const { error } = await withTimeout(
             supabase
                 .from('recent_views')
                 .upsert({
                     viewer_user_id: userId,
                     recipe_id: recipeId,
-                    viewed_at: new Date().toISOString()
+                    viewed_at: viewedAt
                 }, { onConflict: 'viewer_user_id,recipe_id' }),
             10000,
             'recent_views.upsert'
         );
-        if (error) throw error;
+        if (!error) return true;
+
+        // Fallback path: some environments fail ON CONFLICT inference
+        // against partial unique indexes. Keep history resilient anyway.
+        console.error('[recent_views] upsert failed; falling back to select/update/insert', {
+            userId,
+            recipeId,
+            error: toLoggableError(error),
+        });
+
+        const { data: existing, error: selectError } = await withTimeout(
+            supabase
+                .from('recent_views')
+                .select('id')
+                .eq('viewer_user_id', userId)
+                .eq('recipe_id', recipeId)
+                .maybeSingle(),
+            10000,
+            'recent_views.select(existing)'
+        );
+        if (selectError) {
+            console.error('[recent_views] fallback select failed', {
+                userId,
+                recipeId,
+                error: toLoggableError(selectError),
+            });
+            throw selectError;
+        }
+
+        if (existing?.id) {
+            const { error: updateError } = await withTimeout(
+                supabase
+                    .from('recent_views')
+                    .update({ viewed_at: viewedAt })
+                    .eq('id', existing.id),
+                10000,
+                'recent_views.update(existing)'
+            );
+            if (updateError) {
+                console.error('[recent_views] fallback update failed', {
+                    userId,
+                    recipeId,
+                    existingId: existing.id,
+                    error: toLoggableError(updateError),
+                });
+                throw updateError;
+            }
+            return true;
+        }
+
+        const { error: insertError } = await withTimeout(
+            supabase
+                .from('recent_views')
+                .insert({
+                    viewer_user_id: userId,
+                    recipe_id: recipeId,
+                    viewed_at: viewedAt
+                }),
+            10000,
+            'recent_views.insert(new)'
+        );
+        if (insertError) {
+            console.error('[recent_views] fallback insert failed', {
+                userId,
+                recipeId,
+                error: toLoggableError(insertError),
+            });
+            throw insertError;
+        }
 
         return true;
     },
