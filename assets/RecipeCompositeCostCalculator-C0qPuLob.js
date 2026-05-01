@@ -1,8 +1,9 @@
 const e=`import React from 'react';
 import { Button } from './Button';
 import { recipeService } from '../services/recipeService';
+import { ingredientSearchService } from '../services/ingredientSearchService';
 import { useAuth } from '../contexts/useAuth';
-import { normalizeUnit } from '../utils/unitUtils';
+import { costFromQuantityAndUnit, normalizeUnit, normalizedCostPer1000 } from '../utils/unitUtils';
 import {
     categoryCostOverrideService,
     computeRecipeTotalCostTaxIncluded,
@@ -57,6 +58,76 @@ const getDefaultSalesCount = (recipe) => {
     return String(servings);
 };
 
+const isTax10Category = (category) => {
+    const normalized = String(category || '').trim().toLowerCase();
+    return normalized === 'alcohol' || normalized === 'supplies';
+};
+
+const getIngredientTaxRate = (ingredient) => (isTax10Category(ingredient?.itemCategory) ? 1.10 : 1.08);
+
+const getDefaultUsageUnit = (packetUnit) => {
+    const unit = normalizeUnit(packetUnit);
+    if (unit === 'g' || unit === 'kg') return 'g';
+    if (unit === 'ml' || unit === 'cc' || unit === 'cl' || unit === 'l') return 'ml';
+    return unit || '個';
+};
+
+const getUnitCostBasisLabel = (ingredient) => {
+    const unit = normalizeUnit(ingredient?.defaultUsageUnit || ingredient?.unit || '');
+    if (unit === 'g') return '1kg';
+    if (unit === 'ml') return '1L';
+    return \`1\${unit || '単位'}\`;
+};
+
+const getUsageUnitOptions = (ingredient) => {
+    const unit = normalizeUnit(ingredient?.defaultUsageUnit || ingredient?.unit || '');
+    if (unit === 'g') return ['g', 'kg'];
+    if (unit === 'ml') return ['ml', 'cc', 'cl', 'l'];
+    return [unit || '個'];
+};
+
+const normalizeIngredientCandidate = (item) => {
+    const basePrice = toFiniteNumber(item?.price);
+    const packetSize = toFiniteNumber(item?.size);
+    const packetUnit = normalizeUnit(item?.unit || '');
+    const defaultUsageUnit = getDefaultUsageUnit(packetUnit);
+    const unitCostTaxExcluded = Number.isFinite(basePrice) && Number.isFinite(packetSize) && packetSize > 0
+        ? normalizedCostPer1000(basePrice, packetSize, packetUnit)
+        : basePrice;
+
+    return {
+        name: String(item?.name || '').trim(),
+        source: item?.source || '',
+        displaySource: item?.displaySource || '',
+        price: Number.isFinite(basePrice) ? basePrice : null,
+        packetSize: Number.isFinite(packetSize) ? packetSize : null,
+        packetUnit,
+        unit: defaultUsageUnit,
+        defaultUsageUnit,
+        unitCostTaxExcluded: Number.isFinite(unitCostTaxExcluded) ? Math.round(unitCostTaxExcluded * 100) / 100 : null,
+        itemCategory: item?.itemCategory || item?.item_category || null,
+    };
+};
+
+const normalizeSavedIngredient = (item) => {
+    const normalized = normalizeIngredientCandidate({
+        name: item?.name,
+        source: item?.source,
+        displaySource: item?.displaySource,
+        price: item?.price,
+        size: item?.packetSize,
+        unit: item?.packetUnit || item?.unit,
+        itemCategory: item?.itemCategory,
+    });
+    const savedUnitCost = toFiniteNumber(item?.unitCostTaxExcluded);
+    return {
+        ...normalized,
+        unit: item?.unit || normalized.unit,
+        defaultUsageUnit: item?.defaultUsageUnit || normalized.defaultUsageUnit,
+        unitCostTaxExcluded: Number.isFinite(savedUnitCost) ? savedUnitCost : normalized.unitCostTaxExcluded,
+    };
+};
+
 export const RecipeCompositeCostCalculator = ({
     currentRecipe,
     currentIngredients,
@@ -79,6 +150,10 @@ export const RecipeCompositeCostCalculator = ({
     const [currentUsageAmount, setCurrentUsageAmount] = React.useState('');
     const [salesPrice, setSalesPrice] = React.useState('');
     const [salesCount, setSalesCount] = React.useState(() => getDefaultSalesCount(currentRecipe));
+    const [recipeSearchQuery, setRecipeSearchQuery] = React.useState('');
+    const [ingredientSearchQuery, setIngredientSearchQuery] = React.useState('');
+    const [ingredientResults, setIngredientResults] = React.useState([]);
+    const [loadingIngredients, setLoadingIngredients] = React.useState(false);
     const queuedRecipeHandledRef = React.useRef('');
 
     const currentMetrics = React.useMemo(() => {
@@ -107,8 +182,11 @@ export const RecipeCompositeCostCalculator = ({
             ? initialState.rows
                 .map((row) => ({
                     id: String(row?.id || createRowId()),
+                    itemType: row?.itemType === 'ingredient' || row?.ingredient ? 'ingredient' : 'recipe',
                     recipeId: String(row?.recipeId || ''),
+                    ingredient: row?.ingredient ? normalizeSavedIngredient(row.ingredient) : null,
                     usageAmount: row?.usageAmount == null ? '' : String(row.usageAmount),
+                    usageUnit: row?.usageUnit == null ? '' : String(row.usageUnit),
                 }))
             : [];
         setCurrentUsageAmount(
@@ -121,7 +199,15 @@ export const RecipeCompositeCostCalculator = ({
                 ? getDefaultSalesCount(currentRecipe)
                 : String(initialState.salesCount)
         );
-    }, [currentMetrics.recipeId, currentRecipe, initialStateKey]);
+    }, [
+        currentMetrics.recipeId,
+        currentRecipe,
+        initialStateKey,
+        initialState?.currentUsageAmount,
+        initialState?.rows,
+        initialState?.salesCount,
+        initialState?.salesPrice,
+    ]);
 
     React.useEffect(() => {
         let cancelled = false;
@@ -158,6 +244,7 @@ export const RecipeCompositeCostCalculator = ({
         const recipeIdsToLoad = Array.from(
             new Set(
                 rows
+                    .filter((row) => (row?.itemType || 'recipe') === 'recipe')
                     .map((row) => String(row?.recipeId || '').trim())
                     .filter((id) => id && !recipeDetails[id])
             )
@@ -211,6 +298,34 @@ export const RecipeCompositeCostCalculator = ({
         };
     }, [currentRecipe?.id]);
 
+    React.useEffect(() => {
+        let cancelled = false;
+        const query = String(ingredientSearchQuery || '').trim();
+        if (!query) {
+            setIngredientResults([]);
+            setLoadingIngredients(false);
+            return undefined;
+        }
+
+        setLoadingIngredients(true);
+        const timer = window.setTimeout(async () => {
+            try {
+                const results = await ingredientSearchService.search(query);
+                if (cancelled) return;
+                setIngredientResults(Array.isArray(results) ? results.slice(0, 8) : []);
+            } catch {
+                if (!cancelled) setIngredientResults([]);
+            } finally {
+                if (!cancelled) setLoadingIngredients(false);
+            }
+        }, 220);
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
+    }, [ingredientSearchQuery]);
+
     const getMetricsByRecipe = React.useCallback((recipeObj) => {
         if (!recipeObj) return null;
         const ingredients = getRecipeIngredients(recipeObj);
@@ -228,6 +343,28 @@ export const RecipeCompositeCostCalculator = ({
             ...stats,
         };
     }, [overrideMapsByRecipe]);
+
+    const filteredRecipeSearchResults = React.useMemo(() => {
+        const query = String(recipeSearchQuery || '').trim().toLowerCase();
+        const candidates = candidateRecipes.filter((r) => String(r.id) !== String(currentRecipe?.id || ''));
+        if (!query) return candidates.slice(0, 6);
+        return candidates
+            .filter((recipe) => {
+                const haystack = [
+                    recipe?.title,
+                    recipe?.category,
+                    recipe?.course,
+                    recipe?.storeName,
+                    recipe?.store_name,
+                    recipe?.description,
+                ]
+                    .filter(Boolean)
+                    .join(' ')
+                    .toLowerCase();
+                return haystack.includes(query);
+            })
+            .slice(0, 8);
+    }, [candidateRecipes, currentRecipe?.id, recipeSearchQuery]);
 
     const handleRecipeChange = async (rowId, recipeId) => {
         setRows((prev) => prev.map((row) => (
@@ -255,8 +392,10 @@ export const RecipeCompositeCostCalculator = ({
         const rowId = createRowId();
         setRows((prev) => [...prev, {
             id: rowId,
+            itemType: 'recipe',
             recipeId: normalizedId,
             usageAmount: '',
+            usageUnit: '',
         }]);
 
         if (recipeDetails[normalizedId]) return;
@@ -269,6 +408,21 @@ export const RecipeCompositeCostCalculator = ({
             // Keep row selectable; user can modify/remove even if fetch fails.
         }
     }, [currentRecipe?.id, recipeDetails]);
+
+    const appendIngredientAsRow = React.useCallback((item) => {
+        const ingredient = normalizeIngredientCandidate(item);
+        if (!ingredient.name) return;
+        setRows((prev) => [...prev, {
+            id: createRowId(),
+            itemType: 'ingredient',
+            recipeId: '',
+            ingredient,
+            usageAmount: '',
+            usageUnit: ingredient.defaultUsageUnit || ingredient.unit || 'g',
+        }]);
+        setIngredientSearchQuery('');
+        setIngredientResults([]);
+    }, []);
 
     const removeRow = (rowId) => {
         setRows((prev) => prev.filter((row) => row.id !== rowId));
@@ -294,6 +448,26 @@ export const RecipeCompositeCostCalculator = ({
 
     const otherLines = React.useMemo(() => {
         return rows.map((row) => {
+            if ((row.itemType || 'recipe') === 'ingredient') {
+                const ingredient = row.ingredient || null;
+                const use = toFiniteNumber(row.usageAmount);
+                const unit = row.usageUnit || ingredient?.defaultUsageUnit || ingredient?.unit || 'g';
+                const unitCost = toFiniteNumber(ingredient?.unitCostTaxExcluded);
+                const taxExcluded = costFromQuantityAndUnit(use, unitCost, unit);
+                const taxRate = getIngredientTaxRate(ingredient);
+                const lineCost = Number.isFinite(taxExcluded) ? taxExcluded * taxRate : NaN;
+                return {
+                    row,
+                    itemType: 'ingredient',
+                    ingredient,
+                    metrics: null,
+                    batch: NaN,
+                    use,
+                    unitCost,
+                    lineCost,
+                };
+            }
+
             const detail = recipeDetails[row.recipeId];
             const metrics = detail ? getMetricsByRecipe(detail) : null;
             const batch = toFiniteNumber(metrics?.defaultBatchAmount);
@@ -356,8 +530,22 @@ export const RecipeCompositeCostCalculator = ({
         baseRecipeId: currentMetrics.recipeId,
         currentUsageAmount,
         rows: rows.map((row) => ({
+            itemType: row.itemType || 'recipe',
             recipeId: String(row.recipeId || ''),
             usageAmount: row.usageAmount == null ? '' : String(row.usageAmount),
+            usageUnit: row.usageUnit == null ? '' : String(row.usageUnit),
+            ingredient: row.ingredient ? {
+                name: row.ingredient.name,
+                source: row.ingredient.source,
+                displaySource: row.ingredient.displaySource,
+                price: row.ingredient.price,
+                packetSize: row.ingredient.packetSize,
+                packetUnit: row.ingredient.packetUnit,
+                unit: row.ingredient.unit,
+                defaultUsageUnit: row.ingredient.defaultUsageUnit,
+                unitCostTaxExcluded: row.ingredient.unitCostTaxExcluded,
+                itemCategory: row.ingredient.itemCategory,
+            } : null,
         })),
         salesPrice,
         salesCount,
@@ -411,6 +599,24 @@ export const RecipeCompositeCostCalculator = ({
         return \`\${n.toLocaleString(undefined, { maximumFractionDigits: 1 })}\${safeUnit}\`;
     };
 
+    const formatIngredientUnitCost = (ingredient) => {
+        const unitCost = toFiniteNumber(ingredient?.unitCostTaxExcluded);
+        if (!Number.isFinite(unitCost)) return '単価未設定';
+        const taxIncluded = unitCost * getIngredientTaxRate(ingredient);
+        return \`\${formatMoney(taxIncluded)} / \${getUnitCostBasisLabel(ingredient)}\`;
+    };
+
+    const formatIngredientPack = (ingredient) => {
+        const price = toFiniteNumber(ingredient?.price);
+        const size = toFiniteNumber(ingredient?.packetSize);
+        const unit = ingredient?.packetUnit || ingredient?.unit || '';
+        if (Number.isFinite(price) && Number.isFinite(size) && size > 0) {
+            return \`仕入: \${formatMoney(price)} / \${size.toLocaleString(undefined, { maximumFractionDigits: 2 })}\${unit}\`;
+        }
+        if (Number.isFinite(price)) return \`仕入: \${formatMoney(price)}\`;
+        return '単価情報なし';
+    };
+
     return (
         <div className="screen-only no-print composite-cost">
             {showHeader && (
@@ -422,10 +628,80 @@ export const RecipeCompositeCostCalculator = ({
                 </>
             )}
 
+            <div className="composite-cost__add-panel">
+                <div className="composite-cost__add-box">
+                    <label htmlFor="composite-recipe-search">レシピ検索</label>
+                    <input
+                        id="composite-recipe-search"
+                        className="composite-cost__input"
+                        type="search"
+                        value={recipeSearchQuery}
+                        onChange={(e) => setRecipeSearchQuery(e.target.value)}
+                        placeholder={loadingCandidates ? 'レシピ一覧を読み込み中...' : '例: グリッシーニ'}
+                        autoComplete="off"
+                    />
+                    {recipeSearchQuery && (
+                        <div className="composite-cost__quick-results">
+                            {filteredRecipeSearchResults.length === 0 ? (
+                                <span className="composite-cost__quick-empty">該当するレシピがありません</span>
+                            ) : filteredRecipeSearchResults.map((recipe) => (
+                                <button
+                                    key={recipe.id}
+                                    type="button"
+                                    className="composite-cost__quick-result"
+                                    onClick={() => {
+                                        appendRecipeAsRow(recipe.id);
+                                        setRecipeSearchQuery('');
+                                    }}
+                                >
+                                    <strong>{recipe.title}</strong>
+                                    <span>{[recipe.category, recipe.course, recipe.storeName || recipe.store_name].filter(Boolean).join(' / ') || 'レシピ'}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <div className="composite-cost__add-box">
+                    <label htmlFor="composite-ingredient-search">材料検索</label>
+                    <input
+                        id="composite-ingredient-search"
+                        className="composite-cost__input"
+                        type="search"
+                        value={ingredientSearchQuery}
+                        onChange={(e) => setIngredientSearchQuery(e.target.value)}
+                        placeholder="例: 生ハム"
+                        autoComplete="off"
+                    />
+                    {ingredientSearchQuery && (
+                        <div className="composite-cost__quick-results">
+                            {loadingIngredients ? (
+                                <span className="composite-cost__quick-empty">材料を検索中...</span>
+                            ) : ingredientResults.length === 0 ? (
+                                <span className="composite-cost__quick-empty">該当する材料がありません</span>
+                            ) : ingredientResults.map((item) => {
+                                const ingredient = normalizeIngredientCandidate(item);
+                                return (
+                                    <button
+                                        key={\`\${item.source}-\${item.name}-\${item.unit}-\${item.size}\`}
+                                        type="button"
+                                        className="composite-cost__quick-result"
+                                        onClick={() => appendIngredientAsRow(item)}
+                                    >
+                                        <strong>{item.name}</strong>
+                                        <span>{item.displaySource || '材料'} / {formatIngredientUnitCost(ingredient)} / {formatIngredientPack(ingredient)}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
+
             <div className="composite-cost__grid">
                 <div className="composite-cost__head-row">
                     <strong>レシピ</strong>
-                    <strong>総出来上がり量（固定）</strong>
+                    <strong>総量 / 単価基準</strong>
                     <strong>使用量</strong>
                     <strong>使用原価</strong>
                     <span className="composite-cost__remove-spacer" aria-hidden="true" />
@@ -472,6 +748,42 @@ export const RecipeCompositeCostCalculator = ({
 
                 {rows.map((row) => {
                     const line = otherLines.find((x) => x.row.id === row.id);
+                    if ((row.itemType || 'recipe') === 'ingredient') {
+                        const ingredient = row.ingredient || {};
+                        const unitOptions = getUsageUnitOptions(ingredient);
+                        return (
+                            <div key={row.id} className="composite-cost__row composite-cost__row--with-remove">
+                                <div className="composite-cost__ingredient-name">
+                                    <strong>{ingredient.name || '材料'}</strong>
+                                    <span>{ingredient.displaySource || '材料'} / {formatIngredientPack(ingredient)}</span>
+                                </div>
+                                <div className="composite-cost__fixed-batch">{formatIngredientUnitCost(ingredient)}</div>
+                                <div className="composite-cost__usage-group">
+                                    <input
+                                        className="composite-cost__input"
+                                        type="number"
+                                        min="0"
+                                        step="0.1"
+                                        value={row.usageAmount}
+                                        onChange={(e) => updateRowField(row.id, 'usageAmount', e.target.value)}
+                                        placeholder="例: 10"
+                                    />
+                                    <select
+                                        className="composite-cost__input composite-cost__unit-select"
+                                        value={row.usageUnit || ingredient.defaultUsageUnit || ingredient.unit || unitOptions[0]}
+                                        onChange={(e) => updateRowField(row.id, 'usageUnit', e.target.value)}
+                                    >
+                                        {unitOptions.map((unit) => (
+                                            <option key={unit} value={unit}>{unit}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="composite-cost__line-total">{formatMoney(line?.lineCost)}</div>
+                                <Button type="button" variant="ghost" onClick={() => removeRow(row.id)} className="composite-cost__remove-btn">✕</Button>
+                            </div>
+                        );
+                    }
+
                     return (
                         <div key={row.id} className="composite-cost__row composite-cost__row--with-remove">
                             <select

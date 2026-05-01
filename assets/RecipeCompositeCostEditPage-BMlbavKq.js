@@ -35,8 +35,11 @@ export const RecipeCompositeCostEditPage = ({ compositeId, onBack }) => {
                     salesPrice: detail.sales_price == null ? '' : String(detail.sales_price),
                     salesCount: detail.sales_count == null ? '' : String(detail.sales_count),
                     rows: (detail.items || []).map((item) => ({
-                        recipeId: String(item.recipe_id),
+                        itemType: item.item_type === 'ingredient' ? 'ingredient' : 'recipe',
+                        recipeId: item.recipe_id == null ? '' : String(item.recipe_id),
+                        ingredient: item.ingredient_payload || null,
                         usageAmount: item.usage_amount == null ? '' : String(item.usage_amount),
+                        usageUnit: item.ingredient_payload?.unit || '',
                     })),
                 });
             } catch (e) {
