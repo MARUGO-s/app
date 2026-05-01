@@ -140,7 +140,7 @@ export const UserManagement = ({ onBack }) => {
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const isSuperAdmin = (u) => u?.email === 'pingus0428@gmail.com';
+    const isSuperAdmin = (_u) => false;
 
     const loadUsers = React.useCallback(async () => {
         try {

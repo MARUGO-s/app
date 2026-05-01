@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts";
 
 type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -150,6 +151,22 @@ function buildRecipeExtractionPrompt(text: string, url?: string, siteLanguage?: 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
+  }
+
+  const token = getAuthToken(req);
+  if (!token) {
+    return new Response(JSON.stringify({ ok: false, error: "認証が必要です。再ログインしてください。" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  try {
+    await verifySupabaseJWT(token);
+  } catch {
+    return new Response(JSON.stringify({ ok: false, error: "トークンが無効または期限切れです。再ログインしてください。" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   try {

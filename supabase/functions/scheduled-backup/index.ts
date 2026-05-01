@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { getAuthToken, verifySupabaseJWT } from '../_shared/jwt.ts'
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -9,6 +10,24 @@ Deno.serve(async (req) => {
     // CORS preflight
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
+    }
+
+    // JWT検証
+    const token = getAuthToken(req)
+    if (!token) {
+        return new Response(JSON.stringify({ ok: false, error: '認証が必要です。再ログインしてください。' }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+    }
+    let jwtPayload: Record<string, unknown>
+    try {
+        jwtPayload = await verifySupabaseJWT(token) as Record<string, unknown>
+    } catch {
+        return new Response(JSON.stringify({ ok: false, error: 'トークンが無効または期限切れです。再ログインしてください。' }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
     }
 
     try {
@@ -24,6 +43,26 @@ Deno.serve(async (req) => {
             auth: { autoRefreshToken: false, persistSession: false }
         })
 
+        // 管理者ロールチェック
+        const callerId = String(jwtPayload.sub || '')
+        if (!callerId) {
+            return new Response(JSON.stringify({ ok: false, error: '認証情報が不正です。' }), {
+                status: 403,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            })
+        }
+        const { data: callerProfile, error: profileErr } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', callerId)
+            .single()
+        if (profileErr || callerProfile?.role !== 'admin') {
+            return new Response(JSON.stringify({ ok: false, error: '管理者権限が必要です。' }), {
+                status: 403,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            })
+        }
+
         // リクエストボディ: { user_id?: string } が指定されれば特定ユーザーのみ、なければ全ユーザー
         let targetUserId: string | null = null
         if (req.method === 'POST') {
@@ -37,7 +76,7 @@ Deno.serve(async (req) => {
 
         console.log('[scheduled-backup] targetUserId:', targetUserId)
 
-        // バックアップ対象ユーザーを取得 (id だけではなく display_id も取得する)
+        // バックアップ対象ユーザーを取得
         let users: { id: string; display_id: string | null }[] = []
 
         if (targetUserId) {
@@ -52,7 +91,6 @@ Deno.serve(async (req) => {
                 users = [{ id: targetUserId, display_id: null }]
             }
         } else {
-            // 全プロフィールのユーザーIDとdisplayIdを取得
             const { data: profiles, error: profilesError } = await supabase
                 .from('profiles')
                 .select('id, display_id')
@@ -72,68 +110,56 @@ Deno.serve(async (req) => {
             )
         }
 
-        // 全レシピを1回だけ取得（service_roleなのでRLSバイパス）
-        const { data: allRecipes, error: recipesError } = await supabase
-            .from('recipes')
-            .select('*')
-            .order('created_at', { ascending: false })
-
-        if (recipesError) {
-            console.error('[scheduled-backup] recipes fetch error:', recipesError)
-            throw recipesError
-        }
-        console.log('[scheduled-backup] total recipes fetched:', allRecipes?.length ?? 0)
-
-        // recipe_sources も一括取得
-        const allRecipeIds = (allRecipes || []).map((r: { id: string }) => r.id)
-        let globalSourceMap: Record<string, string[]> = {}
-
-        if (allRecipeIds.length > 0) {
-            const { data: sources, error: srcError } = await supabase
-                .from('recipe_sources')
-                .select('recipe_id, url')
-                .in('recipe_id', allRecipeIds)
-
-            if (srcError) {
-                console.warn('[scheduled-backup] recipe_sources fetch warning:', srcError)
-            } else if (sources) {
-                for (const s of sources) {
-                    if (!globalSourceMap[s.recipe_id]) globalSourceMap[s.recipe_id] = []
-                    globalSourceMap[s.recipe_id].push(s.url)
-                }
-            }
-        }
-
-        // 各ユーザーのレシピをフィルタしてバックアップ
+        // ユーザーごとにレシピをDBでフィルタして取得する。
+        // 以前は全レシピを一括取得してメモリ上でフィルタしていたが、
+        // レシピ数が多い場合にEdge Functionのメモリ上限を超える恐れがあるため、
+        // ユーザーごとのクエリに変更。
         const results: { userId: string; success: boolean; recipeCount: number; error?: string }[] = []
         const label = targetUserId ? '手動バックアップ' : '自動バックアップ（定期）'
 
         for (const user of users) {
             try {
-                // このユーザーが owner のレシピをフィルタ
-                // フロントエンドの実装に合わせて UUID と displayId の両方をチェックする
-                const ownerTagId = `owner:${user.id}`
-                const ownerTagDisplay = user.display_id ? `owner:${user.display_id}` : null
+                // owner タグのパターン（UUID と displayId の両方）
+                const ownerTags: string[] = [`owner:${user.id}`]
+                if (user.display_id) ownerTags.push(`owner:${user.display_id}`)
 
-                const userRecipes = (allRecipes || []).filter((r: { tags: unknown }) => {
-                    let tags: string[] = []
-                    if (Array.isArray(r.tags)) {
-                        tags = r.tags.map(String)
-                    } else if (typeof r.tags === 'string') {
-                        // Postgres text[] 形式 "{tag1,tag2}" のパース
-                        const raw = String(r.tags).trim()
-                        if (raw.startsWith('{') && raw.endsWith('}')) {
-                            tags = raw.slice(1, -1).split(',').map(t => t.trim().replace(/^"(.*)"$/, '$1'))
+                // DBレベルでこのユーザーのレシピだけを取得（配列の重複チェック）
+                const { data: userRecipes, error: recipesError } = await supabase
+                    .from('recipes')
+                    .select('*')
+                    .overlaps('tags', ownerTags)
+                    .order('created_at', { ascending: false })
+
+                if (recipesError) {
+                    console.error(`[scheduled-backup] recipes fetch error for user ${user.id}:`, recipesError)
+                    throw recipesError
+                }
+
+                console.log(`[scheduled-backup] user ${user.id} (${user.display_id}): ${userRecipes?.length ?? 0} recipes`)
+
+                // このユーザーのレシピに紐づく recipe_sources を取得
+                const recipeIds = (userRecipes || []).map((r: { id: string }) => r.id)
+                let sourceMap: Record<string, string[]> = {}
+
+                if (recipeIds.length > 0) {
+                    const { data: sources, error: srcError } = await supabase
+                        .from('recipe_sources')
+                        .select('recipe_id, url')
+                        .in('recipe_id', recipeIds)
+
+                    if (srcError) {
+                        console.warn(`[scheduled-backup] recipe_sources fetch warning for user ${user.id}:`, srcError)
+                    } else if (sources) {
+                        for (const s of sources) {
+                            if (!sourceMap[s.recipe_id]) sourceMap[s.recipe_id] = []
+                            sourceMap[s.recipe_id].push(s.url)
                         }
                     }
-                    return tags.includes(ownerTagId) || (ownerTagDisplay && tags.includes(ownerTagDisplay))
-                })
+                }
 
-                console.log(`[scheduled-backup] user ${user.id} (${user.display_id}): ${userRecipes.length} recipes`)
-
-                const backupData = userRecipes.map((r: { id: string }) => ({
+                const backupData = (userRecipes || []).map((r: { id: string }) => ({
                     ...r,
-                    _sources: globalSourceMap[r.id] || [],
+                    _sources: sourceMap[r.id] || [],
                 }))
 
                 // バックアップ保存（RPC呼び出し）

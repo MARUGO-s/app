@@ -1,22 +1,19 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Helper to get env vars in both Vite (import.meta.env) and Node (process.env)
-const getEnv = (key) => {
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
-        return import.meta.env[key];
-    }
-    const procEnv = globalThis?.process?.env;
-    if (procEnv && procEnv[key]) return procEnv[key];
-    return null;
-};
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-// Use environment variables if available
-const supabaseUrl = getEnv('VITE_SUPABASE_URL') || 'https://hjhkccbktkscwtgzxjfq.supabase.co';
-const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY') || 'sb_publishable_TY46n8sbGaESoL7RAzoYbg_i-d8Cwqr';
+if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error(
+        'Supabase環境変数が設定されていません。' +
+        '.env.local に VITE_SUPABASE_URL と VITE_SUPABASE_ANON_KEY を設定してください。' +
+        '（.env.example を参照）'
+    )
+}
 
 // Export URL for diagnostics in UI (safe to expose).
-export const SUPABASE_URL = supabaseUrl;
+export const SUPABASE_URL = supabaseUrl
 // Publishable anon key (safe to expose in the client).
-export const SUPABASE_ANON_KEY = supabaseAnonKey;
+export const SUPABASE_ANON_KEY = supabaseAnonKey
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
