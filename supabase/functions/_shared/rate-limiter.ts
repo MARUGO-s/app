@@ -29,17 +29,25 @@ export class RateLimiter {
     private userId: string
     private endpoint: string
     private config: RateLimitConfig
+    private strict: boolean
 
+    /**
+     * @param strict - true にすると RPC 失敗時に 503 相当のエラーをスロー。
+     *                 false（デフォルト）はサービス継続優先でスキップ。
+     *                 API キー取得など悪用リスクが高いエンドポイントでは true を推奨。
+     */
     constructor(
         supabase: any,
         userId: string,
         endpoint: string,
-        config: RateLimitConfig = { maxRequests: 10, windowMinutes: 60 }
+        config: RateLimitConfig = { maxRequests: 10, windowMinutes: 60 },
+        strict = false
     ) {
         this.supabase = supabase
         this.userId = userId
         this.endpoint = endpoint
         this.config = config
+        this.strict = strict
     }
 
     /**
@@ -60,7 +68,11 @@ export class RateLimiter {
 
         if (error) {
             console.error('レート制限チェックエラー:', error)
-            // エラー時はレート制限をスキップ（サービス継続優先）
+            if (this.strict) {
+                // strict モード: DB 障害時も無制限アクセスを許可しない
+                throw new Error('レートリミットサービスが一時的に利用できません。しばらく待ってから再試行してください。')
+            }
+            // 非 strict モード: サービス継続優先でスキップ
             return
         }
 
