@@ -253,6 +253,14 @@ export const recipeService = {
 
     async _getCurrentUserId() {
         try {
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            if (!sessionError && sessionData?.session?.user?.id) {
+                return sessionData.session.user.id;
+            }
+        } catch {
+            // ignore — fall through to getUser()
+        }
+        try {
             const { data, error } = await withTimeout(
                 supabase.auth.getUser(),
                 6000,
@@ -1037,8 +1045,8 @@ export const recipeService = {
         return true
     },
 
-    async fetchRecentRecipes() {
-        const userId = await this._getCurrentUserId();
+    async fetchRecentRecipes(explicitUserId = null) {
+        const userId = explicitUserId || (await this._getCurrentUserId());
         if (!userId) return [];
 
         const { data, error } = await withTimeout(
@@ -1058,8 +1066,8 @@ export const recipeService = {
             .filter(Boolean);
     },
 
-    async addToHistory(recipeId) {
-        const userId = await this._getCurrentUserId();
+    async addToHistory(recipeId, explicitUserId = null) {
+        const userId = explicitUserId || (await this._getCurrentUserId());
         if (!userId || !recipeId) return false;
 
         const { error } = await withTimeout(

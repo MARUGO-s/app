@@ -89,7 +89,14 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }
             {!loading && !error && rows.length > 0 && (
                 <div className="composite-cost-page__saved-list">
                     {rows.map((row) => (
-                        <Card key={row.id} className="composite-cost-page__saved-item">
+                        <Card
+                            key={row.id}
+                            className="composite-cost-page__saved-item composite-cost-page__saved-item--clickable"
+                            onClick={() => onOpenEditor?.(row.id)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onOpenEditor?.(row.id); }}
+                        >
                             <div className="composite-cost-page__saved-main">
                                 <strong>{row.dish_name}</strong>
                                 <div className="composite-cost-page__saved-meta">
@@ -104,13 +111,13 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }
                                 </div>
                             </div>
                             <div className="composite-cost-page__saved-actions">
-                                <Button type="button" variant="secondary" onClick={() => onOpenEditor?.(row.id)}>
+                                <Button type="button" variant="secondary" onClick={(e) => { e.stopPropagation(); onOpenEditor?.(row.id); }}>
                                     編集を開く
                                 </Button>
                                 <Button
                                     type="button"
                                     variant="danger"
-                                    onClick={() => handleDelete(row.id)}
+                                    onClick={(e) => { e.stopPropagation(); handleDelete(row.id); }}
                                     disabled={deletingId === row.id}
                                 >
                                     {deletingId === row.id ? '削除中...' : '削除'}

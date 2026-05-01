@@ -425,7 +425,7 @@ function AppContent() {
 
   const loadRecentHistory = async () => {
     try {
-      const ids = await recipeService.fetchRecentRecipes();
+      const ids = await recipeService.fetchRecentRecipes(user?.id);
       setRecentIds(ids || []);
     } catch (error) {
       console.error("Failed to load history:", error);
@@ -440,7 +440,7 @@ function AppContent() {
 
     // Server update
     try {
-      await recipeService.addToHistory(id);
+      await recipeService.addToHistory(id, user?.id);
     } catch (e) {
       console.error("Failed to sync history", e);
     }

@@ -1112,6 +1112,63 @@ Deno.serve(async (req) => {
     }
 
     // ---------------------------------------------------------
+    // Strategy 1c: Squarespace (sqs-html-content) — e.g. hernandieguez.com
+    // Squarespace blog posts put all content inside .sqs-html-content,
+    // using <p><strong>Ingredients:</strong></p> + <ul data-rte-list>
+    // and each <li> wraps its text in a nested <p>.
+    // ---------------------------------------------------------
+    if (!recipeData && $('.sqs-html-content').length > 0) {
+      console.log("Detecting Squarespace sqs-html-content...");
+
+      const $content = $('.sqs-html-content').first();
+
+      const titleRaw =
+        $('meta[property="og:title"]').attr('content')?.trim() ||
+        $('h1').first().text().trim() || '';
+      // Remove site name after em-dash or pipe (e.g. "Recipe — SiteName")
+      const title = titleRaw.replace(/\s*[—–|]\s*.*$/, '').trim();
+      const description =
+        $('meta[name="description"]').attr('content') ||
+        $('meta[property="og:description"]').attr('content') || '';
+      const image = $('meta[property="og:image"]').attr('content') || '';
+
+      const INGREDIENT_LABELS = ['ingredients', 'ingredient'];
+      const STEP_LABELS = ['preparation', 'instructions', 'instruction', 'method', 'directions', 'steps', 'how to make'];
+
+      const ingredients: any[] = [];
+      const steps: string[] = [];
+
+      // Find <p> labels and grab the immediately following list
+      $content.find('p').each((_, el) => {
+        const labelText = $(el).text().trim().toLowerCase().replace(/:$/, '');
+        if (INGREDIENT_LABELS.includes(labelText)) {
+          $(el).nextAll('ul, ol').first().find('> li').each((_, li) => {
+            const t = $(li).text().trim();
+            if (t) ingredients.push(parseIngredient(t));
+          });
+        }
+        if (STEP_LABELS.includes(labelText)) {
+          $(el).nextAll('ul, ol').first().find('> li').each((_, li) => {
+            const t = $(li).text().trim();
+            if (t) steps.push(t);
+          });
+        }
+      });
+
+      if (title && (ingredients.length > 0 || steps.length > 0)) {
+        console.log(`Squarespace parse: ingredients=${ingredients.length}, steps=${steps.length}`);
+        recipeData = {
+          name: title,
+          description,
+          image,
+          recipeIngredient: ingredients,
+          recipeInstructions: steps,
+          recipeYield: '',
+        };
+      }
+    }
+
+    // ---------------------------------------------------------
     // Strategy 2: Universal HTML Parsing (Fallback)
     // ---------------------------------------------------------
     if (!recipeData) {
@@ -1315,29 +1372,76 @@ Deno.serve(async (req) => {
         .replace(/[．]/g, '.');
 
       const parseNum = (n: string) => {
-        if (n.includes('/')) {
-          const [a, b] = n.split('/');
+        const normalized = n.replace(',', '.');
+        if (normalized.includes('/')) {
+          const [a, b] = normalized.split('/');
           return parseFloat(a) / parseFloat(b);
         }
-        return parseFloat(n);
+        return parseFloat(normalized);
       };
 
-      // 大さじ (Tbsp) -> 15cc
+      // Normalize ranges: "4-5" -> "4" (take lower bound)
+      // Applied before unit conversions so "2-3 tablespoons" -> "2 tablespoons"
+      s = s.replace(/(\d+(?:[.,]\d+)?)\s*[-–]\s*\d+(?:[.,]\d+)?/g, '$1');
+
+      // 大さじ (Tbsp) -> 15ml
       s = s.replace(/大さじ\s*(\d+(?:\.\d+)?(?:\/\d+)?)/g, (_, n) => {
         const val = parseNum(n);
-        return isNaN(val) ? _ : `${val * 15}cc`;
+        return isNaN(val) ? _ : `${val * 15}ml`;
       });
-      // 小さじ (Tsp) -> 5cc
+      // 小さじ (Tsp) -> 5ml
       s = s.replace(/小さじ\s*(\d+(?:\.\d+)?(?:\/\d+)?)/g, (_, n) => {
         const val = parseNum(n);
-        return isNaN(val) ? _ : `${val * 5}cc`;
+        return isNaN(val) ? _ : `${val * 5}ml`;
       });
-      // カップ (Cup) -> 200cc
-      // Usually "1カップ" or "1/2カップ"
+      // カップ (Cup) -> 200ml
       s = s.replace(/(\d+(?:\.\d+)?(?:\/\d+)?)\s*カップ/g, (_, n) => {
         const val = parseNum(n);
-        return isNaN(val) ? _ : `${val * 200}cc`;
+        return isNaN(val) ? _ : `${val * 200}ml`;
       });
+
+      // English: tablespoon(s) -> 15ml, teaspoon(s) -> 5ml, cup(s) -> 240ml
+      s = s.replace(/(\d+(?:[.,]\d+)?(?:\/\d+)?)\s*tablespoons?\b/gi, (_, n) => {
+        const val = parseNum(n);
+        return isNaN(val) ? _ : `${Math.round(val * 15 * 10) / 10}ml`;
+      });
+      s = s.replace(/(\d+(?:[.,]\d+)?(?:\/\d+)?)\s*teaspoons?\b/gi, (_, n) => {
+        const val = parseNum(n);
+        return isNaN(val) ? _ : `${Math.round(val * 5 * 10) / 10}ml`;
+      });
+      s = s.replace(/(\d+(?:[.,]\d+)?(?:\/\d+)?)\s*cups?\b/gi, (_, n) => {
+        const val = parseNum(n);
+        return isNaN(val) ? _ : `${Math.round(val * 240 * 10) / 10}ml`;
+      });
+      // tbsp / tsp abbreviations
+      s = s.replace(/(\d+(?:[.,]\d+)?(?:\/\d+)?)\s*tbsp\.?\b/gi, (_, n) => {
+        const val = parseNum(n);
+        return isNaN(val) ? _ : `${Math.round(val * 15 * 10) / 10}ml`;
+      });
+      s = s.replace(/(\d+(?:[.,]\d+)?(?:\/\d+)?)\s*tsp\.?\b/gi, (_, n) => {
+        const val = parseNum(n);
+        return isNaN(val) ? _ : `${Math.round(val * 5 * 10) / 10}ml`;
+      });
+
+      // "N [type] leaf/leaves" -> "[type] N枚"
+      // e.g. "3 bay leaves" -> "bay 3枚", so parser sees eastern-style "name qty unit"
+      s = s.replace(/(\d+(?:[.,]\d+)?)\s+([\w]+(?:\s+[\w]+)?)\s+(?:leaf|leaves)\b/gi,
+        (_, num, type) => `${type} ${num}枚`);
+
+      // English count units -> Japanese equivalents
+      // Note: irregular plurals need special patterns
+      s = s.replace(/\bbunch(?:es)?\b/gi, '束');
+      s = s.replace(/\bcloves?\b/gi, '片');
+      s = s.replace(/\bsprigs?\b/gi, '枝');
+      s = s.replace(/\bstalks?\b/gi, '本');
+      s = s.replace(/\bheads?\b/gi, '個');
+      s = s.replace(/\bpieces?\b/gi, '個');
+      s = s.replace(/\bslices?\b/gi, '枚');
+      s = s.replace(/\bsheets?\b/gi, '枚');
+      s = s.replace(/\b(?:leaf|leaves)\b/gi, '枚');
+      s = s.replace(/\bhandfuls?\b/gi, '掴み');
+      s = s.replace(/\bpinch(?:es)?\b/gi, 'ひとつまみ');
+
       return s;
     };
 
@@ -1347,7 +1451,12 @@ Deno.serve(async (req) => {
     function parseIngredient(text: string) {
       const original = text;
       text = text.trim().replace(/[\s\u00A0\u3000]+/g, ' ');
-      console.log(`[ParseIng] In: "${original}" -> Clean: "${text}"`);
+
+      // Handle "to taste" / "to season" patterns: "Salt to taste" -> name="Salt", qty="\u9069\u91CF"
+      const toTasteMatch = text.match(/^(.+?)\s+to\s+(?:taste|season)\s*$/i);
+      if (toTasteMatch) {
+        return { name: toTasteMatch[1].trim(), quantity: '\u9069\u91CF', unit: '' };
+      }
 
       // Apply unit normalization first
       text = normalizeUnit(text);
@@ -1387,19 +1496,35 @@ Deno.serve(async (req) => {
 
       // B. Regex Patterns
       // Supports Unicode Fractions: ½ ⅓ ⅔ ¼ ¾ ⅕ ⅖ ⅗ ⅘ ⅙ ⅚ ⅛ ⅜ ⅝ ⅞
+      // Ranges like "4-5" are already normalized to "4" by normalizeUnit above
       const numberPattern = `[\\d\\s\\.,/\\u00BC-\\u00BE\\u2150-\\u215E]+`;
 
-      // Multilingual Common Units
+      // Multilingual Common Units (full words first for longest-match priority)
       const units = [
-        // English
-        'g', 'kg', 'mg', 'oz', 'lb', 'lbs', 'tsp', 'tbsp', 'cup', 'cups', 'ml', 'cl', 'l', 'liter', 'quart', 'pint', 'box', 'bag', 'slice', 'slices', 'piece', 'pieces', 'clove', 'cloves', 'pinch', 'dash', 'can', 'jar', 'package',
+        // English – full words (must come before abbreviations)
+        'tablespoons', 'tablespoon', 'teaspoons', 'teaspoon',
+        'bunches', 'bunch', 'cloves', 'clove',
+        'sprigs', 'sprig', 'stalks', 'stalk', 'leaves', 'leaf',
+        'heads', 'head', 'knob', 'handful', 'handfuls',
+        'slices', 'slice', 'pieces', 'piece', 'sheets', 'sheet',
+        'cans', 'can', 'jars', 'jar', 'bags', 'bag', 'boxes', 'box',
+        'packages', 'package', 'packets', 'packet',
+        'quarts', 'quart', 'pints', 'pint',
+        'liters', 'liter', 'litres', 'litre',
+        // English – abbreviations
+        'g', 'kg', 'mg', 'oz', 'lb', 'lbs', 'tsp', 'tbsp',
+        'cup', 'cups', 'ml', 'cl', 'l',
+        'pinch', 'dash',
         // French
-        'g', 'gr', 'kgs', 'c.à.s', 'c.à.c', 'cuillère', 'cuillères', 'verre', 'verres', 'tranche', 'tranches', 'pincée', 'brin', 'feuille', 'feuilles', 'gousse', 'gousses',
+        'gr', 'kgs', 'c\\.à\\.s', 'c\\.à\\.c', 'cuillères', 'cuillère',
+        'verres', 'verre', 'tranches', 'tranche', 'pincée',
+        'brins', 'brin', 'feuilles', 'feuille', 'gousses', 'gousse',
         // Spanish/Italian
-        'cucharada', 'cucharadita', 'taza', 'vaso', 'hoja', 'spicchi', 'bicchiere', 'fetta',
-        // Japanese (often unused in this regex flow but good for reference)
-        '個', '本', '束', '枚', '杯', 'g', 'ml', 'cc', 'cm'
-      ].join('|').replace(/\./g, '\\.'); // Escape dots
+        'cucharadas', 'cucharada', 'cucharadita', 'tazas', 'taza',
+        'vaso', 'hoja', 'spicchi', 'bicchiere', 'fetta',
+        // Japanese
+        '個', '本', '束', '枚', '杯', 'ml', 'cc', 'cm'
+      ].join('|');
 
       // Pattern 1: Quantity Starts (Western) "200g Beef" / "1/2 cup Sugar"
       // ^ (Number) (Optional Unit) (Rest)
@@ -1409,7 +1534,8 @@ Deno.serve(async (req) => {
       if (westernMatch) {
         const rawNum = westernMatch[1].trim();
         const rawUnit = (westernMatch[2] || '').trim();
-        const rawName = westernMatch[3].trim();
+        // Strip leading "of " connector (e.g. "2 tablespoons of oregano" \u2192 "oregano")
+        const rawName = westernMatch[3].trim().replace(/^of\s+/i, '');
 
         // Validate Num: must contain at least one digit or fraction
         if (/[\d\u00BC-\u00BE\u2150-\u215E]/.test(rawNum)) {
@@ -1495,21 +1621,31 @@ Deno.serve(async (req) => {
         const rawQty = ing.quantity || '';
         const existingUnit = ing.unit || '';
 
-        const normalizedQty = normalizeUnit(rawQty);
+        // Normalize unit label directly for cases where rawQty is empty
+        // e.g. unit="bunch" -> "束", unit="clove" -> "片"
+        const normalizedExistingUnit = normalizeUnit(existingUnit).trim();
+
+        // Combine quantity + unit so normalizeUnit can convert e.g. "2 tablespoons" -> "30cc"
+        // and "1 bunch" -> "1 束"
+        const combined = `${rawQty} ${existingUnit}`.trim();
+        const normalizedCombined = normalizeUnit(combined);
+
         // Simple Regex for Amount Only: "^(Number) (Unit)?$"
-        const amountOnlyRegex = /^([\d\.]+(?:\/\d+)?)\s*([a-zA-Z%]+|cc|g|ml|個|本|枚|つ|かけ|片|束)?$/;
-        const match = normalizedQty.match(amountOnlyRegex);
+        const amountOnlyRegex = /^([\d\.]+(?:\/\d+)?)\s*([^\s]+)?$/;
+        const match = normalizedCombined.match(amountOnlyRegex);
 
         if (match) {
-          parsed = { name: cleanName, quantity: match[1], unit: match[2] || existingUnit };
+          parsed = { name: cleanName, quantity: match[1], unit: match[2] || '' };
         } else {
-          const numMatch = normalizedQty.match(/^([\d\.]+)/);
+          // normalizeUnit may have returned just a number (no unit) or something complex
+          const numMatch = normalizedCombined.match(/^([\d\.]+)/);
           if (numMatch) {
             const q = numMatch[1];
-            const u = normalizedQty.substring(q.length).trim();
-            parsed = { name: cleanName, quantity: q, unit: u || existingUnit };
+            const u = normalizedCombined.substring(q.length).trim();
+            parsed = { name: cleanName, quantity: q, unit: u };
           } else {
-            parsed = { name: cleanName, quantity: '', unit: rawQty || existingUnit };
+            // Fallback: use original quantity but normalized unit label
+            parsed = { name: cleanName, quantity: rawQty, unit: normalizedExistingUnit || existingUnit };
           }
         }
       } else {
