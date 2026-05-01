@@ -19,9 +19,33 @@ const PROFILE_SELECT_FIELD_SETS = [
     'id, display_id, role, show_master_recipes, created_at, updated_at',
 ];
 
+const STORE_NAME_MAX_LENGTH = 100;
+const DISPLAY_ID_MAX_LENGTH = 50;
+const DISPLAY_ID_RE = /^[a-zA-Z0-9_-]+$/;
+
 const normalizeStoreName = (value) => {
     const normalized = String(value || '').trim();
     return normalized || null;
+};
+
+const validateStoreName = (value) => {
+    const normalized = normalizeStoreName(value);
+    if (normalized && normalized.length > STORE_NAME_MAX_LENGTH) {
+        throw new Error(\`店舗名は\${STORE_NAME_MAX_LENGTH}文字以内で入力してください。\`);
+    }
+    return normalized;
+};
+
+const validateDisplayId = (value) => {
+    const normalized = String(value || '').trim();
+    if (!normalized) throw new Error('表示IDを入力してください。');
+    if (normalized.length > DISPLAY_ID_MAX_LENGTH) {
+        throw new Error(\`表示IDは\${DISPLAY_ID_MAX_LENGTH}文字以内で入力してください。\`);
+    }
+    if (!DISPLAY_ID_RE.test(normalized)) {
+        throw new Error('表示IDは半角英数字・アンダースコア・ハイフンのみ使用できます。');
+    }
+    return normalized;
 };
 
 const isRpcSignatureOrMissingError = (error) => {
@@ -177,7 +201,7 @@ export const userService = {
     ,
 
     async adminSetProfileStoreName(profileId, storeName) {
-        const normalizedStoreName = normalizeStoreName(storeName);
+        const normalizedStoreName = validateStoreName(storeName);
         let rpcFailure = null;
         const rpcParamCandidates = [
             { target_profile_id: profileId, new_store_name: normalizedStoreName },
@@ -301,6 +325,10 @@ export const userService = {
         });
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
+        supabase.rpc('admin_write_audit_log', {
+            p_action: 'reset_password',
+            p_target_id: userId,
+        }).catch((e) => console.warn('audit log failed:', e));
         return data;
     },
 
@@ -318,6 +346,12 @@ export const userService = {
             p_role: newRole
         });
         if (error) throw error;
+        // 監査ログ（失敗しても操作自体はブロックしない）
+        supabase.rpc('admin_write_audit_log', {
+            p_action: 'set_role',
+            p_target_id: userId,
+            p_detail: { new_role: newRole },
+        }).catch((e) => console.warn('audit log failed:', e));
         return true;
     },
 
@@ -326,6 +360,10 @@ export const userService = {
             p_user_id: userId
         });
         if (error) throw error;
+        supabase.rpc('admin_write_audit_log', {
+            p_action: 'delete_user',
+            p_target_id: userId,
+        }).catch((e) => console.warn('audit log failed:', e));
         return true;
     }
 };

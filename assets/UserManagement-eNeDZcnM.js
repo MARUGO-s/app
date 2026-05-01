@@ -6,6 +6,7 @@ import { Modal } from './Modal';
 import { useAuth } from '../contexts/useAuth';
 import { formatDisplayId } from '../utils/formatUtils';
 import { STORE_LIST } from '../constants';
+import { featureFlagService } from '../services/featureFlagService';
 import './UserManagement.css';
 
 const NARROW_BREAKPOINT = 480;
@@ -99,7 +100,7 @@ const isPresenceUnavailableError = (error) => {
     );
 };
 
-export const UserManagement = ({ onBack }) => {
+export const UserManagement = ({ onBack, onMaintenanceModeChange }) => {
     const { user: currentUser, patchCurrentUserProfile } = useAuth();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -129,6 +130,8 @@ export const UserManagement = ({ onBack }) => {
     const [dailyApiLogsError, setDailyApiLogsError] = useState('');
     const [presenceMap, setPresenceMap] = useState({});
     const [isLoadingPresence, setIsLoadingPresence] = useState(false);
+    const [maintenanceMode, setMaintenanceMode] = useState(null);
+    const [isTogglingMaintenance, setIsTogglingMaintenance] = useState(false);
     const [isPresenceFeatureAvailable, setIsPresenceFeatureAvailable] = useState(true);
     const [presenceError, setPresenceError] = useState('');
     const [dailyActivityMap, setDailyActivityMap] = useState({});
@@ -140,7 +143,7 @@ export const UserManagement = ({ onBack }) => {
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const isSuperAdmin = (u) => u?.email === 'pingus0428@gmail.com';
+    const isSuperAdmin = () => false;
 
     const loadUsers = React.useCallback(async () => {
         try {
@@ -264,6 +267,35 @@ export const UserManagement = ({ onBack }) => {
         setIsNarrow(el.getBoundingClientRect().width < NARROW_BREAKPOINT);
         return () => ro.disconnect();
     }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        featureFlagService.getMaintenanceMode({ force: true })
+            .then((enabled) => {
+                if (!cancelled) setMaintenanceMode(enabled === true);
+            })
+            .catch((error) => {
+                console.warn('maintenance mode load failed:', error);
+                if (!cancelled) setMaintenanceMode(false);
+            });
+        return () => { cancelled = true; };
+    }, []);
+
+    const toggleMaintenance = async () => {
+        setIsTogglingMaintenance(true);
+        setError(null);
+        try {
+            const next = !maintenanceMode;
+            const enabled = await featureFlagService.setMaintenanceMode(next);
+            setMaintenanceMode(enabled);
+            onMaintenanceModeChange?.(enabled);
+        } catch (e) {
+            console.error('maintenance toggle failed:', e);
+            setError('メンテナンスモードの切り替えに失敗しました。権限または通信状態を確認してください。');
+        } finally {
+            setIsTogglingMaintenance(false);
+        }
+    };
 
     const admins = users.filter(u => u.role === 'admin');
     const regulars = users.filter(u => u.role !== 'admin');
@@ -652,6 +684,20 @@ export const UserManagement = ({ onBack }) => {
                 <div className="user-management__header">
                     <h2>ユーザー管理</h2>
                     <Button variant="ghost" onClick={onBack}>戻る</Button>
+                </div>
+
+                <div className="user-management__maintenance-toggle">
+                    <span className="user-management__maintenance-label">
+                        🔧 メンテナンスモード
+                    </span>
+                    <button
+                        className={\`maintenance-toggle-btn\${maintenanceMode ? ' maintenance-toggle-btn--on' : ''}\`}
+                        onClick={toggleMaintenance}
+                        disabled={isTogglingMaintenance || maintenanceMode === null}
+                        title={maintenanceMode ? 'クリックして解除' : 'クリックして有効化'}
+                    >
+                        {isTogglingMaintenance ? '...' : maintenanceMode ? 'ON（工事中）' : 'OFF'}
+                    </button>
                 </div>
 
                 <div className="user-management__daily-note">

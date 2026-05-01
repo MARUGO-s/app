@@ -30,6 +30,7 @@ import { recipeService } from './services/recipeService';
 import { formatDisplayId } from './utils/formatUtils';
 import { applyImportedRecipeType } from './utils/importRecipeType';
 import { userService } from './services/userService';
+import { featureFlagService } from './services/featureFlagService';
 import { STORE_LIST } from './constants';
 import { AuthProvider } from './contexts/AuthContext.jsx';
 import { useAuth } from './contexts/useAuth';
@@ -37,6 +38,7 @@ import { ToastProvider } from './contexts/ToastContext.jsx';
 import { useToast } from './contexts/useToast';
 import { LoginPage } from './components/LoginPage';
 import { PasswordResetPage } from './components/PasswordResetPage';
+import { MaintenancePage } from './components/MaintenancePage';
 import { Modal } from './components/Modal';
 import './App.css';
 
@@ -101,7 +103,8 @@ function AppContent() {
   const [authStuckFallback, setAuthStuckFallback] = useState(false);
   const [profilesById, setProfilesById] = useState({});
   const [profilesByDisplayId, setProfilesByDisplayId] = useState({});
-  const [isFromCache, setIsFromCache] = useState(false); // true when showing cached data
+  const [isFromCache, setIsFromCache] = useState(false);
+  const [maintenance, setMaintenance] = useState(null); // null=loading, true=on, false=off
   const recipeLoadRequestRef = useRef(0);
 
   // Derived State from URL
@@ -270,6 +273,22 @@ function AppContent() {
     const t = setTimeout(() => setAuthStuckFallback(true), 3500);
     return () => clearTimeout(t);
   }, [authLoading]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (authLoading || !user?.id) {
+      setMaintenance(null);
+      return () => { cancelled = true; };
+    }
+
+    featureFlagService.getMaintenanceMode({ force: true })
+      .then((enabled) => { if (!cancelled) setMaintenance(enabled === true); })
+      .catch((error) => {
+        console.warn('メンテナンスモード確認に失敗:', error);
+        if (!cancelled) setMaintenance(false);
+      });
+    return () => { cancelled = true; };
+  }, [authLoading, user?.id]);
 
   // FAST PATH: Load cached recipes immediately while auth is still resolving.
   // This eliminates the perceived wait time after login.
@@ -900,9 +919,31 @@ function AppContent() {
   if (!user) return <LoginPage />;
   if (isPasswordRecovery) return <PasswordResetPage />;
 
+  // メンテナンスチェック（認証確定後に実行）
+  if (maintenance === null) return <LoadingScreen label="起動状態を確認中" subLabel="メンテナンスモードの状態を確認しています" />;
+  if (maintenance && user.profileVerified !== true) {
+    return <LoadingScreen label="権限を確認中" subLabel="メンテナンス中のアクセス権限を確認しています" />;
+  }
+  if (maintenance && user.role !== 'admin') return <MaintenancePage />;
+
   return (
 
     <Layout>
+      {maintenance && user.role === 'admin' && (
+        <div className="maintenance-admin-banner">
+          🔧 メンテナンスモード ON（管理者のみ閲覧中）
+          <button onClick={async () => {
+            try {
+              await featureFlagService.setMaintenanceMode(false);
+              setMaintenance(false);
+              toast.success('メンテナンスモードを解除しました');
+            } catch (error) {
+              console.error('メンテナンスモード解除に失敗:', error);
+              toast.error('メンテナンスモードの解除に失敗しました');
+            }
+          }}>解除する</button>
+        </div>
+      )}
       {showBulkDeleteConfirm && (
         <div className="modal-overlay" style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -1471,7 +1512,10 @@ function AppContent() {
       )}
 
       {currentView === 'users' && user?.role === 'admin' && (
-        <UserManagement onBack={() => setSearchParams({ view: 'list' })} />
+        <UserManagement
+          onBack={() => setSearchParams({ view: 'list' })}
+          onMaintenanceModeChange={setMaintenance}
+        />
       )}
 
       {currentView === 'inventory' && (

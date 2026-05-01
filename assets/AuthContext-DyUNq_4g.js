@@ -196,8 +196,8 @@ export const AuthProvider = ({ children }) => {
                 const parsed = JSON.parse(cached);
                 // Verify it belongs to current user
                 if (parsed && parsed.id === uid) {
-                    cachedUser = parsed;
-                    setUser(parsed);
+                    cachedUser = { ...parsed, profileVerified: false };
+                    setUser(cachedUser);
                 }
             }
         } catch (e) {
@@ -268,16 +268,20 @@ export const AuthProvider = ({ children }) => {
                     const displayId = p.display_id || metaDisplayId || cachedUser.displayId || getEmailLocalPart(email) || uid.slice(0, 8);
                     const storeName = normalizeStoreName(p.store_name) || metaStoreName || normalizeStoreName(cachedUser.storeName) || '';
                     const role = String((p.role || 'user')).trim().toLowerCase();
-                    const isSuperAdmin = email === 'pingus0428@gmail.com';
-                    const showMasterRecipes = isSuperAdmin ? true : (p.show_master_recipes === true);
-                    setUser({ id: uid, email, displayId, storeName, role, showMasterRecipes });
+                    const showMasterRecipes = p.show_master_recipes === true;
+                    const verifiedUser = { id: uid, email, displayId, storeName, role, showMasterRecipes, profileVerified: true };
+                    setUser(verifiedUser);
                     try {
-                        localStorage.setItem('auth_user_cache', JSON.stringify({ id: uid, email, displayId, storeName, role, showMasterRecipes }));
+                        localStorage.setItem('auth_user_cache', JSON.stringify(verifiedUser));
                     } catch (e) {
                         console.warn('[Auth] Failed to save cache', e);
                     }
+                } else {
+                    setUser(prev => (prev?.id === uid ? { ...prev, profileVerified: true } : prev));
                 }
-            }).catch(() => { });
+            }).catch(() => {
+                setUser(prev => (prev?.id === uid ? { ...prev, profileVerified: true } : prev));
+            });
             return;
         }
 
@@ -302,9 +306,8 @@ export const AuthProvider = ({ children }) => {
             'user';
         const role = String(rawRole).trim().toLowerCase();
 
-        const isSuperAdmin = email === 'pingus0428@gmail.com';
-        const showMasterRecipes = isSuperAdmin ? true : ((profile?.show_master_recipes === true)
-            || (profile?.show_master_recipes == null && cachedUser?.showMasterRecipes === true));
+        const showMasterRecipes = (profile?.show_master_recipes === true)
+            || (profile?.show_master_recipes == null && cachedUser?.showMasterRecipes === true);
 
         const newUser = {
             id: uid,
@@ -313,6 +316,7 @@ export const AuthProvider = ({ children }) => {
             storeName: resolvedStoreName,
             role,
             showMasterRecipes,
+            profileVerified: true,
         };
 
         setUser(newUser);
@@ -325,14 +329,22 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         let unsub = null;
+        let loadingCleared = false;
 
-        // 1. Check URL hash manually for recovery flow to set state immediately
-        // Supabase sends type=recovery in the hash
+        const clearLoading = () => {
+            if (!loadingCleared) {
+                loadingCleared = true;
+                setLoading(false);
+            }
+        };
+
+        // Check URL hash manually for recovery flow to set state immediately
         if (typeof window !== 'undefined' && window.location.hash && window.location.hash.includes('type=recovery')) {
             setIsPasswordRecovery(true);
         }
 
-        // 2. Subscribe to auth changes FIRST to catch explicit events
+        // Supabase v2 fires INITIAL_SESSION on mount with the current session state,
+        // so a separate getSession() call is redundant and causes a double profile fetch.
         const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
             if (_event === 'PASSWORD_RECOVERY') {
                 setIsPasswordRecovery(true);
@@ -341,30 +353,21 @@ export const AuthProvider = ({ children }) => {
                 await loadProfileAndSetUser(session?.user || null);
             } catch (e) {
                 console.error('Auth state change handler failed:', e);
+            } finally {
+                // INITIAL_SESSION is emitted on mount; use it to clear the loading state
+                // so the app renders only after the first profile fetch is complete.
+                if (_event === 'INITIAL_SESSION') {
+                    clearLoading();
+                }
             }
         });
         unsub = sub?.subscription;
 
-        // 3. Initial Session Load
-        const init = async () => {
-            try {
-                const { data } = await withTimeout(
-                    supabase.auth.getSession(),
-                    10000,
-                    'auth.getSession'
-                );
-                // Only set user if we didn't already get it from onAuthStateChange (though safe to call twice)
-                await loadProfileAndSetUser(data?.session?.user || null);
-            } catch (e) {
-                console.error('Auth init failed:', e);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        init();
+        // Safety fallback: clear loading if INITIAL_SESSION never fires.
+        const fallbackTimer = setTimeout(clearLoading, 10000);
 
         return () => {
+            clearTimeout(fallbackTimer);
             try {
                 unsub?.unsubscribe?.();
             } catch {

@@ -1,6 +1,7 @@
 const e=`import { supabase } from '../supabase';
 
 const VOICE_INPUT_FLAG_KEY = 'voice_input_enabled';
+const MAINTENANCE_MODE_FLAG_KEY = 'maintenance_mode';
 const CACHE_TTL_MS = 15 * 1000;
 
 const cache = new Map();
@@ -94,6 +95,14 @@ export const featureFlagService = {
 
     async setVoiceInputEnabled(enabled) {
         return this.setFlag(VOICE_INPUT_FLAG_KEY, enabled);
+    },
+
+    async getMaintenanceMode(options) {
+        return this.getFlag(MAINTENANCE_MODE_FLAG_KEY, options);
+    },
+
+    async setMaintenanceMode(enabled) {
+        return this.setFlag(MAINTENANCE_MODE_FLAG_KEY, enabled);
     },
 
     clearCache() {
