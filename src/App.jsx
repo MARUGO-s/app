@@ -106,6 +106,7 @@ function AppContent() {
   const [isFromCache, setIsFromCache] = useState(false);
   const [maintenance, setMaintenance] = useState(null); // null=loading, true=on, false=off
   const recipeLoadRequestRef = useRef(0);
+  const recentLocalCacheRef = useRef([]);
 
   // Derived State from URL
   const rawView = searchParams.get('view');
@@ -397,6 +398,7 @@ function AppContent() {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          recentLocalCacheRef.current = parsed;
           setRecentIds(parsed);
         }
       }
@@ -447,8 +449,21 @@ function AppContent() {
 
   const saveRecentToLocal = useCallback((ids, uid) => {
     try {
-      if (!uid || !Array.isArray(ids)) return;
-      localStorage.setItem(`recent_ids:${uid}`, JSON.stringify(ids.slice(0, 20)));
+      if (!Array.isArray(ids)) return;
+      const normalized = ids.slice(0, 20);
+      recentLocalCacheRef.current = normalized;
+
+      let effectiveUid = uid;
+      if (!effectiveUid) {
+        try {
+          const cachedUser = JSON.parse(localStorage.getItem('auth_user_cache') || 'null');
+          effectiveUid = cachedUser?.id || null;
+        } catch {
+          effectiveUid = null;
+        }
+      }
+      if (!effectiveUid) return;
+      localStorage.setItem(`recent_ids:${effectiveUid}`, JSON.stringify(normalized));
     } catch { /* ignore */ }
   }, []);
 
@@ -456,9 +471,24 @@ function AppContent() {
     try {
       const ids = await recipeService.fetchRecentRecipes(user?.id);
       const result = ids || [];
-      setRecentIds(result);
-      // Supabaseから取得した最新をlocalStorageにも保存
-      saveRecentToLocal(result, user?.id);
+      if (result.length > 0) {
+        setRecentIds(result);
+        // Supabaseから取得した最新をlocalStorageにも保存
+        saveRecentToLocal(result, user?.id);
+        return;
+      }
+
+      // DBが空配列でも、端末内に最近履歴がある場合は表示を維持する。
+      // ネットワーク断/書き込み遅延時に[]で上書きされるのを防ぐ。
+      const localFallback = Array.isArray(recentLocalCacheRef.current)
+        ? recentLocalCacheRef.current
+        : [];
+      if (localFallback.length > 0) {
+        setRecentIds(localFallback);
+        return;
+      }
+
+      setRecentIds([]);
     } catch (error) {
       console.error("Failed to load history:", error);
       // Supabaseが失敗しても、localStorageのキャッシュはすでに先出し表示済み
@@ -480,6 +510,24 @@ function AppContent() {
       // localStorageにはすでに保存済みなので閲覧継続中は履歴が残る
     }
   };
+
+  // Ultimate safeguard: whenever a detail view is opened with an ID,
+  // record it regardless of which UI path navigated there.
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user?.id) return;
+    if (currentView !== 'detail') return;
+    if (!selectedRecipeId) return;
+
+    const id = selectedRecipeId;
+    const nextHistory = [id, ...recentLocalCacheRef.current.filter(rId => String(rId) !== String(id))].slice(0, 20);
+    setRecentIds(nextHistory);
+    saveRecentToLocal(nextHistory, user.id);
+
+    recipeService.addToHistory(id, user.id).catch((e) => {
+      console.error("Failed to sync history from detail-view effect:", e);
+    });
+  }, [authLoading, user?.id, currentView, selectedRecipeId, saveRecentToLocal]);
 
   const loadTrashCount = async () => {
     try {
@@ -689,7 +737,27 @@ function AppContent() {
     setDisplayMode('normal');
   };
 
+  const getDetailReturnParams = () => {
+    const from = searchParams.get('from');
+    const compositeId = searchParams.get('compositeId');
+    const baseId = searchParams.get('baseId');
+    const replacedFromId = searchParams.get('replacedFromId');
+    const replacedToId = searchParams.get('replacedToId');
+    const params = {};
+    if (from) params.from = from;
+    if (compositeId) params.compositeId = compositeId;
+    if (baseId) params.baseId = baseId;
+    if (replacedFromId) params.replacedFromId = replacedFromId;
+    if (replacedToId) params.replacedToId = replacedToId;
+    return params;
+  };
+
   const handleSelectRecipe = (recipe, extraParams = {}) => {
+    if (recipe?.id) {
+      // Record history at selection time as a reliable primary trigger.
+      // RecipeDetail still records on mount as a secondary safeguard.
+      addToHistory(recipe.id);
+    }
     // Navigate to detail view
     setSearchParams({ view: 'detail', id: recipe.id, ...extraParams });
   };
@@ -815,12 +883,20 @@ function AppContent() {
         setRecipes([savedRecipe, ...recipes]);
       }
       // Navigate
+      const returnFrom = searchParams.get('from');
+      const isCompositeReturn = returnFrom === 'composite-cost' || returnFrom === 'composite-cost-edit';
+      const replacementParams = (!effectiveIsEdit && isCompositeReturn)
+        ? {
+          replacedFromId: String(recipe?.id || ''),
+          replacedToId: String(savedRecipe?.id || ''),
+        }
+        : {};
       if (effectiveIsEdit) {
-        setSearchParams({ view: 'detail', id: savedRecipe.id });
+        setSearchParams({ view: 'detail', id: savedRecipe.id, ...getDetailReturnParams() });
       } else {
         // Even if originally edit, if we created new, go to list or detail of NEW one
         // User probably expects to see the new one.
-        setSearchParams({ view: 'detail', id: savedRecipe.id }); // Better UX: Show the new recipe
+        setSearchParams({ view: 'detail', id: savedRecipe.id, ...getDetailReturnParams(), ...replacementParams }); // Better UX: Show the new recipe
       }
 
     } catch (error) {
@@ -1553,21 +1629,48 @@ function AppContent() {
           isDeleted={!!selectedRecipe.deletedAt}
           onBack={() => {
             const from = searchParams.get('from');
+            const compositeId = searchParams.get('compositeId');
+            const baseId = searchParams.get('baseId');
+            const replacedFromId = searchParams.get('replacedFromId');
+            const replacedToId = searchParams.get('replacedToId');
             if (from === 'planner') {
               setSearchParams({ view: 'planner' });
+            } else if (from === 'composite-cost-edit' && compositeId) {
+              setSearchParams({
+                view: 'composite-cost-edit',
+                compositeId,
+                ...(replacedFromId && replacedToId ? { replacedFromId, replacedToId } : {}),
+              });
+            } else if (from === 'composite-cost') {
+              setSearchParams({
+                view: 'composite-cost',
+                ...(baseId ? { baseId } : {}),
+                ...(replacedFromId && replacedToId ? { replacedFromId, replacedToId } : {}),
+              });
             } else if (selectedRecipe.deletedAt) {
               handleSwitchToTrash();
             } else {
               handleSwitchToMain();
             }
           }}
-          backLabel={searchParams.get('from') === 'planner' ? '← カレンダーに戻る' : undefined}
+          backLabel={searchParams.get('from') === 'planner'
+            ? '← カレンダーに戻る'
+            : (searchParams.get('from') === 'composite-cost-edit'
+              ? '← 合成レシピ編集に戻る'
+              : (searchParams.get('from') === 'composite-cost' ? '← 合成原価に戻る' : undefined))}
           onList={searchParams.get('from') === 'planner' ? handleSwitchToMain : undefined}
-          onEdit={() => setSearchParams({ view: 'edit', id: selectedRecipe.id, from: searchParams.get('from') })}
+          onEdit={() => setSearchParams({
+            view: 'edit',
+            id: selectedRecipe.id,
+            ...(searchParams.get('from') ? { from: searchParams.get('from') } : {}),
+            ...(searchParams.get('compositeId') ? { compositeId: searchParams.get('compositeId') } : {}),
+            ...(searchParams.get('baseId') ? { baseId: searchParams.get('baseId') } : {}),
+          })}
           onDelete={handleDeleteRecipe}
           onView={addToHistory}
           onHardDelete={handleHardDeleteRecipe}
           onDuplicate={handleDuplicate}
+          forceEditEnabled={searchParams.get('from') === 'composite-cost-edit' || searchParams.get('from') === 'composite-cost'}
           onOpenCompositeCost={() => setSearchParams({
             view: 'composite-cost',
             baseId: String(selectedRecipe.id),
@@ -1587,7 +1690,7 @@ function AppContent() {
             <RecipeForm
               key={`edit-${selectedRecipeId}`}
               initialData={editRecipe}
-              onCancel={() => setSearchParams({ view: 'detail', id: selectedRecipeId })}
+              onCancel={() => setSearchParams({ view: 'detail', id: selectedRecipeId, ...getDetailReturnParams() })}
               onSave={(updatedRecipe) => handleSaveRecipe(updatedRecipe, true)}
             />
           )
@@ -1647,6 +1750,16 @@ function AppContent() {
             setSearchParams({ view: 'list' });
           }}
           onOpenSavedList={() => setSearchParams({ view: 'composite-cost-saved' })}
+          onOpenRecipeDetail={(recipeId) => {
+            const normalizedId = String(recipeId || '').trim();
+            if (!normalizedId) return;
+            setSearchParams({
+              view: 'detail',
+              id: normalizedId,
+              from: 'composite-cost',
+              ...(searchParams.get('baseId') ? { baseId: searchParams.get('baseId') } : {}),
+            });
+          }}
         />
       )}
 
@@ -1662,6 +1775,22 @@ function AppContent() {
         <RecipeCompositeCostEditPage
           compositeId={searchParams.get('compositeId') || ''}
           onBack={() => setSearchParams({ view: 'composite-cost-saved' })}
+          replaceFromRecipeId={searchParams.get('replacedFromId') || ''}
+          replaceToRecipeId={searchParams.get('replacedToId') || ''}
+          onOpenRecipeDetail={(recipeId) => {
+            const normalizedId = String(recipeId || '').trim();
+            const compositeId = String(searchParams.get('compositeId') || '').trim();
+            if (!normalizedId || !compositeId) return;
+            setSearchParams({
+              view: 'detail',
+              id: normalizedId,
+              from: 'composite-cost-edit',
+              compositeId,
+              ...(searchParams.get('replacedFromId') && searchParams.get('replacedToId')
+                ? { replacedFromId: searchParams.get('replacedFromId'), replacedToId: searchParams.get('replacedToId') }
+                : {}),
+            });
+          }}
         />
       )}
 

@@ -13,6 +13,16 @@ const withTimeout = async (promise, ms, label) => {
     }
 };
 
+const toLoggableError = (error) => {
+    if (!error) return null;
+    return {
+        message: error.message || String(error),
+        code: error.code || null,
+        details: error.details || null,
+        hint: error.hint || null,
+    };
+};
+
 const parseTextArrayMaybe = (value) => {
     if (Array.isArray(value)) return value.map(v => String(v)).filter(Boolean);
     if (typeof value !== 'string') return [];
@@ -1070,20 +1080,90 @@ export const recipeService = {
         const userId = explicitUserId || (await this._getCurrentUserId());
         if (!userId || !recipeId) return false;
 
-        const { error } = await withTimeout(
+        const viewedAt = new Date().toISOString();
+        const byKeys = (query) => query
+            .eq('viewer_user_id', userId)
+            .eq('recipe_id', recipeId);
+
+        // Prefer select -> update/insert to avoid noisy 409 duplicate logs in browser.
+        const { data: existing, error: selectError } = await withTimeout(
+            byKeys(
+                supabase
+                    .from('recent_views')
+                    .select('id')
+                    .limit(1)
+                    .maybeSingle()
+            ),
+            10000,
+            'recent_views.select(existing)'
+        );
+        if (selectError) {
+            console.error('[recent_views] select failed', {
+                userId,
+                recipeId,
+                error: toLoggableError(selectError),
+            });
+            return false;
+        }
+
+        if (existing?.id) {
+            const { error: updateError } = await withTimeout(
+                byKeys(
+                    supabase
+                        .from('recent_views')
+                        .update({ viewed_at: viewedAt })
+                ),
+                10000,
+                'recent_views.update(existing)'
+            );
+            if (!updateError) return true;
+            console.error('[recent_views] update failed', {
+                userId,
+                recipeId,
+                existingId: existing.id,
+                error: toLoggableError(updateError),
+            });
+            return false;
+        }
+
+        const { error: insertError } = await withTimeout(
             supabase
                 .from('recent_views')
-                .upsert({
+                .insert({
                     viewer_user_id: userId,
                     recipe_id: recipeId,
-                    viewed_at: new Date().toISOString()
-                }, { onConflict: 'viewer_user_id,recipe_id' }),
+                    viewed_at: viewedAt,
+                }),
             10000,
-            'recent_views.upsert'
+            'recent_views.insert(new)'
         );
-        if (error) throw error;
+        if (!insertError) return true;
 
-        return true;
+        if (String(insertError?.code || '') === '23505') {
+            const { error: raceUpdateError } = await withTimeout(
+                byKeys(
+                    supabase
+                        .from('recent_views')
+                        .update({ viewed_at: viewedAt })
+                ),
+                10000,
+                'recent_views.update(race-duplicate)'
+            );
+            if (!raceUpdateError) return true;
+            console.error('[recent_views] race duplicate update failed', {
+                userId,
+                recipeId,
+                error: toLoggableError(raceUpdateError),
+            });
+            return false;
+        }
+
+        console.error('[recent_views] insert failed', {
+            userId,
+            recipeId,
+            error: toLoggableError(insertError),
+        });
+        return false;
     },
 
     async updateOrder(items) {

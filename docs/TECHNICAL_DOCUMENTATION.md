@@ -835,6 +835,44 @@ VITE_SUPABASE_ANON_KEY=eyJhbGc...（長いキー）
 
 ## トラブルシューティング
 
+### 2026-05-01 追加実装メモ（合成原価・遷移・履歴）
+
+#### 1. 合成レシピ編集からオリジナル詳細へ遷移
+
+- `RecipeCompositeCostCalculator` のレシピ行先頭に `詳細` ボタンを追加。
+- 合成画面（保存済み編集 / 合成原価）から `RecipeDetail` へ遷移する際、`searchParams` に戻り先コンテキストを保持。
+  - `from=composite-cost-edit` + `compositeId`
+  - `from=composite-cost` (+ `baseId`)
+- 詳細画面の戻るボタンはコンテキストに応じて遷移先を切り替える。
+  - `← 合成レシピ編集に戻る`
+  - `← 合成原価に戻る`
+
+#### 2. 詳細画面で編集後に合成画面へ戻す導線
+
+- 合成画面経由で開いた詳細では、`forceEditEnabled` により編集ボタンを表示。
+- 詳細 -> 編集 -> 保存/キャンセル後も、`from/compositeId/baseId` を維持して再度詳細に戻す。
+- 詳細の戻る操作で、元の合成画面へワンクリック復帰できる構成。
+
+#### 3. 非オーナー編集（複製保存）後の合成画面反映
+
+- 共有レシピなど非オーナー編集時、`RecipeForm` 保存で新規レシピが作成される。
+- このとき `replacedFromId` / `replacedToId` を `searchParams` で保持。
+- `RecipeCompositeCostEditPage` 復帰時に以下を置換して再構成する。
+  - ベースレシピID
+  - 合成行内の `recipeId`
+- 結果として、戻った合成編集画面で最新（複製先）レシピを参照した状態になる。
+
+#### 4. `recent_views` の 409/400 コンソールエラー対策
+
+- 対象: `recipeService.addToHistory()`
+- 変更前: `upsert` / `insert-first` により環境依存で `recent_views` の 409/400 が発生。
+- 変更後:
+  1. `select(existing)` で存在確認
+  2. 既存あり -> `update(viewed_at)`
+  3. 既存なし -> `insert`
+  4. 競合レースで `23505` のみ最終 `update` を1回実施
+- 効果: `recent_views` の重複保存エラーを大幅に抑制し、履歴保存処理を安定化。
+
 ### よくある問題と解決方法
 
 #### 1. 「ログイン後、レシピが表示されない」
@@ -984,5 +1022,5 @@ localStorage.clear();
 
 ---
 
-**Last Updated**: 2026-02-03
+**Last Updated**: 2026-05-01
 **Maintained By**: development team
