@@ -1,9 +1,23 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+// ALLOWED_ORIGIN env var restricts which frontend can call this admin endpoint.
+// Set it to your deployed frontend URL (e.g. https://your-app.vercel.app).
+// Falls back to '*' only when unset (local development).
+const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") || "*";
+
+const buildCorsHeaders = (requestOrigin: string | null) => {
+  const allow =
+    ALLOWED_ORIGIN === "*"
+      ? "*"
+      : requestOrigin === ALLOWED_ORIGIN
+      ? requestOrigin
+      : ALLOWED_ORIGIN;
+  return {
+    "Access-Control-Allow-Origin": allow,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Vary": "Origin",
+  };
 };
 
 type ResetBody = {
@@ -14,13 +28,13 @@ type ResetBody = {
 serve(async (req) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: buildCorsHeaders(req.headers.get("origin")) });
   }
 
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...buildCorsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
     });
   }
 
@@ -32,7 +46,7 @@ serve(async (req) => {
     if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
       return new Response(JSON.stringify({ error: "Missing Supabase env vars" }), {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...buildCorsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
       });
     }
 
@@ -40,7 +54,7 @@ serve(async (req) => {
     if (!authHeader.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...buildCorsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
       });
     }
 
@@ -51,13 +65,13 @@ serve(async (req) => {
     if (!userId) {
       return new Response(JSON.stringify({ error: "userId is required" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...buildCorsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
       });
     }
     if (!newPassword || newPassword.length < 8) {
       return new Response(JSON.stringify({ error: "newPassword must be at least 8 characters" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...buildCorsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
       });
     }
 
@@ -71,7 +85,7 @@ serve(async (req) => {
     if (userErr || !userData?.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...buildCorsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
       });
     }
 
@@ -85,7 +99,7 @@ serve(async (req) => {
     if (meErr || me?.role !== "admin") {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...buildCorsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
       });
     }
 
@@ -101,19 +115,19 @@ serve(async (req) => {
     if (error) {
       return new Response(JSON.stringify({ error: error.message }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...buildCorsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
       });
     }
 
     return new Response(JSON.stringify({ success: true, user: { id: data.user?.id } }), {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...buildCorsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("admin-reset-password error:", e);
     return new Response(JSON.stringify({ error: e?.message || "Unknown error" }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...buildCorsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
     });
   }
 });
