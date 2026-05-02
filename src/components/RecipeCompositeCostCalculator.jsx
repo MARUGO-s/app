@@ -100,7 +100,7 @@ export const RecipeCompositeCostCalculator = ({
     const [targetCostRate, setTargetCostRate] = React.useState('');
     const [comparisonSlots, setComparisonSlots] = React.useState({ a: null, b: null });
     const [usageSolverTargetId, setUsageSolverTargetId] = React.useState('base');
-    const [impactChartView, setImpactChartView] = React.useState('bar');
+    const [impactChartView, setImpactChartView] = React.useState('pie');
     const queuedRecipeHandledRef = React.useRef('');
 
     const currentMetrics = React.useMemo(() => {
