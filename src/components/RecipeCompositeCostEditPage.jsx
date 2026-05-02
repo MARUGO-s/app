@@ -3,15 +3,12 @@ import { Card } from './Card';
 import { Button } from './Button';
 import { RecipeCompositeCostCalculator } from './RecipeCompositeCostCalculator';
 import { compositeRecipeService } from '../services/compositeRecipeService';
+import { categoryCostOverrideService } from '../services/categoryCostOverrideService';
 import { recipeService } from '../services/recipeService';
 import { useToast } from '../contexts/useToast';
 import { useAuth } from '../contexts/useAuth';
+import { computeCompositeSnapshotTotals, toFiniteNumber } from '../utils/compositeCostUtils';
 import './RecipeCompositeCostPage.css';
-
-const toFiniteNumber = (value) => {
-    const n = parseFloat(value);
-    return Number.isFinite(n) ? n : null;
-};
 
 const normalizeSharePermission = (value) => {
     const v = String(value || '').trim().toLowerCase();
@@ -37,6 +34,7 @@ const buildCalculatorStateFromSnapshot = (snapshot = {}) => ({
     currentUsageAmount: snapshot?.currentUsageAmount == null ? '' : String(snapshot.currentUsageAmount),
     salesPrice: snapshot?.salesPrice == null ? '' : String(snapshot.salesPrice),
     salesCount: snapshot?.salesCount == null ? '' : String(snapshot.salesCount),
+    targetCostRate: snapshot?.targetCostRate == null ? '' : String(snapshot.targetCostRate),
     rows: (snapshot?.rows || []).map((item) => ({
         itemType: item?.itemType === 'ingredient' ? 'ingredient' : 'recipe',
         recipeId: item?.recipeId == null ? '' : String(item.recipeId),
@@ -70,6 +68,7 @@ const buildSnapshotSummary = (snapshot = {}, recipeNameMap = new Map()) => {
         currentUsageAmount: snapshot?.currentUsageAmount == null || snapshot?.currentUsageAmount === '' ? '未入力' : `${snapshot.currentUsageAmount}g`,
         salesPrice: formatYen(snapshot?.salesPrice),
         salesCount: snapshot?.salesCount == null || snapshot?.salesCount === '' ? '未入力' : `${snapshot.salesCount}`,
+        targetCostRate: snapshot?.targetCostRate == null || snapshot?.targetCostRate === '' ? '未入力' : `${snapshot.targetCostRate}%`,
         totalCompositeCost: formatYen(snapshot?.totalCompositeCost),
         sharePermission: sharePermissionLabel(snapshot?.sharePermission),
         isPublic: snapshot?.isPublic === true ? 'ON' : 'OFF',
@@ -105,6 +104,8 @@ export const RecipeCompositeCostEditPage = ({
     const [initialState, setInitialState] = React.useState(null);
     const [calculatorState, setCalculatorState] = React.useState(null);
     const [recipeNameMap, setRecipeNameMap] = React.useState(new Map());
+    const [savedCostReference, setSavedCostReference] = React.useState(null);
+    const [costDriftInfo, setCostDriftInfo] = React.useState(null);
 
     React.useEffect(() => {
         let cancelled = false;
@@ -134,6 +135,29 @@ export const RecipeCompositeCostEditPage = ({
                     currentUsageAmount: detail.base_usage_amount == null ? '' : String(detail.base_usage_amount),
                     salesPrice: detail.sales_price == null ? '' : String(detail.sales_price),
                     salesCount: detail.sales_count == null ? '' : String(detail.sales_count),
+                    rows: (detail.items || []).map((item) => ({
+                        itemType: item.item_type === 'ingredient' ? 'ingredient' : 'recipe',
+                        recipeId: item.recipe_id == null
+                            ? ''
+                            : (
+                                shouldReplace && String(item.recipe_id) === fromId
+                                    ? toId
+                                    : String(item.recipe_id)
+                            ),
+                        ingredient: item.ingredient_payload || null,
+                        usageAmount: item.usage_amount == null ? '' : String(item.usage_amount),
+                        usageUnit: item.ingredient_payload?.unit || '',
+                    })),
+                });
+                setSavedCostReference({
+                    dishName: detail.dish_name || '',
+                    baseRecipeId: recipe?.id ? Number(recipe.id) : Number(detail.base_recipe_id),
+                    currentUsageAmount: detail.base_usage_amount == null ? '' : String(detail.base_usage_amount),
+                    salesPrice: detail.sales_price == null ? '' : String(detail.sales_price),
+                    salesCount: detail.sales_count == null ? '' : String(detail.sales_count),
+                    totalCompositeCost: detail.total_cost_tax_included,
+                    isPublic: detail.is_public === true,
+                    sharePermission: String(detail.share_permission || 'viewer'),
                     rows: (detail.items || []).map((item) => ({
                         itemType: item.item_type === 'ingredient' ? 'ingredient' : 'recipe',
                         recipeId: item.recipe_id == null
@@ -181,6 +205,27 @@ export const RecipeCompositeCostEditPage = ({
         return () => { cancelled = true; };
     }, [compositeId]);
 
+    React.useEffect(() => {
+        const currentVersion = versions.find((version) => Number(version.version_no) === Number(currentVersionNo || 1));
+        const targetCostRate = currentVersion?.snapshot?.targetCostRate;
+        if (targetCostRate == null || targetCostRate === '') return;
+
+        setInitialState((prev) => {
+            if (!prev || (prev.targetCostRate != null && prev.targetCostRate !== '')) return prev;
+            return {
+                ...prev,
+                targetCostRate: String(targetCostRate),
+            };
+        });
+        setSavedCostReference((prev) => {
+            if (!prev || (prev.targetCostRate != null && prev.targetCostRate !== '')) return prev;
+            return {
+                ...prev,
+                targetCostRate: String(targetCostRate),
+            };
+        });
+    }, [versions, currentVersionNo]);
+
     const selectedVersion = React.useMemo(() => {
         const target = Number(selectedVersionNo);
         if (!Number.isFinite(target) || target < 1) return null;
@@ -193,6 +238,7 @@ export const RecipeCompositeCostEditPage = ({
         currentUsageAmount: calculatorState?.currentUsageAmount ?? initialState?.currentUsageAmount ?? '',
         salesPrice: calculatorState?.salesPrice ?? initialState?.salesPrice ?? '',
         salesCount: calculatorState?.salesCount ?? initialState?.salesCount ?? '',
+        targetCostRate: calculatorState?.targetCostRate ?? initialState?.targetCostRate ?? '',
         totalCompositeCost: calculatorState?.totalCompositeCost ?? null,
         isPublic,
         sharePermission,
@@ -205,6 +251,79 @@ export const RecipeCompositeCostEditPage = ({
         isPublic,
         sharePermission,
     ]);
+
+    React.useEffect(() => {
+        let cancelled = false;
+        if (!savedCostReference || !baseRecipe?.id) {
+            setCostDriftInfo(null);
+            return undefined;
+        }
+
+        const run = async () => {
+            try {
+                const snapshot = {
+                    ...savedCostReference,
+                    baseRecipeId: Number(savedCostReference.baseRecipeId || baseRecipe.id),
+                };
+                const recipeIds = Array.from(new Set(
+                    (Array.isArray(snapshot.rows) ? snapshot.rows : [])
+                        .filter((row) => (row?.itemType || 'recipe') === 'recipe')
+                        .map((row) => String(row?.recipeId || '').trim())
+                        .filter(Boolean)
+                ));
+                const baseOverrideMap = await categoryCostOverrideService.fetchByRecipeId(baseRecipe.id).catch(() => new Map());
+                const recipePairs = await Promise.all(recipeIds.map(async (id) => {
+                    const [recipe, overrideMap] = await Promise.all([
+                        recipeService.getRecipe(id).catch(() => null),
+                        categoryCostOverrideService.fetchByRecipeId(id).catch(() => new Map()),
+                    ]);
+                    return { id, recipe, overrideMap };
+                }));
+
+                if (cancelled) return;
+
+                const recipeDetailsById = {};
+                const overrideMapsByRecipe = {
+                    [String(baseRecipe.id)]: baseOverrideMap,
+                };
+                for (const pair of recipePairs) {
+                    if (pair.recipe) recipeDetailsById[pair.id] = pair.recipe;
+                    overrideMapsByRecipe[pair.id] = pair.overrideMap || new Map();
+                }
+
+                const totals = computeCompositeSnapshotTotals({
+                    baseRecipe,
+                    snapshot,
+                    recipeDetailsById,
+                    overrideMapsByRecipe,
+                });
+                const savedCost = toFiniteNumber(snapshot.totalCompositeCost);
+                const liveCost = toFiniteNumber(totals.totalCompositeCost);
+                const diff = Number.isFinite(savedCost) && Number.isFinite(liveCost)
+                    ? liveCost - savedCost
+                    : NaN;
+                const percent = Number.isFinite(savedCost) && savedCost !== 0 && Number.isFinite(diff)
+                    ? (diff / savedCost) * 100
+                    : NaN;
+
+                setCostDriftInfo({
+                    savedCost,
+                    liveCost,
+                    diff,
+                    percent,
+                    hasDrift: Number.isFinite(diff) && Math.abs(diff) >= 0.01,
+                    missingRecipeIds: totals.missingRecipeIds || [],
+                });
+            } catch {
+                if (!cancelled) setCostDriftInfo(null);
+            }
+        };
+
+        run();
+        return () => {
+            cancelled = true;
+        };
+    }, [savedCostReference, baseRecipe]);
 
     React.useEffect(() => {
         let cancelled = false;
@@ -303,6 +422,14 @@ export const RecipeCompositeCostEditPage = ({
                 ...calculatorState,
             });
             setCurrentVersionNo(Number(updateResult?.versionNo || currentVersionNo + 1));
+            setSavedCostReference({
+                ...currentWorkingSnapshot,
+                dishName: name,
+                baseRecipeId: Number(baseRecipe.id),
+                isPublic,
+                sharePermission: normalizedSharePermission,
+                totalCompositeCost: calculatorState?.totalCompositeCost ?? currentWorkingSnapshot.totalCompositeCost,
+            });
             try {
                 const refreshed = await compositeRecipeService.listSetVersions(compositeId);
                 setVersions(Array.isArray(refreshed) ? refreshed : []);
@@ -338,6 +465,23 @@ export const RecipeCompositeCostEditPage = ({
                 currentUsageAmount: detail.base_usage_amount == null ? '' : String(detail.base_usage_amount),
                 salesPrice: detail.sales_price == null ? '' : String(detail.sales_price),
                 salesCount: detail.sales_count == null ? '' : String(detail.sales_count),
+                rows: (detail.items || []).map((item) => ({
+                    itemType: item.item_type === 'ingredient' ? 'ingredient' : 'recipe',
+                    recipeId: item.recipe_id == null ? '' : String(item.recipe_id),
+                    ingredient: item.ingredient_payload || null,
+                    usageAmount: item.usage_amount == null ? '' : String(item.usage_amount),
+                    usageUnit: item.ingredient_payload?.unit || '',
+                })),
+            });
+            setSavedCostReference({
+                dishName: detail.dish_name || '',
+                baseRecipeId: recipe?.id ? Number(recipe.id) : Number(detail.base_recipe_id),
+                currentUsageAmount: detail.base_usage_amount == null ? '' : String(detail.base_usage_amount),
+                salesPrice: detail.sales_price == null ? '' : String(detail.sales_price),
+                salesCount: detail.sales_count == null ? '' : String(detail.sales_count),
+                totalCompositeCost: detail.total_cost_tax_included,
+                isPublic: detail.is_public === true,
+                sharePermission: String(detail.share_permission || 'viewer'),
                 rows: (detail.items || []).map((item) => ({
                     itemType: item.item_type === 'ingredient' ? 'ingredient' : 'recipe',
                     recipeId: item.recipe_id == null ? '' : String(item.recipe_id),
@@ -398,6 +542,7 @@ export const RecipeCompositeCostEditPage = ({
             { label: 'ベース使用量', current: currentVersionSummary.currentUsageAmount, selected: selectedVersionSummary.currentUsageAmount },
             { label: '販売価格', current: currentVersionSummary.salesPrice, selected: selectedVersionSummary.salesPrice },
             { label: '販売数', current: currentVersionSummary.salesCount, selected: selectedVersionSummary.salesCount },
+            { label: '目標原価率', current: currentVersionSummary.targetCostRate, selected: selectedVersionSummary.targetCostRate },
             { label: '合成原価', current: currentVersionSummary.totalCompositeCost, selected: selectedVersionSummary.totalCompositeCost },
             { label: '共有', current: currentVersionSummary.isPublic, selected: selectedVersionSummary.isPublic },
             { label: '共有権限', current: currentVersionSummary.sharePermission, selected: selectedVersionSummary.sharePermission },
@@ -524,6 +669,44 @@ export const RecipeCompositeCostEditPage = ({
                 </div>
             </Card>
 
+            {costDriftInfo?.hasDrift && (
+                <Card className="composite-cost-page__version-panel composite-cost-page__cost-alert" role="alert">
+                    <div className="composite-cost-page__version-head">
+                        <div>
+                            <h3 className="composite-cost-page__version-title">原価変更アラート</h3>
+                            <p className="composite-cost-page__version-note">
+                                保存時の構成を現在の材料単価・カテゴリ原価で再計算すると差分があります。内容を確認して問題なければ更新保存してください。
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="composite-cost-page__version-summary-grid">
+                        <div className="composite-cost-page__version-summary-card">
+                            <span>保存時の合成原価</span>
+                            <strong>{formatYen(costDriftInfo.savedCost)}</strong>
+                        </div>
+                        <div className="composite-cost-page__version-summary-card">
+                            <span>現在の再計算原価</span>
+                            <strong>{formatYen(costDriftInfo.liveCost)}</strong>
+                        </div>
+                        <div className="composite-cost-page__version-summary-card">
+                            <span>差額</span>
+                            <strong>{`${costDriftInfo.diff >= 0 ? '+' : ''}${formatYen(costDriftInfo.diff)}`}</strong>
+                        </div>
+                        <div className="composite-cost-page__version-summary-card">
+                            <span>変動率</span>
+                            <strong>{Number.isFinite(costDriftInfo.percent) ? `${costDriftInfo.percent >= 0 ? '+' : ''}${costDriftInfo.percent.toFixed(1)}%` : '—'}</strong>
+                        </div>
+                    </div>
+
+                    {costDriftInfo.missingRecipeIds.length > 0 && (
+                        <p className="composite-cost-page__version-note">
+                            一部の参照レシピを読み込めなかったため、差分表示が不完全な可能性があります。
+                        </p>
+                    )}
+                </Card>
+            )}
+
             {selectedVersionSummary && (
                 <Card className="composite-cost-page__version-panel">
                     <div className="composite-cost-page__version-head">
@@ -547,6 +730,10 @@ export const RecipeCompositeCostEditPage = ({
                         <div className="composite-cost-page__version-summary-card">
                             <span>合成原価</span>
                             <strong>{selectedVersionSummary.totalCompositeCost}</strong>
+                        </div>
+                        <div className="composite-cost-page__version-summary-card">
+                            <span>目標原価率</span>
+                            <strong>{selectedVersionSummary.targetCostRate}</strong>
                         </div>
                         <div className="composite-cost-page__version-summary-card">
                             <span>共有 / 権限</span>

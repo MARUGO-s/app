@@ -2,7 +2,10 @@ import React from 'react';
 import { Card } from './Card';
 import { Button } from './Button';
 import { compositeRecipeService } from '../services/compositeRecipeService';
+import { categoryCostOverrideService } from '../services/categoryCostOverrideService';
+import { recipeService } from '../services/recipeService';
 import { useAuth } from '../contexts/useAuth';
+import { computeCompositeSnapshotTotals, toFiniteNumber } from '../utils/compositeCostUtils';
 import './RecipeCompositeCostPage.css';
 
 const formatYen = (value) => {
@@ -25,10 +28,101 @@ const sharePermissionLabel = (value) => {
     return '閲覧のみ';
 };
 
+const formatSignedYen = (value) => {
+    const n = toFiniteNumber(value);
+    if (!Number.isFinite(n)) return '—';
+    const sign = n >= 0 ? '+' : '-';
+    return `${sign}${formatYen(Math.abs(n))}`;
+};
+
+const formatSignedPercent = (value) => {
+    const n = toFiniteNumber(value);
+    if (!Number.isFinite(n)) return '—';
+    return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
+};
+
+const buildSnapshotFromDetail = (detail = {}) => ({
+    baseRecipeId: detail.base_recipe_id == null ? null : Number(detail.base_recipe_id),
+    currentUsageAmount: detail.base_usage_amount == null ? '' : String(detail.base_usage_amount),
+    salesPrice: detail.sales_price == null ? '' : String(detail.sales_price),
+    salesCount: detail.sales_count == null ? '' : String(detail.sales_count),
+    totalCompositeCost: detail.total_cost_tax_included,
+    rows: (detail.items || []).map((item) => ({
+        itemType: item.item_type === 'ingredient' ? 'ingredient' : 'recipe',
+        recipeId: item.recipe_id == null ? '' : String(item.recipe_id),
+        ingredient: item.ingredient_payload || null,
+        usageAmount: item.usage_amount == null ? '' : String(item.usage_amount),
+        usageUnit: item.ingredient_payload?.unit || '',
+    })),
+});
+
+const computeSavedSetDrift = async (row) => {
+    const detail = await compositeRecipeService.getSetDetail(row.id);
+    const snapshot = buildSnapshotFromDetail(detail);
+    if (!snapshot.baseRecipeId) {
+        return { status: 'error' };
+    }
+
+    const baseRecipe = await recipeService.getRecipe(snapshot.baseRecipeId);
+    const recipeIds = Array.from(new Set(
+        snapshot.rows
+            .filter((item) => (item?.itemType || 'recipe') === 'recipe')
+            .map((item) => String(item.recipeId || '').trim())
+            .filter(Boolean)
+    ));
+
+    const [baseOverrideMap, recipePairs] = await Promise.all([
+        categoryCostOverrideService.fetchByRecipeId(snapshot.baseRecipeId).catch(() => new Map()),
+        Promise.all(recipeIds.map(async (id) => {
+            const [recipe, overrideMap] = await Promise.all([
+                recipeService.getRecipe(id).catch(() => null),
+                categoryCostOverrideService.fetchByRecipeId(id).catch(() => new Map()),
+            ]);
+            return { id, recipe, overrideMap };
+        })),
+    ]);
+
+    const recipeDetailsById = {};
+    const overrideMapsByRecipe = {
+        [String(snapshot.baseRecipeId)]: baseOverrideMap || new Map(),
+    };
+    for (const pair of recipePairs) {
+        if (pair.recipe) recipeDetailsById[pair.id] = pair.recipe;
+        overrideMapsByRecipe[pair.id] = pair.overrideMap || new Map();
+    }
+
+    const totals = computeCompositeSnapshotTotals({
+        baseRecipe,
+        snapshot,
+        recipeDetailsById,
+        overrideMapsByRecipe,
+    });
+    const savedCost = toFiniteNumber(row.total_cost_tax_included ?? detail.total_cost_tax_included);
+    const liveCost = toFiniteNumber(totals.totalCompositeCost);
+    const diff = Number.isFinite(savedCost) && Number.isFinite(liveCost)
+        ? liveCost - savedCost
+        : NaN;
+    const percent = Number.isFinite(savedCost) && savedCost !== 0 && Number.isFinite(diff)
+        ? (diff / savedCost) * 100
+        : NaN;
+
+    return {
+        status: 'ready',
+        savedCost,
+        liveCost,
+        diff,
+        percent,
+        hasDrift: Number.isFinite(diff) && Math.abs(diff) >= 0.01,
+        missingRecipeIds: totals.missingRecipeIds || [],
+    };
+};
+
 export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }) => {
     const { user } = useAuth();
     const [rows, setRows] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
+    const [loadingDrifts, setLoadingDrifts] = React.useState(false);
+    const [driftById, setDriftById] = React.useState({});
     const [error, setError] = React.useState('');
     const [deletingId, setDeletingId] = React.useState(null);
 
@@ -37,16 +131,37 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }
         const run = async () => {
             setLoading(true);
             setError('');
+            setDriftById({});
+            setLoadingDrifts(false);
             try {
                 const list = await compositeRecipeService.listSets();
                 if (cancelled) return;
-                setRows(Array.isArray(list) ? list : []);
+                const safeList = Array.isArray(list) ? list : [];
+                setRows(safeList);
+                setLoading(false);
+
+                if (safeList.length > 0) {
+                    setLoadingDrifts(true);
+                    const pairs = await Promise.all(safeList.map(async (row) => {
+                        try {
+                            const drift = await computeSavedSetDrift(row);
+                            return [row.id, drift];
+                        } catch {
+                            return [row.id, { status: 'error' }];
+                        }
+                    }));
+                    if (cancelled) return;
+                    setDriftById(Object.fromEntries(pairs));
+                }
             } catch (e) {
                 if (cancelled) return;
                 setRows([]);
                 setError(e?.message || '保存済み合成レシピの取得に失敗しました。');
             } finally {
-                if (!cancelled) setLoading(false);
+                if (!cancelled) {
+                    setLoading(false);
+                    setLoadingDrifts(false);
+                }
             }
         };
         run();
@@ -61,6 +176,11 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }
             setDeletingId(id);
             await compositeRecipeService.deleteSet(id);
             setRows((prev) => prev.filter((row) => row.id !== id));
+            setDriftById((prev) => {
+                const next = { ...prev };
+                delete next[id];
+                return next;
+            });
         } catch (e) {
             setError(e?.message || '削除に失敗しました。');
         } finally {
@@ -169,6 +289,49 @@ export const RecipeCompositeSavedListPage = ({ onBack, onOpenTop, onOpenEditor }
                                         <em>合成原価</em>
                                         <b>{formatYen(row.total_cost_tax_included)}</b>
                                     </span>
+                                    {(() => {
+                                        const drift = driftById[row.id];
+                                        if (!drift && loadingDrifts) {
+                                            return (
+                                                <span className="composite-cost-page__saved-chip composite-cost-page__saved-chip--drift">
+                                                    <em>原価変動</em>
+                                                    <b>確認中</b>
+                                                </span>
+                                            );
+                                        }
+                                        if (!drift) return null;
+                                        if (drift.status === 'error') {
+                                            return (
+                                                <span className="composite-cost-page__saved-chip composite-cost-page__saved-chip--drift composite-cost-page__saved-chip--drift-muted">
+                                                    <em>原価変動</em>
+                                                    <b>取得不可</b>
+                                                </span>
+                                            );
+                                        }
+                                        if (drift.missingRecipeIds?.length > 0) {
+                                            return (
+                                                <span className="composite-cost-page__saved-chip composite-cost-page__saved-chip--drift composite-cost-page__saved-chip--drift-muted">
+                                                    <em>原価変動</em>
+                                                    <b>一部取得不可</b>
+                                                </span>
+                                            );
+                                        }
+                                        const driftClass = drift.hasDrift
+                                            ? (toFiniteNumber(drift.diff) >= 0
+                                                ? 'composite-cost-page__saved-chip--drift-up'
+                                                : 'composite-cost-page__saved-chip--drift-down')
+                                            : 'composite-cost-page__saved-chip--drift-muted';
+                                        return (
+                                            <span className={`composite-cost-page__saved-chip composite-cost-page__saved-chip--drift ${driftClass}`}>
+                                                <em>原価変動</em>
+                                                <b>
+                                                    {drift.hasDrift
+                                                        ? `${formatSignedYen(drift.diff)} (${formatSignedPercent(drift.percent)})`
+                                                        : '差分なし'}
+                                                </b>
+                                            </span>
+                                        );
+                                    })()}
                                     <span className="composite-cost-page__saved-chip composite-cost-page__saved-chip--updated">
                                         <em>更新</em>
                                         <b>{new Date(row.updated_at || row.created_at).toLocaleString()}</b>

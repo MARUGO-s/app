@@ -396,6 +396,11 @@
   background: #fffdfa;
 }
 
+.composite-cost-page__cost-alert {
+  border-color: #fdba74;
+  background: #fff7ed;
+}
+
 .composite-cost-page__version-head {
   display: flex;
   justify-content: space-between;
@@ -692,6 +697,42 @@
 .composite-cost-page__saved-chip--updated {
   border-color: #DDD0B8;
   background: #FAF7F2;
+}
+
+.composite-cost-page__saved-chip--drift {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.composite-cost-page__saved-chip--drift b {
+  color: #1d4ed8;
+}
+
+.composite-cost-page__saved-chip--drift-up {
+  border-color: #fdba74;
+  background: #fff7ed;
+}
+
+.composite-cost-page__saved-chip--drift-up b {
+  color: #c2410c;
+}
+
+.composite-cost-page__saved-chip--drift-down {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.composite-cost-page__saved-chip--drift-down b {
+  color: #15803d;
+}
+
+.composite-cost-page__saved-chip--drift-muted {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.composite-cost-page__saved-chip--drift-muted b {
+  color: #475569;
 }
 
 .composite-cost-page__saved-actions {

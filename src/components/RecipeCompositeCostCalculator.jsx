@@ -3,52 +3,22 @@ import { Button } from './Button';
 import { recipeService } from '../services/recipeService';
 import { ingredientSearchService } from '../services/ingredientSearchService';
 import { useAuth } from '../contexts/useAuth';
-import { costFromQuantityAndUnit, normalizeUnit, normalizedCostPer1000 } from '../utils/unitUtils';
+import { costFromQuantityAndUnit, normalizeUnit } from '../utils/unitUtils';
 import {
     categoryCostOverrideService,
     computeRecipeTotalCostTaxIncluded,
 } from '../services/categoryCostOverrideService';
+import {
+    buildRecipeMetrics,
+    computeBatchStats,
+    computeCompositeFinancials,
+    getIngredientTaxRate,
+    getRecipeIngredients,
+    normalizeIngredientCandidate,
+    normalizeSavedIngredient,
+    toFiniteNumber,
+} from '../utils/compositeCostUtils';
 import './RecipeCompositeCostCalculator.css';
-
-const toFiniteNumber = (value) => {
-    const n = parseFloat(value);
-    return Number.isFinite(n) ? n : NaN;
-};
-
-const getRecipeIngredients = (recipe) => {
-    if (!recipe || typeof recipe !== 'object') return [];
-    if (recipe.type === 'bread') {
-        return [...(recipe.flours || []), ...(recipe.breadIngredients || [])].filter(Boolean);
-    }
-    return Array.isArray(recipe.ingredients) ? recipe.ingredients.filter(Boolean) : [];
-};
-
-const computeBatchStats = (ingredients) => {
-    let totalWeightGrams = 0;
-    let totalVolumeMl = 0;
-    for (const item of ingredients) {
-        const qty = toFiniteNumber(item?.quantity);
-        if (!Number.isFinite(qty)) continue;
-        const unit = normalizeUnit(item?.unit || '');
-        if (unit === 'g') totalWeightGrams += qty;
-        if (unit === 'kg') totalWeightGrams += qty * 1000;
-        if (unit === 'ml' || unit === 'cc') totalVolumeMl += qty;
-        if (unit === 'cl') totalVolumeMl += qty * 10;
-        if (unit === 'l') totalVolumeMl += qty * 1000;
-    }
-
-    const hasWeightBasis = totalWeightGrams > 0;
-    const hasVolumeBasis = totalVolumeMl > 0;
-    const defaultBatchAmount = (hasWeightBasis || hasVolumeBasis) ? (totalWeightGrams + totalVolumeMl) : NaN;
-    const defaultUnit = hasWeightBasis ? 'g' : (hasVolumeBasis ? 'ml' : 'g');
-
-    return {
-        totalWeightGrams,
-        totalVolumeMl,
-        defaultBatchAmount,
-        defaultUnit,
-    };
-};
 
 const createRowId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -56,20 +26,6 @@ const getDefaultSalesCount = (recipe) => {
     const servings = toFiniteNumber(recipe?.servings);
     if (!Number.isFinite(servings) || servings <= 0) return '';
     return String(servings);
-};
-
-const isTax10Category = (category) => {
-    const normalized = String(category || '').trim().toLowerCase();
-    return normalized === 'alcohol' || normalized === 'supplies';
-};
-
-const getIngredientTaxRate = (ingredient) => (isTax10Category(ingredient?.itemCategory) ? 1.10 : 1.08);
-
-const getDefaultUsageUnit = (packetUnit) => {
-    const unit = normalizeUnit(packetUnit);
-    if (unit === 'g' || unit === 'kg') return 'g';
-    if (unit === 'ml' || unit === 'cc' || unit === 'cl' || unit === 'l') return 'ml';
-    return unit || '個';
 };
 
 const getUnitCostBasisLabel = (ingredient) => {
@@ -86,47 +42,21 @@ const getUsageUnitOptions = (ingredient) => {
     return [unit || '個'];
 };
 
-const normalizeIngredientCandidate = (item) => {
-    const basePrice = toFiniteNumber(item?.price);
-    const packetSize = toFiniteNumber(item?.size);
-    const packetUnit = normalizeUnit(item?.unit || '');
-    const defaultUsageUnit = getDefaultUsageUnit(packetUnit);
-    const unitCostTaxExcluded = Number.isFinite(basePrice) && Number.isFinite(packetSize) && packetSize > 0
-        ? normalizedCostPer1000(basePrice, packetSize, packetUnit)
-        : basePrice;
+const solveIngredientUsageFromCost = ({ targetCostTaxIncluded, unitCostTaxExcluded, usageUnit, taxRate }) => {
+    const target = toFiniteNumber(targetCostTaxIncluded);
+    const unitCost = toFiniteNumber(unitCostTaxExcluded);
+    const rate = toFiniteNumber(taxRate);
+    if (!Number.isFinite(target) || target < 0) return NaN;
+    if (!Number.isFinite(unitCost) || unitCost <= 0) return NaN;
+    if (!Number.isFinite(rate) || rate <= 0) return NaN;
 
-    return {
-        name: String(item?.name || '').trim(),
-        source: item?.source || '',
-        displaySource: item?.displaySource || '',
-        price: Number.isFinite(basePrice) ? basePrice : null,
-        packetSize: Number.isFinite(packetSize) ? packetSize : null,
-        packetUnit,
-        unit: defaultUsageUnit,
-        defaultUsageUnit,
-        unitCostTaxExcluded: Number.isFinite(unitCostTaxExcluded) ? Math.round(unitCostTaxExcluded * 100) / 100 : null,
-        itemCategory: item?.itemCategory || item?.item_category || null,
-    };
+    const taxExcludedTarget = target / rate;
+    const unit = normalizeUnit(usageUnit || '');
+    if (unit === 'cl') return (taxExcludedTarget * 100) / unitCost;
+    if (unit === 'g' || unit === 'ml' || unit === 'cc') return (taxExcludedTarget * 1000) / unitCost;
+    return taxExcludedTarget / unitCost;
 };
 
-const normalizeSavedIngredient = (item) => {
-    const normalized = normalizeIngredientCandidate({
-        name: item?.name,
-        source: item?.source,
-        displaySource: item?.displaySource,
-        price: item?.price,
-        size: item?.packetSize,
-        unit: item?.packetUnit || item?.unit,
-        itemCategory: item?.itemCategory,
-    });
-    const savedUnitCost = toFiniteNumber(item?.unitCostTaxExcluded);
-    return {
-        ...normalized,
-        unit: item?.unit || normalized.unit,
-        defaultUsageUnit: item?.defaultUsageUnit || normalized.defaultUsageUnit,
-        unitCostTaxExcluded: Number.isFinite(savedUnitCost) ? savedUnitCost : normalized.unitCostTaxExcluded,
-    };
-};
 
 export const RecipeCompositeCostCalculator = ({
     currentRecipe,
@@ -156,6 +86,9 @@ export const RecipeCompositeCostCalculator = ({
     const [ingredientSearchQuery, setIngredientSearchQuery] = React.useState('');
     const [ingredientResults, setIngredientResults] = React.useState([]);
     const [loadingIngredients, setLoadingIngredients] = React.useState(false);
+    const [targetCostRate, setTargetCostRate] = React.useState('');
+    const [comparisonSlots, setComparisonSlots] = React.useState({ a: null, b: null });
+    const [usageSolverTargetId, setUsageSolverTargetId] = React.useState('base');
     const queuedRecipeHandledRef = React.useRef('');
 
     const currentMetrics = React.useMemo(() => {
@@ -201,6 +134,11 @@ export const RecipeCompositeCostCalculator = ({
                 ? getDefaultSalesCount(currentRecipe)
                 : String(initialState.salesCount)
         );
+        setTargetCostRate(
+            initialState?.targetCostRate == null ? '' : String(initialState.targetCostRate)
+        );
+        setComparisonSlots({ a: null, b: null });
+        setUsageSolverTargetId('base');
     }, [
         currentMetrics.recipeId,
         currentRecipe,
@@ -209,6 +147,7 @@ export const RecipeCompositeCostCalculator = ({
         initialState?.rows,
         initialState?.salesCount,
         initialState?.salesPrice,
+        initialState?.targetCostRate,
     ]);
 
     React.useEffect(() => {
@@ -340,20 +279,8 @@ export const RecipeCompositeCostCalculator = ({
 
     const getMetricsByRecipe = React.useCallback((recipeObj) => {
         if (!recipeObj) return null;
-        const ingredients = getRecipeIngredients(recipeObj);
-        const stats = computeBatchStats(ingredients);
         const recipeId = String(recipeObj.id || '');
-        const overrideMap = overrideMapsByRecipe[recipeId] || new Map();
-        return {
-            recipeId: String(recipeObj.id),
-            title: recipeObj.title || '無題',
-            ingredients,
-            totalCostTaxIncluded: computeRecipeTotalCostTaxIncluded(
-                { ...recipeObj, ingredients },
-                overrideMap
-            ),
-            ...stats,
-        };
+        return buildRecipeMetrics(recipeObj, overrideMapsByRecipe[recipeId] || new Map());
     }, [overrideMapsByRecipe]);
 
     const filteredRecipeSearchResults = React.useMemo(() => {
@@ -510,33 +437,177 @@ export const RecipeCompositeCostCalculator = ({
         return total;
     }, [currentLine.lineCost, otherLines]);
 
-    const compositeFinancials = React.useMemo(() => {
-        const price = toFiniteNumber(salesPrice);
-        const count = toFiniteNumber(salesCount);
-        const hasCount = Number.isFinite(count) && count > 0;
-        const hasPrice = Number.isFinite(price) && price > 0;
-        // totalCompositeCost is the cost for one composed product at current usage settings.
-        // Therefore cost rate should not change by sales count.
-        const unitCost = Number.isFinite(totalCompositeCost) ? totalCompositeCost : NaN;
-        const totalSales = hasPrice && hasCount ? price * count : NaN;
-        const totalCostForSales = Number.isFinite(unitCost) && hasCount ? unitCost * count : NaN;
-        const grossProfit = Number.isFinite(totalSales) && Number.isFinite(totalCostForSales)
-            ? totalSales - totalCostForSales
+    const lineSummaries = React.useMemo(() => {
+        const recipeTitleById = new Map(
+            candidateRecipes.map((recipe) => [String(recipe.id), recipe.title || `レシピ#${recipe.id}`])
+        );
+        const total = toFiniteNumber(totalCompositeCost);
+        const safePercent = (cost) => (
+            Number.isFinite(total) && total > 0 && Number.isFinite(cost)
+                ? (cost / total) * 100
+                : NaN
+        );
+
+        const baseUnit = currentMetrics.defaultUnit || 'g';
+        const baseLine = {
+            id: 'base',
+            itemType: 'recipe',
+            label: currentMetrics.title || 'ベースレシピ',
+            roleLabel: 'ベース',
+            usageAmount: currentUsageAmount,
+            usageUnit: baseUnit,
+            lineCost: currentLine.lineCost,
+            percent: safePercent(currentLine.lineCost),
+            recipeUnitCostTaxIncluded: currentLine.unitCost,
+            canSolveUsage: Number.isFinite(currentLine.unitCost) && currentLine.unitCost > 0,
+        };
+
+        const rowLines = rows.map((row, index) => {
+            const line = otherLines.find((x) => x.row.id === row.id);
+            if ((row.itemType || 'recipe') === 'ingredient') {
+                const ingredient = row.ingredient || {};
+                const usageUnit = row.usageUnit || ingredient.defaultUsageUnit || ingredient.unit || 'g';
+                const taxRate = getIngredientTaxRate(ingredient);
+                const unitCost = toFiniteNumber(ingredient?.unitCostTaxExcluded);
+                return {
+                    id: row.id,
+                    itemType: 'ingredient',
+                    label: ingredient.name || `材料${index + 1}`,
+                    roleLabel: '材料',
+                    usageAmount: row.usageAmount,
+                    usageUnit,
+                    lineCost: line?.lineCost,
+                    percent: safePercent(line?.lineCost),
+                    ingredient,
+                    ingredientUnitCostTaxExcluded: unitCost,
+                    ingredientTaxRate: taxRate,
+                    canSolveUsage: Number.isFinite(unitCost) && unitCost > 0 && Number.isFinite(taxRate) && taxRate > 0,
+                };
+            }
+
+            const recipeId = String(row.recipeId || '');
+            const label = line?.metrics?.title
+                || recipeDetails[recipeId]?.title
+                || recipeTitleById.get(recipeId)
+                || (recipeId ? `レシピ#${recipeId}` : `レシピ${index + 1}`);
+            return {
+                id: row.id,
+                itemType: 'recipe',
+                label,
+                roleLabel: 'レシピ',
+                usageAmount: row.usageAmount,
+                usageUnit: line?.metrics?.defaultUnit || 'g',
+                lineCost: line?.lineCost,
+                percent: safePercent(line?.lineCost),
+                recipeUnitCostTaxIncluded: line?.unitCost,
+                canSolveUsage: Number.isFinite(line?.unitCost) && line.unitCost > 0,
+            };
+        });
+
+        return [baseLine, ...rowLines];
+    }, [
+        candidateRecipes,
+        currentLine.lineCost,
+        currentLine.unitCost,
+        currentMetrics.defaultUnit,
+        currentMetrics.title,
+        currentUsageAmount,
+        otherLines,
+        recipeDetails,
+        rows,
+        totalCompositeCost,
+    ]);
+
+    const costImpactRows = React.useMemo(() => (
+        lineSummaries
+            .filter((line) => Number.isFinite(toFiniteNumber(line.lineCost)) && toFiniteNumber(line.lineCost) > 0)
+            .sort((a, b) => toFiniteNumber(b.lineCost) - toFiniteNumber(a.lineCost))
+    ), [lineSummaries]);
+
+    React.useEffect(() => {
+        if (lineSummaries.some((line) => line.id === usageSolverTargetId)) return;
+        setUsageSolverTargetId('base');
+    }, [lineSummaries, usageSolverTargetId]);
+
+    const compositeFinancials = React.useMemo(() => (
+        computeCompositeFinancials({
+            totalCompositeCost,
+            salesPrice,
+            salesCount,
+        })
+    ), [salesCount, salesPrice, totalCompositeCost]);
+
+    const pricingTarget = React.useMemo(() => {
+        const rate = toFiniteNumber(targetCostRate);
+        const validRate = Number.isFinite(rate) && rate > 0 && rate < 100;
+        const requiredSalesPrice = validRate && Number.isFinite(compositeFinancials.unitCost)
+            ? compositeFinancials.unitCost / (rate / 100)
             : NaN;
-        const costRate = hasPrice && Number.isFinite(unitCost)
-            ? (unitCost / price) * 100
+        const salesPriceValue = toFiniteNumber(salesPrice);
+        const gapFromCurrentPrice = Number.isFinite(requiredSalesPrice) && Number.isFinite(salesPriceValue)
+            ? salesPriceValue - requiredSalesPrice
+            : NaN;
+        const isMeetingTarget = validRate && Number.isFinite(compositeFinancials.costRate)
+            ? compositeFinancials.costRate <= rate
+            : null;
+
+        return {
+            rate,
+            validRate,
+            requiredSalesPrice,
+            gapFromCurrentPrice,
+            isMeetingTarget,
+        };
+    }, [targetCostRate, salesPrice, compositeFinancials.unitCost, compositeFinancials.costRate]);
+
+    const usageSolver = React.useMemo(() => {
+        const rate = toFiniteNumber(targetCostRate);
+        const price = toFiniteNumber(salesPrice);
+        const targetLine = lineSummaries.find((line) => line.id === usageSolverTargetId) || lineSummaries[0] || null;
+        const validInputs = Number.isFinite(rate) && rate > 0 && rate < 100 && Number.isFinite(price) && price > 0;
+        const targetCostLimit = validInputs ? price * (rate / 100) : NaN;
+        const otherCost = lineSummaries
+            .filter((line) => line.id !== targetLine?.id)
+            .reduce((sum, line) => {
+                const cost = toFiniteNumber(line.lineCost);
+                return Number.isFinite(cost) ? sum + cost : sum;
+            }, 0);
+        const allowedLineCost = Number.isFinite(targetCostLimit) ? targetCostLimit - otherCost : NaN;
+        let solvedUsage = NaN;
+        if (targetLine && Number.isFinite(allowedLineCost) && allowedLineCost >= 0 && targetLine.canSolveUsage) {
+            if (targetLine.itemType === 'ingredient') {
+                solvedUsage = solveIngredientUsageFromCost({
+                    targetCostTaxIncluded: allowedLineCost,
+                    unitCostTaxExcluded: targetLine.ingredientUnitCostTaxExcluded,
+                    usageUnit: targetLine.usageUnit,
+                    taxRate: targetLine.ingredientTaxRate,
+                });
+            } else {
+                const unitCost = toFiniteNumber(targetLine.recipeUnitCostTaxIncluded);
+                solvedUsage = Number.isFinite(unitCost) && unitCost > 0
+                    ? allowedLineCost / unitCost
+                    : NaN;
+            }
+        }
+
+        const currentUsage = toFiniteNumber(targetLine?.usageAmount);
+        const usageDiff = Number.isFinite(solvedUsage) && Number.isFinite(currentUsage)
+            ? solvedUsage - currentUsage
             : NaN;
 
         return {
-            price,
-            count,
-            totalSales,
-            totalCostForSales,
-            unitCost,
-            grossProfit,
-            costRate,
+            targetLine,
+            validInputs,
+            targetCostLimit,
+            otherCost,
+            allowedLineCost,
+            solvedUsage,
+            currentUsage,
+            usageDiff,
+            canApply: !readOnly && Number.isFinite(solvedUsage) && solvedUsage >= 0 && !!targetLine,
+            isAlreadyOverOtherCost: Number.isFinite(allowedLineCost) && allowedLineCost < 0,
         };
-    }, [salesCount, salesPrice, totalCompositeCost]);
+    }, [lineSummaries, readOnly, salesPrice, targetCostRate, usageSolverTargetId]);
 
     const snapshot = React.useMemo(() => ({
         baseRecipeId: currentMetrics.recipeId,
@@ -561,6 +632,7 @@ export const RecipeCompositeCostCalculator = ({
         })),
         salesPrice,
         salesCount,
+        targetCostRate,
         totalCompositeCost,
         unitCost: compositeFinancials.unitCost,
         totalSales: compositeFinancials.totalSales,
@@ -572,6 +644,7 @@ export const RecipeCompositeCostCalculator = ({
         rows,
         salesPrice,
         salesCount,
+        targetCostRate,
         totalCompositeCost,
         compositeFinancials,
     ]);
@@ -603,6 +676,18 @@ export const RecipeCompositeCostCalculator = ({
         return `¥${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
     };
 
+    const formatPercent = (value) => {
+        const n = toFiniteNumber(value);
+        if (!Number.isFinite(n)) return '—';
+        return `${n.toFixed(1)}%`;
+    };
+
+    const formatUsage = (value, unit) => {
+        const n = toFiniteNumber(value);
+        if (!Number.isFinite(n)) return '—';
+        return `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}${unit || ''}`;
+    };
+
     const formatBatch = (amount, unit) => {
         const n = toFiniteNumber(amount);
         if (!Number.isFinite(n) || n <= 0) return '—';
@@ -628,6 +713,65 @@ export const RecipeCompositeCostCalculator = ({
         if (Number.isFinite(price)) return `仕入: ${formatMoney(price)}`;
         return '単価情報なし';
     };
+
+    const captureComparisonSlot = (slotKey) => {
+        setComparisonSlots((prev) => ({
+            ...prev,
+            [slotKey]: {
+                savedAt: new Date().toISOString(),
+                summary: {
+                    baseRecipeTitle: currentMetrics.title,
+                    baseUsageAmount: currentUsageAmount === '' ? '未入力' : `${currentUsageAmount}g`,
+                    rowCount: rows.length + 1,
+                    salesPrice: formatMoney(salesPrice),
+                    salesCount: salesCount === '' ? '未入力' : `${salesCount}`,
+                    unitCost: formatMoney(compositeFinancials.unitCost),
+                    totalSales: formatMoney(compositeFinancials.totalSales),
+                    grossProfit: formatMoney(compositeFinancials.grossProfit),
+                    costRate: Number.isFinite(compositeFinancials.costRate)
+                        ? `${compositeFinancials.costRate.toFixed(1)}%`
+                        : '—',
+                },
+            },
+        }));
+    };
+
+    const applySolvedUsage = () => {
+        if (!usageSolver.canApply || !usageSolver.targetLine) return;
+        const rounded = Math.max(0, Math.round(usageSolver.solvedUsage * 100) / 100);
+        const nextValue = String(rounded);
+        if (usageSolver.targetLine.id === 'base') {
+            setCurrentUsageAmount(nextValue);
+            return;
+        }
+        updateRowField(usageSolver.targetLine.id, 'usageAmount', nextValue);
+    };
+
+    const comparisonRows = React.useMemo(() => {
+        const slotA = comparisonSlots.a?.summary || null;
+        const slotB = comparisonSlots.b?.summary || null;
+        if (!slotA && !slotB) return [];
+
+        const fallback = '—';
+        const definitions = [
+            ['ベースレシピ', slotA?.baseRecipeTitle ?? fallback, slotB?.baseRecipeTitle ?? fallback],
+            ['ベース使用量', slotA?.baseUsageAmount ?? fallback, slotB?.baseUsageAmount ?? fallback],
+            ['項目数', slotA ? `${slotA.rowCount}件` : fallback, slotB ? `${slotB.rowCount}件` : fallback],
+            ['販売価格', slotA?.salesPrice ?? fallback, slotB?.salesPrice ?? fallback],
+            ['販売数', slotA?.salesCount ?? fallback, slotB?.salesCount ?? fallback],
+            ['1個原価', slotA?.unitCost ?? fallback, slotB?.unitCost ?? fallback],
+            ['予想売上', slotA?.totalSales ?? fallback, slotB?.totalSales ?? fallback],
+            ['粗利益', slotA?.grossProfit ?? fallback, slotB?.grossProfit ?? fallback],
+            ['原価率', slotA?.costRate ?? fallback, slotB?.costRate ?? fallback],
+        ];
+
+        return definitions.map(([label, valueA, valueB]) => ({
+            label,
+            valueA,
+            valueB,
+            changed: valueA !== valueB,
+        }));
+    }, [comparisonSlots]);
 
     return (
         <div className="screen-only no-print composite-cost">
@@ -886,6 +1030,37 @@ export const RecipeCompositeCostCalculator = ({
                 <strong className="composite-cost__footer-total">{formatMoney(totalCompositeCost)}</strong>
             </div>
 
+            <div className="composite-cost__impact">
+                <div className="composite-cost__impact-head">
+                    <strong>原価インパクト分析</strong>
+                    <span>合成原価に占める割合が大きい順に表示します。</span>
+                </div>
+                {costImpactRows.length === 0 ? (
+                    <div className="composite-cost__impact-empty">使用量を入力すると、行別の寄与率が表示されます。</div>
+                ) : (
+                    <div className="composite-cost__impact-list">
+                        {costImpactRows.map((line, index) => (
+                            <div key={line.id} className="composite-cost__impact-row">
+                                <div className="composite-cost__impact-name">
+                                    <span>{index + 1}</span>
+                                    <div>
+                                        <strong>{line.label}</strong>
+                                        <em>{line.roleLabel} / {formatUsage(line.usageAmount, line.usageUnit)}</em>
+                                    </div>
+                                </div>
+                                <div className="composite-cost__impact-meter" aria-label={`${line.label} ${formatPercent(line.percent)}`}>
+                                    <span style={{ width: `${Math.min(100, Math.max(0, toFiniteNumber(line.percent) || 0))}%` }} />
+                                </div>
+                                <div className="composite-cost__impact-values">
+                                    <strong>{formatMoney(line.lineCost)}</strong>
+                                    <span>{formatPercent(line.percent)}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
             <div className="composite-cost__profit">
                 <div className="composite-cost__profit-head">
                     <strong>合成原価率シミュレーター</strong>
@@ -923,6 +1098,21 @@ export const RecipeCompositeCostCalculator = ({
                             placeholder="例: 10"
                         />
                     </div>
+
+                    <div className="composite-cost__profit-field">
+                        <label>目標原価率 (%)</label>
+                        <input
+                            className="composite-cost__input"
+                            type="number"
+                            min="0.1"
+                            max="99.9"
+                            step="0.1"
+                            value={targetCostRate}
+                            disabled={readOnly}
+                            onChange={(e) => setTargetCostRate(e.target.value)}
+                            placeholder="例: 35"
+                        />
+                    </div>
                 </div>
 
                 <div className="composite-cost__profit-cards">
@@ -946,8 +1136,159 @@ export const RecipeCompositeCostCalculator = ({
                                 : '—'}
                         </strong>
                     </div>
+                    <div className={`composite-cost__profit-card ${pricingTarget.validRate ? 'composite-cost__profit-card--target' : ''}`}>
+                        <span className="composite-cost__profit-label">目標達成に必要な売価</span>
+                        <strong>{formatMoney(pricingTarget.requiredSalesPrice)}</strong>
+                    </div>
+                    <div className={`composite-cost__profit-card ${pricingTarget.isMeetingTarget === false ? 'composite-cost__profit-card--warning' : ''}`}>
+                        <span className="composite-cost__profit-label">現在売価との差額</span>
+                        <strong>
+                            {Number.isFinite(pricingTarget.gapFromCurrentPrice)
+                                ? `${pricingTarget.gapFromCurrentPrice >= 0 ? '+' : ''}${formatMoney(pricingTarget.gapFromCurrentPrice)}`
+                                : '—'}
+                        </strong>
+                    </div>
                 </div>
+
+                <div className="composite-cost__target-note">
+                    {pricingTarget.validRate
+                        ? (
+                            pricingTarget.isMeetingTarget === null
+                                ? `目標原価率 ${pricingTarget.rate.toFixed(1)}% から必要売価を逆算しています。`
+                                : (
+                                    pricingTarget.isMeetingTarget
+                                        ? `現在の売価は、目標原価率 ${pricingTarget.rate.toFixed(1)}% を満たしています。`
+                                        : `現在の売価では目標原価率 ${pricingTarget.rate.toFixed(1)}% を超えています。必要売価を基準に見直してください。`
+                                )
+                        )
+                        : '目標原価率を入れると、必要な売価を逆算できます。'}
+                </div>
+
+                {!readOnly && (
+                    <div className="composite-cost__usage-solver">
+                        <div className="composite-cost__usage-solver-head">
+                            <strong>目標原価率から使用量を逆算</strong>
+                            <span>対象行以外の原価を固定して、目標内に収まる使用量を出します。</span>
+                        </div>
+                        <div className="composite-cost__usage-solver-grid">
+                            <div className="composite-cost__profit-field">
+                                <label>逆算する行</label>
+                                <select
+                                    className="composite-cost__input"
+                                    value={usageSolverTargetId}
+                                    onChange={(e) => setUsageSolverTargetId(e.target.value)}
+                                >
+                                    {lineSummaries.map((line) => (
+                                        <option key={line.id} value={line.id}>
+                                            {line.roleLabel}: {line.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="composite-cost__usage-solver-card">
+                                <span>許容原価</span>
+                                <strong>{formatMoney(usageSolver.targetCostLimit)}</strong>
+                            </div>
+                            <div className="composite-cost__usage-solver-card">
+                                <span>対象外の原価</span>
+                                <strong>{formatMoney(usageSolver.otherCost)}</strong>
+                            </div>
+                            <div className={`composite-cost__usage-solver-card ${usageSolver.isAlreadyOverOtherCost ? 'composite-cost__usage-solver-card--warning' : ''}`}>
+                                <span>対象行に使える原価</span>
+                                <strong>{formatMoney(usageSolver.allowedLineCost)}</strong>
+                            </div>
+                            <div className="composite-cost__usage-solver-card composite-cost__usage-solver-card--result">
+                                <span>上限使用量</span>
+                                <strong>{formatUsage(usageSolver.solvedUsage, usageSolver.targetLine?.usageUnit)}</strong>
+                            </div>
+                            <div className="composite-cost__usage-solver-card">
+                                <span>現在との差</span>
+                                <strong>
+                                    {Number.isFinite(usageSolver.usageDiff)
+                                        ? `${usageSolver.usageDiff >= 0 ? '+' : ''}${formatUsage(usageSolver.usageDiff, usageSolver.targetLine?.usageUnit)}`
+                                        : '—'}
+                                </strong>
+                            </div>
+                        </div>
+                        <div className="composite-cost__usage-solver-actions">
+                            <span>
+                                {usageSolver.validInputs
+                                    ? (usageSolver.isAlreadyOverOtherCost
+                                        ? '対象行を0にしても、他の行だけで目標原価率を超えています。'
+                                        : '販売価格と目標原価率から使用量を逆算しています。')
+                                    : '販売価格と目標原価率を入力すると逆算できます。'}
+                            </span>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={applySolvedUsage}
+                                disabled={!usageSolver.canApply}
+                            >
+                                この使用量を反映
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </div>
+
+            {!readOnly && (
+                <div className="composite-cost__compare">
+                    <div className="composite-cost__compare-head">
+                        <div>
+                            <strong>2案比較</strong>
+                            <span>現在の内容を案A / 案Bに保存して、売価・原価率・粗利を並べて比較します。</span>
+                        </div>
+                        <div className="composite-cost__compare-actions">
+                            <Button type="button" variant="secondary" onClick={() => captureComparisonSlot('a')}>
+                                現在を案Aに保存
+                            </Button>
+                            <Button type="button" variant="secondary" onClick={() => captureComparisonSlot('b')}>
+                                現在を案Bに保存
+                            </Button>
+                            <Button type="button" variant="ghost" onClick={() => setComparisonSlots({ a: null, b: null })}>
+                                比較をクリア
+                            </Button>
+                        </div>
+                    </div>
+
+                    {(comparisonSlots.a || comparisonSlots.b) ? (
+                        <>
+                            <div className="composite-cost__compare-grid">
+                                <div className="composite-cost__compare-card">
+                                    <span className="composite-cost__compare-card-label">案A</span>
+                                    <strong>{comparisonSlots.a ? `保存時刻 ${new Date(comparisonSlots.a.savedAt).toLocaleString()}` : '未保存'}</strong>
+                                </div>
+                                <div className="composite-cost__compare-card">
+                                    <span className="composite-cost__compare-card-label">案B</span>
+                                    <strong>{comparisonSlots.b ? `保存時刻 ${new Date(comparisonSlots.b.savedAt).toLocaleString()}` : '未保存'}</strong>
+                                </div>
+                            </div>
+
+                            <div className="composite-cost__compare-table">
+                                <div className="composite-cost__compare-table-head">
+                                    <strong>比較項目</strong>
+                                    <strong>案A</strong>
+                                    <strong>案B</strong>
+                                </div>
+                                {comparisonRows.map((row) => (
+                                    <div
+                                        key={row.label}
+                                        className={`composite-cost__compare-table-row ${row.changed ? 'is-changed' : ''}`}
+                                    >
+                                        <span>{row.label}</span>
+                                        <strong>{row.valueA}</strong>
+                                        <strong>{row.valueB}</strong>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    ) : (
+                        <div className="composite-cost__compare-empty">
+                            まず現在の内容を案Aまたは案Bに保存してください。
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };
