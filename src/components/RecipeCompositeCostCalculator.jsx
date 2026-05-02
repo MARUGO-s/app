@@ -22,6 +22,17 @@ import './RecipeCompositeCostCalculator.css';
 
 const createRowId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
+const IMPACT_CHART_COLORS = [
+    '#7A5230',
+    '#B8935A',
+    '#2F6F73',
+    '#587B4D',
+    '#9B4E42',
+    '#596A8A',
+    '#C0894A',
+    '#455A64',
+];
+
 const getDefaultSalesCount = (recipe) => {
     const servings = toFiniteNumber(recipe?.servings);
     if (!Number.isFinite(servings) || servings <= 0) return '';
@@ -89,6 +100,7 @@ export const RecipeCompositeCostCalculator = ({
     const [targetCostRate, setTargetCostRate] = React.useState('');
     const [comparisonSlots, setComparisonSlots] = React.useState({ a: null, b: null });
     const [usageSolverTargetId, setUsageSolverTargetId] = React.useState('base');
+    const [impactChartView, setImpactChartView] = React.useState('bar');
     const queuedRecipeHandledRef = React.useRef('');
 
     const currentMetrics = React.useMemo(() => {
@@ -523,6 +535,33 @@ export const RecipeCompositeCostCalculator = ({
             .filter((line) => Number.isFinite(toFiniteNumber(line.lineCost)) && toFiniteNumber(line.lineCost) > 0)
             .sort((a, b) => toFiniteNumber(b.lineCost) - toFiniteNumber(a.lineCost))
     ), [lineSummaries]);
+
+    const impactPieChart = React.useMemo(() => {
+        const total = costImpactRows.reduce((sum, line) => sum + toFiniteNumber(line.lineCost), 0);
+        if (!Number.isFinite(total) || total <= 0) {
+            return {
+                total: 0,
+                gradient: '#e2e8f0',
+            };
+        }
+
+        let start = 0;
+        const segments = costImpactRows.map((line, index) => {
+            const value = toFiniteNumber(line.lineCost);
+            const end = index === costImpactRows.length - 1
+                ? 360
+                : start + (value / total) * 360;
+            const color = IMPACT_CHART_COLORS[index % IMPACT_CHART_COLORS.length];
+            const segment = `${color} ${start.toFixed(2)}deg ${end.toFixed(2)}deg`;
+            start = end;
+            return segment;
+        });
+
+        return {
+            total,
+            gradient: `conic-gradient(${segments.join(', ')})`,
+        };
+    }, [costImpactRows]);
 
     React.useEffect(() => {
         if (lineSummaries.some((line) => line.id === usageSolverTargetId)) return;
@@ -1032,11 +1071,65 @@ export const RecipeCompositeCostCalculator = ({
 
             <div className="composite-cost__impact">
                 <div className="composite-cost__impact-head">
-                    <strong>原価インパクト分析</strong>
-                    <span>合成原価に占める割合が大きい順に表示します。</span>
+                    <div className="composite-cost__impact-head-main">
+                        <strong>原価インパクト分析</strong>
+                        <span>合成原価に占める割合が大きい順に表示します。</span>
+                    </div>
+                    <div className="composite-cost__impact-switch" role="group" aria-label="原価インパクト分析の表示切替">
+                        <button
+                            type="button"
+                            className={`composite-cost__impact-switch-btn ${impactChartView === 'bar' ? 'is-active' : ''}`}
+                            aria-pressed={impactChartView === 'bar'}
+                            onClick={() => setImpactChartView('bar')}
+                        >
+                            棒グラフ
+                        </button>
+                        <button
+                            type="button"
+                            className={`composite-cost__impact-switch-btn ${impactChartView === 'pie' ? 'is-active' : ''}`}
+                            aria-pressed={impactChartView === 'pie'}
+                            onClick={() => setImpactChartView('pie')}
+                        >
+                            円グラフ
+                        </button>
+                    </div>
                 </div>
                 {costImpactRows.length === 0 ? (
                     <div className="composite-cost__impact-empty">使用量を入力すると、行別の寄与率が表示されます。</div>
+                ) : impactChartView === 'pie' ? (
+                    <div className="composite-cost__impact-pie-view">
+                        <div className="composite-cost__impact-pie-wrap">
+                            <div
+                                className="composite-cost__impact-pie"
+                                style={{ background: impactPieChart.gradient }}
+                                role="img"
+                                aria-label="合成原価に占める行別割合の円グラフ"
+                            />
+                            <div className="composite-cost__impact-pie-center">
+                                <span>合計</span>
+                                <strong>{formatMoney(impactPieChart.total)}</strong>
+                            </div>
+                        </div>
+                        <div className="composite-cost__impact-legend">
+                            {costImpactRows.map((line, index) => (
+                                <div key={line.id} className="composite-cost__impact-legend-row">
+                                    <span
+                                        className="composite-cost__impact-legend-swatch"
+                                        style={{ background: IMPACT_CHART_COLORS[index % IMPACT_CHART_COLORS.length] }}
+                                        aria-hidden="true"
+                                    />
+                                    <div className="composite-cost__impact-legend-name">
+                                        <strong>{line.label}</strong>
+                                        <span>{line.roleLabel} / {formatUsage(line.usageAmount, line.usageUnit)}</span>
+                                    </div>
+                                    <div className="composite-cost__impact-legend-values">
+                                        <strong>{formatMoney(line.lineCost)}</strong>
+                                        <span>{formatPercent(line.percent)}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 ) : (
                     <div className="composite-cost__impact-list">
                         {costImpactRows.map((line, index) => (
