@@ -93,7 +93,7 @@ const n=`.composite-cost {
 
 .composite-cost__head-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 0.8fr) 34px;
+  grid-template-columns: minmax(0, 2.25fr) minmax(0, 0.63fr) minmax(0, 0.6fr) minmax(0, 0.53fr) 34px;
   gap: 10px;
   font-size: 0.77rem;
   color: #334155;
@@ -107,7 +107,7 @@ const n=`.composite-cost {
 
 .composite-cost__row {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 0.8fr) 34px;
+  grid-template-columns: minmax(0, 2.25fr) minmax(0, 0.63fr) minmax(0, 0.6fr) minmax(0, 0.53fr) 34px;
   gap: 10px;
   align-items: center;
   padding: 9px 11px;
@@ -118,7 +118,7 @@ const n=`.composite-cost {
 }
 
 .composite-cost__row--with-remove {
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 0.8fr) 34px;
+  grid-template-columns: minmax(0, 2.25fr) minmax(0, 0.63fr) minmax(0, 0.6fr) minmax(0, 0.53fr) 34px;
 }
 
 .composite-cost__head-row > *,
@@ -910,7 +910,7 @@ const n=`.composite-cost {
   font-size: 0.78rem;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 768px) {
   .composite-cost {
     padding: 0.9rem;
   }
@@ -1030,5 +1030,6 @@ const n=`.composite-cost {
     width: fit-content;
   }
 }
+
 
 `;export{n as default};

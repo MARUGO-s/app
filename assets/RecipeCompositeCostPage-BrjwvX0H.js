@@ -787,7 +787,7 @@ const n=`.composite-cost-page {
   color: #334155 !important;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .composite-cost-page__hero {
     padding: 18px;
   }
@@ -853,4 +853,5 @@ const n=`.composite-cost-page {
     justify-content: space-between;
   }
 }
+
 `;export{n as default};
