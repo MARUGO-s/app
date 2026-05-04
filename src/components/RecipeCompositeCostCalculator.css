@@ -93,7 +93,7 @@
 
 .composite-cost__head-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 0.8fr) 34px;
+  grid-template-columns: minmax(0, 2.25fr) minmax(0, 0.63fr) minmax(0, 0.6fr) minmax(0, 0.53fr) 34px;
   gap: 10px;
   font-size: 0.77rem;
   color: #334155;
@@ -107,7 +107,7 @@
 
 .composite-cost__row {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 0.8fr) 34px;
+  grid-template-columns: minmax(0, 2.25fr) minmax(0, 0.63fr) minmax(0, 0.6fr) minmax(0, 0.53fr) 34px;
   gap: 10px;
   align-items: center;
   padding: 9px 11px;
@@ -118,7 +118,7 @@
 }
 
 .composite-cost__row--with-remove {
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 0.8fr) 34px;
+  grid-template-columns: minmax(0, 2.25fr) minmax(0, 0.63fr) minmax(0, 0.6fr) minmax(0, 0.53fr) 34px;
 }
 
 .composite-cost__head-row > *,
@@ -910,7 +910,7 @@
   font-size: 0.78rem;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 768px) {
   .composite-cost {
     padding: 0.9rem;
   }
@@ -1031,48 +1031,4 @@
   }
 }
 
-@media (max-width: 1180px) {
-  .composite-cost__head-row {
-    display: none;
-  }
 
-  .composite-cost__row,
-  .composite-cost__row--with-remove {
-    grid-template-columns: 1fr;
-    gap: 7px;
-    padding: 8px;
-    border: 1px solid #DDD0B8;
-    border-radius: 6px;
-    background: #ffffff;
-  }
-
-  .composite-cost__add-panel {
-    grid-template-columns: 1fr;
-  }
-
-  .composite-cost__line-total {
-    text-align: right;
-  }
-
-  .composite-cost__profit-grid,
-  .composite-cost__profit-cards,
-  .composite-cost__compare-grid,
-  .composite-cost__usage-solver-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .composite-cost__compare-table-head,
-  .composite-cost__compare-table-row {
-    grid-template-columns: 1fr;
-  }
-
-  .composite-cost__impact-head,
-  .composite-cost__usage-solver-head,
-  .composite-cost__impact-row {
-    grid-template-columns: 1fr;
-  }
-
-  .composite-cost__impact-pie-view {
-    grid-template-columns: 1fr;
-  }
-}
