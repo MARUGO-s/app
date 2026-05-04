@@ -807,6 +807,12 @@ const n=`.composite-cost-page {
     align-items: stretch;
   }
 
+  .composite-cost-page__save-row .composite-cost-page__search {
+    flex: 0 0 auto;
+    min-width: 0;
+    width: 100%;
+  }
+
   .composite-cost-page__saved-hero-head {
     flex-direction: column;
     align-items: flex-start;
