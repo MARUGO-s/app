@@ -179,7 +179,7 @@ const summarizeIngredientGroup = (items, { multiplier = 1, totalRecipeCostTaxInc
         ingredientCount += 1;
         if (typeof item !== 'object') return;
 
-        const qty = toFiniteNumber(item.quantity);
+        const qty = parseQuantityValue(item.quantity);
         const scaledQty = Number.isFinite(qty) ? qty * multiplier : NaN;
         const rawUnit = String(item.unit || '').trim();
         const normalizedUnit = normalizeUnit(rawUnit);
@@ -208,8 +208,8 @@ const summarizeIngredientGroup = (items, { multiplier = 1, totalRecipeCostTaxInc
         unitLabel,
         total,
         display: unitLabel === '単位なし'
-            ? `${formatCompactNumber(total)}`
-            : `${formatCompactNumber(total)} ${unitLabel}`,
+            ? `${formatCompactNumber(total, { maximumFractionDigits: 3 })}`
+            : `${formatCompactNumber(total, { maximumFractionDigits: 3 })} ${unitLabel}`,
     }));
 
     const hasWeightBasis = totalWeightGrams > 0;
@@ -284,6 +284,186 @@ const UI_TEXT_DEFAULT = Object.freeze({
 
 const UI_TEXT_KEYS = Object.keys(UI_TEXT_DEFAULT);
 
+const formatScaledQuantity = (value) => {
+    if (!Number.isFinite(value)) return '';
+    return String(Math.round(value * 10) / 10)
+        .replace(/\.0+$/, '')
+        .replace(/(\.\d*?)0+$/, '$1');
+};
+
+const getUsageAmountStorageKey = (scopeKey) => `recipe-detail:group-usage-amounts:${String(scopeKey ?? '')}`;
+const getUsageScopeKey = (recipeId, recipeTitle) => {
+    if (recipeId) return `id:${String(recipeId)}`;
+    if (recipeTitle) return `title:${String(recipeTitle)}`;
+    return '';
+};
+
+const loadUsageAmountMap = (scopeKey) => {
+    if (!scopeKey || typeof window === 'undefined') return new Map();
+    try {
+        const raw = window.localStorage.getItem(getUsageAmountStorageKey(scopeKey));
+        if (!raw) return new Map();
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return new Map();
+        const next = new Map();
+        for (const [key, value] of Object.entries(parsed)) {
+            if (!key) continue;
+            next.set(key, value == null ? '' : String(value));
+        }
+        return next;
+    } catch {
+        return new Map();
+    }
+};
+
+const saveUsageAmountMap = (scopeKey, usageMap) => {
+    if (!scopeKey || typeof window === 'undefined') return;
+    try {
+        const payload = Object.fromEntries(Array.from(usageMap.entries()));
+        window.localStorage.setItem(getUsageAmountStorageKey(scopeKey), JSON.stringify(payload));
+    } catch {
+        // ignore localStorage write errors (private mode / quota, etc.)
+    }
+};
+
+const mergeUsageMaps = (primaryMap, secondaryMap) => {
+    const merged = new Map(secondaryMap || []);
+    for (const [key, value] of (primaryMap || new Map()).entries()) {
+        merged.set(key, value);
+    }
+    return merged;
+};
+
+const loadUsageAmountForGroup = ({ recipeId, recipeTitle, groupKey }) => {
+    if (!groupKey) return '';
+    const idScope = getUsageScopeKey(recipeId, null);
+    const titleScope = getUsageScopeKey(null, recipeTitle);
+    const idMap = loadUsageAmountMap(idScope);
+    const titleMap = loadUsageAmountMap(titleScope);
+    const merged = mergeUsageMaps(idMap, titleMap);
+    const value = merged.get(groupKey);
+    return value == null ? '' : String(value);
+};
+
+const saveUsageAmountForGroup = ({ recipeId, recipeTitle, groupKey, value }) => {
+    if (!groupKey) return;
+    const nextValue = value == null ? '' : String(value);
+    const idScope = getUsageScopeKey(recipeId, null);
+    const titleScope = getUsageScopeKey(null, recipeTitle);
+
+    if (idScope) {
+        const idMap = loadUsageAmountMap(idScope);
+        idMap.set(groupKey, nextValue);
+        saveUsageAmountMap(idScope, idMap);
+    }
+    if (titleScope) {
+        const titleMap = loadUsageAmountMap(titleScope);
+        titleMap.set(groupKey, nextValue);
+        saveUsageAmountMap(titleScope, titleMap);
+    }
+};
+
+const parseFractionInput = (value) => {
+    const raw = String(value ?? '').trim().replace(/／/g, '/');
+    if (!raw) return null;
+
+    const mixed = raw.match(/^(-?\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+    if (mixed) {
+        const whole = Number(mixed[1]);
+        const numerator = Number(mixed[2]);
+        const denominator = Number(mixed[3]);
+        if (Number.isInteger(whole) && Number.isInteger(numerator) && Number.isInteger(denominator) && numerator >= 0 && denominator > 0) {
+            const improper = whole >= 0
+                ? (whole * denominator + numerator)
+                : (whole * denominator - numerator);
+            return { numerator: improper, denominator };
+        }
+    }
+
+    const simple = raw.match(/^(-?\d+)\s*\/\s*(\d+)$/);
+    if (simple) {
+        const numerator = Number(simple[1]);
+        const denominator = Number(simple[2]);
+        if (Number.isInteger(numerator) && Number.isInteger(denominator) && denominator > 0) {
+            return { numerator, denominator };
+        }
+    }
+
+    return null;
+};
+
+const gcd = (a, b) => {
+    let x = Math.abs(a);
+    let y = Math.abs(b);
+    while (y !== 0) {
+        const t = x % y;
+        x = y;
+        y = t;
+    }
+    return x || 1;
+};
+
+const formatFraction = (numerator, denominator) => {
+    if (!Number.isInteger(numerator) || !Number.isInteger(denominator) || denominator <= 0) return '';
+    const sign = numerator < 0 ? '-' : '';
+    const absNum = Math.abs(numerator);
+    const whole = Math.floor(absNum / denominator);
+    const remainder = absNum % denominator;
+    if (remainder === 0) return `${sign}${whole}`;
+    if (whole === 0) return `${sign}${remainder}/${denominator}`;
+    return `${sign}${whole} ${remainder}/${denominator}`;
+};
+
+const parseQuantityValue = (value) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return NaN;
+
+    // Fraction first. parseFloat("1/8") === 1 になるのを防ぐ。
+    const fraction = parseFractionInput(raw);
+    if (fraction && Number.isFinite(fraction.numerator) && Number.isFinite(fraction.denominator) && fraction.denominator !== 0) {
+        return fraction.numerator / fraction.denominator;
+    }
+
+    // Strict numeric parse (allow only full numeric literals).
+    const normalized = raw.replace(/[，,]/g, '').replace(/−/g, '-');
+    if (!/^-?(?:\d+|\d*\.\d+)$/.test(normalized)) return NaN;
+    const numeric = Number(normalized);
+    if (Number.isFinite(numeric)) return numeric;
+
+    return NaN;
+};
+
+const parseYieldRateInput = (value) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return 1;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) return NaN;
+    // Allow both ratio input (0.6) and percentage input (60 => 0.6)
+    if (n > 1) return n / 100;
+    return n;
+};
+
+const scaleQuantityText = (qty, mult) => {
+    if (qty === null || qty === undefined || qty === '') return '';
+
+    const rawQty = String(qty).trim();
+    const multNum = Number(mult);
+    if (!Number.isFinite(multNum) || Math.abs(multNum - 1) < 0.0000001) {
+        return rawQty;
+    }
+
+    const parsedFraction = parseFractionInput(rawQty);
+    if (parsedFraction && Number.isInteger(multNum)) {
+        const scaledNumerator = parsedFraction.numerator * multNum;
+        const common = gcd(scaledNumerator, parsedFraction.denominator);
+        return formatFraction(scaledNumerator / common, parsedFraction.denominator / common);
+    }
+
+    const num = Number(rawQty);
+    if (!Number.isFinite(num)) return rawQty;
+    return formatScaledQuantity(num * multNum);
+};
+
 export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onHardDelete, isDeleted, onView, onDuplicate, onOpenCompositeCost, backLabel, onList, forceEditEnabled = false }) => {
     const { user } = useAuth();
     const toast = useToast();
@@ -321,16 +501,13 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
     // Profit Calculator State
     const [salesPrice, setSalesPrice] = React.useState('');
     const [calcServings, setCalcServings] = React.useState('');
+    const [calcUsageGrams, setCalcUsageGrams] = React.useState('');
+    const [calcYieldRate, setCalcYieldRate] = React.useState('1');
+    const [isSavingRecipeYieldRate, setIsSavingRecipeYieldRate] = React.useState(false);
 
     // Helper for Normal Recipe Scaling
     const getScaledQty = (qty, mult) => {
-        if (!qty) return '';
-        const num = parseFloat(qty);
-        if (isNaN(num)) return qty;
-        // Float precision handling could be better but simple for now
-        const val = num * parseFloat(mult);
-        // Avoid .00 if integer
-        return Number.isInteger(val) ? val.toString() : val.toFixed(1).replace(/\.0$/, '');
+        return scaleQuantityText(qty, mult);
     };
 
     const getScaledCost = (cost, mult) => {
@@ -475,7 +652,11 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
             setGroupUsageAmountByCategory(new Map());
             return undefined;
         }
-        setGroupUsageAmountByCategory(new Map());
+        const idScope = getUsageScopeKey(recipe.id, null);
+        const titleScope = getUsageScopeKey(null, recipe?.title);
+        setGroupUsageAmountByCategory(
+            mergeUsageMaps(loadUsageAmountMap(idScope), loadUsageAmountMap(titleScope))
+        );
 
         const loadCategoryOverrides = async () => {
             try {
@@ -745,7 +926,34 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
             setCalcServings('');
         }
         setSalesPrice('');
-    }, [recipe]);
+        setCalcUsageGrams('');
+        const recipeYieldRate = Number(sourceRecipe?.yieldRate ?? recipe?.yieldRate);
+        setCalcYieldRate(
+            Number.isFinite(recipeYieldRate) && recipeYieldRate > 0
+                ? String(recipeYieldRate)
+                : '1'
+        );
+    }, [recipe, sourceRecipe?.yieldRate]);
+
+    const handleSaveRecipeYieldRate = React.useCallback(async () => {
+        if (!recipe?.id) return;
+        const yieldRate = parseYieldRateInput(calcYieldRate);
+        if (!Number.isFinite(yieldRate) || yieldRate <= 0) {
+            toast.warning('歩留まりは 0 より大きい数値で入力してください。');
+            return;
+        }
+        try {
+            setIsSavingRecipeYieldRate(true);
+            const nextRecipe = { ...(sourceRecipe || recipe), yieldRate };
+            await recipeService.updateRecipe(nextRecipe);
+            setFullRecipe((prev) => prev ? { ...prev, yieldRate } : prev);
+            toast.success('歩留まりを保存しました。');
+        } catch (e) {
+            toast.error(`歩留まりの保存に失敗しました: ${e?.message || 'unknown error'}`);
+        } finally {
+            setIsSavingRecipeYieldRate(false);
+        }
+    }, [recipe, sourceRecipe, calcYieldRate, toast]);
 
     // ... (handlers kept same)
 
@@ -823,15 +1031,24 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
     // --- Helper for Profit Calculation UI ---
     // Note: totalCost passed here usually represents Tax Excluded (sum of ingredients).
     // We will apply 8% tax (consumption tax for food ingredients) to get the "Actual Cost".
-    const renderProfitCalculator = (totalCostTaxIncluded) => {
+    const renderProfitCalculator = (totalCostTaxIncluded, totalWeightGramsForUsage = null) => {
         // totalCostTaxIncluded is already tax included
         const costNum = Math.round(parseFloat(totalCostTaxIncluded));
         const priceNum = parseFloat(salesPrice);
         const servingsNum = parseFloat(calcServings);
+        const usageGramsNum = parseFloat(calcUsageGrams);
+        const totalWeightNum = parseFloat(totalWeightGramsForUsage);
+        const yieldRate = parseYieldRateInput(calcYieldRate);
+        const adjustedBatchWeight = Number.isFinite(totalWeightNum) && Number.isFinite(yieldRate)
+            ? totalWeightNum * yieldRate
+            : NaN;
 
         let costRate = null;
         let totalSales = null;
         let unitCost = null;
+        let costPerGram = null;
+        let usageCost = null;
+        let usageCostRate = null;
 
         if (!isNaN(costNum) && !isNaN(servingsNum) && servingsNum > 0) {
             unitCost = costNum / servingsNum;
@@ -840,6 +1057,16 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         if (!isNaN(costNum) && !isNaN(priceNum) && !isNaN(servingsNum) && priceNum > 0 && servingsNum > 0) {
             totalSales = priceNum * servingsNum;
             costRate = (costNum / totalSales) * 100;
+        }
+
+        if (!isNaN(costNum) && Number.isFinite(adjustedBatchWeight) && adjustedBatchWeight > 0) {
+            costPerGram = costNum / adjustedBatchWeight;
+        }
+        if (costPerGram !== null && !isNaN(usageGramsNum) && usageGramsNum >= 0) {
+            usageCost = costPerGram * usageGramsNum;
+            if (!isNaN(priceNum) && priceNum > 0) {
+                usageCostRate = (usageCost / priceNum) * 100;
+            }
         }
 
         return (
@@ -891,19 +1118,61 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                             }}
                         />
                     </div>
-
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#666' }}>使用量 (g)</label>
+                        <input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={calcUsageGrams}
+                            onChange={(e) => setCalcUsageGrams(e.target.value)}
+                            placeholder="例: 30"
+                            style={{
+                                padding: '6px',
+                                width: '90px',
+                                borderRadius: '4px',
+                                border: '1px solid #ccc',
+                                fontSize: '1rem',
+                                textAlign: 'center'
+                            }}
+                        />
+                    </div>
                     {unitCost !== null && (
                         <div style={{
                             marginLeft: 'auto',
-                            padding: '8px 12px',
-                            background: costRate !== null ? (costRate > 40 ? '#ffebee' : '#e8f5e9') : '#eef3ff',
-                            borderRadius: '6px',
-                            border: `1px solid ${costRate !== null ? (costRate > 40 ? '#ffcdd2' : '#c8e6c9') : '#d6e3ff'}`,
+                            padding: '10px 14px',
+                            background: usageCostRate !== null
+                                ? (usageCostRate > 40 ? '#ffebee' : '#e8f5e9')
+                                : (costRate !== null ? (costRate > 40 ? '#ffebee' : '#e8f5e9') : '#eef3ff'),
+                            borderRadius: '8px',
+                            border: `1px solid ${usageCostRate !== null
+                                ? (usageCostRate > 40 ? '#ffcdd2' : '#c8e6c9')
+                                : (costRate !== null ? (costRate > 40 ? '#ffcdd2' : '#c8e6c9') : '#d6e3ff')}`,
                             textAlign: 'right'
                         }}>
+                            {usageCostRate !== null && (
+                                <div style={{ marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px dashed rgba(0,0,0,0.15)' }}>
+                                    <div style={{ fontSize: '0.82rem', color: '#555' }}>
+                                        最重要: 使用量ベース原価率
+                                    </div>
+                                    <div style={{ fontSize: '1.55rem', fontWeight: 800, lineHeight: 1.1, color: usageCostRate > 40 ? '#c62828' : '#1b5e20' }}>
+                                        {usageCostRate.toFixed(1)}%
+                                    </div>
+                                    {usageCost !== null && (
+                                        <div style={{ fontSize: '0.88rem', color: '#475569', marginTop: '6px' }}>
+                                            {calcUsageGrams || '入力'}g 使用時の原価(税込): <strong>¥{usageCost.toLocaleString(undefined, { maximumFractionDigits: 1 })}</strong>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                             <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: costRate !== null ? '6px' : '0' }}>
                                 1個あたり原価(税込): <strong>¥{unitCost.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong>
                             </div>
+                            {Number.isFinite(adjustedBatchWeight) && adjustedBatchWeight > 0 && (
+                                <div style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '4px' }}>
+                                    出来上がり量(歩留まり反映): {formatCompactNumber(adjustedBatchWeight, { maximumFractionDigits: 1 })} g
+                                </div>
+                            )}
                             {costRate !== null && (
                                 <>
                                     <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '4px' }}>
@@ -913,12 +1182,25 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                         粗利益: ¥{(totalSales - costNum).toLocaleString()}
                                     </div>
                                     <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: costRate > 40 ? '#d32f2f' : '#2e7d32' }}>
-                                        原価率: {costRate.toFixed(1)}%
+                                        全体原価率: {costRate.toFixed(1)}%
                                     </div>
                                 </>
                             )}
+                            {usageCost !== null && usageCostRate === null && (
+                                <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '6px' }}>
+                                    {calcUsageGrams || '入力'}g 使用時の原価(税込): <strong>¥{usageCost.toLocaleString(undefined, { maximumFractionDigits: 1 })}</strong>
+                                </div>
+                            )}
                         </div>
                     )}
+                </div>
+                {!(Number.isFinite(totalWeightNum) && totalWeightNum > 0) && (
+                    <div style={{ marginTop: '0.6rem', fontSize: '0.78rem', color: '#64748b' }}>
+                        使用量シミュレーションは重量(g)が集計できる材料がある場合に有効です。
+                    </div>
+                )}
+                <div style={{ marginTop: '0.4rem', fontSize: '0.75rem', color: '#64748b' }}>
+                    歩留まりは 0.6（60%）または 60（%）で入力できます。例: 100g × 0.6 = 60g
                 </div>
             </div>
         );
@@ -1061,8 +1343,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
 
         const calcPercent = (qty) => totalFlour ? ((parseFloat(qty) || 0) / totalFlour * 100).toFixed(1) : '0.0';
         const getScaledQtyValue = (qty) => {
-            if (!target) return qty;
-            return ((parseFloat(qty) || 0) * scaleFactor).toFixed(1);
+            return scaleQuantityText(qty, target ? scaleFactor : 1);
         };
         const getScaledCostValue = (cost) => {
             const raw = parseFloat(cost) || 0;
@@ -1107,6 +1388,14 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
             { multiplier: normalEffectiveMultiplier }
         );
     }, [displayRecipe, ingredients, normalEffectiveMultiplier, costReferenceMode, categoryCostOverrides]);
+
+    const normalQuantitySummary = React.useMemo(() => {
+        if (displayRecipe.type === 'bread') return null;
+        return summarizeIngredientGroup(ingredients, {
+            multiplier: normalEffectiveMultiplier,
+            totalRecipeCostTaxIncluded: 0,
+        });
+    }, [displayRecipe.type, ingredients, normalEffectiveMultiplier]);
 
     const printCostTotalDisplay = displayRecipe.type === 'bread'
         ? (breadPrintContext ? Math.round(breadPrintContext.totalTaxIncluded).toLocaleString() : '0')
@@ -1193,12 +1482,17 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         setSelectedIngredientGroupStats({
             groupName,
             groupKey,
+            savedUsageAmount: loadUsageAmountForGroup({
+                recipeId: recipe?.id,
+                recipeTitle: recipe?.title,
+                groupKey,
+            }),
             ...summary,
             baseOriginalCostTaxIncluded: originalBase,
             overrideBaseCostTaxIncluded: Number.isFinite(overriddenBase) ? overriddenBase : null,
             costTaxIncluded: effectiveCostTaxIncluded,
         });
-    }, [normalEffectiveMultiplier, normalPrintTotal, categoryCostOverrides, costReferenceMode]);
+    }, [normalEffectiveMultiplier, normalPrintTotal, categoryCostOverrides, costReferenceMode, recipe?.id]);
 
     React.useEffect(() => {
         if (!selectedIngredientGroupStats) {
@@ -1217,7 +1511,10 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                 : ''
         );
         const savedUsageAmount = selectedIngredientGroupStats.groupKey
-            ? groupUsageAmountByCategory.get(selectedIngredientGroupStats.groupKey)
+            ? (
+                groupUsageAmountByCategory.get(selectedIngredientGroupStats.groupKey)
+                ?? selectedIngredientGroupStats.savedUsageAmount
+            )
             : null;
         setGroupUsageAmount(savedUsageAmount ?? '');
         setOverrideCostInput(
@@ -1303,6 +1600,18 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                 next.set(selectedIngredientGroupStats.groupKey, nextCost);
                 return next;
             });
+            if (recipe?.id && selectedIngredientGroupStats?.groupKey) {
+                // Keep the last entered "今回使う量" on explicit save as well.
+                setGroupUsageAmountByCategory((prev) => {
+                    const next = new Map(prev);
+                    next.set(selectedIngredientGroupStats.groupKey, groupUsageAmount ?? '');
+                    const idScope = getUsageScopeKey(recipe.id, null);
+                    const titleScope = getUsageScopeKey(null, recipe?.title);
+                    if (idScope) saveUsageAmountMap(idScope, next);
+                    if (titleScope) saveUsageAmountMap(titleScope, next);
+                    return next;
+                });
+            }
             setSelectedIngredientGroupStats((prev) => {
                 if (!prev) return prev;
                 return {
@@ -1320,7 +1629,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         } finally {
             setIsSavingCategoryOverride(false);
         }
-    }, [selectedIngredientGroupStats, overrideCostInput, toast, recipe?.id, normalEffectiveMultiplier]);
+    }, [selectedIngredientGroupStats, overrideCostInput, toast, recipe?.id, recipe?.title, normalEffectiveMultiplier, groupUsageAmount]);
 
 
     return (
@@ -1493,11 +1802,18 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                 onChange={(e) => {
                                                     const nextValue = e.target.value;
                                                     setGroupUsageAmount(nextValue);
-                                                    if (!selectedIngredientGroupStats?.groupKey) return;
+                                                    const groupKey = selectedIngredientGroupStats?.groupKey;
+                                                    if (!groupKey) return;
                                                     setGroupUsageAmountByCategory((prev) => {
                                                         const next = new Map(prev);
-                                                        next.set(selectedIngredientGroupStats.groupKey, nextValue);
+                                                        next.set(groupKey, nextValue);
                                                         return next;
+                                                    });
+                                                    saveUsageAmountForGroup({
+                                                        recipeId: recipe?.id,
+                                                        recipeTitle: recipe?.title,
+                                                        groupKey,
+                                                        value: nextValue,
                                                     });
                                                 }}
                                                 placeholder={`例: 20`}
@@ -1738,6 +2054,49 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                         <section className="detail-section">
                             <h2>{tUi('ingredients')}</h2>
                             <Card className="ingredients-card">
+                                <div className="screen-only no-print" style={{
+                                    margin: '0 0 0.9rem 0',
+                                    padding: '0.55rem 0.7rem',
+                                    border: '1px solid #dee2e6',
+                                    borderRadius: '8px',
+                                    background: '#f8fafc',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    flexWrap: 'wrap'
+                                }}>
+                                    <span style={{ fontSize: '0.82rem', color: '#334155', fontWeight: 700 }}>このレシピの歩留まり:</span>
+                                    <input
+                                        type="number"
+                                        min="0.01"
+                                        step="0.01"
+                                        value={calcYieldRate}
+                                        onChange={(e) => setCalcYieldRate(e.target.value)}
+                                        onBlur={handleSaveRecipeYieldRate}
+                                        placeholder="例: 0.6"
+                                        style={{
+                                            padding: '4px 8px',
+                                            width: '90px',
+                                            borderRadius: '6px',
+                                            border: '1px solid #cbd5e1',
+                                            fontSize: '0.95rem',
+                                            textAlign: 'center',
+                                            background: '#fff'
+                                        }}
+                                    />
+                                    <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                                        0.6（60%）または 60（%）で入力
+                                    </span>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={handleSaveRecipeYieldRate}
+                                        disabled={isSavingRecipeYieldRate}
+                                    >
+                                        {isSavingRecipeYieldRate ? '保存中...' : '保存'}
+                                    </Button>
+                                </div>
                                 {displayRecipe.type === 'bread' ? (
                                     <div className="bread-detail-view">
                                         {/* Helper for total calculation */}
@@ -1785,8 +2144,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                             };
 
                                             const getScaledQty = (q) => {
-                                                if (!target) return q;
-                                                return ((parseFloat(q) || 0) * scaleFactor).toFixed(1);
+                                                return scaleQuantityText(q, target ? scaleFactor : 1);
                                             };
                                             const getScaledCost = (c) => {
                                                 const raw = parseFloat(c) || 0;
@@ -2029,8 +2387,22 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                     return sum + (scaledCost * taxRate);
                                                                 }, 0);
                                                             }
+                                                            const calcTotalWeightLikeGrams = (items) => {
+                                                                return items.reduce((sum, item) => {
+                                                                    const qty = parseQuantityValue(item?.quantity);
+                                                                    if (!Number.isFinite(qty)) return sum;
+                                                                    const u = normalizeUnit(item?.unit);
+                                                                    if (u === 'kg') return sum + (qty * 1000 * scaleFactor);
+                                                                    if (u === 'g' || !u) return sum + (qty * scaleFactor);
+                                                                    if (u === 'ml' || u === 'cc') return sum + (qty * scaleFactor);
+                                                                    if (u === 'l') return sum + (qty * 1000 * scaleFactor);
+                                                                    if (u === 'cl') return sum + (qty * 10 * scaleFactor);
+                                                                    return sum;
+                                                                }, 0);
+                                                            };
                                                             const total = calcTaxedCost(flours) + calcTaxedCost(others);
-                                                            return renderProfitCalculator(total);
+                                                            const totalWeight = calcTotalWeightLikeGrams(flours) + calcTotalWeightLikeGrams(others);
+                                                            return renderProfitCalculator(total, totalWeight);
                                                         })()}
                                                     </div>
                                                 </>
@@ -2215,6 +2587,26 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                 ※ 合成原価では再設定を優先。未設定カテゴリは元データを参照します。
                                             </span>
                                         </div>
+                                        {normalQuantitySummary && (
+                                            <div className="screen-only no-print" style={{ margin: '0 0 0.9rem 0', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: 700 }}>総量:</span>
+                                                {normalQuantitySummary.hasWeightBasis && (
+                                                    <span style={{ fontSize: '0.82rem', color: '#0f172a', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '999px', padding: '2px 10px', fontWeight: 700 }}>
+                                                        {formatCompactNumber(normalQuantitySummary.totalWeightGrams, { maximumFractionDigits: 1 })} g
+                                                    </span>
+                                                )}
+                                                {normalQuantitySummary.hasVolumeBasis && (
+                                                    <span style={{ fontSize: '0.82rem', color: '#0f172a', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '999px', padding: '2px 10px', fontWeight: 700 }}>
+                                                        {formatCompactNumber(normalQuantitySummary.totalVolumeMl, { maximumFractionDigits: 1 })} ml
+                                                    </span>
+                                                )}
+                                                {!normalQuantitySummary.hasWeightBasis && !normalQuantitySummary.hasVolumeBasis && (
+                                                    <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                                                        重量/液量の自動集計対象がありません（個・本は分量集計をご確認ください）
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
 
                                         {(() => {
                                             // Grouping Logic
@@ -2235,6 +2627,11 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                     const groupSetCost = hasSetCost
                                                         ? (overrideBase * normalEffectiveMultiplier)
                                                         : null;
+                                                    const groupSummary = summarizeIngredientGroup(groupIngredients, {
+                                                        multiplier: normalEffectiveMultiplier * categoryMultiplier,
+                                                        totalRecipeCostTaxIncluded: normalPrintTotal,
+                                                    });
+                                                    const groupSetAmountLikeGrams = groupSummary.totalWeightGrams + groupSummary.totalVolumeMl;
 
                                                     return (
                                                         <div key={group.id} style={{ marginBottom: '1.5rem' }}>
@@ -2250,6 +2647,9 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                             {hasSetCost && (
                                                                                 <span className="ingredient-group-heading__set-cost screen-only">
                                                                                     セット原価: {formatYen(groupSetCost, { maximumFractionDigits: 2 }) ?? '—'}
+                                                                                    {Number.isFinite(groupSetAmountLikeGrams) && groupSetAmountLikeGrams > 0
+                                                                                        ? ` / ${formatCompactNumber(groupSetAmountLikeGrams, { maximumFractionDigits: 1 })}g`
+                                                                                        : ''}
                                                                                 </span>
                                                                             )}
                                                                             <span className="ingredient-group-heading__hint screen-only">集計を見る</span>
@@ -2391,7 +2791,10 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                         <p className="recipe-detail__subtle recipe-detail__tax-footnote">※原価は材料ごとに税率(8% or 10%)を適用</p>
 
                                         {(() => {
-                                            return renderProfitCalculator(normalPrintTotal);
+                                            const totalWeightLikeGrams = normalQuantitySummary
+                                                ? (normalQuantitySummary.totalWeightGrams + normalQuantitySummary.totalVolumeMl)
+                                                : null;
+                                            return renderProfitCalculator(normalPrintTotal, totalWeightLikeGrams);
                                         })()}
                                     </>
                                 )}
