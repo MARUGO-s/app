@@ -1334,6 +1334,10 @@ const toDbFormat = (recipe) => {
         _meta: true,
         type: recipe.type || 'normal'
     };
+    const rawYieldRate = Number(recipe?.yieldRate);
+    if (Number.isFinite(rawYieldRate) && rawYieldRate > 0) {
+        metaItem.yieldRate = rawYieldRate;
+    }
 
     if (recipe.ingredientGroups && recipe.ingredientGroups.length > 0) {
         metaItem.groups = recipe.ingredientGroups;
@@ -1405,6 +1409,7 @@ const fromDbFormat = (recipe) => {
     let breadIngredients = [];
     let ingredientGroups = [];
     let stepGroups = [];
+    let yieldRate = null;
     let cleanIngredients = rawIngs;
     const normalizedTags = normalizeRecipeTags(recipe.tags);
 
@@ -1420,6 +1425,10 @@ const fromDbFormat = (recipe) => {
     if (hasPackedMetaInIngredients) {
         const meta = rawIngs[0];
         type = meta.type || 'normal';
+        const metaYieldRate = Number(meta?.yieldRate);
+        if (Number.isFinite(metaYieldRate) && metaYieldRate > 0) {
+            yieldRate = metaYieldRate;
+        }
 
         if (meta.groups) {
             ingredientGroups = meta.groups;
@@ -1459,6 +1468,10 @@ const fromDbFormat = (recipe) => {
         }
         if (Array.isArray(recipe.ingredients_meta.stepGroups)) {
             stepGroups = recipe.ingredients_meta.stepGroups;
+        }
+        const metaYieldRate = Number(recipe.ingredients_meta?.yieldRate);
+        if (Number.isFinite(metaYieldRate) && metaYieldRate > 0) {
+            yieldRate = metaYieldRate;
         }
         cleanIngredients = Array.isArray(rawIngs) ? rawIngs : [];
     }
@@ -1506,6 +1519,7 @@ const fromDbFormat = (recipe) => {
         breadIngredients,
         ingredientGroups,
         stepGroups,
+        yieldRate,
         ingredients: cleanIngredients,
         steps: stepsWithIds.length > 0 && typeof stepsWithIds[0] === 'object' ? stepsWithIds : recipe.steps, // Return objects if grouped
         tags: normalizedTags,
