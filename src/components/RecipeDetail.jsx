@@ -483,6 +483,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
     const [costReferenceMode, setCostReferenceMode] = React.useState('original');
     const [categoryCostOverrides, setCategoryCostOverrides] = React.useState(new Map());
     const [overrideCostInput, setOverrideCostInput] = React.useState('');
+    const [isOverrideCostInputDirty, setIsOverrideCostInputDirty] = React.useState(false);
     const [isSavingCategoryOverride, setIsSavingCategoryOverride] = React.useState(false);
     const [groupUsageUnit, setGroupUsageUnit] = React.useState('g');
     const [groupTotalBatchAmount, setGroupTotalBatchAmount] = React.useState('');
@@ -1389,13 +1390,81 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         );
     }, [displayRecipe, ingredients, normalEffectiveMultiplier, costReferenceMode, categoryCostOverrides]);
 
-    const normalQuantitySummary = React.useMemo(() => {
+    const normalOverrideUsageTotal = React.useMemo(() => {
         if (displayRecipe.type === 'bread') return null;
-        return summarizeIngredientGroup(ingredients, {
-            multiplier: normalEffectiveMultiplier,
-            totalRecipeCostTaxIncluded: 0,
+        if (costReferenceMode !== 'override') return null;
+
+        const rawGroups = Array.isArray(displayRecipe.ingredientGroups) ? displayRecipe.ingredientGroups : [];
+        const skipNames = ['作り方', 'Steps', 'Method', '手順'].map((name) => String(name || '').trim().toLowerCase());
+        const skipGroupIds = new Set(
+            rawGroups
+                .filter((group) => skipNames.includes(String(group?.name || '').trim().toLowerCase()))
+                .map((group) => group.id)
+        );
+        const groups = rawGroups
+            .filter((group) => !skipGroupIds.has(group.id))
+            .map((group) => ({
+                id: group.id,
+                items: ingredients.filter((ing) => ing?.groupId === group.id),
+            }))
+            .filter((section) => section.items.length > 0);
+        const effectiveGroups = groups.length > 0
+            ? groups
+            : [{ id: 'all', items: ingredients.filter((ing) => !skipGroupIds.has(ing?.groupId)) }];
+
+        let sum = 0;
+        let includedCount = 0;
+        effectiveGroups.forEach((group) => {
+            const groupId = String(group?.id ?? 'all');
+            const groupKey = groupId === 'all' ? 'group:all' : `group:${groupId}`;
+            const groupItems = Array.isArray(group?.items) ? group.items : [];
+            const overrideBase = toFiniteNumber(categoryCostOverrides.get(groupKey));
+            if (!Number.isFinite(overrideBase)) return;
+
+            const groupSetCost = overrideBase * normalEffectiveMultiplier;
+            const groupSummary = summarizeIngredientGroup(groupItems, {
+                multiplier: normalEffectiveMultiplier,
+                totalRecipeCostTaxIncluded: normalPrintTotal,
+            });
+            const groupSetAmountLikeGrams = groupSummary.totalWeightGrams + groupSummary.totalVolumeMl;
+            if (!Number.isFinite(groupSetAmountLikeGrams) || groupSetAmountLikeGrams <= 0) return;
+
+            const savedUsageAmountRaw =
+                groupUsageAmountByCategory.get(groupKey)
+                ?? loadUsageAmountForGroup({
+                    recipeId: recipe?.id,
+                    recipeTitle: recipe?.title,
+                    groupKey,
+                });
+            const savedUsageAmount = toFiniteNumber(savedUsageAmountRaw);
+            if (!Number.isFinite(savedUsageAmount) || savedUsageAmount < 0) return;
+
+            const usageCost = (groupSetCost / groupSetAmountLikeGrams) * savedUsageAmount;
+            if (!Number.isFinite(usageCost)) return;
+
+            sum += usageCost;
+            includedCount += 1;
         });
-    }, [displayRecipe.type, ingredients, normalEffectiveMultiplier]);
+        return includedCount > 0 ? sum : null;
+    }, [
+        displayRecipe.type,
+        costReferenceMode,
+        displayRecipe.ingredientGroups,
+        ingredients,
+        categoryCostOverrides,
+        normalEffectiveMultiplier,
+        normalPrintTotal,
+        groupUsageAmountByCategory,
+        recipe?.id,
+        recipe?.title,
+    ]);
+
+    const normalCostTotalForDisplay = React.useMemo(() => {
+        if (Number.isFinite(toFiniteNumber(normalOverrideUsageTotal))) {
+            return normalOverrideUsageTotal;
+        }
+        return normalPrintTotal;
+    }, [normalOverrideUsageTotal, normalPrintTotal]);
 
     const printCostTotalDisplay = displayRecipe.type === 'bread'
         ? (breadPrintContext ? Math.round(breadPrintContext.totalTaxIncluded).toLocaleString() : '0')
@@ -1464,6 +1533,125 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         return v;
     }, [costReferenceMode, categoryDisplayMultiplierMap]);
 
+    const categoryUsageMultiplierMap = React.useMemo(() => {
+        if (costReferenceMode !== 'override') return new Map();
+        if (displayRecipe.type === 'bread') return new Map();
+
+        const rawGroups = Array.isArray(displayRecipe.ingredientGroups) ? displayRecipe.ingredientGroups : [];
+        const skipNames = ['作り方', 'Steps', 'Method', '手順'].map((name) => String(name || '').trim().toLowerCase());
+        const skipGroupIds = new Set(
+            rawGroups
+                .filter((group) => skipNames.includes(String(group?.name || '').trim().toLowerCase()))
+                .map((group) => group.id)
+        );
+
+        const groups = rawGroups
+            .filter((group) => !skipGroupIds.has(group.id))
+            .map((group) => ({
+                key: `group:${String(group.id)}`,
+                items: ingredients.filter((ing) => ing?.groupId === group.id),
+            }))
+            .filter((section) => section.items.length > 0);
+
+        const effectiveGroups = groups.length > 0
+            ? groups
+            : [{ key: 'group:all', items: ingredients.filter((ing) => !skipGroupIds.has(ing?.groupId)) }];
+
+        const map = new Map();
+        effectiveGroups.forEach(({ key, items }) => {
+            const hasOverride = Number.isFinite(toFiniteNumber(categoryCostOverrides.get(key)));
+            if (!hasOverride) {
+                map.set(key, 1);
+                return;
+            }
+            const summary = summarizeIngredientGroup(items, {
+                multiplier: normalEffectiveMultiplier,
+                totalRecipeCostTaxIncluded: 0,
+            });
+            const setAmountLikeGrams = summary.totalWeightGrams + summary.totalVolumeMl;
+            if (!Number.isFinite(setAmountLikeGrams) || setAmountLikeGrams <= 0) {
+                map.set(key, 1);
+                return;
+            }
+            const savedUsageAmountRaw =
+                groupUsageAmountByCategory.get(key)
+                ?? loadUsageAmountForGroup({
+                    recipeId: recipe?.id,
+                    recipeTitle: recipe?.title,
+                    groupKey: key,
+                });
+            const savedUsageAmount = toFiniteNumber(savedUsageAmountRaw);
+            if (!Number.isFinite(savedUsageAmount) || savedUsageAmount < 0) {
+                map.set(key, 1);
+                return;
+            }
+            map.set(key, savedUsageAmount / setAmountLikeGrams);
+        });
+
+        return map;
+    }, [
+        costReferenceMode,
+        displayRecipe.type,
+        displayRecipe.ingredientGroups,
+        ingredients,
+        categoryCostOverrides,
+        normalEffectiveMultiplier,
+        groupUsageAmountByCategory,
+        recipe?.id,
+        recipe?.title,
+    ]);
+
+    const getCategoryUsageMultiplier = React.useCallback((categoryKey) => {
+        if (costReferenceMode !== 'override') return 1;
+        const v = toFiniteNumber(categoryUsageMultiplierMap.get(categoryKey));
+        if (!Number.isFinite(v) || v <= 0) return 1;
+        return v;
+    }, [costReferenceMode, categoryUsageMultiplierMap]);
+
+    const normalQuantitySummary = React.useMemo(() => {
+        if (displayRecipe.type === 'bread') return null;
+        if (costReferenceMode === 'override') {
+            const rawGroups = Array.isArray(displayRecipe.ingredientGroups) ? displayRecipe.ingredientGroups : [];
+            const skipNames = ['作り方', 'Steps', 'Method', '手順'].map((name) => String(name || '').trim().toLowerCase());
+            const skipGroupIds = new Set(
+                rawGroups
+                    .filter((group) => skipNames.includes(String(group?.name || '').trim().toLowerCase()))
+                    .map((group) => group.id)
+            );
+            const grouped = rawGroups
+                .filter((group) => !skipGroupIds.has(group.id))
+                .map((group) => ({
+                    key: `group:${String(group.id)}`,
+                    items: ingredients.filter((ing) => ing?.groupId === group.id),
+                }))
+                .filter((section) => section.items.length > 0);
+            const sections = grouped.length > 0
+                ? grouped
+                : [{ key: 'group:all', items: ingredients.filter((ing) => !skipGroupIds.has(ing?.groupId)) }];
+
+            let totalWeightGrams = 0;
+            let totalVolumeMl = 0;
+            sections.forEach(({ key, items }) => {
+                const sectionSummary = summarizeIngredientGroup(items, {
+                    multiplier: normalEffectiveMultiplier * getCategoryUsageMultiplier(key),
+                    totalRecipeCostTaxIncluded: 0,
+                });
+                totalWeightGrams += sectionSummary.totalWeightGrams;
+                totalVolumeMl += sectionSummary.totalVolumeMl;
+            });
+            return {
+                totalWeightGrams,
+                totalVolumeMl,
+                hasWeightBasis: totalWeightGrams > 0,
+                hasVolumeBasis: totalVolumeMl > 0,
+            };
+        }
+        return summarizeIngredientGroup(ingredients, {
+            multiplier: normalEffectiveMultiplier,
+            totalRecipeCostTaxIncluded: 0,
+        });
+    }, [displayRecipe.type, costReferenceMode, displayRecipe.ingredientGroups, ingredients, normalEffectiveMultiplier, getCategoryUsageMultiplier]);
+
     const openIngredientGroupStats = React.useCallback((groupKey, groupName, groupIngredients) => {
         const summary = summarizeIngredientGroup(groupIngredients, {
             multiplier: normalEffectiveMultiplier,
@@ -1520,8 +1708,13 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         setOverrideCostInput(
             Number.isFinite(toFiniteNumber(selectedIngredientGroupStats.overrideBaseCostTaxIncluded))
                 ? String(selectedIngredientGroupStats.overrideBaseCostTaxIncluded)
-                : ''
+                : (
+                    Number.isFinite(toFiniteNumber(selectedIngredientGroupStats.baseOriginalCostTaxIncluded))
+                        ? String(Math.round(selectedIngredientGroupStats.baseOriginalCostTaxIncluded * 100) / 100)
+                        : ''
+                )
         );
+        setIsOverrideCostInputDirty(false);
     }, [selectedIngredientGroupStats, groupUsageAmountByCategory]);
 
     const groupUsageSimulation = React.useMemo(() => {
@@ -1565,17 +1758,6 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
 
         return '総出来上がり量が自動で出せないため、実際の仕上がり量を入力してください。';
     }, [selectedIngredientGroupStats]);
-
-    React.useEffect(() => {
-        if (!selectedIngredientGroupStats) return;
-        const hasSavedOverride = Number.isFinite(
-            toFiniteNumber(selectedIngredientGroupStats.overrideBaseCostTaxIncluded)
-        );
-        if (hasSavedOverride) return;
-        const usageCost = toFiniteNumber(groupUsageSimulation?.usageCost);
-        if (!Number.isFinite(usageCost)) return;
-        setOverrideCostInput(String(Math.round(usageCost * 100) / 100));
-    }, [groupUsageSimulation?.usageCost, selectedIngredientGroupStats]);
 
     const handleSaveCategoryOverride = React.useCallback(async () => {
         if (!selectedIngredientGroupStats?.groupKey) return;
@@ -1623,6 +1805,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                 };
             });
             setCostReferenceMode('override');
+            setIsOverrideCostInputDirty(false);
             toast.success('カテゴリ原価を再設定しました。');
         } catch (error) {
             toast.error(`カテゴリ原価の保存に失敗しました: ${error?.message || 'unknown error'}`);
@@ -1630,6 +1813,56 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
             setIsSavingCategoryOverride(false);
         }
     }, [selectedIngredientGroupStats, overrideCostInput, toast, recipe?.id, recipe?.title, normalEffectiveMultiplier, groupUsageAmount]);
+
+    const handleClearCategoryOverride = React.useCallback(async (groupKey, groupName = 'カテゴリ') => {
+        if (!groupKey || !recipe?.id) return;
+        const hasSavedOverride = Number.isFinite(
+            toFiniteNumber(categoryCostOverrides.get(groupKey))
+        );
+
+        if (!hasSavedOverride) {
+            const baseOriginal = toFiniteNumber(selectedIngredientGroupStats?.baseOriginalCostTaxIncluded);
+            setOverrideCostInput(Number.isFinite(baseOriginal) ? String(Math.round(baseOriginal * 100) / 100) : '');
+            setIsOverrideCostInputDirty(false);
+            toast.success('自動計算に戻しました。');
+            return;
+        }
+
+        try {
+            setIsSavingCategoryOverride(true);
+            await categoryCostOverrideService.removeForRecipeCategory({
+                recipeId: recipe.id,
+                categoryKey: groupKey,
+            });
+            setCategoryCostOverrides((prev) => {
+                const next = new Map(prev);
+                next.delete(groupKey);
+                return next;
+            });
+            setSelectedIngredientGroupStats((prev) => {
+                if (!prev || prev.groupKey !== groupKey) return prev;
+                const multiplierBase = Number.isFinite(normalEffectiveMultiplier) && normalEffectiveMultiplier > 0
+                    ? normalEffectiveMultiplier
+                    : 1;
+                const fallbackCost = Number.isFinite(toFiniteNumber(prev.baseOriginalCostTaxIncluded))
+                    ? prev.baseOriginalCostTaxIncluded * multiplierBase
+                    : prev.costTaxIncluded;
+                return {
+                    ...prev,
+                    overrideBaseCostTaxIncluded: null,
+                    costTaxIncluded: fallbackCost,
+                };
+            });
+            const baseOriginal = toFiniteNumber(selectedIngredientGroupStats?.baseOriginalCostTaxIncluded);
+            setOverrideCostInput(Number.isFinite(baseOriginal) ? String(Math.round(baseOriginal * 100) / 100) : '');
+            setIsOverrideCostInputDirty(false);
+            toast.success(`${groupName}のセット原価をクリアしました。`);
+        } catch (error) {
+            toast.error(`セット原価のクリアに失敗しました: ${error?.message || 'unknown error'}`);
+        } finally {
+            setIsSavingCategoryOverride(false);
+        }
+    }, [recipe?.id, normalEffectiveMultiplier, toast, categoryCostOverrides, selectedIngredientGroupStats?.baseOriginalCostTaxIncluded]);
 
 
     return (
@@ -1840,7 +2073,10 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                             min="0"
                                             step="0.01"
                                             value={overrideCostInput}
-                                            onChange={(e) => setOverrideCostInput(e.target.value)}
+                                            onChange={(e) => {
+                                                setOverrideCostInput(e.target.value);
+                                                setIsOverrideCostInputDirty(true);
+                                            }}
                                             placeholder="再設定原価"
                                             style={{ width: '140px', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
                                         />
@@ -1852,6 +2088,26 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                             disabled={isSavingCategoryOverride}
                                         >
                                             {isSavingCategoryOverride ? '保存中...' : '再設定を保存'}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => handleClearCategoryOverride(
+                                                selectedIngredientGroupStats?.groupKey,
+                                                selectedIngredientGroupStats?.groupName
+                                            )}
+                                            disabled={
+                                                isSavingCategoryOverride
+                                                || (
+                                                    !Number.isFinite(
+                                                        toFiniteNumber(selectedIngredientGroupStats?.overrideBaseCostTaxIncluded)
+                                                    )
+                                                    && !isOverrideCostInputDirty
+                                                )
+                                            }
+                                        >
+                                            セット原価をクリア
                                         </Button>
                                     </div>
                                 </div>
@@ -2621,17 +2877,33 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
 
                                                     if (['作り方', 'Steps', 'Method', '手順'].includes(group.name)) return null;
                                                     const shouldHideHeading = ['材料', 'Ingredients', 'ingredients'].includes(group.name);
+                                                    const groupKey = `group:${String(group.id)}`;
                                                     const categoryMultiplier = getCategoryDisplayMultiplier(`group:${String(group.id)}`);
+                                                    const usageMultiplier = getCategoryUsageMultiplier(groupKey);
                                                     const overrideBase = toFiniteNumber(categoryCostOverrides.get(`group:${String(group.id)}`));
                                                     const hasSetCost = Number.isFinite(overrideBase);
                                                     const groupSetCost = hasSetCost
                                                         ? (overrideBase * normalEffectiveMultiplier)
                                                         : null;
                                                     const groupSummary = summarizeIngredientGroup(groupIngredients, {
-                                                        multiplier: normalEffectiveMultiplier * categoryMultiplier,
+                                                        multiplier: normalEffectiveMultiplier,
                                                         totalRecipeCostTaxIncluded: normalPrintTotal,
                                                     });
                                                     const groupSetAmountLikeGrams = groupSummary.totalWeightGrams + groupSummary.totalVolumeMl;
+                                                    const savedUsageAmountRaw =
+                                                        groupUsageAmountByCategory.get(`group:${String(group.id)}`)
+                                                        ?? loadUsageAmountForGroup({
+                                                            recipeId: recipe?.id,
+                                                            recipeTitle: recipe?.title,
+                                                            groupKey: `group:${String(group.id)}`,
+                                                        });
+                                                    const savedUsageAmount = toFiniteNumber(savedUsageAmountRaw);
+                                                    const usageCostFromSavedAmount =
+                                                        Number.isFinite(savedUsageAmount) && savedUsageAmount >= 0 &&
+                                                        Number.isFinite(groupSetCost) && groupSetCost >= 0 &&
+                                                        Number.isFinite(groupSetAmountLikeGrams) && groupSetAmountLikeGrams > 0
+                                                            ? (groupSetCost / groupSetAmountLikeGrams) * savedUsageAmount
+                                                            : null;
 
                                                     return (
                                                         <div key={group.id} style={{ marginBottom: '1.5rem' }}>
@@ -2642,14 +2914,30 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                         className="ingredient-group-heading__button"
                                                                         onClick={() => openIngredientGroupStats(`group:${String(group.id)}`, group.name, groupIngredients)}
                                                                     >
-                                                                        <span>{group.name}</span>
-                                                                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                        <span className="ingredient-group-heading__title">{group.name}</span>
+                                                                        <span className="ingredient-group-heading__meta">
                                                                             {hasSetCost && (
                                                                                 <span className="ingredient-group-heading__set-cost screen-only">
                                                                                     セット原価: {formatYen(groupSetCost, { maximumFractionDigits: 2 }) ?? '—'}
                                                                                     {Number.isFinite(groupSetAmountLikeGrams) && groupSetAmountLikeGrams > 0
                                                                                         ? ` / ${formatCompactNumber(groupSetAmountLikeGrams, { maximumFractionDigits: 1 })}g`
                                                                                         : ''}
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        className="ingredient-group-heading__clear-btn"
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            handleClearCategoryOverride(`group:${String(group.id)}`, group.name);
+                                                                                        }}
+                                                                                        disabled={isSavingCategoryOverride}
+                                                                                    >
+                                                                                        クリア
+                                                                                    </button>
+                                                                                </span>
+                                                                            )}
+                                                                            {usageCostFromSavedAmount != null && (
+                                                                                <span className="ingredient-group-heading__usage-cost screen-only">
+                                                                                    {formatCompactNumber(savedUsageAmount, { maximumFractionDigits: 1 })}g使用: {formatYen(usageCostFromSavedAmount, { maximumFractionDigits: 2 }) ?? '—'}
                                                                                 </span>
                                                                             )}
                                                                             <span className="ingredient-group-heading__hint screen-only">集計を見る</span>
@@ -2676,10 +2964,11 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                         const displayUnit = typeof ing === 'object' ? ing.unit : '';
                                                                         const originalUnit = originalIng && typeof originalIng === 'object' ? originalIng.unit : '';
 
-                                                                        const effectiveMultiplier = normalEffectiveMultiplier * categoryMultiplier;
-                                                                        const scaledQty = getScaledQty(ing.quantity, effectiveMultiplier);
-                                                                        const scaledCost = getScaledCost(ing.cost, effectiveMultiplier);
-                                                                        const isScaled = effectiveMultiplier !== 1;
+                                                                        const quantityMultiplier = normalEffectiveMultiplier * usageMultiplier;
+                                                                        const costMultiplier = normalEffectiveMultiplier * categoryMultiplier * usageMultiplier;
+                                                                        const scaledQty = getScaledQty(ing.quantity, quantityMultiplier);
+                                                                        const scaledCost = getScaledCost(ing.cost, costMultiplier);
+                                                                        const isScaled = quantityMultiplier !== 1 || costMultiplier !== 1;
                                                                         const baseId = `ing-${group.id}-${i}`;
 
                                                                         return (
@@ -2736,10 +3025,12 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                 const displayUnit = typeof ing === 'object' ? ing.unit : '';
                                                                 const originalUnit = originalIng && typeof originalIng === 'object' ? originalIng.unit : '';
 
-                                                                const effectiveMultiplier = normalEffectiveMultiplier * categoryMultiplier;
-                                                                const scaledQty = getScaledQty(ing.quantity, effectiveMultiplier);
-                                                                const scaledCost = getScaledCost(ing.cost, effectiveMultiplier);
-                                                                const isScaled = effectiveMultiplier !== 1;
+                                                                const usageMultiplier = getCategoryUsageMultiplier('group:all');
+                                                                const quantityMultiplier = normalEffectiveMultiplier * usageMultiplier;
+                                                                const costMultiplier = normalEffectiveMultiplier * categoryMultiplier * usageMultiplier;
+                                                                const scaledQty = getScaledQty(ing.quantity, quantityMultiplier);
+                                                                const scaledCost = getScaledCost(ing.cost, costMultiplier);
+                                                                const isScaled = quantityMultiplier !== 1 || costMultiplier !== 1;
                                                                 const baseId = `ing-${i}`;
 
                                                                 return (
@@ -2772,7 +3063,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                     <div className="cost-summary">
                                                         <span className="cost-summary__label">{tUi('totalCost')}:</span>
                                                         <span className="cost-summary__value">
-                                                            ¥{Math.round(normalPrintTotal).toLocaleString()}
+                                                            ¥{Math.round(normalCostTotalForDisplay).toLocaleString()}
                                                         </span>
                                                     </div>
                                                 </>
@@ -2783,7 +3074,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                             <div className="cost-summary">
                                                 <span className="cost-summary__label">{tUi('totalCost')}:</span>
                                                 <span className="cost-summary__value">
-                                                    ¥{Math.round(normalPrintTotal).toLocaleString()}
+                                                    ¥{Math.round(normalCostTotalForDisplay).toLocaleString()}
                                                 </span>
                                                 <span className="cost-summary__note">(税込)</span>
                                             </div>
@@ -2794,7 +3085,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                             const totalWeightLikeGrams = normalQuantitySummary
                                                 ? (normalQuantitySummary.totalWeightGrams + normalQuantitySummary.totalVolumeMl)
                                                 : null;
-                                            return renderProfitCalculator(normalPrintTotal, totalWeightLikeGrams);
+                                            return renderProfitCalculator(normalCostTotalForDisplay, totalWeightLikeGrams);
                                         })()}
                                     </>
                                 )}
@@ -3116,8 +3407,6 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                 const groupIngredients = ingredients.filter(ing => ing.groupId === group.id);
                                                 if (groupIngredients.length === 0) return null;
                                                 if (['作り方', 'Steps', 'Method', '手順'].includes(group.name)) return null;
-                                                const categoryMultiplier = getCategoryDisplayMultiplier(`group:${String(group.id)}`);
-
                                                 return (
                                                     <div key={group.id} className="ingredient-group">
                                                         <h4>{group.name}</h4>
@@ -3133,8 +3422,9 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                 {groupIngredients.map((ing, i) => {
                                                                     const itemId = `${group.id}-${i}`;
                                                                     const name = typeof ing === 'string' ? ing : ing.name;
+                                                                    const usageMultiplier = getCategoryUsageMultiplier(`group:${String(group.id)}`);
                                                                     const qty = typeof ing === 'object'
-                                                                        ? getScaledQty(ing.quantity, normalEffectiveMultiplier * categoryMultiplier)
+                                                                        ? getScaledQty(ing.quantity, normalEffectiveMultiplier * usageMultiplier)
                                                                         : '';
                                                                     const unit = typeof ing === 'object' ? ing.unit : '';
                                                                     return (
@@ -3163,7 +3453,6 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                 );
                                             });
                                         } else {
-                                            const categoryMultiplier = getCategoryDisplayMultiplier('group:all');
                                             return (
                                                 <table className="preview-table preview-table--normal">
                                                     <thead>
@@ -3177,8 +3466,9 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                         {ingredients.map((ing, i) => {
                                                             const itemId = `ungrouped-${i}`;
                                                             const name = typeof ing === 'string' ? ing : ing.name;
+                                                            const usageMultiplier = getCategoryUsageMultiplier('group:all');
                                                             const qty = typeof ing === 'object'
-                                                                ? getScaledQty(ing.quantity, normalEffectiveMultiplier * categoryMultiplier)
+                                                                ? getScaledQty(ing.quantity, normalEffectiveMultiplier * usageMultiplier)
                                                                 : '';
                                                             const unit = typeof ing === 'object' ? ing.unit : '';
                                                             return (
@@ -3414,8 +3704,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                 const sectionCategoryKey = section.id === 'ungrouped'
                                     ? 'group:ungrouped'
                                     : `group:${String(section.id)}`;
-                                const sectionCategoryMultiplier = getCategoryDisplayMultiplier(sectionCategoryKey);
-                                const printEffectiveMultiplier = normalEffectiveMultiplier * sectionCategoryMultiplier;
+                                const printEffectiveMultiplier = normalEffectiveMultiplier * getCategoryUsageMultiplier(sectionCategoryKey);
                                 return (
                                     <div key={section.id} style={{ marginBottom: '1.2rem' }}>
                                         {section.name && (

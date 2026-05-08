@@ -146,5 +146,18 @@ export const categoryCostOverrideService = {
         if (insertError) throw insertError;
         return payload;
     },
+
+    async removeForRecipeCategory({ recipeId, categoryKey }) {
+        if (!recipeId || !categoryKey) {
+            throw new Error('カテゴリ原価の削除パラメータが不正です。');
+        }
+
+        const { error } = await supabase
+            .from('recipe_category_cost_overrides')
+            .delete()
+            .eq('recipe_id', recipeId)
+            .eq('category_key', categoryKey);
+        if (error) throw error;
+    },
 };
 
