@@ -28,7 +28,6 @@ const SORT_MODES = {
     newest: '新しい順',
     low_first: '低評価優先',
 };
-const FREE_QUOTA_LIMIT = 200;
 
 const formatDate = (value) => {
     if (!value) return '-';
@@ -185,46 +184,6 @@ const filterLogsBySearch = (items, search) => {
     });
 };
 
-const toLowerText = (value) => String(value || '').toLowerCase();
-
-const isLikelyQuotaCountedLog = (log) => {
-    if (!log || typeof log !== 'object') return false;
-    const metadata = (log.metadata && typeof log.metadata === 'object') ? log.metadata : {};
-    const source = toLowerText(metadata.source);
-    const context = toLowerText(metadata.context || metadata.log_context || metadata.flow_context);
-    const answerSource = toLowerText(log.answer_source);
-
-    // Treat explicit LINE webhook / auto-reply contexts as quota candidates.
-    const lineWebhookRelated = (
-        source.includes('line-webhook')
-        || answerSource.includes('webhook_line')
-        || context.includes('line')
-        || context.includes('calendar_pending_confirmation')
-        || context.includes('ai_auto_create_reply')
-    );
-    if (lineWebhookRelated) {
-        return Boolean(log.ai_attempted || log.ai_used);
-    }
-
-    // Fallback: count explicit AI attempts/usages in this log stream.
-    return Boolean(log.ai_attempted || log.ai_used);
-};
-
-const getCurrentJstMonthRange = () => {
-    const now = new Date();
-    const nowJstMs = now.getTime() + (9 * 60 * 60 * 1000);
-    const nowJst = new Date(nowJstMs);
-    const year = nowJst.getUTCFullYear();
-    const month = nowJst.getUTCMonth();
-    const monthStartJstUtcMs = Date.UTC(year, month, 1, 0, 0, 0) - (9 * 60 * 60 * 1000);
-    const nextMonthStartJstUtcMs = Date.UTC(year, month + 1, 1, 0, 0, 0) - (9 * 60 * 60 * 1000);
-    return {
-        monthStartMs: monthStartJstUtcMs,
-        nextMonthStartMs: nextMonthStartJstUtcMs,
-        label: `${year}/${String(month + 1).padStart(2, '0')}`,
-    };
-};
-
 const applySourceFilter = (query, source) => {
     if (source === 'ai') {
         return query.eq('ai_used', true);
@@ -378,23 +337,6 @@ export default function OperationQaLogs() {
             avgRating,
         };
     }, [displayedLogs]);
-
-    const quotaStats = useMemo(() => {
-        const baseLogs = Array.isArray(logs) ? logs : [];
-        const jstMonth = getCurrentJstMonthRange();
-        const used = baseLogs.filter((log) => {
-            const createdAtMs = new Date(log?.created_at || '').getTime();
-            if (!Number.isFinite(createdAtMs)) return false;
-            if (createdAtMs < jstMonth.monthStartMs || createdAtMs >= jstMonth.nextMonthStartMs) return false;
-            return isLikelyQuotaCountedLog(log);
-        }).length;
-        return {
-            limit: FREE_QUOTA_LIMIT,
-            used,
-            remaining: Math.max(0, FREE_QUOTA_LIMIT - used),
-            monthLabel: jstMonth.label,
-        };
-    }, [logs]);
 
     const fetchAllLogsForExport = useCallback(async () => {
         const all = [];
@@ -697,15 +639,6 @@ export default function OperationQaLogs() {
                 <div className="operation-qa-logs__stat">
                     <div className="operation-qa-logs__stat-label">低評価(1-2)</div>
                     <div className="operation-qa-logs__stat-value">{stats.lowRatedCount.toLocaleString()}件</div>
-                </div>
-                <div className="operation-qa-logs__stat operation-qa-logs__stat--quota">
-                    <div className="operation-qa-logs__stat-label">無料枠(200) 推定残数</div>
-                    <div className="operation-qa-logs__stat-value">
-                        {quotaStats.remaining.toLocaleString()} 回
-                    </div>
-                    <div className="secondary-stat">
-                        {quotaStats.monthLabel} 使用推定: {quotaStats.used.toLocaleString()} / {quotaStats.limit.toLocaleString()} 回
-                    </div>
                 </div>
             </div>
 
