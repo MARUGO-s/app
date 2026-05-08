@@ -794,6 +794,9 @@ const n=`.recipe-detail {
 
 .ingredient-group-heading__set-cost {
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     padding: 4px 12px;
     border-radius: 999px;
     background: rgba(217, 119, 6, 0.15);
@@ -801,6 +804,27 @@ const n=`.recipe-detail {
     font-size: 0.84rem;
     font-weight: 700;
     line-height: 1.1;
+}
+
+.ingredient-group-heading__clear-btn {
+    border: 1px solid rgba(217, 119, 6, 0.5);
+    background: rgba(255, 255, 255, 0.72);
+    color: #92400e;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.1;
+    cursor: pointer;
+}
+
+.ingredient-group-heading__clear-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.92);
+}
+
+.ingredient-group-heading__clear-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
 }
 
 .ingredient-group-heading__usage-cost {
