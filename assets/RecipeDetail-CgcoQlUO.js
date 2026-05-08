@@ -1389,6 +1389,82 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
         );
     }, [displayRecipe, ingredients, normalEffectiveMultiplier, costReferenceMode, categoryCostOverrides]);
 
+    const normalOverrideUsageTotal = React.useMemo(() => {
+        if (displayRecipe.type === 'bread') return null;
+        if (costReferenceMode !== 'override') return null;
+
+        // In override mode, prioritize the sum of each category's saved usage-based cost.
+        const rawGroups = Array.isArray(displayRecipe.ingredientGroups) ? displayRecipe.ingredientGroups : [];
+        const skipNames = ['作り方', 'Steps', 'Method', '手順'].map((name) => String(name || '').trim().toLowerCase());
+        const skipGroupIds = new Set(
+            rawGroups
+                .filter((group) => skipNames.includes(String(group?.name || '').trim().toLowerCase()))
+                .map((group) => group.id)
+        );
+        const groups = rawGroups
+            .filter((group) => !skipGroupIds.has(group.id))
+            .map((group) => ({
+                id: group.id,
+                items: ingredients.filter((ing) => ing?.groupId === group.id),
+            }))
+            .filter((section) => section.items.length > 0);
+        const effectiveGroups = groups.length > 0 ? groups : [{ id: 'all', items: ingredients.filter((ing) => !skipGroupIds.has(ing?.groupId)) }];
+
+        let sum = 0;
+        let includedCount = 0;
+
+        effectiveGroups.forEach((group) => {
+            const groupId = String(group?.id ?? 'all');
+            const groupKey = groupId === 'all' ? 'group:all' : \`group:\${groupId}\`;
+            const groupItems = Array.isArray(group?.items) ? group.items : [];
+            const overrideBase = toFiniteNumber(categoryCostOverrides.get(groupKey));
+            if (!Number.isFinite(overrideBase)) return;
+
+            const groupSetCost = overrideBase * normalEffectiveMultiplier;
+            const groupSummary = summarizeIngredientGroup(groupItems, {
+                multiplier: normalEffectiveMultiplier,
+                totalRecipeCostTaxIncluded: normalPrintTotal,
+            });
+            const groupSetAmountLikeGrams = groupSummary.totalWeightGrams + groupSummary.totalVolumeMl;
+            if (!Number.isFinite(groupSetAmountLikeGrams) || groupSetAmountLikeGrams <= 0) return;
+
+            const savedUsageAmountRaw =
+                groupUsageAmountByCategory.get(groupKey)
+                ?? loadUsageAmountForGroup({
+                    recipeId: recipe?.id,
+                    recipeTitle: recipe?.title,
+                    groupKey,
+                });
+            const savedUsageAmount = toFiniteNumber(savedUsageAmountRaw);
+            if (!Number.isFinite(savedUsageAmount) || savedUsageAmount < 0) return;
+
+            const usageCost = (groupSetCost / groupSetAmountLikeGrams) * savedUsageAmount;
+            if (!Number.isFinite(usageCost)) return;
+            sum += usageCost;
+            includedCount += 1;
+        });
+
+        return includedCount > 0 ? sum : null;
+    }, [
+        displayRecipe.type,
+        costReferenceMode,
+        displayRecipe.ingredientGroups,
+        ingredients,
+        categoryCostOverrides,
+        normalEffectiveMultiplier,
+        normalPrintTotal,
+        groupUsageAmountByCategory,
+        recipe?.id,
+        recipe?.title,
+    ]);
+
+    const normalCostTotalForDisplay = React.useMemo(() => {
+        if (Number.isFinite(toFiniteNumber(normalOverrideUsageTotal))) {
+            return normalOverrideUsageTotal;
+        }
+        return normalPrintTotal;
+    }, [normalOverrideUsageTotal, normalPrintTotal]);
+
     const normalQuantitySummary = React.useMemo(() => {
         if (displayRecipe.type === 'bread') return null;
         return summarizeIngredientGroup(ingredients, {
@@ -2632,6 +2708,20 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                         totalRecipeCostTaxIncluded: normalPrintTotal,
                                                     });
                                                     const groupSetAmountLikeGrams = groupSummary.totalWeightGrams + groupSummary.totalVolumeMl;
+                                                    const savedUsageAmountRaw =
+                                                        groupUsageAmountByCategory.get(\`group:\${String(group.id)}\`)
+                                                        ?? loadUsageAmountForGroup({
+                                                            recipeId: recipe?.id,
+                                                            recipeTitle: recipe?.title,
+                                                            groupKey: \`group:\${String(group.id)}\`,
+                                                        });
+                                                    const savedUsageAmount = toFiniteNumber(savedUsageAmountRaw);
+                                                    const usageCostFromSavedAmount =
+                                                        Number.isFinite(savedUsageAmount) && savedUsageAmount >= 0 &&
+                                                        Number.isFinite(groupSetCost) && groupSetCost >= 0 &&
+                                                        Number.isFinite(groupSetAmountLikeGrams) && groupSetAmountLikeGrams > 0
+                                                            ? (groupSetCost / groupSetAmountLikeGrams) * savedUsageAmount
+                                                            : null;
 
                                                     return (
                                                         <div key={group.id} style={{ marginBottom: '1.5rem' }}>
@@ -2642,14 +2732,19 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                                         className="ingredient-group-heading__button"
                                                                         onClick={() => openIngredientGroupStats(\`group:\${String(group.id)}\`, group.name, groupIngredients)}
                                                                     >
-                                                                        <span>{group.name}</span>
-                                                                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                        <span className="ingredient-group-heading__title">{group.name}</span>
+                                                                        <span className="ingredient-group-heading__meta">
                                                                             {hasSetCost && (
                                                                                 <span className="ingredient-group-heading__set-cost screen-only">
                                                                                     セット原価: {formatYen(groupSetCost, { maximumFractionDigits: 2 }) ?? '—'}
                                                                                     {Number.isFinite(groupSetAmountLikeGrams) && groupSetAmountLikeGrams > 0
                                                                                         ? \` / \${formatCompactNumber(groupSetAmountLikeGrams, { maximumFractionDigits: 1 })}g\`
                                                                                         : ''}
+                                                                                </span>
+                                                                            )}
+                                                                            {usageCostFromSavedAmount != null && (
+                                                                                <span className="ingredient-group-heading__usage-cost screen-only">
+                                                                                    {formatCompactNumber(savedUsageAmount, { maximumFractionDigits: 1 })}g使用: {formatYen(usageCostFromSavedAmount, { maximumFractionDigits: 2 }) ?? '—'}
                                                                                 </span>
                                                                             )}
                                                                             <span className="ingredient-group-heading__hint screen-only">集計を見る</span>
@@ -2772,7 +2867,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                     <div className="cost-summary">
                                                         <span className="cost-summary__label">{tUi('totalCost')}:</span>
                                                         <span className="cost-summary__value">
-                                                            ¥{Math.round(normalPrintTotal).toLocaleString()}
+                                                            ¥{Math.round(normalCostTotalForDisplay).toLocaleString()}
                                                         </span>
                                                     </div>
                                                 </>
@@ -2783,7 +2878,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                             <div className="cost-summary">
                                                 <span className="cost-summary__label">{tUi('totalCost')}:</span>
                                                 <span className="cost-summary__value">
-                                                    ¥{Math.round(normalPrintTotal).toLocaleString()}
+                                                    ¥{Math.round(normalCostTotalForDisplay).toLocaleString()}
                                                 </span>
                                                 <span className="cost-summary__note">(税込)</span>
                                             </div>
@@ -2794,7 +2889,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                             const totalWeightLikeGrams = normalQuantitySummary
                                                 ? (normalQuantitySummary.totalWeightGrams + normalQuantitySummary.totalVolumeMl)
                                                 : null;
-                                            return renderProfitCalculator(normalPrintTotal, totalWeightLikeGrams);
+                                            return renderProfitCalculator(normalCostTotalForDisplay, totalWeightLikeGrams);
                                         })()}
                                     </>
                                 )}

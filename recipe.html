@@ -2668,6 +2668,59 @@
           </div>
         </div>
       </div>
+
+      <div class="qa-item" data-cat="trouble">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">歩留まりはどこに入力しますか？保存されますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>歩留まりは、レシピ詳細の「材料」セクション上部にある<strong>「このレシピの歩留まり」</strong>に入力します。</p>
+            <ul>
+              <li><strong>0.6</strong>（比率）または <strong>60</strong>（%）のどちらでも入力できます。</li>
+              <li>入力後にフォーカスを外すか「保存」を押すと、レシピデータへ保存されます。</li>
+              <li>次回レシピを開いたときも、保存した歩留まり値が復元されます。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="trouble">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">使用量ベース原価率とは何ですか？どこを見ればよいですか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>原価率シミュレーターでは、<strong>最重要: 使用量ベース原価率</strong>を最上段に表示しています。</p>
+            <ul>
+              <li>これは「入力した使用量(g)」に対する実使用原価率です。</li>
+              <li>直下に「○g使用時の原価(税込)」を表示し、率の元データを確認できます。</li>
+              <li>「全体原価率」はレシピ全体量に対する指標で、補助情報として下段に表示されます。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="trouble">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">総量の g と ml はどう計算していますか？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>総量表示は重量（g）と液量（ml）を分けて表示します。使用量計算では、必要に応じて <strong>1ml=1g</strong> の概算で合算します。</p>
+            <ul>
+              <li>例: 385g と 150ml の場合、使用量シミュレーションでは 535g 相当として計算。</li>
+              <li>個・本・枚などは自動換算に含めず、分量集計（単位別）で別表示します。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="no-results" id="noResults">

@@ -19,6 +19,7 @@ import { IncomingDeliveries } from './components/IncomingDeliveries';
 import { IncomingStock } from './components/IncomingStock';
 import { Planner } from './components/Planner';
 import { OrderList } from './components/OrderList';
+import { ReferenceBox } from './components/ReferenceBox';
 import ApiUsageLogs from './components/ApiUsageLogs';
 import OperationQaLogs from './components/OperationQaLogs';
 import { DeployLogs } from './components/DeployLogs';
@@ -146,6 +147,7 @@ function AppContent() {
     'incoming-deliveries': '入荷PDF',
     'incoming-stock': '入荷在庫',
     planner: '仕込みカレンダー',
+    'reference-box': '資料箱',
     data: 'データ管理',
     users: 'ユーザー管理',
     'order-list': '発注リスト',
@@ -1392,6 +1394,9 @@ function AppContent() {
                           <Button variant="secondary" onClick={() => { setSearchParams({ view: 'composite-cost-saved' }); setIsMenuOpen(false); }}>
                             <span style={{ marginRight: '8px' }}>📚</span> 合成レシピ保存一覧
                           </Button>
+                          <Button variant="secondary" onClick={() => { setSearchParams({ view: 'reference-box' }); setIsMenuOpen(false); }}>
+                            <span style={{ marginRight: '8px' }}>🗂️</span> 資料箱
+                          </Button>
                           <div className="menu-divider"></div>
 
                           <Button variant="secondary" onClick={() => { setSearchParams({ view: 'data' }); setIsMenuOpen(false); }}>
@@ -1815,6 +1820,10 @@ function AppContent() {
           onBack={() => setSearchParams({ view: 'list' })}
           onNavigateToPlanner={() => setSearchParams({ view: 'planner' })}
         />
+      )}
+
+      {currentView === 'reference-box' && (
+        <ReferenceBox onBack={() => setSearchParams({ view: 'list' })} />
       )}
 
       {currentView === 'deploy-logs' && user?.role === 'admin' && (
