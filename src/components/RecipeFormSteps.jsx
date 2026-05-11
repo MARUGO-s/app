@@ -24,8 +24,28 @@ import { Input } from './Input';
 import { Card } from './Card';
 import { VoiceInputButton } from './VoiceInputButton';
 
+const SECTION_SORT_PREFIX = 'step-section-sort:';
+const SECTION_DROP_PREFIX = 'step-section-drop:';
+const ITEM_SORT_PREFIX = 'step-item-sort:';
+
+const toDndString = (value) => String(value ?? '');
+const toSectionSortId = (sectionId) => `${SECTION_SORT_PREFIX}${toDndString(sectionId)}`;
+const toSectionDropId = (sectionId) => `${SECTION_DROP_PREFIX}${toDndString(sectionId)}`;
+const toItemSortId = (itemId) => `${ITEM_SORT_PREFIX}${toDndString(itemId)}`;
+
+const parsePrefixedId = (value, prefix) => {
+    const str = String(value ?? '');
+    if (!str.startsWith(prefix)) return null;
+    return str.slice(prefix.length);
+};
+
+const parseSectionSortId = (value) => parsePrefixedId(value, SECTION_SORT_PREFIX);
+const parseSectionDropId = (value) => parsePrefixedId(value, SECTION_DROP_PREFIX);
+const parseItemSortId = (value) => parsePrefixedId(value, ITEM_SORT_PREFIX);
+
 // --- Sortable Item Component ---
 const SortableStepItem = ({
+    sortId,
     id,
     index,
     item,
@@ -42,7 +62,7 @@ const SortableStepItem = ({
         transform,
         transition,
         isDragging
-    } = useSortable({ id, data: { groupId, index } });
+    } = useSortable({ id: sortId, data: { type: 'step-item', groupId, index, itemId: id } });
 
     const style = {
         transform: CSS.Translate.toString(transform),
@@ -104,18 +124,52 @@ const SortableStepItem = ({
 
 // --- Sortable Section Component ---
 const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, children }) => {
-    const { setNodeRef } = useDroppable({ id: section.id });
+    const sortId = toSectionSortId(section.id);
+    const dropId = toSectionDropId(section.id);
+    const {
+        attributes,
+        listeners,
+        setNodeRef: setSortableNodeRef,
+        transform,
+        transition,
+        isDragging
+    } = useSortable({
+        id: sortId,
+        data: { type: 'step-section', sectionId: section.id },
+    });
+    const { setNodeRef: setDropNodeRef } = useDroppable({ id: dropId });
+
+    const sectionStyle = {
+        border: '1px solid #e0e0e0',
+        boxShadow: 'none',
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.8 : 1,
+        position: 'relative',
+        zIndex: isDragging ? 20 : 'auto',
+    };
 
     return (
-        <Card className="step-section mb-md" style={{ border: '1px solid #e0e0e0', boxShadow: 'none' }}>
+        <Card ref={setSortableNodeRef} className="step-section mb-md" style={sectionStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', borderBottom: '1px solid #f0f0f0', paddingBottom: '0.5rem' }}>
-                <Input
-                    value={section.name}
-                    onChange={(e) => onSectionChange(section.id, e.target.value)}
-                    placeholder="グループ名 (例: 下準備)"
-                    className="section-header-input"
-                    style={{ fontWeight: 'bold', border: 'none', background: 'transparent', fontSize: '1.05rem', padding: '4px', width: '70%' }}
-                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '70%' }}>
+                    <div
+                        {...attributes}
+                        {...listeners}
+                        className="section-drag-handle"
+                        title="グループを並び替え"
+                        style={{ cursor: 'grab', color: '#9ca3af', padding: '0 4px', touchAction: 'none', userSelect: 'none' }}
+                    >
+                        ⋮⋮
+                    </div>
+                    <Input
+                        value={section.name}
+                        onChange={(e) => onSectionChange(section.id, e.target.value)}
+                        placeholder="グループ名 (例: 下準備)"
+                        className="section-header-input"
+                        style={{ fontWeight: 'bold', border: 'none', background: 'transparent', fontSize: '1.05rem', padding: '4px', width: '100%' }}
+                    />
+                </div>
 
                 <div style={{ display: 'flex', gap: '8px' }}>
                     {sections.length > 1 && (
@@ -126,7 +180,7 @@ const SortableSection = ({ section, sections, onSectionChange, onRemoveSection, 
                 </div>
             </div>
 
-            <div ref={setNodeRef} className="section-steps-list" style={{ minHeight: '50px', transition: 'min-height 0.2s', paddingBottom: '10px' }}>
+            <div ref={setDropNodeRef} className="section-steps-list" style={{ minHeight: '50px', transition: 'min-height 0.2s', paddingBottom: '10px' }}>
                 {children}
                 {section.items.length === 0 && (
                     <div className="recipe-form-drop-placeholder" style={{ padding: '10px', textAlign: 'center', color: '#aaa', fontSize: '0.85rem', border: '1px dashed #ddd', borderRadius: '4px' }}>
@@ -221,79 +275,128 @@ export const RecipeFormSteps = ({ formData, setFormData, voiceInputEnabled = fal
 
     const handleDragOver = ({ active, over }) => {
         if (!over) return;
-        const activeId = active.id;
-        const overId = over.id;
+        const activeItemId = parseItemSortId(active.id);
+        if (!activeItemId) return;
+        const overItemId = parseItemSortId(over.id);
+        const overSectionDrop = parseSectionDropId(over.id);
+        const overSectionSort = parseSectionSortId(over.id);
 
-        const activeSection = sections.find(s => s.items.some(i => i.id === activeId));
-        const overSection = sections.find(s => s.items.some(i => i.id === overId)) || sections.find(s => s.id === overId);
+        const activeSection = sections.find((section) =>
+            section.items.some((item) => toDndString(item.id) === activeItemId)
+        );
+
+        let overSection = null;
+        if (overItemId) {
+            overSection = sections.find((section) =>
+                section.items.some((item) => toDndString(item.id) === overItemId)
+            );
+        } else if (overSectionDrop) {
+            overSection = sections.find((section) => toDndString(section.id) === overSectionDrop);
+        } else if (overSectionSort) {
+            overSection = sections.find((section) => toDndString(section.id) === overSectionSort);
+        }
 
         if (!activeSection || !overSection || activeSection === overSection) {
             return;
         }
 
         setFormData(prev => {
-            const activeItems = activeSection.items;
-            const overItems = overSection.items;
-            const activeIndex = activeItems.findIndex(i => i.id === activeId);
-            const overIndex = overItems.findIndex(i => i.id === overId);
-
-            let newIndex;
-            if (overId === overSection.id) {
-                newIndex = overItems.length + 1;
-            } else {
-                const isBelowOverItem =
-                    over &&
-                    active.rect.current.translated &&
-                    active.rect.current.translated.top > over.rect.top + over.rect.height;
-                const modifier = isBelowOverItem ? 1 : 0;
-                newIndex = overIndex >= 0 ? overIndex + modifier : overItems.length + 1;
+            const prevSections = prev.stepSections || [];
+            const activeSectionIndex = prevSections.findIndex((section) =>
+                section.items.some((item) => toDndString(item.id) === activeItemId)
+            );
+            const overSectionId = overSectionDrop || overSectionSort;
+            const overSectionIndex = overItemId
+                ? prevSections.findIndex((section) =>
+                    section.items.some((item) => toDndString(item.id) === overItemId)
+                )
+                : prevSections.findIndex((section) => toDndString(section.id) === overSectionId);
+            if (activeSectionIndex < 0 || overSectionIndex < 0 || activeSectionIndex === overSectionIndex) {
+                return prev;
             }
 
+            const sourceSection = prevSections[activeSectionIndex];
+            const targetSection = prevSections[overSectionIndex];
+            const movingItemIndex = sourceSection.items.findIndex((item) => toDndString(item.id) === activeItemId);
+            if (movingItemIndex < 0) return prev;
+            const movingItem = sourceSection.items[movingItemIndex];
+            const nextSourceItems = sourceSection.items.filter((item) => toDndString(item.id) !== activeItemId);
+            const baseTargetItems = targetSection.items.filter((item) => toDndString(item.id) !== activeItemId);
+
+            let insertIndex = baseTargetItems.length;
+            if (overItemId) {
+                const overIndex = baseTargetItems.findIndex((item) => toDndString(item.id) === overItemId);
+                const isBelowOverItem = Boolean(
+                    over &&
+                    active.rect.current.translated &&
+                    active.rect.current.translated.top > over.rect.top + over.rect.height
+                );
+                if (overIndex >= 0) {
+                    insertIndex = overIndex + (isBelowOverItem ? 1 : 0);
+                }
+            }
+            const boundedInsertIndex = Math.max(0, Math.min(insertIndex, baseTargetItems.length));
+            const nextTargetItems = [
+                ...baseTargetItems.slice(0, boundedInsertIndex),
+                movingItem,
+                ...baseTargetItems.slice(boundedInsertIndex),
+            ];
             return {
                 ...prev,
-                stepSections: prev.stepSections.map(s => {
-                    if (s.id === activeSection.id) {
-                        return { ...s, items: activeItems.filter(i => i.id !== activeId) };
-                    }
-                    if (s.id === overSection.id) {
-                        return {
-                            ...s,
-                            items: [
-                                ...overItems.slice(0, newIndex),
-                                activeItems[activeIndex],
-                                ...overItems.slice(newIndex, overItems.length)
-                            ]
-                        };
-                    }
-                    return s;
-                })
+                stepSections: prevSections.map((section, index) => {
+                    if (index === activeSectionIndex) return { ...section, items: nextSourceItems };
+                    if (index === overSectionIndex) return { ...section, items: nextTargetItems };
+                    return section;
+                }),
             };
         });
     };
 
     const handleDragEnd = ({ active, over }) => {
         if (!over) return;
-        const activeId = active.id;
-        const overId = over.id;
-
-        const activeSection = sections.find(s => s.items.some(i => i.id === activeId));
-        const overSection = sections.find(s => s.items.some(i => i.id === overId)) || sections.find(s => s.id === overId);
-
-        if (activeSection && overSection && activeSection === overSection) {
-            const activeIndex = activeSection.items.findIndex(i => i.id === activeId);
-            const overIndex = overSection.items.findIndex(i => i.id === overId);
-            if (activeIndex !== overIndex) {
-                setFormData(prev => ({
-                    ...prev,
-                    stepSections: prev.stepSections.map(s => {
-                        if (s.id === activeSection.id) {
-                            return { ...s, items: arrayMove(s.items, activeIndex, overIndex) };
-                        }
-                        return s;
-                    })
-                }));
+        const activeSectionSortId = parseSectionSortId(active.id);
+        const overSectionSortId = parseSectionSortId(over.id);
+        if (activeSectionSortId && overSectionSortId) {
+            if (activeSectionSortId !== overSectionSortId) {
+                setFormData((prev) => {
+                    const prevSections = prev.stepSections || [];
+                    const oldIndex = prevSections.findIndex((section) => toDndString(section.id) === activeSectionSortId);
+                    const newIndex = prevSections.findIndex((section) => toDndString(section.id) === overSectionSortId);
+                    if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return prev;
+                    return {
+                        ...prev,
+                        stepSections: arrayMove(prevSections, oldIndex, newIndex),
+                    };
+                });
             }
+            return;
         }
+
+        const activeItemId = parseItemSortId(active.id);
+        const overItemId = parseItemSortId(over.id);
+        if (!activeItemId || !overItemId) return;
+        setFormData((prev) => {
+            const prevSections = prev.stepSections || [];
+            const activeSectionIndex = prevSections.findIndex((section) =>
+                section.items.some((item) => toDndString(item.id) === activeItemId)
+            );
+            const overSectionIndex = prevSections.findIndex((section) =>
+                section.items.some((item) => toDndString(item.id) === overItemId)
+            );
+            if (activeSectionIndex < 0 || overSectionIndex < 0 || activeSectionIndex !== overSectionIndex) {
+                return prev;
+            }
+            const section = prevSections[activeSectionIndex];
+            const oldIndex = section.items.findIndex((item) => toDndString(item.id) === activeItemId);
+            const newIndex = section.items.findIndex((item) => toDndString(item.id) === overItemId);
+            if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return prev;
+            const nextSections = [...prevSections];
+            nextSections[activeSectionIndex] = {
+                ...section,
+                items: arrayMove(section.items, oldIndex, newIndex),
+            };
+            return { ...prev, stepSections: nextSections };
+        });
     };
 
     const handleItemChange = (groupId, index, value) => {
@@ -374,27 +477,31 @@ export const RecipeFormSteps = ({ formData, setFormData, voiceInputEnabled = fal
             onDragEnd={handleDragEnd}
         >
             <div className="recipe-form-steps">
-                {sections.map(section => (
-                    <SortableContext key={section.id} id={section.id} items={section.items.map(i => i.id)} strategy={verticalListSortingStrategy}>
+                <SortableContext items={sections.map((section) => toSectionSortId(section.id))} strategy={verticalListSortingStrategy}>
+                    {sections.map(section => (
                         <SortableSection
+                            key={section.id}
                             section={section}
                             sections={sections}
                             onSectionChange={handleSectionNameChange}
                             onRemoveSection={handleRemoveSection}
                         >
-                            {section.items.map((item, index) => (
-                                <SortableStepItem
-                                    key={item.id}
-                                    id={item.id}
-                                    index={index}
-                                    item={item}
-                                    groupId={section.id}
-                                    voiceInputEnabled={voiceInputEnabled}
-                                    onChange={handleItemChange}
-                                    onRemove={handleRemoveItem}
-                                    onVoiceAppend={handleVoiceAppend}
-                                />
-                            ))}
+                            <SortableContext items={section.items.map((item) => toItemSortId(item.id))} strategy={verticalListSortingStrategy}>
+                                {section.items.map((item, index) => (
+                                    <SortableStepItem
+                                        key={item.id}
+                                        sortId={toItemSortId(item.id)}
+                                        id={item.id}
+                                        index={index}
+                                        item={item}
+                                        groupId={section.id}
+                                        voiceInputEnabled={voiceInputEnabled}
+                                        onChange={handleItemChange}
+                                        onRemove={handleRemoveItem}
+                                        onVoiceAppend={handleVoiceAppend}
+                                    />
+                                ))}
+                            </SortableContext>
                             <Button
                                 type="button"
                                 variant="ghost"
@@ -404,8 +511,8 @@ export const RecipeFormSteps = ({ formData, setFormData, voiceInputEnabled = fal
                                 + 手順を追加
                             </Button>
                         </SortableSection>
-                    </SortableContext>
-                ))}
+                    ))}
+                </SortableContext>
 
                 <Button
                     type="button"
