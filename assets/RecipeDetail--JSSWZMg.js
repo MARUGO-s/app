@@ -426,9 +426,17 @@ const parseQuantityValue = (value) => {
 
     // Strict numeric parse (allow only full numeric literals).
     const normalized = raw.replace(/[，,]/g, '').replace(/−/g, '-');
-    if (!/^-?(?:\\d+|\\d*\\.\\d+)$/.test(normalized)) return NaN;
-    const numeric = Number(normalized);
-    if (Number.isFinite(numeric)) return numeric;
+    if (/^-?(?:\\d+|\\d*\\.\\d+)$/.test(normalized)) {
+        const numeric = Number(normalized);
+        if (Number.isFinite(numeric)) return numeric;
+    }
+
+    // Fallback: allow quantity strings that accidentally include trailing unit text (e.g. "120g", "30ml").
+    const withUnitSuffix = normalized.match(/^(-?(?:\\d+|\\d*\\.\\d+))\\s*[^\\d].*$/);
+    if (withUnitSuffix) {
+        const parsedWithSuffix = Number(withUnitSuffix[1]);
+        if (Number.isFinite(parsedWithSuffix)) return parsedWithSuffix;
+    }
 
     return NaN;
 };
@@ -2822,7 +2830,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                         })()}
 
                                         <div className="screen-only no-print" style={{ margin: '0.25rem 0 0.9rem 0', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                            <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: 700 }}>原価参照モード:</span>
+                                            <span style={{ fontSize: '0.82rem', color: '#e2e8f0', fontWeight: 700 }}>原価参照モード:</span>
                                             <Button
                                                 type="button"
                                                 size="sm"
@@ -2839,13 +2847,13 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                             >
                                                 カテゴリ再設定
                                             </Button>
-                                            <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                                            <span style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
                                                 ※ 合成原価では再設定を優先。未設定カテゴリは元データを参照します。
                                             </span>
                                         </div>
                                         {normalQuantitySummary && (
                                             <div className="screen-only no-print" style={{ margin: '0 0 0.9rem 0', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                                <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: 700 }}>総量:</span>
+                                                <span style={{ fontSize: '0.82rem', color: '#e2e8f0', fontWeight: 700 }}>総量:</span>
                                                 {normalQuantitySummary.hasWeightBasis && (
                                                     <span style={{ fontSize: '0.82rem', color: '#0f172a', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '999px', padding: '2px 10px', fontWeight: 700 }}>
                                                         {formatCompactNumber(normalQuantitySummary.totalWeightGrams, { maximumFractionDigits: 1 })} g
@@ -2856,9 +2864,23 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                                         {formatCompactNumber(normalQuantitySummary.totalVolumeMl, { maximumFractionDigits: 1 })} ml
                                                     </span>
                                                 )}
+                                                {(normalQuantitySummary.hasWeightBasis || normalQuantitySummary.hasVolumeBasis) && (
+                                                    <span style={{ fontSize: '0.82rem', color: '#0f172a', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: '999px', padding: '2px 10px', fontWeight: 800 }}>
+                                                        合計 {formatCompactNumber(
+                                                            (toFiniteNumber(normalQuantitySummary.totalWeightGrams) || 0)
+                                                            + (toFiniteNumber(normalQuantitySummary.totalVolumeMl) || 0),
+                                                            { maximumFractionDigits: 1 }
+                                                        )} g
+                                                    </span>
+                                                )}
                                                 {!normalQuantitySummary.hasWeightBasis && !normalQuantitySummary.hasVolumeBasis && (
-                                                    <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                                                    <span style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
                                                         重量/液量の自動集計対象がありません（個・本は分量集計をご確認ください）
+                                                    </span>
+                                                )}
+                                                {(normalQuantitySummary.hasWeightBasis || normalQuantitySummary.hasVolumeBasis) && (
+                                                    <span style={{ fontSize: '0.74rem', color: '#cbd5e1' }}>
+                                                        ※ 総量合計は 1ml=1g として換算しています。
                                                     </span>
                                                 )}
                                             </div>
