@@ -67,11 +67,6 @@ const n=`.operation-qa-logs {
     padding: 10px 12px;
 }
 
-.operation-qa-logs__stat--quota {
-    border-color: #fde68a;
-    background: #fffbeb;
-}
-
 .operation-qa-logs__stat-label {
     font-size: 0.75rem;
     color: #6b7280;
