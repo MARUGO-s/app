@@ -99,9 +99,21 @@ const resolvePreviewKind = (mimeType, fileName) => {
   return 'other';
 };
 
+const parseRpcJsonAttachment = (raw) => {
+  if (raw == null) return null;
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(String(raw));
+  } catch {
+    return null;
+  }
+};
+
 export const ReferenceBox = ({ onBack }) => {
   const { user } = useAuth();
   const [documents, setDocuments] = useState([]);
+  const [ownedShareGrants, setOwnedShareGrants] = useState([]);
+  const [sharedIncoming, setSharedIncoming] = useState([]);
   const [selectedKey, setSelectedKey] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -115,19 +127,32 @@ export const ReferenceBox = ({ onBack }) => {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [editCategoryValue, setEditCategoryValue] = useState('');
   const [shareTargets, setShareTargets] = useState([]);
+  const [shareTargetsReady, setShareTargetsReady] = useState(false);
   const [selectedShareTargetIds, setSelectedShareTargetIds] = useState([]);
   const [shareUserSearch, setShareUserSearch] = useState('');
   const [sharing, setSharing] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
   const hydratedShareSelectionKeyRef = useRef('');
+  const selectedKeyRef = useRef('');
+  const documentsRef = useRef([]);
+  const ownedShareGrantsRef = useRef([]);
+  selectedKeyRef.current = String(selectedKey || '');
+  documentsRef.current = documents;
+  ownedShareGrantsRef.current = ownedShareGrants;
 
   const loadDocuments = async () => {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const items = await referenceBoxService.getAll(user.id);
+      const [items, grants, incoming] = await Promise.all([
+        referenceBoxService.getAll(user.id),
+        referenceBoxService.fetchOwnedShareGrants().catch(() => []),
+        referenceBoxService.fetchSharedIncoming().catch(() => []),
+      ]);
       setDocuments(items || []);
+      setOwnedShareGrants(Array.isArray(grants) ? grants : []);
+      setSharedIncoming(Array.isArray(incoming) ? incoming : []);
       setStatus({ type: '', message: '' });
     } catch (error) {
       console.error('資料箱の読み込みに失敗:', error);
@@ -148,48 +173,82 @@ export const ReferenceBox = ({ onBack }) => {
   useEffect(() => {
     let cancelled = false;
     const loadShareTargets = async () => {
-      if (user?.role !== 'admin') {
+      if (!user?.id) {
         setShareTargets([]);
         setSelectedShareTargetIds([]);
+        setShareTargetsReady(true);
         return;
       }
+      setShareTargetsReady(false);
+      hydratedShareSelectionKeyRef.current = '';
       try {
-        const profiles = await userService.fetchAllProfiles();
+        const profiles = user?.role === 'admin'
+          ? await userService.fetchAllProfiles()
+          : await userService.fetchProfilesForReferenceShare();
         if (cancelled) return;
         const list = (profiles || []).filter((p) => String(p?.id || '') !== String(user?.id || ''));
         setShareTargets(list);
-        try {
-          const saved = JSON.parse(localStorage.getItem(getShareTargetStorageKey(user?.id)) || '[]');
-          const validIds = new Set(list.map((p) => String(p?.id || '')));
-          const restored = (Array.isArray(saved) ? saved : []).map((id) => String(id || '')).filter((id) => validIds.has(id));
-          setSelectedShareTargetIds(restored);
-        } catch {
-          setSelectedShareTargetIds([]);
+        // ファイル選択中は per-file のハイドレーションに任せ、ここでチェック状態を上書きしない
+        if (!selectedKeyRef.current) {
+          try {
+            const saved = JSON.parse(localStorage.getItem(getShareTargetStorageKey(user?.id)) || '[]');
+            const validIds = new Set(list.map((p) => String(p?.id || '')));
+            let restored = (Array.isArray(saved) ? saved : []).map((id) => String(id || '')).filter((id) => validIds.has(id));
+            if (restored.length === 0) {
+              const union = new Set();
+              for (const row of ownedShareGrantsRef.current || []) {
+                const s = String(row.viewer_user_id || '').trim();
+                if (s) union.add(s);
+              }
+              restored = [...union].filter((id) => validIds.has(id));
+            }
+            setSelectedShareTargetIds(restored);
+          } catch {
+            setSelectedShareTargetIds([]);
+          }
         }
       } catch (error) {
         console.error('共有先ユーザー一覧の取得に失敗:', error);
         if (!cancelled) setShareTargets([]);
+      } finally {
+        if (!cancelled) setShareTargetsReady(true);
       }
     };
     loadShareTargets();
     return () => { cancelled = true; };
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, ownedShareGrants]);
 
   useEffect(() => {
-    if (user?.role !== 'admin' || !user?.id) return;
+    if (!user?.id) return;
     try {
       localStorage.setItem(getShareTargetStorageKey(user.id), JSON.stringify(selectedShareTargetIds));
     } catch {
       // ignore storage errors
     }
-  }, [selectedShareTargetIds, user?.id, user?.role]);
+  }, [selectedShareTargetIds, user?.id]);
+
+  const viewerIdsByFileKey = useMemo(() => {
+    const m = new Map();
+    for (const row of ownedShareGrants || []) {
+      const k = `${String(row.document_id || '')}:${String(row.attachment_id || '')}`;
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(String(row.viewer_user_id || '').trim());
+    }
+    return m;
+  }, [ownedShareGrants]);
 
   const fileEntries = useMemo(() => {
     const rows = [];
+    const grantCountByKey = new Map();
+    for (const row of ownedShareGrants || []) {
+      const k = `${String(row.document_id || '')}:${String(row.attachment_id || '')}`;
+      grantCountByKey.set(k, (grantCountByKey.get(k) || 0) + 1);
+    }
     for (const doc of documents || []) {
       for (const attachment of (doc.attachments || [])) {
-        const entry = {
-          key: `${doc.id}:${attachment.id}`,
+        const fk = `${String(doc.id)}:${String(attachment?.id || '')}`;
+        rows.push({
+          key: fk,
           docId: String(doc.id),
           docTitle: doc.title || '',
           docBody: doc.body || '',
@@ -197,13 +256,32 @@ export const ReferenceBox = ({ onBack }) => {
           attachment,
           fileName: attachment?.name || doc.title || '(無題ファイル)',
           updatedAt: attachment?.addedAt || doc.updatedAt || '',
-        };
-        rows.push(entry);
+          isSharedIncoming: false,
+          shareViewerCount: grantCountByKey.get(fk) || 0,
+        });
       }
+    }
+    for (const s of sharedIncoming || []) {
+      const att = parseRpcJsonAttachment(s.attachment);
+      if (!att) continue;
+      const fk = `shared:${s.owner_user_id}:${s.document_id}:${s.attachment_id}`;
+      rows.push({
+        key: fk,
+        docId: String(s.document_id),
+        sourceOwnerUserId: String(s.owner_user_id || ''),
+        docTitle: s.document_title || '',
+        docBody: '',
+        docUpdatedAt: s.shared_at || '',
+        attachment: att,
+        fileName: att?.name || s.document_title || '(共有ファイル)',
+        updatedAt: s.shared_at || att?.addedAt || '',
+        isSharedIncoming: true,
+        shareViewerCount: 0,
+      });
     }
     rows.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
     return rows;
-  }, [documents]);
+  }, [documents, sharedIncoming, ownedShareGrants]);
 
   const filteredDocuments = useMemo(() => {
     const q = normalizeForSearch(searchQuery);
@@ -231,8 +309,17 @@ export const ReferenceBox = ({ onBack }) => {
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'ja'));
   }, [fileEntries]);
 
+  /** 添付ごとの共有先（DB）が変わったときだけ変わる — モーダル内の未保存トグルでは変化しない */
+  const referenceShareStateFingerprint = useMemo(() => {
+    const keys = [...viewerIdsByFileKey.entries()].map(([k, ids]) => `${k}:${[...new Set(ids)].sort().join(',')}`);
+    keys.sort();
+    return keys.join('|');
+  }, [viewerIdsByFileKey]);
+
   const totalUsedBytes = useMemo(
-    () => fileEntries.reduce((sum, entry) => sum + toSafeBytes(entry?.attachment?.compressedSize), 0),
+    () => fileEntries
+      .filter((e) => !e.isSharedIncoming)
+      .reduce((sum, entry) => sum + toSafeBytes(entry?.attachment?.compressedSize), 0),
     [fileEntries]
   );
   const remainingBytes = Math.max(0, USER_STORAGE_LIMIT_BYTES - totalUsedBytes);
@@ -257,7 +344,7 @@ export const ReferenceBox = ({ onBack }) => {
   }, [shareTargets, shareUserSearch]);
 
   useEffect(() => {
-    if (user?.role !== 'admin') return;
+    if (!user?.id) return;
     const currentKey = String(selectedKey || '');
     if (!currentKey) {
       hydratedShareSelectionKeyRef.current = '';
@@ -265,33 +352,41 @@ export const ReferenceBox = ({ onBack }) => {
     }
     if (hydratedShareSelectionKeyRef.current === currentKey) return;
     if (!selectedEntry?.attachment) return;
-    const validTargetIds = new Set((shareTargets || []).map((p) => String(p?.id || '').trim()).filter(Boolean));
-    let restoredIds = [];
-    try {
-      const key = getShareSelectionByFileStorageKey(user?.id);
-      const raw = JSON.parse(localStorage.getItem(key) || '{}');
-      const savedByFile = raw && typeof raw === 'object' ? raw : {};
-      const fromLocal = Array.isArray(savedByFile[currentKey]) ? savedByFile[currentKey] : null;
-      if (Array.isArray(fromLocal)) {
-        restoredIds = fromLocal
-          .map((id) => String(id || '').trim())
-          .filter((id) => validTargetIds.has(id));
-      }
-    } catch {
-      // ignore restore errors
+    // 共有先一覧が未取得のまま復元すると ID がすべて除外され、後続で再ハイドレートされない
+    if (!shareTargetsReady) return;
+
+    if (selectedEntry.isSharedIncoming) {
+      setSelectedShareTargetIds([]);
+      hydratedShareSelectionKeyRef.current = currentKey;
+      return;
     }
 
+    const validTargetIds = new Set((shareTargets || []).map((p) => String(p?.id || '').trim()).filter(Boolean));
+    const fk = `${String(selectedEntry.docId)}:${String(selectedEntry.attachment?.id || '')}`;
+    let restoredIds = (viewerIdsByFileKey.get(fk) || [])
+      .map((id) => String(id || '').trim())
+      .filter((id) => validTargetIds.has(id));
     if (restoredIds.length === 0) {
-      restoredIds = (selectedEntry.attachment?.sharedToUserIds || [])
-        .map((id) => String(id || '').trim())
-        .filter((id) => validTargetIds.has(id));
+      try {
+        const key = getShareSelectionByFileStorageKey(user?.id);
+        const raw = JSON.parse(localStorage.getItem(key) || '{}');
+        const savedByFile = raw && typeof raw === 'object' ? raw : {};
+        const fromLocal = Array.isArray(savedByFile[currentKey]) ? savedByFile[currentKey] : null;
+        if (Array.isArray(fromLocal)) {
+          restoredIds = fromLocal
+            .map((id) => String(id || '').trim())
+            .filter((id) => validTargetIds.has(id));
+        }
+      } catch {
+        // ignore restore errors
+      }
     }
     setSelectedShareTargetIds(restoredIds);
     hydratedShareSelectionKeyRef.current = currentKey;
-  }, [selectedEntry, selectedKey, shareTargets, user?.id, user?.role]);
+  }, [selectedEntry, selectedKey, shareTargets, shareTargetsReady, user?.id, viewerIdsByFileKey]);
 
   useEffect(() => {
-    if (user?.role !== 'admin' || !user?.id) return;
+    if (!user?.id || !shareTargetsReady) return;
     const currentKey = String(selectedKey || '').trim();
     if (!currentKey) return;
     try {
@@ -303,7 +398,66 @@ export const ReferenceBox = ({ onBack }) => {
     } catch {
       // ignore storage errors
     }
-  }, [selectedShareTargetIds, selectedKey, user?.id, user?.role]);
+  }, [selectedShareTargetIds, selectedKey, user?.id, shareTargetsReady]);
+
+  // 共有モーダル表示中は、共有テーブル（＋未選択時は全資料の共有先の和集合）をチェックに反映する
+  useEffect(() => {
+    if (!isShareModalOpen || !user?.id || !shareTargetsReady || loading) return;
+    const validIds = new Set((shareTargets || []).map((p) => String(p?.id || '').trim()).filter(Boolean));
+    const filterIds = (rawIds) => (Array.isArray(rawIds) ? rawIds : [])
+      .map((id) => String(id || '').trim())
+      .filter((id) => validIds.has(id));
+
+    let ids = [];
+    const att = selectedEntry?.attachment;
+    if (att) {
+      if (selectedEntry?.isSharedIncoming) {
+        ids = [];
+      } else {
+        const fk = `${String(selectedEntry.docId)}:${String(att.id || '')}`;
+        ids = filterIds(viewerIdsByFileKey.get(fk) || []);
+        const currentKey = String(selectedKey || '').trim();
+        if (ids.length === 0 && currentKey && user?.id) {
+          try {
+            const raw = JSON.parse(localStorage.getItem(getShareSelectionByFileStorageKey(user.id)) || '{}');
+            const fromLocal = Array.isArray(raw?.[currentKey]) ? raw[currentKey] : [];
+            ids = filterIds(fromLocal);
+          } catch {
+            // ignore
+          }
+        }
+      }
+    } else {
+      const union = new Set();
+      for (const row of ownedShareGrants || []) {
+        const s = String(row.viewer_user_id || '').trim();
+        if (s) union.add(s);
+      }
+      ids = [...union].filter((id) => validIds.has(id));
+      if (ids.length === 0 && user?.id) {
+        try {
+          const saved = JSON.parse(localStorage.getItem(getShareTargetStorageKey(user.id)) || '[]');
+          ids = filterIds(saved);
+        } catch {
+          // ignore
+        }
+      }
+    }
+    setSelectedShareTargetIds(ids);
+  }, [
+    isShareModalOpen,
+    shareTargetsReady,
+    loading,
+    selectedKey,
+    selectedEntry,
+    referenceShareStateFingerprint,
+    shareTargets,
+    user?.id,
+    ownedShareGrants,
+    viewerIdsByFileKey,
+    selectedEntry?.isSharedIncoming,
+    selectedEntry?.docId,
+  ]);
 
   useEffect(() => {
     if (!selectedEntry?.attachment) {
@@ -356,13 +510,11 @@ export const ReferenceBox = ({ onBack }) => {
       let nextUsedBytes = totalUsedBytes;
       for (const file of files) {
         // 圧縮/保存は順次実行してブラウザ負荷を抑える
-        // eslint-disable-next-line no-await-in-loop
         const attachment = await toCompressedAttachment(file);
         const projected = nextUsedBytes + toSafeBytes(attachment.compressedSize);
         if (projected > USER_STORAGE_LIMIT_BYTES) {
           throw new Error(`容量上限(10MB)を超えるため「${file.name}」は保存できません。`);
         }
-        // eslint-disable-next-line no-await-in-loop
         const savedDoc = await referenceBoxService.save(user.id, {
           title: file.name || '資料',
           body: '',
@@ -417,6 +569,10 @@ export const ReferenceBox = ({ onBack }) => {
 
   const handleDeleteSelectedFile = async () => {
     if (!user?.id || !selectedEntry) return;
+    if (selectedEntry.isSharedIncoming) {
+      setStatus({ type: 'warning', message: '共有されたファイルは、共有元の資料箱でのみ削除できます。' });
+      return;
+    }
     if (!window.confirm('このファイルを削除しますか？')) return;
     try {
       const targetDoc = documents.find((doc) => String(doc.id) === String(selectedEntry.docId));
@@ -457,64 +613,32 @@ export const ReferenceBox = ({ onBack }) => {
     ));
   };
 
-  const handleShare = async ({ bulk, targetIdsOverride }) => {
-    if (sharing || user?.role !== 'admin') return;
-    const files = bulk ? filteredDocuments : (selectedEntry ? [selectedEntry] : []);
-    const effectiveTargetIds = Array.isArray(targetIdsOverride) ? targetIdsOverride : selectedShareTargetIds;
-    if (files.length === 0) {
-      setStatus({ type: 'warning', message: '共有対象ファイルがありません。' });
+  const handleShare = async () => {
+    if (sharing || !user?.id) return;
+    if (!selectedEntry?.attachment || selectedEntry.isSharedIncoming) {
+      setStatus({ type: 'warning', message: '自分の資料のファイルを選んでから共有してください。' });
       return;
     }
-    if (effectiveTargetIds.length === 0) {
-      setStatus({ type: 'warning', message: '共有先ユーザーを選択してください。' });
-      return;
-    }
-    const message = bulk
-      ? `表示中の${files.length}件を${effectiveTargetIds.length}ユーザーへ共有します。よろしいですか？`
-      : `このファイルを${effectiveTargetIds.length}ユーザーへ共有します。よろしいですか？`;
+    const effectiveTargetIds = selectedShareTargetIds.map((id) => String(id || '').trim()).filter(Boolean);
+    const message = effectiveTargetIds.length === 0
+      ? 'このファイルの共有をすべて解除します。よろしいですか？'
+      : `このファイルの共有先を、選択中の${effectiveTargetIds.length}ユーザーに設定します。元データはあなたの資料箱に1件のままです。よろしいですか？`;
     if (!window.confirm(message)) return;
 
     setSharing(true);
-    setStatus({ type: 'info', message: '共有中...' });
+    setStatus({ type: 'info', message: '共有設定を保存しています...' });
     try {
-      const result = await referenceBoxService.shareFilesToUsers({
-        sourceUserId: user.id,
-        targetUserIds: effectiveTargetIds,
-        files,
+      await referenceBoxService.setAttachmentShares({
+        documentId: selectedEntry.docId,
+        attachmentId: selectedEntry.attachment.id,
+        viewerUserIds: effectiveTargetIds,
       });
-
-      // 共有済み情報を元ファイル側にも保存して、リロード後も判別できるようにする
-      const nextDocsById = new Map((documents || []).map((doc) => [String(doc.id), { ...doc, attachments: [...(doc.attachments || [])] }]));
-      const touchedDocIds = new Set();
-      const nowIso = new Date().toISOString();
-      for (const file of files) {
-        const docId = String(file?.docId || '');
-        const attId = String(file?.attachment?.id || '');
-        const doc = nextDocsById.get(docId);
-        if (!doc || !attId) continue;
-        doc.attachments = (doc.attachments || []).map((att) => {
-          if (String(att?.id || '') !== attId) return att;
-          const existingSharedIds = Array.isArray(att?.sharedToUserIds) ? att.sharedToUserIds.map((id) => String(id)) : [];
-          const mergedSharedIds = Array.from(new Set([...existingSharedIds, ...effectiveTargetIds]));
-          return {
-            ...att,
-            sharedToUserIds: mergedSharedIds,
-            lastSharedAt: nowIso,
-          };
-        });
-        touchedDocIds.add(docId);
-      }
-      for (const docId of touchedDocIds) {
-        const doc = nextDocsById.get(docId);
-        if (!doc) continue;
-        // eslint-disable-next-line no-await-in-loop
-        await referenceBoxService.save(user.id, doc);
-      }
       await loadDocuments();
-
       setStatus({
         type: 'success',
-        message: `共有しました: ${result.insertedCount}件（ファイル${result.fileCount}件 × 共有先${result.targetCount}件）`,
+        message: effectiveTargetIds.length === 0
+          ? '共有を解除しました。'
+          : '共有先を保存しました。チェックを外したユーザーは閲覧できなくなります。',
       });
     } catch (error) {
       console.error('共有に失敗:', error);
@@ -524,50 +648,67 @@ export const ReferenceBox = ({ onBack }) => {
     }
   };
 
-  const handleBulkShareClick = async () => {
-    const allTargetIds = (shareTargets || [])
-      .map((profile) => String(profile?.id || '').trim())
-      .filter(Boolean);
-    if (allTargetIds.length === 0) {
-      setStatus({ type: 'warning', message: '共有先ユーザーがいません。' });
+  /** 表示中の各ファイルについて、共有先（閲覧権）を現在のチェックと一致させる */
+  const handleBulkSaveShareTargetsOnly = async () => {
+    if (sharing || !user?.id) return;
+    const files = filteredDocuments.filter((e) => !e.isSharedIncoming);
+    if (files.length === 0) {
+      setStatus({ type: 'warning', message: '表示中の自分のファイルがありません。' });
       return;
     }
-    setSelectedShareTargetIds(allTargetIds);
-    await handleShare({ bulk: true, targetIdsOverride: allTargetIds });
+    const nextIds = selectedShareTargetIds.map((id) => String(id || '').trim()).filter(Boolean);
+    const msg = `今の一覧に出ている自分のファイル ${files.length} 件すべてについて、共有先を現在のチェック（${nextIds.length}名）に置き換えます。`
+      + `${nextIds.length === 0 ? '（誰も共有されない状態になります）' : ''}`
+      + ' 元データは各オーナーの資料箱に1件のままです。よろしいですか？';
+    if (!window.confirm(msg)) return;
+
+    setSharing(true);
+    setStatus({ type: 'info', message: '共有先を保存しています...' });
+    try {
+      for (const file of files) {
+        await referenceBoxService.setAttachmentShares({
+          documentId: file.docId,
+          attachmentId: file.attachment.id,
+          viewerUserIds: nextIds,
+        });
+      }
+
+      await loadDocuments();
+      setStatus({
+        type: 'success',
+        message: `共有先を更新しました（${files.length}件のファイル）。`,
+      });
+    } catch (error) {
+      console.error('共有先の一括保存に失敗:', error);
+      setStatus({ type: 'error', message: `共有先の保存に失敗しました: ${error?.message || 'unknown error'}` });
+    } finally {
+      setSharing(false);
+    }
   };
 
   const handleRefresh = async () => {
     if (
-      user?.role === 'admin'
+      user?.id
       && selectedEntry
+      && !selectedEntry.isSharedIncoming
       && selectedEntry?.docId
       && selectedEntry?.attachment?.id
     ) {
       try {
-        const targetDoc = documents.find((doc) => String(doc.id) === String(selectedEntry.docId));
-        if (targetDoc) {
-          const currentIds = Array.isArray(selectedEntry.attachment?.sharedToUserIds)
-            ? selectedEntry.attachment.sharedToUserIds.map((id) => String(id || '')).sort()
-            : [];
-          const nextIds = selectedShareTargetIds.map((id) => String(id || '')).sort();
-          const changed = currentIds.length !== nextIds.length || currentIds.some((id, idx) => id !== nextIds[idx]);
-          if (changed) {
-            const nowIso = new Date().toISOString();
-            const nextAttachments = (targetDoc.attachments || []).map((att) => {
-              if (String(att?.id || '') !== String(selectedEntry.attachment.id)) return att;
-              return {
-                ...att,
-                sharedToUserIds: nextIds,
-                lastSharedAt: nowIso,
-              };
-            });
-            await referenceBoxService.save(user.id, {
-              id: targetDoc.id,
-              title: targetDoc.title || selectedEntry.fileName || '資料',
-              body: targetDoc.body || '',
-              attachments: nextAttachments,
-            });
-          }
+        const fk = `${String(selectedEntry.docId)}:${String(selectedEntry.attachment.id)}`;
+        const currentSet = new Set(
+          (viewerIdsByFileKey.get(fk) || []).map((id) => String(id || '').trim()).filter(Boolean),
+        );
+        const currentIds = [...currentSet].sort();
+        const nextIdsRaw = selectedShareTargetIds.map((id) => String(id || '').trim()).filter(Boolean);
+        const nextSorted = [...new Set(nextIdsRaw)].sort();
+        const changed = currentIds.length !== nextSorted.length || currentIds.some((id, idx) => id !== nextSorted[idx]);
+        if (changed) {
+          await referenceBoxService.setAttachmentShares({
+            documentId: selectedEntry.docId,
+            attachmentId: selectedEntry.attachment.id,
+            viewerUserIds: nextIdsRaw,
+          });
         }
       } catch (error) {
         console.error('共有設定の更新に失敗:', error);
@@ -579,6 +720,10 @@ export const ReferenceBox = ({ onBack }) => {
 
   const handleSaveCategory = async () => {
     if (!selectedEntry?.docId || !selectedEntry?.attachment?.id || !user?.id) return;
+    if (selectedEntry.isSharedIncoming) {
+      setStatus({ type: 'warning', message: '共有されたファイルのカテゴリーは変更できません。' });
+      return;
+    }
     try {
       const targetDoc = documents.find((doc) => String(doc.id) === String(selectedEntry.docId));
       if (!targetDoc) return;
@@ -721,14 +866,34 @@ export const ReferenceBox = ({ onBack }) => {
                   className={`reference-box__item ${String(entry.key) === String(selectedKey) ? 'active' : ''}`}
                   onClick={() => setSelectedKey(entry.key)}
                 >
-                  <div className="reference-box__item-title">{entry.fileName || '(無題ファイル)'}</div>
+                  <div className="reference-box__item-head">
+                    {!entry.isSharedIncoming && (
+                      <span
+                        className="reference-box__item-own-icon"
+                        title="あなたがアップロードしたファイル"
+                        aria-label="あなたがアップロードしたファイル"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="17 8 12 3 7 8" />
+                          <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
+                      </span>
+                    )}
+                    <div className="reference-box__item-title">{entry.fileName || '(無題ファイル)'}</div>
+                  </div>
                   {!!entry?.attachment?.category && (
                     <div className="reference-box__item-date">カテゴリー: {entry.attachment.category}</div>
                   )}
-                  {!!(entry.attachment?.sharedToUserIds?.length) && (
-                    <div className="reference-box__item-date">
-                      共有済み: {entry.attachment.sharedToUserIds.length}ユーザー
+                  {!entry.isSharedIncoming && (
+                    <div className="reference-box__item-date reference-box__item-date--share-count">
+                      {Number(entry.shareViewerCount) > 0
+                        ? `${Number(entry.shareViewerCount)}人に共有中`
+                        : '0人に共有中'}
                     </div>
+                  )}
+                  {entry.isSharedIncoming && (
+                    <div className="reference-box__item-date">共有を受領（閲覧のみ）</div>
                   )}
                   <div className="reference-box__item-date">
                     {formatBytes(entry.attachment?.originalSize)} → {formatBytes(entry.attachment?.compressedSize)}
@@ -794,7 +959,7 @@ export const ReferenceBox = ({ onBack }) => {
             </div>
           </div>
 
-          {user?.role === 'admin' && (
+          {user?.id && (
             <div className="reference-box__share-inline-trigger">
               <Button
                 variant="secondary"
@@ -813,15 +978,21 @@ export const ReferenceBox = ({ onBack }) => {
               <div className="reference-box__attachment-item">
                 <div className="reference-box__attachment-main">
                   <div className="reference-box__attachment-name">{selectedEntry.fileName}</div>
+                  {selectedEntry.isSharedIncoming && (
+                    <div className="reference-box__attachment-meta">
+                      他ユーザーの資料箱からの共有（閲覧のみ） / 共有元ID: {selectedEntry.sourceOwnerUserId || '-'}
+                    </div>
+                  )}
+                  {!selectedEntry.isSharedIncoming && (
+                    <div className="reference-box__attachment-meta">
+                      {Number(selectedEntry.shareViewerCount) > 0
+                        ? `${Number(selectedEntry.shareViewerCount)}人に共有中`
+                        : '0人に共有中'}
+                    </div>
+                  )}
                   {!!selectedEntry.attachment?.category && (
                     <div className="reference-box__attachment-meta">
                       カテゴリー: {selectedEntry.attachment.category}
-                    </div>
-                  )}
-                  {!!(selectedEntry.attachment?.sharedToUserIds?.length) && (
-                    <div className="reference-box__attachment-meta">
-                      共有済み: {selectedEntry.attachment.sharedToUserIds.length}ユーザー
-                      {selectedEntry.attachment?.lastSharedAt ? ` / 最終共有: ${formatDateTime(selectedEntry.attachment.lastSharedAt)}` : ''}
                     </div>
                   )}
                   <div className="reference-box__attachment-meta">
@@ -834,6 +1005,7 @@ export const ReferenceBox = ({ onBack }) => {
                       placeholder="カテゴリーを設定"
                       value={editCategoryValue}
                       onChange={(e) => setEditCategoryValue(e.target.value)}
+                      disabled={selectedEntry.isSharedIncoming}
                     />
                     <select
                       className="reference-box__category-select"
@@ -841,13 +1013,14 @@ export const ReferenceBox = ({ onBack }) => {
                       onChange={(e) => {
                         if (e.target.value) setEditCategoryValue(e.target.value);
                       }}
+                      disabled={selectedEntry.isSharedIncoming}
                     >
                       <option value="">カテゴリ候補から選択...</option>
                       {availableCategories.map((cat) => (
                         <option key={`edit-${cat}`} value={cat}>{cat}</option>
                       ))}
                     </select>
-                    <Button variant="secondary" size="sm" onClick={handleSaveCategory}>
+                    <Button variant="secondary" size="sm" onClick={handleSaveCategory} disabled={selectedEntry.isSharedIncoming}>
                       カテゴリー保存
                     </Button>
                   </div>
@@ -856,14 +1029,16 @@ export const ReferenceBox = ({ onBack }) => {
                   <Button variant="secondary" size="sm" onClick={() => handleDownloadAttachment(selectedEntry.attachment)}>
                     解凍してダウンロード
                   </Button>
-                  {user?.role === 'admin' && (
+                  {user?.id && !selectedEntry.isSharedIncoming && (
                     <Button variant="secondary" size="sm" onClick={() => setIsShareModalOpen(true)} disabled={sharing}>
                       共有設定
                     </Button>
                   )}
-                  <Button variant="danger" size="sm" onClick={handleDeleteSelectedFile}>
-                    削除
-                  </Button>
+                  {!selectedEntry.isSharedIncoming && (
+                    <Button variant="danger" size="sm" onClick={handleDeleteSelectedFile}>
+                      削除
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -895,7 +1070,7 @@ export const ReferenceBox = ({ onBack }) => {
       <Modal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        title="共有設定（管理者）"
+        title="共有設定"
         size="large"
       >
         <div className="reference-box__share-panel">
@@ -907,7 +1082,19 @@ export const ReferenceBox = ({ onBack }) => {
               選択中: <strong>{selectedShareTargetIds.length}</strong> / {shareTargets.length} ユーザー
             </div>
           </div>
-          <div className="reference-box__share-note">共有先ユーザーを検索して選択できます。</div>
+          <div className="reference-box__share-note">
+            共有先ユーザーを検索して選択できます。ファイルはあなたの資料箱に1件のまま、選んだ相手だけが閲覧できます。
+            <br />
+            <span className="reference-box__share-note-sub">
+              「選択中の1ファイルにだけ共有先を保存」＝左の一覧でハイライトしている1件だけに、下のチェック内容を適用します。「一覧の全表示分に共有先を一括保存」＝検索・カテゴリーで絞ったあとに左に並んでいる自分のファイルすべてに、同じチェック内容をまとめて適用します（共有を受領した行は対象外）。チェックを外したユーザーは閲覧できなくなります。
+            </span>
+            {selectedEntry?.isSharedIncoming ? (
+              <span className="reference-box__share-note-sub">
+                <br />
+                現在選択中のファイルは共有を受領したものです。共有先の変更はできません。
+              </span>
+            ) : null}
+          </div>
           <input
             className="reference-box__share-search"
             placeholder="共有先ユーザーを検索..."
@@ -946,6 +1133,7 @@ export const ReferenceBox = ({ onBack }) => {
                     type="checkbox"
                     checked={checked}
                     onChange={() => toggleShareTarget(targetId)}
+                    disabled={!!selectedEntry?.isSharedIncoming}
                   />
                   <span className="reference-box__share-target-main">{label}</span>
                   {subLabel ? <span className="reference-box__share-target-sub">{subLabel}</span> : null}
@@ -957,18 +1145,18 @@ export const ReferenceBox = ({ onBack }) => {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => handleShare({ bulk: false })}
-              disabled={!selectedEntry || sharing}
+              onClick={handleBulkSaveShareTargetsOnly}
+              disabled={filteredDocuments.filter((e) => !e.isSharedIncoming).length === 0 || sharing}
             >
-              このファイルを共有
+              一覧の全表示分に共有先を一括保存
             </Button>
             <Button
               variant="secondary"
               size="sm"
-              onClick={handleBulkShareClick}
-              disabled={filteredDocuments.length === 0 || sharing}
+              onClick={handleShare}
+              disabled={!selectedEntry || !!selectedEntry.isSharedIncoming || sharing}
             >
-              一覧を一括共有
+              選択中の1ファイルにだけ共有先を保存
             </Button>
           </div>
         </div>
