@@ -10,6 +10,7 @@ import { userService } from '../services/userService';
 import { useToast } from '../contexts/useToast';
 import { useAuth } from '../contexts/useAuth';
 import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
+import { normalizeNumericFieldValue } from '../utils/normalizeNumericInput.js';
 import { Button } from './Button';
 import { Input } from './Input';
 import { Modal } from './Modal';
@@ -348,9 +349,10 @@ export const IngredientMaster = () => {
     };
 
     const handleChange = (clientId, field, value) => {
+        const nextValue = normalizeNumericFieldValue(field, value);
         setIngredients(prev => prev.map(i => {
             if (i?.clientId !== clientId) return i;
-            return { ...i, [field]: value };
+            return { ...i, [field]: nextValue };
         }));
     };
 

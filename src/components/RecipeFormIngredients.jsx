@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     DndContext,
     KeyboardSensor,
@@ -28,6 +28,7 @@ import { useToast } from '../contexts/useToast';
 import { unitConversionService } from '../services/unitConversionService';
 import { ingredientSearchService } from '../services/ingredientSearchService';
 import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
+import { normalizeNumericFieldValue, parseNumericInput, toHalfWidthNumericString } from '../utils/normalizeNumericInput.js';
 
 import { AutocompleteInput } from './AutocompleteInput';
 
@@ -96,7 +97,7 @@ const findConversionByName = (conversionMap, ingredientName) => {
 };
 
 const toFiniteNumber = (value) => {
-    const n = parseFloat(value);
+    const n = parseNumericInput(value);
     return Number.isFinite(n) ? n : NaN;
 };
 
@@ -172,7 +173,10 @@ const calculateCostByUnit = (quantity, purchaseCost, unit, yieldRate = 1) => {
 const isLikelyLegacyPackPrice = (item, normalizedCost) => {
     const stored = toFiniteNumber(item?.purchaseCost);
     const ref = toFiniteNumber(item?.purchaseCostRef ?? item?.purchase_cost);
+    const currentCost = toFiniteNumber(item?.cost);
     if (!Number.isFinite(normalizedCost)) return false;
+    // 仕入れ単価は入っているが原価が空 → マスター読込後に再計算が必要
+    if (!Number.isFinite(currentCost)) return true;
     if (!Number.isFinite(stored)) return true;
 
     if (Number.isFinite(ref) && Math.abs(stored - ref) < 0.0001 && Math.abs(stored - normalizedCost) > 0.01) {
@@ -486,9 +490,23 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
     // Unit Conversion Cache
     const [conversionMap, setConversionMap] = useState(new Map());
 
-    useEffect(() => {
-        unitConversionService.getAllConversions().then(map => setConversionMap(map));
+    const refreshConversionMap = useCallback(() => {
+        unitConversionService.getAllConversions().then((map) => setConversionMap(map));
     }, []);
+
+    useEffect(() => {
+        refreshConversionMap();
+    }, [refreshConversionMap]);
+
+    // データ管理で材料を追加した直後など、タブに戻ったときマスターを再読込
+    useEffect(() => {
+        const onFocus = () => {
+            refreshConversionMap();
+            ingredientSearchService.invalidateCache();
+        };
+        window.addEventListener('focus', onFocus);
+        return () => window.removeEventListener('focus', onFocus);
+    }, [refreshConversionMap]);
 
     // Helper Modal State
     const [conversionModal, setConversionModal] = useState({
@@ -796,7 +814,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                     };
 
                     // Recalculate cost
-                    const qty = parseFloat(newItem.quantity);
+                    const qty = parseNumericInput(newItem.quantity);
                     const pCost = parseFloat(normalizedCost);
 
                     if (!isNaN(qty) && !isNaN(pCost)) {
@@ -833,19 +851,20 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
         : null;
 
     const handleItemChange = React.useCallback((groupId, index, field, value) => {
+        const nextValue = normalizeNumericFieldValue(field, value);
         setFormData(prev => {
             const newSections = prev.ingredientSections.map(s => {
                 if (s.id !== groupId) return s;
 
                 const newItems = [...s.items];
-                const newItem = { ...newItems[index], [field]: value };
+                const newItem = { ...newItems[index], [field]: nextValue };
                 newItems[index] = newItem;
 
                 // Calculation Logic
                 if (['quantity', 'purchaseCost', 'unit', 'name', 'isAlcohol'].includes(field)) {
                     // Cost Calc
-                    const qty = parseFloat(newItem.quantity);
-                    const pCost = parseFloat(newItem.purchaseCost);
+                    const qty = parseNumericInput(newItem.quantity);
+                    const pCost = parseNumericInput(newItem.purchaseCost);
                     const convForYield = findConversionByName(conversionMap, newItem.name);
                     const yieldRate = getYieldRate(newItem, convForYield);
                     const safeYieldRate = (Number.isFinite(yieldRate) && yieldRate > 0) ? yieldRate : 1;
@@ -964,8 +983,8 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                         }
 
                         // Re-calc cost after autofill
-                        const qty = parseFloat(newItem.quantity);
-                        const pCost = parseFloat(newItem.purchaseCost);
+                        const qty = parseNumericInput(newItem.quantity);
+                        const pCost = parseNumericInput(newItem.purchaseCost);
                         if (!isNaN(qty) && !isNaN(pCost)) {
                             const convForYield = findConversionByName(conversionMap, newItem.name);
                             const yieldRate = getYieldRate(newItem, convForYield);
@@ -1002,7 +1021,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
             toast.warning('数値が認識できませんでした。「10」「15」など数字で話してください。');
             return;
         }
-        handleItemChange(groupId, index, 'quantity', String(q));
+        handleItemChange(groupId, index, 'quantity', toHalfWidthNumericString(String(q)));
     }, [toast, handleItemChange]);
 
     const handleSuggestionSelect = React.useCallback((groupId, index, item) => {
@@ -1020,7 +1039,7 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
 
                 // Set Price & Unit
                 // Logic adapted from handleItemChange but using the selected item directly
-                if (item.price) {
+                if (item.price !== null && item.price !== undefined && item.price !== '') {
                     newItem.purchaseCostRef = item.price;
                     newItem.vendorRef = item.source === 'csv' ? 'CSV' : 'Master';
 
@@ -1110,8 +1129,8 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
                 }
 
                 // Recalculate Cost
-                const qty = parseFloat(newItem.quantity);
-                const pCost = parseFloat(newItem.purchaseCost);
+                const qty = parseNumericInput(newItem.quantity);
+                const pCost = parseNumericInput(newItem.purchaseCost);
                 if (!isNaN(qty) && !isNaN(pCost)) {
                     const convForYield = findConversionByName(conversionMap, newItem.name);
                     const yieldRate = getYieldRate(newItem, convForYield);
@@ -1133,7 +1152,9 @@ export const RecipeFormIngredients = ({ formData, setFormData, priceList }) => {
             });
             return { ...prev, ingredientSections: newSections };
         });
-    }, [conversionMap, setFormData]);
+        refreshConversionMap();
+        ingredientSearchService.invalidateCache();
+    }, [conversionMap, setFormData, refreshConversionMap]);
 
     const handleRemoveItem = React.useCallback((groupId, index) => {
         setFormData(prev => ({

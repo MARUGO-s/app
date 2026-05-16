@@ -142,31 +142,45 @@ export const unitConversionService = {
 
     /**
      * Get ALL conversions (useful for bulk loading in forms)
+     * PostgREST / Supabase は1リクエストあたり最大1000行のためページングする
      */
     async getAllConversions() {
         try {
             const userId = await this._getCurrentUserId();
             if (!userId) return new Map();
-            const { data, error } = await supabase
-                .from('unit_conversions')
-                .select('*')
-                .eq('user_id', userId);
 
-            if (error) throw error;
-
+            const PAGE_SIZE = 1000;
             const map = new Map();
-            data.forEach(item => {
-                map.set(item.ingredient_name, {
-                    ingredientName: item.ingredient_name,
-                    packetSize: item.packet_size,
-                    packetUnit: item.packet_unit,
-                    lastPrice: item.last_price,
-                    vendor: item.vendor || '',
-                    itemCategory: normalizeItemCategory(item.item_category),
-                    yieldPercent: (item.yield_percent === null || item.yield_percent === undefined) ? 100 : item.yield_percent,
-                    updatedAt: item.updated_at
+            let from = 0;
+
+            while (true) {
+                const { data, error } = await supabase
+                    .from('unit_conversions')
+                    .select('*')
+                    .eq('user_id', userId)
+                    .order('ingredient_name', { ascending: true })
+                    .range(from, from + PAGE_SIZE - 1);
+
+                if (error) throw error;
+
+                const rows = Array.isArray(data) ? data : [];
+                rows.forEach((item) => {
+                    map.set(item.ingredient_name, {
+                        ingredientName: item.ingredient_name,
+                        packetSize: item.packet_size,
+                        packetUnit: item.packet_unit,
+                        lastPrice: item.last_price,
+                        vendor: item.vendor || '',
+                        itemCategory: normalizeItemCategory(item.item_category),
+                        yieldPercent: (item.yield_percent === null || item.yield_percent === undefined) ? 100 : item.yield_percent,
+                        updatedAt: item.updated_at,
+                    });
                 });
-            });
+
+                if (rows.length < PAGE_SIZE) break;
+                from += PAGE_SIZE;
+            }
+
             return map;
         } catch (err) {
             console.error('Error in getAllConversions:', err);

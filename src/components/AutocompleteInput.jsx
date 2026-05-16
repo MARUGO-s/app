@@ -154,17 +154,14 @@ export const AutocompleteInput = ({ value, onChange, placeholder, disabled, onSe
     };
 
     const handleSelect = (item) => {
-        // Create a synthetic event to update the input value
-        const event = {
-            target: { value: item.name }
-        };
-        onChange(event);
         setShowSuggestions(false);
-
-        // Callback with extra data (price, unit, etc.)
+        // onSelect 側で材料名・単価・原価までまとめて反映する（先に onChange すると
+        // conversionMap 未登録の新規マスターで参照が消え、原価が入らないことがある）
         if (onSelect) {
             onSelect(item);
+            return;
         }
+        onChange({ target: { value: item.name } });
     };
 
     const handleKeyDown = (e) => {

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { unitConversionService } from '../services/unitConversionService';
 import { purchasePriceService } from '../services/purchasePriceService';
 import { Button } from './Button';
+import { toHalfWidthNumericString } from '../utils/normalizeNumericInput.js';
 import './UnitConversionModal.css';
 
 const UnitConversionModal = ({
@@ -184,7 +185,7 @@ const UnitConversionModal = ({
 	                            <input
                                 type="number"
                                 value={packetPrice}
-                                onChange={(e) => setPacketPrice(e.target.value)}
+                                onChange={(e) => setPacketPrice(toHalfWidthNumericString(e.target.value))}
                                 className="input-field unit-conversion-modal__input"
                                 placeholder="例: 1000"
                             />
@@ -196,7 +197,7 @@ const UnitConversionModal = ({
 	                                <input
                                     type="number"
                                     value={packetSize}
-                                    onChange={(e) => setPacketSize(e.target.value)}
+                                    onChange={(e) => setPacketSize(toHalfWidthNumericString(e.target.value))}
                                     className="input-field unit-conversion-modal__input"
                                     placeholder="例: 1000"
                                 />
