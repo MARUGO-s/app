@@ -353,6 +353,8 @@ export const recipeService = {
         limit = null,
         skipCacheSave = false,
         returnMeta = false,
+        /** 管理者のみ: true のとき他ユーザーの非公開レシピも一覧に含める */
+        viewAllUsersRecipes = false,
     } = {}) {
         if (!currentUser) {
             console.warn("fetchRecipes: No currentUser, returning empty list.");
@@ -493,6 +495,22 @@ export const recipeService = {
         }
 
         // 3. Apply Filtering Logic (defense-in-depth; DB RLS と同じ基準)
+        const isAdmin = currentUser.role === 'admin';
+        const adminViewAll = isAdmin && viewAllUsersRecipes === true;
+
+        if (adminViewAll) {
+            if (!skipCacheSave) {
+                saveRecipeListCache(allRecipes, currentUser.id);
+            }
+            if (returnMeta) {
+                return {
+                    recipes: allRecipes,
+                    hasMoreRaw: safeLimit != null ? rawFetchedCount === safeLimit : false,
+                };
+            }
+            return allRecipes;
+        }
+
         const userIds = [String(currentUser.id)];
         if (currentUser.displayId) userIds.push(String(currentUser.displayId));
 

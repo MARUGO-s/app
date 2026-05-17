@@ -79,6 +79,23 @@ const MOBILE_RECIPE_PAGE_LIMIT = 64;
 const DESKTOP_RECIPE_PAGE_LIMIT = 180;
 const NO_STORE_VALUE = '__NO_STORE__';
 const OTHER_STORE_VALUE = '__OTHER_STORE__';
+const ADMIN_VIEW_ALL_USERS_RECIPES_KEY = 'recipe_admin_view_all_users';
+
+const readAdminViewAllUsersRecipes = (userId) => {
+  if (!userId) return false;
+  try {
+    return localStorage.getItem(\`\${ADMIN_VIEW_ALL_USERS_RECIPES_KEY}:\${userId}\`) === '1';
+  } catch {
+    return false;
+  }
+};
+
+const writeAdminViewAllUsersRecipes = (userId, enabled) => {
+  if (!userId) return;
+  try {
+    localStorage.setItem(\`\${ADMIN_VIEW_ALL_USERS_RECIPES_KEY}:\${userId}\`, enabled ? '1' : '0');
+  } catch { /* ignore */ }
+};
 
 const mergeRecipesById = (existing, incoming) => {
   const seen = new Set((existing || []).map(r => String(r.id)));
@@ -107,6 +124,7 @@ function AppContent() {
   const [authStuckFallback, setAuthStuckFallback] = useState(false);
   const [profilesById, setProfilesById] = useState({});
   const [profilesByDisplayId, setProfilesByDisplayId] = useState({});
+  const [adminViewAllUsersRecipes, setAdminViewAllUsersRecipes] = useState(false);
   const [isFromCache, setIsFromCache] = useState(false);
   const [maintenance, setMaintenance] = useState(null); // null=loading, true=on, false=off
   const recipeLoadRequestRef = useRef(0);
@@ -414,6 +432,22 @@ function AppContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user?.id]);
 
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user?.id || user.role !== 'admin') {
+      setAdminViewAllUsersRecipes(false);
+      return;
+    }
+    setAdminViewAllUsersRecipes(readAdminViewAllUsersRecipes(user.id));
+  }, [authLoading, user?.id, user?.role]);
+
+  const handleAdminViewAllUsersRecipesToggle = () => {
+    if (user?.role !== 'admin' || !user?.id) return;
+    const next = !adminViewAllUsersRecipes;
+    setAdminViewAllUsersRecipes(next);
+    writeAdminViewAllUsersRecipes(user.id, next);
+  };
+
   // Admin helper: load all profiles so we can show "which user's recipe" in UI.
   useEffect(() => {
     if (authLoading) return;
@@ -572,6 +606,7 @@ function AppContent() {
             includeSources: false,
             skipCacheSave: true,
             returnMeta: true,
+            viewAllUsersRecipes: user?.role === 'admin' && adminViewAllUsersRecipes,
             ...params,
           });
         } catch (error) {
@@ -1136,7 +1171,7 @@ function AppContent() {
     if (!user) return;
     if (currentView === 'trash') loadDeletedRecipes();
     else if (currentView === 'list') loadRecipes();
-  }, [currentView, authLoading, user?.id]);
+  }, [currentView, authLoading, user?.id, adminViewAllUsersRecipes]);
 
   const maintenanceAdminAccessVerified = Boolean(
     maintenance
@@ -1479,6 +1514,18 @@ function AppContent() {
 
                           {user?.role === 'admin' && (
                             <>
+                              <button
+                                type="button"
+                                className={\`public-recipe-toggle-btn admin-view-all-toggle \${adminViewAllUsersRecipes ? 'active' : ''}\`}
+                                aria-pressed={adminViewAllUsersRecipes}
+                                onClick={() => {
+                                  handleAdminViewAllUsersRecipesToggle();
+                                  setIsMenuOpen(false);
+                                }}
+                                style={{ width: '100%', marginBottom: '8px', justifyContent: 'center' }}
+                              >
+                                {adminViewAllUsersRecipes ? '👁️ 他ユーザーのレシピ表示中' : '👁️‍🗨️ 他ユーザーのレシピを表示'}
+                              </button>
                               <Button variant="secondary" onClick={() => { setSearchParams({ view: 'users' }); setIsMenuOpen(false); }}>
                                 <span style={{ marginRight: '8px' }}>👥</span> ユーザー管理
                               </Button>
@@ -1581,6 +1628,17 @@ function AppContent() {
                     onClick={() => setPublicRecipeView('none')}
                   >
                     ✕ 公開非表示
+                  </button>
+                )}
+                {user?.role === 'admin' && (
+                  <button
+                    type="button"
+                    className={\`public-recipe-toggle-btn admin-view-all-toggle \${adminViewAllUsersRecipes ? 'active' : ''}\`}
+                    aria-pressed={adminViewAllUsersRecipes}
+                    onClick={handleAdminViewAllUsersRecipesToggle}
+                    title="ON にすると全ユーザーのレシピを一覧に表示します（OFF は自分＋公開のみ）"
+                  >
+                    {adminViewAllUsersRecipes ? '👁️ 全ユーザー表示中' : '👁️‍🗨️ 全ユーザー表示'}
                   </button>
                 )}
               </div>
@@ -1703,7 +1761,7 @@ function AppContent() {
                     onToggleSelection={handleToggleSelection}
                     displayMode={displayMode}
                     publicRecipeView={publicRecipeView}
-                    showOwner={false}
+                    showOwner={user?.role === 'admin' && adminViewAllUsersRecipes}
                     ownerLabelFn={getRecipeOwnerLabel}
                     currentUser={user}
                   />
@@ -1717,7 +1775,7 @@ function AppContent() {
       {currentView === 'detail' && selectedRecipe && (
         <RecipeDetail
           recipe={selectedRecipe}
-          ownerLabel={undefined}
+          ownerLabel={user?.role === 'admin' && adminViewAllUsersRecipes ? getRecipeOwnerLabel(selectedRecipe) : undefined}
           isDeleted={!!selectedRecipe.deletedAt}
           onBack={() => {
             const from = searchParams.get('from');
