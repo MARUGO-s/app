@@ -403,7 +403,7 @@ export const BackupManagement = () => {
                 <div className="backup-cron-sql">
                     <div className="backup-cron-sql-label">本番環境でのcronジョブ設定（Supabase SQL Editor）:</div>
                     <code className="backup-cron-code">
-                        {'SELECT cron.schedule(\'daily-account-backup\', \'0 15 * * *\', $$SELECT net.http_post(url:=\'<SUPABASE_URL>/functions/v1/scheduled-backup\', headers:=\'{\"Content-Type\":\"application/json\",\"Authorization\":\"Bearer <ANON_KEY>\"}\', body:=\'{}\'::jsonb) AS request_id;$$);'}
+                        {'-- Vault: SELECT vault.create_secret(\'<SERVICE_ROLE_KEY>\', \'service_role_key\', \'Cron backup\');\nSELECT cron.schedule(\'daily-account-backup\', \'0 15 * * *\', $$SELECT net.http_post(url:=\'<SUPABASE_URL>/functions/v1/scheduled-backup\', headers:=jsonb_build_object(\'Content-Type\',\'application/json\',\'Authorization\',\'Bearer \'||(SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name=\'service_role_key\' LIMIT 1)), body:=\'{}\'::jsonb);$$);'}
                     </code>
                 </div>
             </div>

@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { getAuthToken, verifySupabaseJWT } from '../_shared/jwt.ts'
+import { getAuthToken, isServiceRoleBearer, verifySupabaseJWT } from '../_shared/jwt.ts'
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -12,7 +12,16 @@ Deno.serve(async (req) => {
         return new Response('ok', { headers: corsHeaders })
     }
 
-    // JWT検証
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+    if (!supabaseUrl || !serviceRoleKey) {
+        return new Response(JSON.stringify({ ok: false, error: 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set' }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+    }
+
     const token = getAuthToken(req)
     if (!token) {
         return new Response(JSON.stringify({ ok: false, error: '認証が必要です。再ログインしてください。' }), {
@@ -20,48 +29,46 @@ Deno.serve(async (req) => {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
     }
-    let jwtPayload: Record<string, unknown>
-    try {
-        jwtPayload = await verifySupabaseJWT(token) as Record<string, unknown>
-    } catch {
-        return new Response(JSON.stringify({ ok: false, error: 'トークンが無効または期限切れです。再ログインしてください。' }), {
-            status: 401,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+
+    const isCronInvocation = isServiceRoleBearer(token, serviceRoleKey)
+
+    if (!isCronInvocation) {
+        try {
+            const jwtPayload = await verifySupabaseJWT(token) as Record<string, unknown>
+            const supabase = createClient(supabaseUrl, serviceRoleKey, {
+                auth: { autoRefreshToken: false, persistSession: false },
+            })
+            const callerId = String(jwtPayload.sub || '')
+            if (!callerId) {
+                return new Response(JSON.stringify({ ok: false, error: '認証情報が不正です。' }), {
+                    status: 403,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                })
+            }
+            const { data: callerProfile, error: profileErr } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', callerId)
+                .single()
+            if (profileErr || callerProfile?.role !== 'admin') {
+                return new Response(JSON.stringify({ ok: false, error: '管理者権限が必要です。' }), {
+                    status: 403,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                })
+            }
+        } catch {
+            return new Response(JSON.stringify({ ok: false, error: 'トークンが無効または期限切れです。再ログインしてください。' }), {
+                status: 401,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            })
+        }
     }
 
     try {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-        const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-
-        if (!supabaseUrl || !serviceRoleKey) {
-            throw new Error('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set')
-        }
-
         // サービスロールキーでクライアントを作成（RLSをバイパス）
         const supabase = createClient(supabaseUrl, serviceRoleKey, {
-            auth: { autoRefreshToken: false, persistSession: false }
+            auth: { autoRefreshToken: false, persistSession: false },
         })
-
-        // 管理者ロールチェック
-        const callerId = String(jwtPayload.sub || '')
-        if (!callerId) {
-            return new Response(JSON.stringify({ ok: false, error: '認証情報が不正です。' }), {
-                status: 403,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            })
-        }
-        const { data: callerProfile, error: profileErr } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', callerId)
-            .single()
-        if (profileErr || callerProfile?.role !== 'admin') {
-            return new Response(JSON.stringify({ ok: false, error: '管理者権限が必要です。' }), {
-                status: 403,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            })
-        }
 
         // リクエストボディ: { user_id?: string } が指定されれば特定ユーザーのみ、なければ全ユーザー
         let targetUserId: string | null = null
