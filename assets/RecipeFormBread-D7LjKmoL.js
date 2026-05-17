@@ -9,6 +9,7 @@ import { VoiceInputButton } from './VoiceInputButton';
 import { useToast } from '../contexts/useToast';
 import { ingredientSearchService } from '../services/ingredientSearchService';
 import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
+import { normalizeNumericFieldValue, parseNumericInput, toHalfWidthNumericString } from '../utils/normalizeNumericInput.js';
 import './RecipeForm.css'; // Reuse basic styles
 import './RecipeFormBread.css'; // Add specialized styles
 
@@ -72,7 +73,7 @@ const applyCategoryTax = (item, categoryValue) => {
 };
 
 const toFiniteNumber = (value) => {
-    const n = parseFloat(value);
+    const n = parseNumericInput(value);
     return Number.isFinite(n) ? n : NaN;
 };
 
@@ -324,8 +325,9 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
     }, [conversionMap, formData.breadIngredients, formData.flours, setFormData]);
 
     const handleFlourChange = (index, field, value) => {
+        const nextValue = normalizeNumericFieldValue(field, value);
         const newFlours = [...(formData.flours || [])];
-        newFlours[index] = { ...newFlours[index], [field]: value };
+        newFlours[index] = { ...newFlours[index], [field]: nextValue };
 
         // Auto-lookup cost if name changes
         if (field === 'name') {
@@ -395,8 +397,8 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
             // Re-evaluate cost for this row
             // Note: 'value' is the NEW value for 'field'. But we already set it in newFlours[index].
             const item = newFlours[index];
-            const qty = parseFloat(item.quantity);
-            const pCost = parseFloat(item.purchaseCost);
+            const qty = parseNumericInput(item.quantity);
+            const pCost = parseNumericInput(item.purchaseCost);
 
             if (!isNaN(qty) && !isNaN(pCost)) {
                 let calculated = 0;
@@ -425,8 +427,9 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
     };
 
     const handleIngredientChange = (index, field, value) => {
+        const nextValue = normalizeNumericFieldValue(field, value);
         const newIngs = [...(formData.breadIngredients || [])];
-        newIngs[index] = { ...newIngs[index], [field]: value };
+        newIngs[index] = { ...newIngs[index], [field]: nextValue };
 
         if (field === 'name') {
             // Suggestion logic
@@ -492,8 +495,8 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
         // Auto-Calc Cost logic
         if (['quantity', 'purchaseCost', 'name', 'isAlcohol', 'unit'].includes(field) || field === 'name') {
             const item = newIngs[index];
-            const qty = parseFloat(item.quantity);
-            const pCost = parseFloat(item.purchaseCost);
+            const qty = parseNumericInput(item.quantity);
+            const pCost = parseNumericInput(item.purchaseCost);
 
             if (!isNaN(qty) && !isNaN(pCost)) {
                 let calculated = 0;
@@ -526,7 +529,7 @@ export const RecipeFormBread = ({ formData, setFormData }) => {
             toast.warning('数値が認識できませんでした。「10」「15」など数字で話してください。');
             return;
         }
-        onChange(index, 'quantity', String(q));
+        onChange(index, 'quantity', toHalfWidthNumericString(String(q)));
     };
 
     const addFlour = () => {

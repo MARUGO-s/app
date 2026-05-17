@@ -262,6 +262,7 @@ const REQUIRED_TRANSLATION_VERSION = 2;
 const UI_TEXT_DEFAULT = Object.freeze({
     course: 'コース',
     category: 'カテゴリー',
+    country: '国',
     storeName: '店舗名',
     servings: '分量',
     ingredients: '材料',
@@ -2265,6 +2266,12 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                 <span className="meta-value">{renderText(displayRecipe.category, sourceRecipe.category)}</span>
                             </div>
                         )}
+                        {displayRecipe.country && (
+                            <div className="meta-item">
+                                <span className="meta-label">{tUi('country')}</span>
+                                <span className="meta-value">{renderText(displayRecipe.country, sourceRecipe.country)}</span>
+                            </div>
+                        )}
                         {displayRecipe.storeName && (
                             <div className="meta-item">
                                 <span className="meta-label">{tUi('storeName')}</span>
@@ -3225,6 +3232,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                         <div className="preview-meta">
                             {displayRecipe.course && <div><strong>コース:</strong> {displayRecipe.course}</div>}
                             {displayRecipe.category && <div><strong>カテゴリー:</strong> {displayRecipe.category}</div>}
+                            {displayRecipe.country && <div><strong>国:</strong> {displayRecipe.country}</div>}
                             {displayRecipe.storeName && <div><strong>店舗名:</strong> {displayRecipe.storeName}</div>}
                             {displayRecipe.servings && <div><strong>分量:</strong> {displayRecipe.servings}人分</div>}
                         </div>
@@ -3606,6 +3614,12 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                         <div className="meta-item">
                             <span className="meta-label">{tUi('category')}</span>
                             <span className="meta-value">{renderPrintText(displayRecipe.category, sourceRecipe.category)}</span>
+                        </div>
+                    )}
+                    {displayRecipe.country && (
+                        <div className="meta-item">
+                            <span className="meta-label">{tUi('country')}</span>
+                            <span className="meta-value">{renderPrintText(displayRecipe.country, sourceRecipe.country)}</span>
                         </div>
                     )}
                     {displayRecipe.storeName && (

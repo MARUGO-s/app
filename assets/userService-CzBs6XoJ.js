@@ -153,6 +153,13 @@ export const userService = {
         return selectAllProfilesDirect();
     },
 
+    /** 資料箱の共有先選択用（一般ユーザー向け）。DB に list_profiles_for_reference_share が必要です。 */
+    async fetchProfilesForReferenceShare() {
+        const { data, error } = await supabase.rpc('list_profiles_for_reference_share');
+        if (error) throw error;
+        return Array.isArray(data) ? data : [];
+    },
+
     async updateProfile(profileId, updates) {
         const updateKeys = Object.keys(updates || {});
         const isMasterPrefOnlyUpdate =

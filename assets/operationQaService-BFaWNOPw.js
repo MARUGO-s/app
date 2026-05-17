@@ -7,7 +7,7 @@ import {
 } from './operationKnowledgeBase';
 import { searchCodeEvidence } from './codeContextService';
 
-const OPERATION_ASSISTANT_MODEL = 'gemini-1.5-flash';
+const OPERATION_ASSISTANT_MODEL = 'gemini-3.1-flash-lite';
 
 const VIEW_LABEL_MAP = {
     list: 'レシピ一覧',
@@ -925,6 +925,7 @@ const normalizeServerOperationQaLog = (logLike) => {
 };
 
 const GEMINI_RATES_JPY_PER_1M = {
+    'gemini-3.1-flash-lite': { input: 37.5, output: 225 },
     'gemini-2.5-flash-lite': { input: 2, output: 6 },
     'gemini-1.5-flash': { input: 5, output: 15 },
     'gemini-2.0-flash': { input: 10, output: 30 },
@@ -934,12 +935,13 @@ const GEMINI_RATES_JPY_PER_1M = {
 
 const normalizeGeminiModelNameForCost = (modelName) => {
     const normalized = String(modelName || '').trim().toLowerCase();
-    if (!normalized) return 'gemini-2.5-flash-lite';
+    if (!normalized) return 'gemini-3.1-flash-lite';
+    if (normalized.includes('3.1-flash-lite')) return 'gemini-3.1-flash-lite';
     if (normalized.includes('flash-lite')) return 'gemini-2.5-flash-lite';
     if (normalized.includes('2.5-pro') || normalized.includes('pro')) return 'gemini-2.5-pro';
     if (normalized.includes('2.0-flash')) return 'gemini-2.0-flash';
     if (normalized.includes('1.5-flash') || normalized.includes('flash')) return 'gemini-1.5-flash';
-    return 'gemini-2.5-flash-lite';
+    return 'gemini-3.1-flash-lite';
 };
 
 const estimateGeminiCostJpy = ({
@@ -948,7 +950,7 @@ const estimateGeminiCostJpy = ({
     outputTokens,
 }) => {
     const normalizedModel = normalizeGeminiModelNameForCost(modelName);
-    const rate = GEMINI_RATES_JPY_PER_1M[normalizedModel] || GEMINI_RATES_JPY_PER_1M['gemini-2.5-flash-lite'];
+    const rate = GEMINI_RATES_JPY_PER_1M[normalizedModel] || GEMINI_RATES_JPY_PER_1M['gemini-3.1-flash-lite'];
     const inTokens = Number.isFinite(Number(inputTokens)) ? Math.max(0, Number(inputTokens)) : 0;
     const outTokens = Number.isFinite(Number(outputTokens)) ? Math.max(0, Number(outputTokens)) : 0;
     const total = ((inTokens / 1_000_000) * rate.input) + ((outTokens / 1_000_000) * rate.output);

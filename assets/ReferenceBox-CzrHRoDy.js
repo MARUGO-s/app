@@ -74,6 +74,8 @@ const n=`.reference-box {
   border-radius: 10px;
   padding: 9px 12px;
   font-size: 0.9rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .reference-box__status.info {
@@ -152,15 +154,52 @@ const n=`.reference-box {
   background: #eef4ff;
 }
 
+.reference-box__item.active .reference-box__item-own-icon {
+  background: #ffd8c2;
+  border-color: rgba(234, 88, 12, 0.45);
+}
+
+.reference-box__item-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.reference-box__item-own-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
+  border-radius: 8px;
+  background: #ffefe6;
+  color: #ea580c;
+  border: 1px solid rgba(234, 88, 12, 0.35);
+}
+
+.reference-box__item-own-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
 .reference-box__item-title {
+  flex: 1;
+  min-width: 0;
   font-weight: 700;
   color: #333;
-  margin-bottom: 4px;
 }
 
 .reference-box__item-date {
   color: #666;
   font-size: 0.82rem;
+}
+
+.reference-box__item-date--share-count {
+  font-weight: 600;
+  color: #374151;
 }
 
 .reference-box__empty {
@@ -236,6 +275,12 @@ const n=`.reference-box {
   margin-top: 4px;
   font-size: 0.82rem;
   color: #6b7280;
+}
+
+.reference-box__share-note-sub {
+  display: block;
+  margin-top: 6px;
+  line-height: 1.45;
 }
 
 .reference-box__share-summary {

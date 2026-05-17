@@ -30,9 +30,11 @@ import { supabase } from './supabase';
 import { recipeService } from './services/recipeService';
 import { formatDisplayId } from './utils/formatUtils';
 import { applyImportedRecipeType } from './utils/importRecipeType';
+import { mapImportedRecipeToSavePayload } from './utils/importedRecipeMapper';
 import { userService } from './services/userService';
 import { featureFlagService } from './services/featureFlagService';
 import { STORE_LIST } from './constants';
+import { RECIPE_CATEGORY_OPTIONS, normalizeRecipeCategory } from './constants/recipeCategories';
 import { AuthProvider } from './contexts/AuthContext.jsx';
 import { useAuth } from './contexts/useAuth';
 import { ToastProvider } from './contexts/ToastContext.jsx';
@@ -120,7 +122,7 @@ function AppContent() {
   const [isEditRecipeLoading, setIsEditRecipeLoading] = useState(false);
 
   const [selectedTag, setSelectedTag] = useState('すべて');
-  const [importMode, setImportMode] = useState(null); // null | 'url' | 'image'
+  const [importMode, setImportMode] = useState(null); // null | 'url' | 'image' | 'pdf'
   const [importedData, setImportedData] = useState(null);
   const [searchQuery, setSearchQuery] = useState(''); // New search state
   const [publicRecipeView, setPublicRecipeView] = useState('none'); // 'none' | 'mine' | 'others'
@@ -655,14 +657,17 @@ function AppContent() {
   const {
     allCourses,
     allCategories,
+    allCountries,
     storeCounts,
     noStoreCount,
     otherStoreCount,
     courseCounts,
     categoryCounts,
+    countryCounts,
   } = useMemo(() => {
     const nextAllCourses = [...new Set(recipes.map(r => normalizeValue(r.course)).filter(Boolean))];
-    const nextAllCategories = [...new Set(recipes.map(r => normalizeValue(r.category)).filter(Boolean))];
+    const nextAllCategories = RECIPE_CATEGORY_OPTIONS;
+    const nextAllCountries = [...new Set(recipes.map(r => normalizeValue(r.country)).filter(Boolean))];
 
     const nextStoreCounts = recipes.reduce((acc, r) => {
       const key = normalizeKey(r.storeName);
@@ -688,7 +693,13 @@ function AppContent() {
     }, {});
 
     const nextCategoryCounts = recipes.reduce((acc, r) => {
-      const key = normalizeKey(r.category);
+      const key = normalizeKey(normalizeRecipeCategory(r.category, r));
+      if (key) acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    const nextCountryCounts = recipes.reduce((acc, r) => {
+      const key = normalizeKey(r.country);
       if (key) acc[key] = (acc[key] || 0) + 1;
       return acc;
     }, {});
@@ -696,11 +707,13 @@ function AppContent() {
     return {
       allCourses: nextAllCourses,
       allCategories: nextAllCategories,
+      allCountries: nextAllCountries,
       storeCounts: nextStoreCounts,
       noStoreCount: nextNoStoreCount,
       otherStoreCount: nextOtherStoreCount,
       courseCounts: nextCourseCounts,
       categoryCounts: nextCategoryCounts,
+      countryCounts: nextCountryCounts,
     };
   }, [recipes]);
 
@@ -717,8 +730,9 @@ function AppContent() {
         (recipe.tags && recipe.tags.includes(selectedTag)) ||
         (selectedTag === NO_STORE_VALUE && !storeKey) ||
         (selectedTag === OTHER_STORE_VALUE && storeKey && !KNOWN_STORE_KEYS.has(storeKey)) ||
-        (recipe.category && normalizeKey(recipe.category) === normalizedSelectedTag) ||
+        (normalizeRecipeCategory(recipe.category, recipe) && normalizeKey(normalizeRecipeCategory(recipe.category, recipe)) === normalizedSelectedTag) ||
         (recipe.course && normalizeKey(recipe.course) === normalizedSelectedTag) ||
+        (recipe.country && normalizeKey(recipe.country) === normalizedSelectedTag) ||
         (recipe.storeName && storeKey === normalizedSelectedTag);
 
       if (!matchesTag) return false;
@@ -727,6 +741,10 @@ function AppContent() {
       return (
         (recipe.title || '').toLowerCase().includes(query) ||
         (recipe.description && recipe.description.toLowerCase().includes(query)) ||
+        (recipe.country && recipe.country.toLowerCase().includes(query)) ||
+        (recipe.course && recipe.course.toLowerCase().includes(query)) ||
+        (recipe.category && recipe.category.toLowerCase().includes(query)) ||
+        (recipe.storeName && recipe.storeName.toLowerCase().includes(query)) ||
         (Array.isArray(recipe.ingredients) && recipe.ingredients.some(ing => (ing?.name || '').toLowerCase().includes(query)))
       );
     });
@@ -944,7 +962,7 @@ function AppContent() {
   }, [currentView, selectedRecipeId]);
 
   const handleImportRecipe = (recipeData, sourceUrl = '', importOptions = {}) => {
-    const importTypeMode = importOptions?.mode === 'image'
+    const importTypeMode = importOptions?.mode === 'image' || importOptions?.mode === 'pdf'
       ? (importOptions?.recipeType === 'bread' ? 'bread' : 'normal')
       : 'auto';
     const typedRecipeData = applyImportedRecipeType(recipeData, importTypeMode);
@@ -960,11 +978,61 @@ function AppContent() {
     }
 
     typedRecipeData.sourceUrl = sourceUrl;
-    if (sourceUrl) {
-      typedRecipeData.category = 'URL取り込み';
+    if (sourceUrl?.startsWith('pdf:')) {
+      typedRecipeData.category = '取り込み';
+    } else if (sourceUrl) {
+      typedRecipeData.category = '取り込み';
     }
     setImportedData(typedRecipeData);
     setSearchParams({ view: 'create' });
+  };
+
+  const handleImportRecipeBatch = async (recipes, importOptions = {}, sourceLabel = '') => {
+    if (!user?.id) {
+      toast.warning('ログインが必要です');
+      return;
+    }
+    setImportMode(null);
+    setLoading(true);
+    const failed = [];
+    let successCount = 0;
+    try {
+      for (let i = 0; i < recipes.length; i += 1) {
+        const raw = recipes[i];
+        const title = String(raw?.title || raw?.name || \`レシピ \${i + 1}\`).trim();
+        try {
+          const payload = mapImportedRecipeToSavePayload(raw, {
+            category: '取り込み',
+            sourceUrl: '',
+            importOptions,
+          });
+          await recipeService.createRecipe(payload, user);
+          successCount += 1;
+        } catch (error) {
+          console.error(\`PDF import failed for "\${title}":\`, error);
+          failed.push({ title, message: error?.message || '保存に失敗しました' });
+        }
+      }
+
+      if (successCount === 0) {
+        const first = failed[0]?.message || '一括登録に失敗しました';
+        throw new Error(first);
+      }
+
+      await loadRecipes();
+      setSearchParams({ view: 'list' });
+      if (failed.length > 0) {
+        toast.warning(\`\${successCount}件を登録しました（\${failed.length}件は失敗）\`);
+      } else {
+        toast.success(\`\${successCount}件のレシピを登録しました\`);
+      }
+    } catch (error) {
+      console.error('PDF batch import failed:', error);
+      toast.error(error?.message || '一括登録に失敗しました');
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleSelectMode = () => {
@@ -1367,6 +1435,9 @@ function AppContent() {
                           <Button variant="secondary" onClick={() => { setImportMode('image'); setIsMenuOpen(false); }}>
                             <span style={{ marginRight: '8px' }}>📷</span> 画像から追加
                           </Button>
+                          <Button variant="secondary" onClick={() => { setImportMode('pdf'); setIsMenuOpen(false); }}>
+                            <span style={{ marginRight: '8px' }}>📄</span> PDFから追加
+                          </Button>
                           <div className="menu-divider"></div>
 
                           <div className="pc-recommend-note">
@@ -1478,7 +1549,7 @@ function AppContent() {
                 <input
                   type="text"
                   className="search-input"
-                  placeholder="レシピ名、材料、メモから検索..."
+                  placeholder="レシピ名、材料、メモ、国などから検索..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -1546,12 +1617,25 @@ function AppContent() {
 
             <select
               className="store-filter-select"
-              value={allCategories.includes(selectedTag) ? selectedTag : ""}
+              value={allCategories.find((cat) => normalizeKey(cat) === normalizeKey(selectedTag)) || ""}
               onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
             >
               <option value="">カテゴリー</option>
               {allCategories.sort().map(cat => (
                 <option key={cat} value={cat}>{cat} ({categoryCounts[normalizeKey(cat)] || 0})</option>
+              ))}
+            </select>
+
+            <select
+              className="store-filter-select"
+              value={allCountries.some((country) => normalizeKey(country) === normalizeKey(selectedTag)) ? selectedTag : ""}
+              onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
+            >
+              <option value="">国</option>
+              {allCountries.sort((a, b) => a.localeCompare(b, 'ja')).map((country) => (
+                <option key={country} value={country}>
+                  {country} ({countryCounts[normalizeKey(country)] || 0})
+                </option>
               ))}
             </select>
 
@@ -1719,6 +1803,7 @@ function AppContent() {
           initialMode={importMode}
           onClose={() => setImportMode(null)}
           onImport={handleImportRecipe}
+          onImportBatch={handleImportRecipeBatch}
         />
       )}
 

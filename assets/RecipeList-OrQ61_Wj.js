@@ -1,5 +1,11 @@
 const e=`import React, { useState } from 'react';
 import { Card } from './Card';
+import {
+    RECIPE_CATEGORY_OPTIONS,
+    RECIPE_LIST_SECTION_ICONS,
+    normalizeRecipeCategory,
+    splitRecipesByCategory,
+} from '../constants/recipeCategories';
 import './RecipeList.css';
 
 const isMobileViewport = () => {
@@ -28,6 +34,70 @@ const formatDate = (dateString) => {
     const date = new Date(dateString);
     return \`\${date.getFullYear()}/\${String(date.getMonth() + 1).padStart(2, '0')}/\${String(date.getDate()).padStart(2, '0')}\`;
 };
+
+const displayMeta = (value) => {
+    const text = String(value ?? '').trim();
+    return text || '—';
+};
+
+const RecipeListTable = ({
+    recipes,
+    isSelectMode,
+    selectedIds,
+    onSelectRecipe,
+    onToggleSelection,
+    showOwner,
+    ownerLabelFn,
+}) => (
+    <div className="recipe-list-table-wrap">
+        <table className="recipe-list-table">
+            <thead>
+                <tr>
+                    <th>レシピ名</th>
+                    <th>店舗</th>
+                    <th>コース</th>
+                    <th>カテゴリー</th>
+                    <th>国</th>
+                    {showOwner && <th>作成者</th>}
+                    <th>登録日</th>
+                </tr>
+            </thead>
+            <tbody>
+                {recipes.map((recipe) => {
+                    const isSelected = selectedIds && selectedIds.has(recipe.id);
+                    return (
+                        <tr
+                            key={recipe.id}
+                            className={\`recipe-list-table__row \${isSelected ? 'recipe-list-table__row--selected' : ''}\`}
+                            onClick={() => {
+                                if (isSelectMode) {
+                                    onToggleSelection(recipe.id);
+                                } else {
+                                    onSelectRecipe(recipe);
+                                }
+                            }}
+                        >
+                            <td className="recipe-list-table__title">
+                                {isSelectMode && (
+                                    <span className={\`recipe-list-table__checkbox \${isSelected ? 'checked' : ''}\`} aria-hidden="true" />
+                                )}
+                                {recipe.title}
+                            </td>
+                            <td>{displayMeta(recipe.storeName)}</td>
+                            <td>{displayMeta(recipe.course)}</td>
+                            <td>{displayMeta(recipe.category)}</td>
+                            <td>{displayMeta(recipe.country)}</td>
+                            {showOwner && (
+                                <td>{typeof ownerLabelFn === 'function' ? displayMeta(ownerLabelFn(recipe)) : '—'}</td>
+                            )}
+                            <td>{formatDate(recipe.created_at)}</td>
+                        </tr>
+                    );
+                })}
+            </tbody>
+        </table>
+    </div>
+);
 
 const normalizeTags = (rawTags) => {
     if (Array.isArray(rawTags)) {
@@ -62,7 +132,7 @@ const RecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggle
         <div style={style}>
             <Card
                 hoverable
-                className={\`recipe-card \${isSelected ? 'selected' : ''} \${recipe.type === 'bread' ? 'recipe-card--bread' : ''} \${(/デザート|Dessert/i.test(recipe.category || '') || (recipe.tags && recipe.tags.some(t => /デザート|Dessert/i.test(t)))) ? 'recipe-card--dessert' : ''} \${recipe.category === 'URL取り込み' || recipe.sourceUrl ? 'recipe-card--url' : ''}\`}
+                className={\`recipe-card \${isSelected ? 'selected' : ''} \${recipe.type === 'bread' ? 'recipe-card--bread' : ''} \${normalizeRecipeCategory(recipe.category, recipe) === 'デザート・お菓子' ? 'recipe-card--dessert' : ''} \${normalizeRecipeCategory(recipe.category, recipe) === '取り込み' || recipe.sourceUrl ? 'recipe-card--url' : ''}\`}
                 style={{ height: '100%' }}
                 onClick={() => {
                     if (isSelectMode) {
@@ -100,9 +170,8 @@ const RecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggle
                             if (allTags.length === 0) return null;
                             // Filter out internal tags (like owner:*)
                             const visibleTags = allTags.filter(t => !t.startsWith('owner:'));
-                            // Prioritize 'URL取り込み'
-                            const hasImport = visibleTags.includes('URL取り込み');
-                            const displayTags = hasImport ? ['URL取り込み'] : visibleTags;
+                            const hasImport = visibleTags.some((tag) => /^(取り込み|URL取り込み|PDF取り込み)$/i.test(tag));
+                            const displayTags = hasImport ? ['取り込み'] : visibleTags;
 
                             return displayTags.slice(0, 1).map((tag, index) => (
                                 <span key={\`\${tag}-\${index}\`} className="recipe-tag">{tag}</span>
@@ -115,6 +184,7 @@ const RecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggle
                     <p className="recipe-desc">{recipe.description}</p>
                     <div className="recipe-meta">
                         {recipe.storeName && <span>🏢 {recipe.storeName}</span>}
+                        {recipe.country && <span>🌍 {recipe.country}</span>}
                         {showOwner && typeof ownerLabelFn === 'function' && (
                             <span className="recipe-owner">👤 {ownerLabelFn(recipe)}</span>
                         )}
@@ -129,68 +199,6 @@ const RecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggle
             </Card>
         </div>
     );
-};
-
-const isBread = (recipe) => {
-    const tags = normalizeTags(recipe.tags);
-    return recipe.type === 'bread' || tags.some(t => /パン|Bread/i.test(t));
-};
-
-const isDessert = (recipe) => {
-    const isDessertTag = (t) => /デザート|Dessert/i.test(t);
-    const tags = normalizeTags(recipe.tags);
-    return /デザート|Dessert/i.test(recipe.category || '') || tags.some(isDessertTag);
-};
-
-const isSauce = (recipe) => {
-    const tags = normalizeTags(recipe.tags);
-    return /ソース|Sauce/i.test(recipe.category || '') || tags.some(t => /ソース|Sauce/i.test(t));
-};
-
-const isDecoration = (recipe) => {
-    // "飾り" or "Deco" or "Garnish"? 
-    const tags = normalizeTags(recipe.tags);
-    return /飾り|デコ|Decor/i.test(recipe.category || '') || tags.some(t => /飾り|デコ|Decor/i.test(t));
-};
-
-const isDressing = (recipe) => {
-    const cat = recipe.category || '';
-    const tags = normalizeTags(recipe.tags);
-    return /ドレッシング|Dressing|ヴィネグレット|Vinaigrette|マヨネーズ|Mayonnaise/i.test(cat) ||
-        tags.some(t => /ドレッシング|Dressing|ヴィネグレット|Vinaigrette|マヨネーズ|Mayonnaise/i.test(t));
-};
-
-const splitRecipesBySection = (list) => {
-    // Bread
-    const breadRecipes = list.filter(r => isBread(r));
-    const nonBread = list.filter(r => !isBread(r));
-
-    // Sauce
-    const sauceRecipes = nonBread.filter(r => isSauce(r));
-    const nonSauce = nonBread.filter(r => !isSauce(r));
-
-    // Decoration
-    const decorationRecipes = nonSauce.filter(r => isDecoration(r));
-    const nonDecoration = nonSauce.filter(r => !isDecoration(r));
-
-    // Dressing
-    const dressingRecipes = nonDecoration.filter(r => isDressing(r));
-    const nonDressing = nonDecoration.filter(r => !isDressing(r));
-
-    // Dessert
-    const dessertRecipes = nonDressing.filter(r => isDessert(r));
-
-    // Cooking (Rest)
-    const cookingRecipes = nonDressing.filter(r => !isDessert(r));
-
-    return {
-        cookingRecipes,
-        breadRecipes,
-        dessertRecipes,
-        sauceRecipes,
-        dressingRecipes,
-        decorationRecipes,
-    };
 };
 
 export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds, onToggleSelection, displayMode = 'normal', publicRecipeView = 'none', showOwner = false, ownerLabelFn, currentUser = null }) => {
@@ -251,14 +259,7 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
         return 'others';
     })();
 
-    const {
-        cookingRecipes,
-        breadRecipes,
-        dessertRecipes,
-        sauceRecipes,
-        dressingRecipes,
-        decorationRecipes,
-    } = splitRecipesBySection(nonPublicShared);
+    const categoryBuckets = splitRecipesByCategory(nonPublicShared);
 
     // Dynamic limit based on screen width
     // Mobile/Tablet (< 1024px): 8 items
@@ -322,25 +323,37 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                         </span>
                     )}
                 </h3>
-                <div className="recipe-grid">
-                    {displayItems.map((recipe, index) => {
-                        const isSelected = selectedIds && selectedIds.has(recipe.id);
-                        return (
-                            <RecipeCard
-                                key={recipe.id}
-                                recipe={recipe}
-                                isSelected={isSelected}
-                                isSelectMode={isSelectMode}
-                                onSelectRecipe={onSelectRecipe}
-                                onToggleSelection={onToggleSelection}
-                                showOwner={showOwner}
-                                ownerLabelFn={ownerLabelFn}
-                                index={index}
-                                mobileView={isMobileView}
-                            />
-                        );
-                    })}
-                </div>
+                {isAllMode ? (
+                    <RecipeListTable
+                        recipes={displayItems}
+                        isSelectMode={isSelectMode}
+                        selectedIds={selectedIds}
+                        onSelectRecipe={onSelectRecipe}
+                        onToggleSelection={onToggleSelection}
+                        showOwner={showOwner}
+                        ownerLabelFn={ownerLabelFn}
+                    />
+                ) : (
+                    <div className="recipe-grid">
+                        {displayItems.map((recipe, index) => {
+                            const isSelected = selectedIds && selectedIds.has(recipe.id);
+                            return (
+                                <RecipeCard
+                                    key={recipe.id}
+                                    recipe={recipe}
+                                    isSelected={isSelected}
+                                    isSelectMode={isSelectMode}
+                                    onSelectRecipe={onSelectRecipe}
+                                    onToggleSelection={onToggleSelection}
+                                    showOwner={showOwner}
+                                    ownerLabelFn={ownerLabelFn}
+                                    index={index}
+                                    mobileView={isMobileView}
+                                />
+                            );
+                        })}
+                    </div>
+                )}
                 {items.length === 0 && (
                     <div style={{ color: '#9ca3af', fontSize: '0.9rem', marginTop: '0.5rem' }}>
                         {emptyMessage || \`\${title}はありません\`}
@@ -349,6 +362,15 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
             </div>
         );
     };
+
+    const renderCategorySections = (buckets, sectionPrefix = '') => (
+        RECIPE_CATEGORY_OPTIONS.map((categoryKey) => renderSection(
+            categoryKey,
+            buckets[categoryKey] || [],
+            RECIPE_LIST_SECTION_ICONS[categoryKey] || '📁',
+            sectionPrefix ? \`\${sectionPrefix}-\${categoryKey}\` : categoryKey,
+        ))
+    );
 
     const renderPublicRecipeSections = () => {
         if (effectivePublicRecipeView !== 'mine' && effectivePublicRecipeView !== 'others') return null;
@@ -362,7 +384,7 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
             ? '自分が公開中のレシピはありません'
             : '他ユーザーの公開レシピはありません';
 
-        const grouped = splitRecipesBySection(items);
+        const grouped = splitRecipesByCategory(items);
 
         return (
             <div className="public-recipes-block">
@@ -375,14 +397,7 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                 {items.length === 0 ? (
                     <div className="public-recipes-block__empty">{emptyMessage}</div>
                 ) : (
-                    <>
-                        {renderSection("料理", grouped.cookingRecipes, "🍽️", \`\${sectionPrefix}-cooking\`)}
-                        {renderSection("パン", grouped.breadRecipes, "🍞", \`\${sectionPrefix}-bread\`)}
-                        {renderSection("デザート", grouped.dessertRecipes, "🍰", \`\${sectionPrefix}-dessert\`)}
-                        {renderSection("ソース", grouped.sauceRecipes, "🥣", \`\${sectionPrefix}-sauce\`)}
-                        {renderSection("ドレッシング", grouped.dressingRecipes, "🥗", \`\${sectionPrefix}-dressing\`)}
-                        {renderSection("飾り", grouped.decorationRecipes, "✨", \`\${sectionPrefix}-decoration\`)}
-                    </>
+                    <>{renderCategorySections(grouped, sectionPrefix)}</>
                 )}
             </div>
         );
@@ -401,12 +416,7 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                     公開レシピは非表示です。上の「自分公開中」または「他ユーザー公開」を押すと表示されます。
                 </div>
             )}
-            {renderSection("料理", cookingRecipes, "🍽️", "cooking")}
-            {renderSection("パン", breadRecipes, "🍞", "bread")}
-            {renderSection("デザート", dessertRecipes, "🍰", "dessert")}
-            {renderSection("ソース", sauceRecipes, "🥣", "sauce")}
-            {renderSection("ドレッシング", dressingRecipes, "🥗", "dressing")}
-            {renderSection("飾り", decorationRecipes, "✨", "decoration")}
+            {renderCategorySections(categoryBuckets)}
 
             {/* Fallback if no recipes at all */}
             {recipes.length === 0 && (

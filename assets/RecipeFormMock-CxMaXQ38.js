@@ -3,6 +3,8 @@ import { Button } from './Button';
 import { Input } from './Input';
 import { Card } from './Card';
 import { STORE_LIST } from '../constants';
+import { RECIPE_CATEGORY_OPTIONS } from '../constants/recipeCategories';
+import { RecipeMetaDatalist } from './RecipeMetaDatalist';
 import { RecipeFormBread } from './RecipeFormBread';
 import { RecipeFormIngredients } from './RecipeFormIngredients';
 import { RecipeFormSteps } from './RecipeFormSteps';
@@ -171,7 +173,7 @@ export const RecipeFormMock = ({ onSave, onCancel, initialData }) => {
             ...prev,
             title: importedData.name || prev.title,
             description: importedData.description || prev.description,
-            category: sourceUrl ? 'URL取り込み' : (importedData.category || prev.category),
+            category: sourceUrl ? '取り込み' : (importedData.category || prev.category),
             image: importedData.image || prev.image,
             servings: importedData.recipeYield || prev.servings,
             ingredients: mappedIngredients,
@@ -395,13 +397,7 @@ export const RecipeFormMock = ({ onSave, onCancel, initialData }) => {
                                     list="category-options"
                                     wrapperClassName="input-group--no-margin"
                                 />
-                                <datalist id="category-options">
-                                    <option value="ドレッシング" />
-                                    <option value="ソース" />
-                                    <option value="飾り" />
-                                    <option value="付け合わせ" />
-                                    <option value="お菓子" />
-                                </datalist>
+                                <RecipeMetaDatalist id="category-options" values={RECIPE_CATEGORY_OPTIONS} />
                             </div>
 
                             <div className="recipe-form-mock__meta-field">
