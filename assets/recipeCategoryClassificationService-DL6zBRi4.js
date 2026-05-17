@@ -43,7 +43,7 @@ export const classifyRecipeCategoriesChunk = async ({
 };
 
 /**
- * 全レシピのカテゴリーを案Aの固定カテゴリーに Gemini で一括変換
+ * 自分のレシピのカテゴリーを案Aの固定カテゴリーに Gemini で一括変換
  */
 export const classifyAllRecipeCategories = async ({
     onlyMissing = false,

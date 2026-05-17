@@ -83,7 +83,6 @@ const getCurrentUserOwnerKeys = (currentUser) => {
 
 const canCurrentUserAccessDeletedRecipe = (recipe, currentUser) => {
     if (!currentUser) return false;
-    if (currentUser.role === 'admin') return true;
 
     const deletedBy = recipe?.deleted_by_user_id || recipe?.deletedByUserId || null;
     if (deletedBy && currentUser.id && String(deletedBy) === String(currentUser.id)) {
@@ -360,11 +359,8 @@ export const recipeService = {
             return [];
         }
 
-        const isAdmin = currentUser.role === 'admin';
         // Kick off preference fetch early (in parallel with recipes.select) to reduce perceived latency.
-        const showMasterPromise = isAdmin
-            ? Promise.resolve(false)
-            : this._resolveShowMasterPreference(currentUser, timeoutMs);
+        const showMasterPromise = this._resolveShowMasterPreference(currentUser, timeoutMs);
 
         const safeOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
         const safeLimit = Number.isInteger(limit) && limit > 0 ? limit : null;
@@ -496,20 +492,7 @@ export const recipeService = {
             }
         }
 
-        // 3. Apply Filtering Logic (App-side RLS)
-        if (isAdmin) {
-            if (!skipCacheSave) {
-                saveRecipeListCache(allRecipes, currentUser.id);
-            }
-            if (returnMeta) {
-                return {
-                    recipes: allRecipes,
-                    hasMoreRaw: safeLimit != null ? rawFetchedCount === safeLimit : false,
-                };
-            }
-            return allRecipes;
-        }
-
+        // 3. Apply Filtering Logic (defense-in-depth; DB RLS と同じ基準)
         const userIds = [String(currentUser.id)];
         if (currentUser.displayId) userIds.push(String(currentUser.displayId));
 
@@ -523,7 +506,7 @@ export const recipeService = {
             const tags = normalizeRecipeTags(recipe.tags);
             const ownerTags = tags.filter(t => t && t.startsWith('owner:'));
 
-            // 所有者タグなしは非公開扱い（管理者は上で全件返却済み）
+            // 所有者タグなしは public のみ表示
             if (ownerTags.length === 0) {
                 return tags.includes('public');
             }
@@ -946,7 +929,6 @@ export const recipeService = {
             .select('*', { count: 'exact' })
 
         if (error) throw error
-        if (currentUser.role === 'admin') return count ?? (data || []).length;
         return (data || []).filter(recipe => canCurrentUserAccessDeletedRecipe(recipe, currentUser)).length;
     },
 

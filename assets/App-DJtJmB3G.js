@@ -1703,7 +1703,7 @@ function AppContent() {
                     onToggleSelection={handleToggleSelection}
                     displayMode={displayMode}
                     publicRecipeView={publicRecipeView}
-                    showOwner={user?.role === 'admin'}
+                    showOwner={false}
                     ownerLabelFn={getRecipeOwnerLabel}
                     currentUser={user}
                   />
@@ -1717,7 +1717,7 @@ function AppContent() {
       {currentView === 'detail' && selectedRecipe && (
         <RecipeDetail
           recipe={selectedRecipe}
-          ownerLabel={user?.role === 'admin' ? getRecipeOwnerLabel(selectedRecipe) : undefined}
+          ownerLabel={undefined}
           isDeleted={!!selectedRecipe.deletedAt}
           onBack={() => {
             const from = searchParams.get('from');

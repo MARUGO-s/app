@@ -687,7 +687,6 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
 
     const [isPublic, setIsPublic] = React.useState(recipe.tags?.includes('public') || false);
     const isOwner =
-        user?.role === 'admin' ||
         (recipe.tags && recipe.tags.includes(\`owner:\${user?.id}\`)) ||
         (user?.displayId && recipe.tags && recipe.tags.includes(\`owner:\${user.displayId}\`));
     // If no owner tag, assume public/legacy, but for safety treat as owner if no tag present? 

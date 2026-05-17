@@ -725,7 +725,7 @@ export const DataManagement = ({ onBack }) => {
 
     const handleClassifyRecipeCategories = async () => {
         if (!window.confirm(
-            '全レシピの既存カテゴリーを含め、AIの判断で案Aの固定カテゴリーに上書きします。よろしいですか？',
+            'あなたが所有するレシピのみ、既存カテゴリーを含め AI の判断で案Aの固定カテゴリーに上書きします。よろしいですか？',
         )) return;
         setCategoryClassifyLoading(true);
         setCategoryClassifyStatus({ message: '処理を開始しています...', type: 'info' });
@@ -757,7 +757,7 @@ export const DataManagement = ({ onBack }) => {
 
     const handleClassifyRecipeCourses = async () => {
         if (!window.confirm(
-            '全レシピのコースを AI の判断で固定12種に上書きします（カテゴリーとは別の「提供順」です）。よろしいですか？',
+            'あなたが所有するレシピのみ、コースを AI の判断で固定12種に上書きします（カテゴリーとは別の「提供順」です）。よろしいですか？',
         )) return;
         setCourseClassifyLoading(true);
         setCourseClassifyStatus({ message: '処理を開始しています...', type: 'info' });
@@ -788,7 +788,7 @@ export const DataManagement = ({ onBack }) => {
     };
 
     const handleClassifyRecipeCountries = async () => {
-        if (!window.confirm('未設定のレシピに国名を推定して保存します。よろしいですか？')) return;
+        if (!window.confirm('あなたが所有するレシピのうち、国が未設定のものに国名を推定して保存します。よろしいですか？')) return;
         setCountryClassifyLoading(true);
         setCountryClassifyStatus({ message: '処理を開始しています...', type: 'info' });
         try {
