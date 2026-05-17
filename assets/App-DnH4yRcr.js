@@ -35,6 +35,7 @@ import { userService } from './services/userService';
 import { featureFlagService } from './services/featureFlagService';
 import { STORE_LIST } from './constants';
 import { RECIPE_CATEGORY_OPTIONS, normalizeRecipeCategory } from './constants/recipeCategories';
+import { RECIPE_COURSE_OPTIONS, normalizeRecipeCourse } from './constants/recipeCourses';
 import { AuthProvider } from './contexts/AuthContext.jsx';
 import { useAuth } from './contexts/useAuth';
 import { ToastProvider } from './contexts/ToastContext.jsx';
@@ -665,7 +666,7 @@ function AppContent() {
     categoryCounts,
     countryCounts,
   } = useMemo(() => {
-    const nextAllCourses = [...new Set(recipes.map(r => normalizeValue(r.course)).filter(Boolean))];
+    const nextAllCourses = RECIPE_COURSE_OPTIONS;
     const nextAllCategories = RECIPE_CATEGORY_OPTIONS;
     const nextAllCountries = [...new Set(recipes.map(r => normalizeValue(r.country)).filter(Boolean))];
 
@@ -687,7 +688,9 @@ function AppContent() {
     }, 0);
 
     const nextCourseCounts = recipes.reduce((acc, r) => {
-      const key = normalizeKey(r.course);
+      const canonical = normalizeRecipeCourse(r.course, r);
+      if (!canonical) return acc;
+      const key = normalizeKey(canonical);
       if (key) acc[key] = (acc[key] || 0) + 1;
       return acc;
     }, {});
@@ -731,7 +734,7 @@ function AppContent() {
         (selectedTag === NO_STORE_VALUE && !storeKey) ||
         (selectedTag === OTHER_STORE_VALUE && storeKey && !KNOWN_STORE_KEYS.has(storeKey)) ||
         (normalizeRecipeCategory(recipe.category, recipe) && normalizeKey(normalizeRecipeCategory(recipe.category, recipe)) === normalizedSelectedTag) ||
-        (recipe.course && normalizeKey(recipe.course) === normalizedSelectedTag) ||
+        (normalizeRecipeCourse(recipe.course, recipe) && normalizeKey(normalizeRecipeCourse(recipe.course, recipe)) === normalizedSelectedTag) ||
         (recipe.country && normalizeKey(recipe.country) === normalizedSelectedTag) ||
         (recipe.storeName && storeKey === normalizedSelectedTag);
 
@@ -1606,7 +1609,7 @@ function AppContent() {
 
             <select
               className="store-filter-select"
-              value={allCourses.includes(selectedTag) ? selectedTag : ""}
+              value={allCourses.find((course) => normalizeKey(course) === normalizeKey(selectedTag)) || ""}
               onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
             >
               <option value="">コース</option>

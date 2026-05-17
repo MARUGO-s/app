@@ -4,6 +4,7 @@ import { Input } from './Input';
 import { Card } from './Card';
 import { STORE_LIST } from '../constants';
 import { RECIPE_CATEGORY_OPTIONS } from '../constants/recipeCategories';
+import { RECIPE_COURSE_OPTIONS } from '../constants/recipeCourses';
 import { RecipeMetaDatalist } from './RecipeMetaDatalist';
 import { RecipeFormBread } from './RecipeFormBread';
 import { RecipeFormIngredients } from './RecipeFormIngredients';
@@ -376,15 +377,7 @@ export const RecipeFormMock = ({ onSave, onCancel, initialData }) => {
                                     list="course-options"
                                     wrapperClassName="input-group--no-margin"
                                 />
-                                <datalist id="course-options">
-                                    <option value="アミューズ" />
-                                    <option value="前菜" />
-                                    <option value="スープ" />
-                                    <option value="魚料理" />
-                                    <option value="肉料理" />
-                                    <option value="デザート" />
-                                    <option value="プティフール" />
-                                </datalist>
+                                <RecipeMetaDatalist id="course-options" values={RECIPE_COURSE_OPTIONS} />
                             </div>
 
                             <div className="recipe-form-mock__meta-field">

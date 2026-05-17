@@ -19,8 +19,10 @@ import { BackupManagement } from './BackupManagement';
 import { supabase } from '../supabase';
 import { classifyAllRecipeCountries } from '../services/recipeCountryClassificationService';
 import { classifyAllRecipeCategories } from '../services/recipeCategoryClassificationService';
+import { classifyAllRecipeCourses } from '../services/recipeCourseClassificationService';
 import { CountryClassifyAdminPanel } from './CountryClassifyAdminPanel';
 import { CategoryClassifyAdminPanel } from './CategoryClassifyAdminPanel';
+import { CourseClassifyAdminPanel } from './CourseClassifyAdminPanel';
 import './DataManagement.css';
 
 const toMonthKey = (dateStr) => {
@@ -45,6 +47,8 @@ export const DataManagement = ({ onBack }) => {
     const [countryClassifyStatus, setCountryClassifyStatus] = useState(null);
     const [categoryClassifyLoading, setCategoryClassifyLoading] = useState(false);
     const [categoryClassifyStatus, setCategoryClassifyStatus] = useState(null);
+    const [courseClassifyLoading, setCourseClassifyLoading] = useState(false);
+    const [courseClassifyStatus, setCourseClassifyStatus] = useState(null);
 
     // 一括削除（ゴミ箱移動）用の状態
     const [bulkDeletePriceModal, setBulkDeletePriceModal] = useState(false);
@@ -751,6 +755,38 @@ export const DataManagement = ({ onBack }) => {
         }
     };
 
+    const handleClassifyRecipeCourses = async () => {
+        if (!window.confirm(
+            '全レシピのコースを AI の判断で固定12種に上書きします（カテゴリーとは別の「提供順」です）。よろしいですか？',
+        )) return;
+        setCourseClassifyLoading(true);
+        setCourseClassifyStatus({ message: '処理を開始しています...', type: 'info' });
+        try {
+            const result = await classifyAllRecipeCourses({
+                onlyMissing: false,
+                overwrite: true,
+                forceRewrite: true,
+                onProgress: ({ totalProcessed, totalUpdated, totalSkipped, totalFailed }) => {
+                    setCourseClassifyStatus({
+                        message: \`処理中: \${totalProcessed}件（更新 \${totalUpdated} / スキップ \${totalSkipped} / 失敗 \${totalFailed}）\`,
+                        type: 'info',
+                    });
+                },
+            });
+            setCourseClassifyStatus({
+                message: \`完了: 更新 \${result.totalUpdated}件 / スキップ \${result.totalSkipped}件 / 失敗 \${result.totalFailed}件（計 \${result.totalProcessed}件）\`,
+                type: result.totalFailed > 0 ? 'warning' : 'success',
+            });
+        } catch (err) {
+            setCourseClassifyStatus({
+                message: err?.message || 'コースの一括変換に失敗しました',
+                type: 'error',
+            });
+        } finally {
+            setCourseClassifyLoading(false);
+        }
+    };
+
     const handleClassifyRecipeCountries = async () => {
         if (!window.confirm('未設定のレシピに国名を推定して保存します。よろしいですか？')) return;
         setCountryClassifyLoading(true);
@@ -868,6 +904,11 @@ export const DataManagement = ({ onBack }) => {
                         loading={categoryClassifyLoading}
                         status={categoryClassifyStatus}
                         onRun={handleClassifyRecipeCategories}
+                    />
+                    <CourseClassifyAdminPanel
+                        loading={courseClassifyLoading}
+                        status={courseClassifyStatus}
+                        onRun={handleClassifyRecipeCourses}
                     />
                 </>
             )}

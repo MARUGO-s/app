@@ -1,5 +1,6 @@
 const e=`import { supabase } from '../supabase';
 import { RECIPE_CATEGORY_OPTIONS, normalizeRecipeCategory } from '../constants/recipeCategories';
+import { RECIPE_COURSE_OPTIONS, normalizeCourseSuggestions, normalizeRecipeCourse } from '../constants/recipeCourses';
 
 const HISTORY_STORAGE_KEY_PREFIX = 'recipe_meta_history_v1';
 const PAGE_SIZE = 1000;
@@ -7,7 +8,7 @@ const PAGE_SIZE = 1000;
 const META_FIELDS = ['course', 'category', 'country', 'servings', 'storeName'];
 
 const DEFAULT_SUGGESTIONS = {
-    course: ['アミューズ', '前菜', 'スープ', '魚料理', '肉料理', 'デザート', 'プティフール'],
+    course: [...RECIPE_COURSE_OPTIONS],
     category: [...RECIPE_CATEGORY_OPTIONS],
     country: [],
     servings: [],
@@ -114,6 +115,9 @@ export const rememberRecipeMetaFields = (fields, currentUser) => {
         if (field === 'category') {
             value = normalizeRecipeCategory(value);
         }
+        if (field === 'course') {
+            value = normalizeRecipeCourse(value, { category: fields?.category });
+        }
 
         const prev = Array.isArray(history[field]) ? history[field] : [];
         const next = [value, ...prev.filter((item) => normalizeValue(item).toLowerCase() !== value.toLowerCase())].slice(0, 80);
@@ -173,7 +177,9 @@ const fetchDistinctMetaFromRecipes = async (currentUser) => {
         for (const row of rows) {
             if (!recipeOwnedByUser(row, ownerKeys)) continue;
 
-            if (normalizeValue(row.course)) buckets.course.add(normalizeValue(row.course));
+            if (normalizeValue(row.course)) {
+                buckets.course.add(normalizeRecipeCourse(row.course, row));
+            }
             if (normalizeValue(row.category)) {
                 buckets.category.add(normalizeRecipeCategory(row.category, row));
             }
@@ -219,8 +225,24 @@ export const loadRecipeMetaSuggestions = async ({ storeList = [], currentUser } 
         }
     }
 
+    const courseHistory = normalizeCourseSuggestions([
+        ...RECIPE_COURSE_OPTIONS,
+        ...fromDb.course,
+        ...(Array.isArray(local.course) ? local.course : []),
+    ]);
+
+    if (getHistoryStorageKey(currentUser)) {
+        const history = readLocalHistory(currentUser);
+        const prevCourse = Array.isArray(history.course) ? history.course : [];
+        const cleanedCourse = normalizeCourseSuggestions(prevCourse);
+        if (cleanedCourse.length !== prevCourse.length || cleanedCourse.some((v, i) => v !== prevCourse[i])) {
+            history.course = cleanedCourse;
+            writeLocalHistory(currentUser, history);
+        }
+    }
+
     return {
-        course: mergeUnique(DEFAULT_SUGGESTIONS.course, fromDb.course, local.course),
+        course: courseHistory,
         category: categoryHistory,
         country: mergeUnique(DEFAULT_SUGGESTIONS.country, fromDb.country, local.country),
         servings: mergeUnique(DEFAULT_SUGGESTIONS.servings, fromDb.servings, local.servings),
