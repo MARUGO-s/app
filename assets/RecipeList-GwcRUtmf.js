@@ -1,11 +1,12 @@
 const e=`import React, { useState } from 'react';
 import { Card } from './Card';
+import { normalizeRecipeCategory } from '../constants/recipeCategories';
 import {
-    RECIPE_CATEGORY_OPTIONS,
-    RECIPE_LIST_SECTION_ICONS,
-    normalizeRecipeCategory,
-    splitRecipesByCategory,
-} from '../constants/recipeCategories';
+    RECIPE_LIST_COURSE_ICONS,
+    RECIPE_LIST_COURSE_ORDER,
+    normalizeRecipeCourse,
+    splitRecipesByCourse,
+} from '../constants/recipeCourses';
 import './RecipeList.css';
 
 const isMobileViewport = () => {
@@ -259,7 +260,7 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
         return 'others';
     })();
 
-    const categoryBuckets = splitRecipesByCategory(nonPublicShared);
+    const courseBuckets = splitRecipesByCourse(nonPublicShared);
 
     // Dynamic limit based on screen width
     // Mobile/Tablet (< 1024px): 8 items
@@ -363,13 +364,22 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
         );
     };
 
-    const renderCategorySections = (buckets, sectionPrefix = '') => (
-        RECIPE_CATEGORY_OPTIONS.map((categoryKey) => renderSection(
-            categoryKey,
-            buckets[categoryKey] || [],
-            RECIPE_LIST_SECTION_ICONS[categoryKey] || '📁',
-            sectionPrefix ? \`\${sectionPrefix}-\${categoryKey}\` : categoryKey,
-        ))
+    const renderCourseSections = (buckets, sectionPrefix = '') => (
+        RECIPE_LIST_COURSE_ORDER.map((courseKey) => renderSection(
+            courseKey,
+            buckets[courseKey] || [],
+            RECIPE_LIST_COURSE_ICONS[courseKey] || '📁',
+            sectionPrefix ? \`\${sectionPrefix}-\${courseKey}\` : courseKey,
+        )).concat(
+            (buckets['未分類']?.length ?? 0) > 0
+                ? [renderSection(
+                    '未分類',
+                    buckets['未分類'] || [],
+                    RECIPE_LIST_COURSE_ICONS['未分類'],
+                    sectionPrefix ? \`\${sectionPrefix}-未分類\` : '未分類',
+                )]
+                : [],
+        )
     );
 
     const renderPublicRecipeSections = () => {
@@ -384,7 +394,7 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
             ? '自分が公開中のレシピはありません'
             : '他ユーザーの公開レシピはありません';
 
-        const grouped = splitRecipesByCategory(items);
+        const grouped = splitRecipesByCourse(items);
 
         return (
             <div className="public-recipes-block">
@@ -397,7 +407,7 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                 {items.length === 0 ? (
                     <div className="public-recipes-block__empty">{emptyMessage}</div>
                 ) : (
-                    <>{renderCategorySections(grouped, sectionPrefix)}</>
+                    <>{renderCourseSections(grouped, sectionPrefix)}</>
                 )}
             </div>
         );
@@ -416,7 +426,7 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                     公開レシピは非表示です。上の「自分公開中」または「他ユーザー公開」を押すと表示されます。
                 </div>
             )}
-            {renderCategorySections(categoryBuckets)}
+            {renderCourseSections(courseBuckets)}
 
             {/* Fallback if no recipes at all */}
             {recipes.length === 0 && (
