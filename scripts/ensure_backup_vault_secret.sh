@@ -59,6 +59,6 @@ echo "Verifying vault secret..."
 run_query "SELECT name, length(decrypted_secret) AS secret_len FROM vault.decrypted_secrets WHERE name = 'service_role_key';"
 
 echo "Checking cron job..."
-run_query "SELECT jobid, jobname, schedule, active FROM cron.job WHERE jobname = 'daily-account-backup';"
+run_query "SELECT jobid, jobname, schedule, active FROM cron.job WHERE jobname = 'weekly-account-backup';"
 
-echo "OK: Vault secret for daily-account-backup is configured."
+echo "OK: Vault secret for weekly-account-backup is configured."
