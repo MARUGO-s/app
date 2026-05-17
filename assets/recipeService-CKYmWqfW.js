@@ -523,10 +523,9 @@ export const recipeService = {
             const tags = normalizeRecipeTags(recipe.tags);
             const ownerTags = tags.filter(t => t && t.startsWith('owner:'));
 
-            // If NO owner tag, treat as legacy/shared and allow showing.
-            // (RLS is permissive in this project; hiding legacy items here can make the UI look empty.)
+            // 所有者タグなしは非公開扱い（管理者は上で全件返却済み）
             if (ownerTags.length === 0) {
-                return true;
+                return tags.includes('public');
             }
 
             // Check if recipe is owned by a Master/Admin
