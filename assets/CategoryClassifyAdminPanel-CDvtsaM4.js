@@ -6,7 +6,7 @@ export const CategoryClassifyAdminPanel = ({ loading, status, onRun }) => (
         <div className="voice-feature-card__left">
             <div className="voice-feature-card__title">📁 レシピのカテゴリー（一括変換）</div>
             <div className="voice-feature-card__desc">
-                全レシピの既存カテゴリーを含め、内容を Gemini が再判定し、案Aの固定カテゴリー（料理 / スープ / テリーヌ / ソース / ドレッシング / ソース・ドレッシング / 付け合わせ・飾り / デザート・お菓子 / パン / 取り込み / その他）に上書きします。
+                全レシピの既存カテゴリーを含め、内容を Gemini が再判定し、固定カテゴリー（料理 / 煮込み料理 / 温菜 / 冷菜 / スープ / テリーヌ / ソース / ドレッシング / ソース・ドレッシング / 付け合わせ・飾り / デザート・お菓子 / パン / 取り込み / その他）に上書きします。
             </div>
         </div>
         <div className="voice-feature-card__right">
