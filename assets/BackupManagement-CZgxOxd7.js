@@ -396,14 +396,14 @@ export const BackupManagement = () => {
             <div className="backup-cron-info">
                 <div className="backup-cron-title">⏰ 自動バックアップについて</div>
                 <ul className="backup-cron-list">
-                    <li>自動バックアップは毎日 <strong>0:00 JST</strong>（UTC 15:00）に実行されます。</li>
+                    <li>自動バックアップは<strong>毎週1回</strong>、<strong>月曜 0:00 JST</strong>（日曜 UTC 15:00）に実行されます。</li>
                     <li>スケジュール実行には Supabase ダッシュボードの <strong>Database → Cron Jobs</strong> で設定が必要です。</li>
                     <li>最大3世代まで保存され、古いものから順に上書きされます。</li>
                 </ul>
                 <div className="backup-cron-sql">
                     <div className="backup-cron-sql-label">本番環境でのcronジョブ設定（Supabase SQL Editor）:</div>
                     <code className="backup-cron-code">
-                        {'SELECT cron.schedule(\\'daily-account-backup\\', \\'0 15 * * *\\', $$SELECT net.http_post(url:=\\'<SUPABASE_URL>/functions/v1/scheduled-backup\\', headers:=\\'{\\"Content-Type\\":\\"application/json\\",\\"Authorization\\":\\"Bearer <ANON_KEY>\\"}\\', body:=\\'{}\\'::jsonb) AS request_id;$$);'}
+                        {'-- Vault: SELECT vault.create_secret(\\'<SERVICE_ROLE_KEY>\\', \\'service_role_key\\', \\'Cron backup\\');\\nSELECT cron.schedule(\\'weekly-account-backup\\', \\'0 15 * * 0\\', $$SELECT net.http_post(url:=\\'<SUPABASE_URL>/functions/v1/scheduled-backup\\', headers:=jsonb_build_object(\\'Content-Type\\',\\'application/json\\',\\'Authorization\\',\\'Bearer \\'||(SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name=\\'service_role_key\\' LIMIT 1)), body:=\\'{}\\'::jsonb);$$);'}
                     </code>
                 </div>
             </div>
