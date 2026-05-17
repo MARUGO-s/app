@@ -3,17 +3,23 @@ import { SUPABASE_ANON_KEY, SUPABASE_URL, supabase } from '../supabase';
 import { Card } from './Card';
 import { Button } from './Button';
 import { useToast } from '../contexts/useToast';
+import { parseRecipePdfFile } from '../utils/parseRecipePdf';
+import { normalizeImportedRecipe } from '../utils/importedRecipeMapper';
 import './ImportModal.css';
 
-export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
+export const ImportModal = ({ onClose, onImport, onImportBatch, initialMode = 'url' }) => {
     const toast = useToast();
-    const [mode, setMode] = useState(initialMode); // 'url' | 'image' | 'confirm-translation'
+    const [mode, setMode] = useState(initialMode); // 'url' | 'image' | 'pdf' | 'pdf-preview' | 'confirm-translation'
     const [pendingRecipe, setPendingRecipe] = useState(null);
     const [pendingImportOptions, setPendingImportOptions] = useState(null);
     const [scrapedUrl, setScrapedUrl] = useState('');
     const [url, setUrl] = useState('');
     const [imageFile, setImageFile] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
+    const [pdfFile, setPdfFile] = useState(null);
+    const [pdfRecipes, setPdfRecipes] = useState([]);
+    const [pdfSelected, setPdfSelected] = useState(() => new Set());
+    const [importAsBreadPdf, setImportAsBreadPdf] = useState(false);
     const [importAsBread, setImportAsBread] = useState(false);
     // Image analysis engine preference. This is only a hint; the server may still fall back.
     // - groq: Groq (Vision) first. If it fails and Azure OCR is configured, do OCR -> Groq (Text).
@@ -37,8 +43,10 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [isDragActive, setIsDragActive] = useState(false);
+    const [isPdfDragActive, setIsPdfDragActive] = useState(false);
     const cameraInputRef = useRef(null);
     const galleryInputRef = useRef(null);
+    const pdfInputRef = useRef(null);
     const analyzeAbortRef = useRef(null);
     const analyzeTimeoutRef = useRef(null);
 
@@ -98,6 +106,11 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
             // ignore (private mode, etc.)
         }
     }, [imageEngine]);
+
+    useEffect(() => {
+        setIsDragActive(false);
+        setIsPdfDragActive(false);
+    }, [mode]);
 
     const optimizeImageFile = (file) => new Promise((resolve) => {
         if (!file || typeof file !== 'object') return resolve(file);
@@ -221,6 +234,98 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                 void setSelectedImageFile(file);
             }
         }
+    };
+
+    const getFileExtension = (fileName) => {
+        const name = String(fileName || '').trim();
+        const idx = name.lastIndexOf('.');
+        if (idx < 0 || idx === name.length - 1) return '';
+        return name.slice(idx + 1).toLowerCase();
+    };
+
+    const isPdfFileSync = (file) => {
+        if (!(file instanceof File)) return false;
+        const mimeType = String(file.type || '').split(';')[0].trim().toLowerCase();
+        const ext = getFileExtension(file.name);
+        if (mimeType === 'application/pdf' || ext === 'pdf') return true;
+        if (
+            (mimeType === 'application/octet-stream' || mimeType === 'binary/octet-stream' || mimeType === '')
+            && ext === 'pdf'
+        ) {
+            return true;
+        }
+        return false;
+    };
+
+    const isPdfFile = async (file) => {
+        if (isPdfFileSync(file)) return true;
+        try {
+            const header = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+            return header.length >= 4
+                && header[0] === 0x25
+                && header[1] === 0x50
+                && header[2] === 0x44
+                && header[3] === 0x46;
+        } catch {
+            return false;
+        }
+    };
+
+    const normalizePdfFile = (file) => {
+        if (!(file instanceof File)) return file;
+        const mimeType = String(file.type || '').split(';')[0].trim().toLowerCase();
+        if (mimeType === 'application/pdf' && /\.pdf$/i.test(String(file.name || ''))) {
+            return file;
+        }
+        const baseName = String(file.name || 'recipe')
+            .replace(/[\\/]+$/, '')
+            .replace(/\.[^.\\/]+$/, '')
+            || 'recipe';
+        const nextName = /\.pdf$/i.test(String(file.name || '')) ? file.name : `${baseName}.pdf`;
+        return new File([file], nextName, {
+            type: 'application/pdf',
+            lastModified: file.lastModified,
+        });
+    };
+
+    const setSelectedPdfFile = async (file) => {
+        if (!file) return;
+        const maxBytes = 20 * 1024 * 1024;
+        if (file.size > maxBytes) {
+            setError('PDFは20MB以下にしてください。');
+            return;
+        }
+        if (!(await isPdfFile(file))) {
+            setError('PDFファイルを選択してください。');
+            return;
+        }
+        setPdfFile(normalizePdfFile(file));
+        setPdfRecipes([]);
+        setPdfSelected(new Set());
+        setError(null);
+    };
+
+    const openPdfPicker = () => {
+        if (isLoading) return;
+        pdfInputRef.current?.click?.();
+    };
+
+    const handlePdfDrag = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.type === 'dragenter' || e.type === 'dragover') {
+            setIsPdfDragActive(true);
+        } else if (e.type === 'dragleave') {
+            setIsPdfDragActive(false);
+        }
+    };
+
+    const handlePdfDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsPdfDragActive(false);
+        const file = e.dataTransfer?.files?.[0];
+        if (file) void setSelectedPdfFile(file);
     };
 
     // Helper to detect if text contains Japanese
@@ -386,6 +491,87 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
 
     // State for streaming logs
     const [progressLog, setProgressLog] = useState([]);
+
+    const getSelectedPdfRecipes = () => pdfRecipes.filter((_, index) => pdfSelected.has(index));
+
+    const handlePdfFileChange = (e) => {
+        const file = e.target.files?.[0];
+        if (file) void setSelectedPdfFile(file);
+        e.target.value = '';
+    };
+
+    const handleParsePdf = async () => {
+        if (!pdfFile) return;
+        setIsLoading(true);
+        setError(null);
+        setProgressLog(['PDFを解析しています…（複数レシピの抽出には1〜2分かかることがあります）']);
+        try {
+            const { recipes, partial, warning } = await parseRecipePdfFile(pdfFile);
+            setPdfRecipes(recipes);
+            setPdfSelected(new Set(recipes.map((_, index) => index)));
+            setMode('pdf-preview');
+            if (partial && warning) {
+                toast.warning(warning);
+            }
+            toast.success(`${recipes.length}件のレシピを検出しました`);
+        } catch (err) {
+            console.error(err);
+            setError(err?.message || 'PDFの解析に失敗しました');
+        } finally {
+            setIsLoading(false);
+            setProgressLog([]);
+        }
+    };
+
+    const togglePdfRecipeSelection = (index) => {
+        setPdfSelected((prev) => {
+            const next = new Set(prev);
+            if (next.has(index)) next.delete(index);
+            else next.add(index);
+            return next;
+        });
+    };
+
+    const handlePdfImportToForm = () => {
+        const selected = getSelectedPdfRecipes();
+        if (selected.length !== 1) {
+            setError('編集画面へ反映するには、レシピを1件だけ選択してください');
+            return;
+        }
+        const importOptions = { mode: 'pdf', recipeType: importAsBreadPdf ? 'bread' : 'normal' };
+        const finalRecipe = normalizeImportedRecipe(selected[0]);
+        onImport(finalRecipe, `pdf:${pdfFile?.name || ''}`, importOptions);
+        onClose();
+    };
+
+    const handlePdfRegisterBatch = async () => {
+        const selected = getSelectedPdfRecipes();
+        if (selected.length === 0) {
+            setError('登録するレシピを1件以上選択してください');
+            return;
+        }
+        if (!onImportBatch) {
+            if (selected.length === 1) {
+                handlePdfImportToForm();
+                return;
+            }
+            setError('一括登録は一覧画面の「PDFから追加」から利用してください');
+            return;
+        }
+        setIsLoading(true);
+        setError(null);
+        try {
+            const importOptions = { mode: 'pdf', recipeType: importAsBreadPdf ? 'bread' : 'normal' };
+            const normalized = selected.map((r) => normalizeImportedRecipe(r));
+            await onImportBatch(normalized, importOptions, `pdf:${pdfFile?.name || ''}`);
+            onClose();
+        } catch (err) {
+            console.error(err);
+            setError(err?.message || '一括登録に失敗しました');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const handleImport = async () => {
         setIsLoading(true);
@@ -619,48 +805,7 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
             if (data.error) throw new Error(data.error);
             if (!data.recipe) throw new Error("No recipe found");
 
-            let finalRecipe = data.recipe;
-
-            // Normalize fields to ensure compatibility (backend might return title/servings or name/recipeYield)
-            finalRecipe.title = finalRecipe.title || finalRecipe.name || '';
-            finalRecipe.name = finalRecipe.name || finalRecipe.title || '';
-            finalRecipe.recipeYield = finalRecipe.recipeYield || finalRecipe.servings || '';
-            // Ensure consistency for other components
-            finalRecipe.description = finalRecipe.description || '';
-
-            // FIX: Extract steps erroneously categorized as ingredients
-            // First ensure ingredients is populated (some scrapers return recipeIngredient)
-            if (!finalRecipe.ingredients && finalRecipe.recipeIngredient) {
-                finalRecipe.ingredients = finalRecipe.recipeIngredient;
-            }
-
-            if (Array.isArray(finalRecipe.ingredients)) {
-                const stepGroupKeywords = ['作り方', '手順', 'method', 'instructions', 'steps', 'preparation'];
-                const realIngredients = [];
-                const extractedSteps = [];
-
-                finalRecipe.ingredients.forEach(ing => {
-                    const groupName = (ing.group || '').trim().toLowerCase();
-                    // Check if group name indicates it is actually a step
-                    if (groupName && stepGroupKeywords.some(k => groupName === k || groupName.includes(k))) {
-                        // Extract text: prefer name or text
-                        const stepText = ing.name || ing.text || '';
-                        if (stepText) {
-                            extractedSteps.push(stepText);
-                        }
-                    } else {
-                        realIngredients.push(ing);
-                    }
-                });
-
-                if (extractedSteps.length > 0) {
-                    finalRecipe.ingredients = realIngredients;
-                    // Ensure steps array exists
-                    finalRecipe.steps = Array.isArray(finalRecipe.steps) ? finalRecipe.steps : [];
-                    // Combine
-                    finalRecipe.steps = [...finalRecipe.steps, ...extractedSteps];
-                }
-            }
+            const finalRecipe = normalizeImportedRecipe(data.recipe);
 
             // Check for foreign language (lack of Japanese) in Name or Steps
             // We check name and first few steps
@@ -757,10 +902,81 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
 
             <Card className="import-modal-card">
                 <h3 className="modal-title">
-                    {mode === 'confirm-translation' ? '翻訳の確認' : 'レシピを取り込む'}
+                    {mode === 'confirm-translation'
+                        ? '翻訳の確認'
+                        : mode === 'pdf-preview'
+                            ? 'PDFから抽出したレシピ'
+                            : 'レシピを取り込む'}
                 </h3>
 
-                {mode === 'confirm-translation' ? (
+                {mode === 'pdf-preview' ? (
+                    <>
+                        <p style={{ fontSize: '0.9rem', color: '#555', marginBottom: '12px' }}>
+                            {pdfFile?.name && <span>ファイル: {pdfFile.name}<br /></span>}
+                            {pdfRecipes.length}件を検出しました。登録するレシピにチェックを入れてください。
+                        </p>
+                        <div className="pdf-recipe-preview-list">
+                            {pdfRecipes.map((recipe, index) => {
+                                const ingCount = Array.isArray(recipe.ingredients) ? recipe.ingredients.length : 0;
+                                const stepCount = Array.isArray(recipe.steps) ? recipe.steps.length : 0;
+                                const checked = pdfSelected.has(index);
+                                return (
+                                    <label
+                                        key={`pdf-recipe-${index}`}
+                                        className={`pdf-recipe-preview-item ${checked ? 'is-selected' : ''}`}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={() => togglePdfRecipeSelection(index)}
+                                        />
+                                        <div className="pdf-recipe-preview-body">
+                                            <div className="pdf-recipe-preview-title">
+                                                {recipe.title || recipe.name || `レシピ ${index + 1}`}
+                                            </div>
+                                            <div className="pdf-recipe-preview-meta">
+                                                材料 {ingCount} / 手順 {stepCount}
+                                            </div>
+                                        </div>
+                                    </label>
+                                );
+                            })}
+                        </div>
+                        {error && (
+                            <div className="error-text pdf-preview-error">{error}</div>
+                        )}
+                        <div className="modal-actions" style={{ flexDirection: 'column', gap: '8px' }}>
+                            <Button
+                                type="button"
+                                variant="primary"
+                                onClick={handlePdfRegisterBatch}
+                                isLoading={isLoading}
+                                disabled={pdfSelected.size === 0}
+                                style={{ width: '100%' }}
+                            >
+                                選択した{pdfSelected.size}件を登録
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={handlePdfImportToForm}
+                                disabled={isLoading || pdfSelected.size !== 1}
+                                style={{ width: '100%' }}
+                            >
+                                1件を編集画面へ反映
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => { setMode('pdf'); setError(null); }}
+                                disabled={isLoading}
+                                style={{ width: '100%' }}
+                            >
+                                戻る
+                            </Button>
+                        </div>
+                    </>
+                ) : mode === 'confirm-translation' ? (
                     <div className="translation-confirm-content">
                         <div style={{ textAlign: 'center', padding: '1rem 0', marginBottom: '1rem' }}>
                             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🌐 ⇄ 🇯🇵</div>
@@ -821,7 +1037,14 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                                 onClick={() => setMode('image')}
                                 className={`tab-btn tab-import-image ${mode === 'image' ? 'active' : ''}`}
                             >
-                                📷 画像解析 (Best Effort)
+                                📷 画像解析
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setMode('pdf')}
+                                className={`tab-btn tab-import-pdf ${mode === 'pdf' ? 'active' : ''}`}
+                            >
+                                📄 PDF
                             </button>
                         </div>
 
@@ -836,6 +1059,67 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                                     className="import-url-input"
                                     autoFocus
                                 />
+                            </>
+                        ) : mode === 'pdf' ? (
+                            <>
+                                <p>
+                                    複数レシピが載ったPDFから、料理名・材料・作り方を抽出して登録します。
+                                    解析には1〜2分かかることがあります（20MB以下）。
+                                </p>
+                                <div className="image-target-panel">
+                                    <div className="image-target-label">取り込み先タイプ</div>
+                                    <div className="image-target-buttons">
+                                        <button
+                                            type="button"
+                                            className={`image-target-btn ${!importAsBreadPdf ? 'active' : ''}`}
+                                            onClick={() => setImportAsBreadPdf(false)}
+                                            disabled={isLoading}
+                                        >
+                                            通常
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`image-target-btn image-target-btn-bread ${importAsBreadPdf ? 'active' : ''}`}
+                                            onClick={() => setImportAsBreadPdf(true)}
+                                            disabled={isLoading}
+                                        >
+                                            {importAsBreadPdf ? '☑ パン用' : '☐ パン用'}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div
+                                    className={`pdf-upload-wrapper ${isPdfDragActive ? 'drag-active' : ''}`}
+                                    onDragEnter={handlePdfDrag}
+                                    onDragLeave={handlePdfDrag}
+                                    onDragOver={handlePdfDrag}
+                                    onDrop={handlePdfDrop}
+                                    onClick={openPdfPicker}
+                                    onKeyDown={(e) => {
+                                        if (isLoading) return;
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            openPdfPicker();
+                                        }
+                                    }}
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label="PDFをドラッグ＆ドロップまたはクリックして選択"
+                                >
+                                    <input
+                                        ref={pdfInputRef}
+                                        type="file"
+                                        accept="application/pdf,.pdf"
+                                        onChange={handlePdfFileChange}
+                                        className="image-upload-input"
+                                    />
+                                    <div className="pdf-upload-label">
+                                        {isPdfDragActive
+                                            ? 'ここにPDFをドロップ'
+                                            : (pdfFile
+                                                ? pdfFile.name
+                                                : 'PDFファイルを選択またはドラッグ＆ドロップ')}
+                                    </div>
+                                </div>
                             </>
                         ) : (
                             <>
@@ -970,11 +1254,14 @@ export const ImportModal = ({ onClose, onImport, initialMode = 'url' }) => {
                             <Button
                                 type="button"
                                 variant="primary"
-                                onClick={handleImport}
+                                onClick={mode === 'pdf' ? handleParsePdf : handleImport}
                                 isLoading={isLoading}
-                                disabled={isImagePreparing || (mode === 'url' ? !url : !imageFile)}
+                                disabled={
+                                    isImagePreparing
+                                    || (mode === 'url' ? !url : mode === 'pdf' ? !pdfFile : !imageFile)
+                                }
                             >
-                                取り込む
+                                {mode === 'pdf' ? 'PDFを解析' : '取り込む'}
                             </Button>
                         </div>
                     </>

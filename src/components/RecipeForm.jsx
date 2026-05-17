@@ -10,15 +10,26 @@ import { purchasePriceService } from '../services/purchasePriceService';
 import { featureFlagService } from '../services/featureFlagService';
 import { VoiceInputButton } from './VoiceInputButton';
 import { applyImportedRecipeType } from '../utils/importRecipeType';
+import { mapImportedRecipeToSavePayload } from '../utils/importedRecipeMapper';
+import { recipeService } from '../services/recipeService';
+import {
+    loadRecipeMetaSuggestions,
+    rememberRecipeMetaFields,
+} from '../services/recipeMetaSuggestionService';
+import { RecipeMetaDatalist } from './RecipeMetaDatalist';
+import { useAuth } from '../contexts/useAuth';
+import { useToast } from '../contexts/useToast';
 import './RecipeForm.css';
 import './RecipeFormMock.css';
 import { ImportModal } from './ImportModal';
 
 export const RecipeForm = ({ onSave, onCancel, initialData }) => {
     const safeInitialData = initialData || {};
+    const { user } = useAuth();
+    const toast = useToast();
 
     const [workTab, setWorkTab] = useState('ingredients'); // 'ingredients' | 'steps'
-    const [importMode, setImportMode] = useState(null); // 'url' | 'image' | null
+    const [importMode, setImportMode] = useState(null); // 'url' | 'image' | 'pdf' | null
 
     // Price list cache
     const [priceList, setPriceList] = useState(new Map());
@@ -131,6 +142,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         tags: safeInitialData.tags || [''],
         course: safeInitialData.course || '',
         category: safeInitialData.category || '',
+        country: safeInitialData.country || '',
         type: safeInitialData.type || 'normal', // 'normal' | 'bread'
         flours: safeInitialData.flours || [],
         breadIngredients: safeInitialData.breadIngredients || [],
@@ -139,6 +151,23 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
 
     const [isDragActive, setIsDragActive] = useState(false);
     const [voiceInputEnabled, setVoiceInputEnabled] = useState(false);
+    const [metaSuggestions, setMetaSuggestions] = useState({
+        course: [],
+        category: [],
+        country: [],
+        servings: [],
+        storeName: STORE_LIST,
+    });
+
+    useEffect(() => {
+        if (!user?.id) return undefined;
+
+        let cancelled = false;
+        loadRecipeMetaSuggestions({ storeList: STORE_LIST, currentUser: user }).then((suggestions) => {
+            if (!cancelled) setMetaSuggestions(suggestions);
+        });
+        return () => { cancelled = true; };
+    }, [user?.id, user?.displayId]);
 
     useEffect(() => {
         let isMounted = true;
@@ -267,7 +296,9 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
             ...prev,
             title: typedImportedData.name || typedImportedData.title || prev.title,
             description: typedImportedData.description || prev.description,
-            category: sourceUrl ? 'URL取り込み' : (typedImportedData.category || prev.category),
+            category: sourceUrl?.startsWith('pdf:')
+                ? '取り込み'
+                : (sourceUrl ? '取り込み' : (typedImportedData.category || prev.category)),
             image: typedImportedData.image || prev.image,
             servings: typedImportedData.recipeYield || typedImportedData.servings || prev.servings,
             ingredients: mappedIngredients,
@@ -288,6 +319,47 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         }));
         setImportMode(null);
         setWorkTab('ingredients');
+    };
+
+    const handleImportRecipeBatch = async (recipes, importOptions = {}) => {
+        if (!user?.id) {
+            toast.warning('ログインが必要です');
+            return;
+        }
+        const failed = [];
+        let successCount = 0;
+        try {
+            for (let i = 0; i < recipes.length; i += 1) {
+                const raw = recipes[i];
+                const title = String(raw?.title || raw?.name || `レシピ ${i + 1}`).trim();
+                try {
+                    const payload = mapImportedRecipeToSavePayload(raw, {
+                        category: '取り込み',
+                        sourceUrl: '',
+                        importOptions,
+                    });
+                    await recipeService.createRecipe(payload, user);
+                    successCount += 1;
+                } catch (err) {
+                    console.error(`PDF import failed for "${title}":`, err);
+                    failed.push({ title, message: err?.message || '保存に失敗しました' });
+                }
+            }
+            if (successCount === 0) {
+                throw new Error(failed[0]?.message || '一括登録に失敗しました');
+            }
+            setImportMode(null);
+            if (failed.length > 0) {
+                toast.warning(`${successCount}件を登録しました（${failed.length}件は失敗）`);
+            } else {
+                toast.success(`${successCount}件のレシピを登録しました`);
+            }
+            onCancel?.();
+        } catch (err) {
+            console.error(err);
+            toast.error(err?.message || '一括登録に失敗しました');
+            throw err;
+        }
     };
 
     const handleDrag = (e) => {
@@ -418,6 +490,14 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
             finalStepGroups = stepSections.map(s => ({ id: s.id, name: s.name }));
         }
 
+        rememberRecipeMetaFields({
+            course: formData.course,
+            category: formData.category,
+            country: formData.country,
+            servings: formData.servings,
+            storeName: formData.storeName,
+        }, user);
+
         onSave({
             ...formData,
             ingredients: finalIngredients,
@@ -438,7 +518,12 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
     return (
         <form className="recipe-form-mock fade-in" onSubmit={handleSubmit}>
             {importMode && (
-                <ImportModal onClose={() => setImportMode(null)} onImport={handleImportedRecipe} initialMode={importMode} />
+                <ImportModal
+                    onClose={() => setImportMode(null)}
+                    onImport={handleImportedRecipe}
+                    onImportBatch={handleImportRecipeBatch}
+                    initialMode={importMode}
+                />
             )}
             <div className="recipe-form-mock__page">
                 <div className="recipe-form-mock__commandbar" role="banner">
@@ -484,15 +569,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                     list="course-options"
                                     wrapperClassName="input-group--no-margin"
                                 />
-                                <datalist id="course-options">
-                                    <option value="アミューズ" />
-                                    <option value="前菜" />
-                                    <option value="スープ" />
-                                    <option value="魚料理" />
-                                    <option value="肉料理" />
-                                    <option value="デザート" />
-                                    <option value="プティフール" />
-                                </datalist>
+                                <RecipeMetaDatalist id="course-options" values={metaSuggestions.course} />
                             </div>
 
                             <div className="recipe-form-mock__meta-field">
@@ -505,13 +582,20 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                     list="category-options"
                                     wrapperClassName="input-group--no-margin"
                                 />
-                                <datalist id="category-options">
-                                    <option value="ドレッシング" />
-                                    <option value="ソース" />
-                                    <option value="飾り" />
-                                    <option value="付け合わせ" />
-                                    <option value="お菓子" />
-                                </datalist>
+                                <RecipeMetaDatalist id="category-options" values={metaSuggestions.category} />
+                            </div>
+
+                            <div className="recipe-form-mock__meta-field">
+                                <Input
+                                    label="国"
+                                    id="country"
+                                    value={formData.country}
+                                    onChange={handleChange}
+                                    placeholder="例: アルゼンチン, 日本"
+                                    list="country-options"
+                                    wrapperClassName="input-group--no-margin"
+                                />
+                                <RecipeMetaDatalist id="country-options" values={metaSuggestions.country} />
                             </div>
 
                             <div className="recipe-form-mock__meta-field">
@@ -524,11 +608,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                     list="store-options"
                                     wrapperClassName="input-group--no-margin"
                                 />
-                                <datalist id="store-options">
-                                    {STORE_LIST.map(store => (
-                                        <option key={store} value={store} />
-                                    ))}
-                                </datalist>
+                                <RecipeMetaDatalist id="store-options" values={metaSuggestions.storeName} />
                             </div>
 
                             <div className="recipe-form-mock__meta-field">
@@ -538,8 +618,10 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                     value={formData.servings}
                                     onChange={handleChange}
                                     placeholder="4人分"
+                                    list="servings-options"
                                     wrapperClassName="input-group--no-margin"
                                 />
+                                <RecipeMetaDatalist id="servings-options" values={metaSuggestions.servings} />
                             </div>
                         </div>
                     </header>
@@ -623,6 +705,9 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                         </Button>
                                         <Button variant="secondary" type="button" onClick={() => setImportMode('image')}>
                                             画像解析
+                                        </Button>
+                                        <Button variant="secondary" type="button" onClick={() => setImportMode('pdf')}>
+                                            PDF取り込み
                                         </Button>
                                     </div>
                                     <div className="recipe-form-mock__import-note">取り込み後も内容は編集できます。</div>

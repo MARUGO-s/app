@@ -17,6 +17,12 @@ import { AdminTargetDeleteModal } from './AdminTargetDeleteModal';
 import { AdminCopyAllModal } from './AdminCopyAllModal';
 import { BackupManagement } from './BackupManagement';
 import { supabase } from '../supabase';
+import { classifyAllRecipeCountries } from '../services/recipeCountryClassificationService';
+import { classifyAllRecipeCategories } from '../services/recipeCategoryClassificationService';
+import { classifyAllRecipeCourses } from '../services/recipeCourseClassificationService';
+import { CountryClassifyAdminPanel } from './CountryClassifyAdminPanel';
+import { CategoryClassifyAdminPanel } from './CategoryClassifyAdminPanel';
+import { CourseClassifyAdminPanel } from './CourseClassifyAdminPanel';
 import './DataManagement.css';
 
 const toMonthKey = (dateStr) => {
@@ -36,6 +42,13 @@ export const DataManagement = ({ onBack }) => {
     const [adminCopyAllLoading, setAdminCopyAllLoading] = useState(false);
     const [adminCopyAllStatus, setAdminCopyAllStatus] = useState(null);
     const [adminCopyAllResult, setAdminCopyAllResult] = useState(null);
+
+    const [countryClassifyLoading, setCountryClassifyLoading] = useState(false);
+    const [countryClassifyStatus, setCountryClassifyStatus] = useState(null);
+    const [categoryClassifyLoading, setCategoryClassifyLoading] = useState(false);
+    const [categoryClassifyStatus, setCategoryClassifyStatus] = useState(null);
+    const [courseClassifyLoading, setCourseClassifyLoading] = useState(false);
+    const [courseClassifyStatus, setCourseClassifyStatus] = useState(null);
 
     // 一括削除（ゴミ箱移動）用の状態
     const [bulkDeletePriceModal, setBulkDeletePriceModal] = useState(false);
@@ -710,6 +723,98 @@ export const DataManagement = ({ onBack }) => {
         }
     };
 
+    const handleClassifyRecipeCategories = async () => {
+        if (!window.confirm(
+            'あなたが所有するレシピのみ、既存カテゴリーを含め AI の判断で案Aの固定カテゴリーに上書きします。よろしいですか？',
+        )) return;
+        setCategoryClassifyLoading(true);
+        setCategoryClassifyStatus({ message: '処理を開始しています...', type: 'info' });
+        try {
+            const result = await classifyAllRecipeCategories({
+                onlyMissing: false,
+                overwrite: true,
+                forceRewrite: true,
+                onProgress: ({ totalProcessed, totalUpdated, totalSkipped, totalFailed }) => {
+                    setCategoryClassifyStatus({
+                        message: `処理中: ${totalProcessed}件（更新 ${totalUpdated} / スキップ ${totalSkipped} / 失敗 ${totalFailed}）`,
+                        type: 'info',
+                    });
+                },
+            });
+            setCategoryClassifyStatus({
+                message: `完了: 更新 ${result.totalUpdated}件 / スキップ ${result.totalSkipped}件 / 失敗 ${result.totalFailed}件（計 ${result.totalProcessed}件）`,
+                type: result.totalFailed > 0 ? 'warning' : 'success',
+            });
+        } catch (err) {
+            setCategoryClassifyStatus({
+                message: err?.message || 'カテゴリーの一括変換に失敗しました',
+                type: 'error',
+            });
+        } finally {
+            setCategoryClassifyLoading(false);
+        }
+    };
+
+    const handleClassifyRecipeCourses = async () => {
+        if (!window.confirm(
+            'あなたが所有するレシピのみ、コースを AI の判断で固定12種に上書きします（カテゴリーとは別の「提供順」です）。よろしいですか？',
+        )) return;
+        setCourseClassifyLoading(true);
+        setCourseClassifyStatus({ message: '処理を開始しています...', type: 'info' });
+        try {
+            const result = await classifyAllRecipeCourses({
+                onlyMissing: false,
+                overwrite: true,
+                forceRewrite: true,
+                onProgress: ({ totalProcessed, totalUpdated, totalSkipped, totalFailed }) => {
+                    setCourseClassifyStatus({
+                        message: `処理中: ${totalProcessed}件（更新 ${totalUpdated} / スキップ ${totalSkipped} / 失敗 ${totalFailed}）`,
+                        type: 'info',
+                    });
+                },
+            });
+            setCourseClassifyStatus({
+                message: `完了: 更新 ${result.totalUpdated}件 / スキップ ${result.totalSkipped}件 / 失敗 ${result.totalFailed}件（計 ${result.totalProcessed}件）`,
+                type: result.totalFailed > 0 ? 'warning' : 'success',
+            });
+        } catch (err) {
+            setCourseClassifyStatus({
+                message: err?.message || 'コースの一括変換に失敗しました',
+                type: 'error',
+            });
+        } finally {
+            setCourseClassifyLoading(false);
+        }
+    };
+
+    const handleClassifyRecipeCountries = async () => {
+        if (!window.confirm('あなたが所有するレシピのうち、国が未設定のものに国名を推定して保存します。よろしいですか？')) return;
+        setCountryClassifyLoading(true);
+        setCountryClassifyStatus({ message: '処理を開始しています...', type: 'info' });
+        try {
+            const result = await classifyAllRecipeCountries({
+                onlyMissing: true,
+                onProgress: ({ totalProcessed, totalUpdated, totalFailed }) => {
+                    setCountryClassifyStatus({
+                        message: `処理中: ${totalProcessed}件（更新 ${totalUpdated} / 失敗 ${totalFailed}）`,
+                        type: 'info',
+                    });
+                },
+            });
+            setCountryClassifyStatus({
+                message: `完了: 更新 ${result.totalUpdated}件 / 失敗 ${result.totalFailed}件（計 ${result.totalProcessed}件）`,
+                type: result.totalFailed > 0 ? 'warning' : 'success',
+            });
+        } catch (err) {
+            setCountryClassifyStatus({
+                message: err?.message || '国の一括推定に失敗しました',
+                type: 'error',
+            });
+        } finally {
+            setCountryClassifyLoading(false);
+        }
+    };
+
     return (
         <div
             className={[
@@ -787,6 +892,26 @@ export const DataManagement = ({ onBack }) => {
                     )}
                 </div>
             </div>
+
+            {user?.role === 'admin' && activeTab === 'price' && (
+                <>
+                    <CountryClassifyAdminPanel
+                        loading={countryClassifyLoading}
+                        status={countryClassifyStatus}
+                        onRun={handleClassifyRecipeCountries}
+                    />
+                    <CategoryClassifyAdminPanel
+                        loading={categoryClassifyLoading}
+                        status={categoryClassifyStatus}
+                        onRun={handleClassifyRecipeCategories}
+                    />
+                    <CourseClassifyAdminPanel
+                        loading={courseClassifyLoading}
+                        status={courseClassifyStatus}
+                        onRun={handleClassifyRecipeCourses}
+                    />
+                </>
+            )}
 
             {user?.role === 'admin' && activeTab === 'price' && (
                 <div className="voice-feature-card">

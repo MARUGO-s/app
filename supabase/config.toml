@@ -399,3 +399,18 @@ enabled = true
 # 関数内で JWT を検証するため、ゲートウェイ側検証は無効化
 verify_jwt = false
 entrypoint = "./functions/call-gemini-api/index.ts"
+
+[functions.classify-recipe-countries]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/classify-recipe-countries/index.ts"
+
+[functions.classify-recipe-categories]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/classify-recipe-categories/index.ts"
+
+[functions.classify-recipe-courses]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/classify-recipe-courses/index.ts"

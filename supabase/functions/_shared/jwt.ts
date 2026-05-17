@@ -19,6 +19,22 @@ function getJwtKeys(): jose.RemoteJWKSet {
     return cachedJwks;
 }
 
+/** Service role key / JWT（CLI・バッチ用） */
+export function isServiceRoleBearer(token: string, serviceRoleKey?: string): boolean {
+    if (!token) return false;
+    if (serviceRoleKey && token === serviceRoleKey) return true;
+    try {
+        const parts = token.split(".");
+        if (parts.length !== 3) return false;
+        const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+        const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+        const payload = JSON.parse(atob(padded)) as { role?: string };
+        return payload?.role === "service_role";
+    } catch {
+        return false;
+    }
+}
+
 /** Get Bearer token from Authorization header or fallback X-User-JWT header */
 export function getAuthToken(req: Request): string | null {
     const auth = req.headers.get("authorization") || req.headers.get("Authorization") || "";

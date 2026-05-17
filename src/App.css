@@ -111,6 +111,11 @@
   color: #ef4444;
 }
 
+.public-recipe-toggle-btn.admin-view-all-toggle.active {
+  background: #7c3aed;
+  border-color: #7c3aed;
+}
+
 /* Tag Filter Styles */
 .tag-filter-container {
   display: flex;

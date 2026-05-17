@@ -83,7 +83,6 @@ const getCurrentUserOwnerKeys = (currentUser) => {
 
 const canCurrentUserAccessDeletedRecipe = (recipe, currentUser) => {
     if (!currentUser) return false;
-    if (currentUser.role === 'admin') return true;
 
     const deletedBy = recipe?.deleted_by_user_id || recipe?.deletedByUserId || null;
     if (deletedBy && currentUser.id && String(deletedBy) === String(currentUser.id)) {
@@ -169,6 +168,7 @@ const saveRecipeListCache = (recipes, userId) => {
             servings: r.servings,
             course: r.course,
             category: r.category,
+            country: r.country,
             storeName: r.storeName,
             store_name: r.store_name,
             tags: r.tags,
@@ -353,17 +353,16 @@ export const recipeService = {
         limit = null,
         skipCacheSave = false,
         returnMeta = false,
+        /** 管理者のみ: true のとき他ユーザーのレシピのみ一覧に含める（自分のレシピは除外） */
+        viewAllUsersRecipes = false,
     } = {}) {
         if (!currentUser) {
             console.warn("fetchRecipes: No currentUser, returning empty list.");
             return [];
         }
 
-        const isAdmin = currentUser.role === 'admin';
         // Kick off preference fetch early (in parallel with recipes.select) to reduce perceived latency.
-        const showMasterPromise = isAdmin
-            ? Promise.resolve(false)
-            : this._resolveShowMasterPreference(currentUser, timeoutMs);
+        const showMasterPromise = this._resolveShowMasterPreference(currentUser, timeoutMs);
 
         const safeOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
         const safeLimit = Number.isInteger(limit) && limit > 0 ? limit : null;
@@ -397,17 +396,17 @@ export const recipeService = {
         // Deprecated ingredients->0; it causes 400 if ingredients is not jsonb or null in a way Supabase dislikes.
         // We will just fetch 'ingredients' (jsonb) and parse it client-side if needed, but for list view we don't really need deep inspection yet.
         const listSelectV1 = includeIngredients
-            ? `id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at,updated_at,order_index${includeSources ? ',recipe_sources(url)' : ''}`
-            : `id,title,description,image,servings,course,category,store_name,tags,created_at,updated_at,order_index${includeSources ? ',recipe_sources(url)' : ''}`;
+            ? `id,title,description,image,servings,course,category,country,store_name,ingredients,tags,created_at,updated_at,order_index${includeSources ? ',recipe_sources(url)' : ''}`
+            : `id,title,description,image,servings,course,category,country,store_name,tags,created_at,updated_at,order_index${includeSources ? ',recipe_sources(url)' : ''}`;
         const listSelectV2 = includeIngredients
-            ? `id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at,updated_at${includeSources ? ',recipe_sources(url)' : ''}`
-            : `id,title,description,image,servings,course,category,store_name,tags,created_at,updated_at${includeSources ? ',recipe_sources(url)' : ''}`;
+            ? `id,title,description,image,servings,course,category,country,store_name,ingredients,tags,created_at,updated_at${includeSources ? ',recipe_sources(url)' : ''}`
+            : `id,title,description,image,servings,course,category,country,store_name,tags,created_at,updated_at${includeSources ? ',recipe_sources(url)' : ''}`;
         const listSelectV3 = includeIngredients
-            ? 'id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at,updated_at'
-            : 'id,title,description,image,servings,course,category,store_name,tags,created_at,updated_at';
+            ? 'id,title,description,image,servings,course,category,country,store_name,ingredients,tags,created_at,updated_at'
+            : 'id,title,description,image,servings,course,category,country,store_name,tags,created_at,updated_at';
         const listSelectV4 = includeIngredients
-            ? 'id,title,description,image,servings,course,category,store_name,ingredients,tags,created_at'
-            : 'id,title,description,image,servings,course,category,store_name,tags,created_at';
+            ? 'id,title,description,image,servings,course,category,country,store_name,ingredients,tags,created_at'
+            : 'id,title,description,image,servings,course,category,country,store_name,tags,created_at';
 
         let lastError = null;
 
@@ -495,18 +494,30 @@ export const recipeService = {
             }
         }
 
-        // 3. Apply Filtering Logic (App-side RLS)
-        if (isAdmin) {
+        // 3. Apply Filtering Logic (defense-in-depth; DB RLS と同じ基準)
+        const isAdmin = currentUser.role === 'admin';
+        const adminViewAll = isAdmin && viewAllUsersRecipes === true;
+
+        if (adminViewAll) {
+            const ownerKeys = getCurrentUserOwnerKeys(currentUser);
+            const othersOnly = allRecipes.filter((recipe) => {
+                const tags = normalizeRecipeTags(recipe.tags);
+                const ownerTags = tags.filter((t) => t && t.startsWith('owner:'));
+                if (ownerTags.length === 0) return false;
+                const isOwn = ownerTags.some((tag) => ownerKeys.has(tag));
+                return !isOwn;
+            });
+
             if (!skipCacheSave) {
-                saveRecipeListCache(allRecipes, currentUser.id);
+                saveRecipeListCache(othersOnly, currentUser.id);
             }
             if (returnMeta) {
                 return {
-                    recipes: allRecipes,
+                    recipes: othersOnly,
                     hasMoreRaw: safeLimit != null ? rawFetchedCount === safeLimit : false,
                 };
             }
-            return allRecipes;
+            return othersOnly;
         }
 
         const userIds = [String(currentUser.id)];
@@ -522,10 +533,9 @@ export const recipeService = {
             const tags = normalizeRecipeTags(recipe.tags);
             const ownerTags = tags.filter(t => t && t.startsWith('owner:'));
 
-            // If NO owner tag, treat as legacy/shared and allow showing.
-            // (RLS is permissive in this project; hiding legacy items here can make the UI look empty.)
+            // 所有者タグなしは public のみ表示
             if (ownerTags.length === 0) {
-                return true;
+                return tags.includes('public');
             }
 
             // Check if recipe is owned by a Master/Admin
@@ -678,10 +688,10 @@ export const recipeService = {
                 'recipes.insert'
             );
 
-            if (error) throw error
+            if (error) throw new Error(formatRecipeInsertError(error));
 
             // Handle Source URL
-            if (sourceUrl) {
+            if (sourceUrl && !String(sourceUrl).startsWith('pdf:')) {
                 try {
                     const { error: sourceError } = await withTimeout(
                         supabase
@@ -946,7 +956,6 @@ export const recipeService = {
             .select('*', { count: 'exact' })
 
         if (error) throw error
-        if (currentUser.role === 'admin') return count ?? (data || []).length;
         return (data || []).filter(recipe => canCurrentUserAccessDeletedRecipe(recipe, currentUser)).length;
     },
 
@@ -1325,6 +1334,40 @@ export const recipeService = {
 
 }
 
+const RECIPE_TITLE_MAX = 200;
+const RECIPE_DESCRIPTION_MAX = 1000;
+const RECIPE_INGREDIENTS_MAX = 200; // RLS: jsonb_array_length(ingredients) <= 200
+
+const truncateText = (value, maxLen) => {
+    const text = String(value ?? '');
+    if (text.length <= maxLen) return text;
+    return text.slice(0, maxLen);
+};
+
+const capIngredientsForDb = (ingredients) => {
+    const list = Array.isArray(ingredients) ? ingredients.filter(Boolean) : [];
+    if (list.length <= RECIPE_INGREDIENTS_MAX) return list;
+    return list.slice(0, RECIPE_INGREDIENTS_MAX);
+};
+
+const formatRecipeInsertError = (error) => {
+    const code = String(error?.code || '');
+    const message = String(error?.message || '');
+    const lower = message.toLowerCase();
+
+    if (code === '23505' || lower.includes('duplicate key')) {
+        return 'レシピの登録でIDが競合しました。しばらくして再試行するか、管理者に連絡してください。';
+    }
+    if (code === '42501' || lower.includes('row-level security') || lower.includes('policy')) {
+        if (lower.includes('ingredients') || lower.includes('jsonb_array_length')) {
+            return '材料数が多すぎて保存できません（上限200件）。材料を減らしてから保存してください。';
+        }
+        return 'レシピを保存する権限がありません。ログインし直してください。';
+    }
+    if (message) return message;
+    return 'レシピの保存に失敗しました';
+};
+
 // Helpers to map between frontend (camelCase) and DB (snake_case)
 const toDbFormat = (recipe) => {
     let ingredientsToSave = Array.isArray(recipe.ingredients) ? recipe.ingredients.filter(Boolean) : [];
@@ -1373,8 +1416,10 @@ const toDbFormat = (recipe) => {
         // Ensure meta is first
         // If meta was already added in previous logic, remove it? 
         // No, current logic constructs new list.
-        ingredientsToSave = [metaItem, ...ingredientsToSave];
+        ingredientsToSave = capIngredientsForDb([metaItem, ...ingredientsToSave]);
     }
+
+    ingredientsToSave = capIngredientsForDb(ingredientsToSave);
 
     // STEPS: Save as plain strings
     // If steps are objects (which they should be now), map to text.
@@ -1389,12 +1434,13 @@ const toDbFormat = (recipe) => {
 
     // Explicitly whitelist columns to avoid sending unknown fields
     return {
-        title: recipe.title,
-        description: recipe.description,
+        title: truncateText(recipe.title, RECIPE_TITLE_MAX),
+        description: truncateText(recipe.description, RECIPE_DESCRIPTION_MAX),
         image: imageToSave,
         servings: recipe.servings,
         course: recipe.course,
         category: recipe.category,
+        country: recipe.country || null,
         store_name: storeNameToSave, // Map camelCase to snake_case
         ingredients: ingredientsToSave,
         steps: stepsToSave,
@@ -1514,6 +1560,7 @@ const fromDbFormat = (recipe) => {
         prepTime: recipe.prep_time,
         cookTime: recipe.cook_time,
         storeName: recipe.store_name,
+        country: recipe.country || '',
         type,
         flours,
         breadIngredients,

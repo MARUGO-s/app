@@ -421,3 +421,95 @@
 .progress-log::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.3);
 }
+
+.import-mode-tabs {
+    flex-wrap: wrap;
+}
+
+.tab-btn.tab-import-pdf.active {
+    background-color: #fff3e0;
+    border-color: #ffb74d;
+    color: #e65100;
+}
+
+.pdf-upload-wrapper {
+    position: relative;
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    padding: 1.25rem;
+    text-align: center;
+    margin-top: 0.75rem;
+    cursor: pointer;
+}
+
+.pdf-upload-wrapper:hover {
+    border-color: #ffb74d;
+    background: #fffaf3;
+}
+
+.pdf-upload-wrapper.drag-active {
+    border-color: var(--color-primary);
+    background: #f0f9ff;
+}
+
+.pdf-upload-wrapper.drag-active .pdf-upload-label {
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+.pdf-upload-label {
+    font-size: 0.9rem;
+    color: #555;
+    word-break: break-all;
+}
+
+.pdf-recipe-preview-list {
+    max-height: 280px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+    border: 1px solid #eee;
+    border-radius: 8px;
+}
+
+.pdf-recipe-preview-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 10px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+}
+
+.pdf-recipe-preview-item:last-child {
+    border-bottom: none;
+}
+
+.pdf-recipe-preview-item.is-selected {
+    background: #fff8e1;
+}
+
+.pdf-recipe-preview-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #222;
+}
+
+.pdf-recipe-preview-meta {
+    font-size: 0.8rem;
+    color: #777;
+    margin-top: 2px;
+}
+
+.pdf-preview-error {
+    color: #d32f2f;
+    background: #ffebee;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    word-break: break-word;
+    margin-bottom: 12px;
+}
+
+.import-modal-card.pdf-preview-mode {
+    max-width: 560px;
+}

@@ -1,7 +1,8 @@
 export const DEFAULT_GEMINI_CHEAPEST_MODEL = 'gemini-3.1-flash-lite';
-export const DEFAULT_GEMINI_FALLBACK_MODEL = 'gemini-1.5-flash';
+export const DEFAULT_GEMINI_FALLBACK_MODEL = 'gemini-2.5-flash-lite';
 
 const PRO_MODEL_SEGMENT_RE = /(^|[-_])pro($|[-_])/i;
+const PREVIEW_MODEL_SEGMENT_RE = /3\.1-flash-lite-preview/i;
 
 function readModelFromEnv() {
     const envValue = String(
@@ -18,19 +19,38 @@ function readFallbackModelFromEnv() {
     ).trim();
 }
 
-function sanitizeModel(candidate: string, defaultModel: string) {
+/**
+ * Google は 2026-05-25 に gemini-3.1-flash-lite-preview を停止。
+ * GA 版 gemini-3.1-flash-lite へ正規化する。
+ */
+function migrateDeprecatedGeminiModel(candidate: string, defaultModel: string) {
     const trimmed = String(candidate || '').trim();
     if (!trimmed) return defaultModel;
-    if (PRO_MODEL_SEGMENT_RE.test(trimmed)) {
-        console.warn(`Refusing high-cost Gemini model: ${trimmed}. Fallback to ${defaultModel}`);
+
+    if (PREVIEW_MODEL_SEGMENT_RE.test(trimmed) || trimmed === 'gemini-3.1-flash-lite-preview') {
+        console.warn(
+            `[gemini-model] Deprecated preview model "${trimmed}" migrated to ${DEFAULT_GEMINI_CHEAPEST_MODEL}`,
+        );
+        return DEFAULT_GEMINI_CHEAPEST_MODEL;
+    }
+
+    return trimmed;
+}
+
+function sanitizeModel(candidate: string, defaultModel: string) {
+    const migrated = migrateDeprecatedGeminiModel(candidate, defaultModel);
+    if (!migrated) return defaultModel;
+    if (PRO_MODEL_SEGMENT_RE.test(migrated)) {
+        console.warn(`Refusing high-cost Gemini model: ${migrated}. Fallback to ${defaultModel}`);
         return defaultModel;
     }
-    return trimmed;
+    return migrated;
 }
 
 /**
  * 全Gemini呼び出しで使う「最安モデル」を返す。
- * - 未設定時は gemini-3.1-flash-lite
+ * - 未設定時は gemini-3.1-flash-lite (GA)
+ * - preview 系は GA に自動移行
  * - Pro 系は高コストなので拒否して既定に戻す
  */
 export function resolveCheapestGeminiModel() {

@@ -76,6 +76,7 @@ function normalizeImageMimeType(file: File) {
 
 function normalizeGeminiModelForEstimation(modelName: string) {
     const m = String(modelName || '').trim().toLowerCase();
+    if (m.includes('3.1-flash-lite')) return 'gemini-3.1-flash-lite';
     if (m.startsWith('gemini-2.5-flash-lite')) return 'gemini-2.5-flash-lite';
     if (m.startsWith('gemini-1.5-flash')) return 'gemini-1.5-flash';
     if (m.startsWith('gemini-2.0-flash-lite')) return 'gemini-2.0-flash';
