@@ -1636,9 +1636,9 @@ function AppContent() {
                     className={\`public-recipe-toggle-btn admin-view-all-toggle \${adminViewAllUsersRecipes ? 'active' : ''}\`}
                     aria-pressed={adminViewAllUsersRecipes}
                     onClick={handleAdminViewAllUsersRecipesToggle}
-                    title="ON にすると全ユーザーのレシピを一覧に表示します（OFF は自分＋公開のみ）"
+                    title="ON にすると他ユーザーのレシピのみ表示します（自分のレシピは非表示・OFF は自分＋公開のみ）"
                   >
-                    {adminViewAllUsersRecipes ? '👁️ 全ユーザー表示中' : '👁️‍🗨️ 全ユーザー表示'}
+                    {adminViewAllUsersRecipes ? '👁️ 他ユーザーのみ表示中' : '👁️‍🗨️ 他ユーザーのみ表示'}
                   </button>
                 )}
               </div>

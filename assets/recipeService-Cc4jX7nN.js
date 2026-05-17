@@ -353,7 +353,7 @@ export const recipeService = {
         limit = null,
         skipCacheSave = false,
         returnMeta = false,
-        /** 管理者のみ: true のとき他ユーザーの非公開レシピも一覧に含める */
+        /** 管理者のみ: true のとき他ユーザーのレシピのみ一覧に含める（自分のレシピは除外） */
         viewAllUsersRecipes = false,
     } = {}) {
         if (!currentUser) {
@@ -499,16 +499,25 @@ export const recipeService = {
         const adminViewAll = isAdmin && viewAllUsersRecipes === true;
 
         if (adminViewAll) {
+            const ownerKeys = getCurrentUserOwnerKeys(currentUser);
+            const othersOnly = allRecipes.filter((recipe) => {
+                const tags = normalizeRecipeTags(recipe.tags);
+                const ownerTags = tags.filter((t) => t && t.startsWith('owner:'));
+                if (ownerTags.length === 0) return false;
+                const isOwn = ownerTags.some((tag) => ownerKeys.has(tag));
+                return !isOwn;
+            });
+
             if (!skipCacheSave) {
-                saveRecipeListCache(allRecipes, currentUser.id);
+                saveRecipeListCache(othersOnly, currentUser.id);
             }
             if (returnMeta) {
                 return {
-                    recipes: allRecipes,
+                    recipes: othersOnly,
                     hasMoreRaw: safeLimit != null ? rawFetchedCount === safeLimit : false,
                 };
             }
-            return allRecipes;
+            return othersOnly;
         }
 
         const userIds = [String(currentUser.id)];
