@@ -1153,9 +1153,57 @@
               </tr>
               <tr>
                 <td>全表示</td>
-                <td>すべてのレシピを展開表示（折りたたみなし）</td>
+                <td>各セクションの「もっと見る」を使わず、コース別に<strong>すべてのレシピ</strong>を一度に表示（カード/リストの見た目はそのまま）</td>
               </tr>
             </table>
+            <div class="tip">「通常」「全表示」は<strong>表示件数</strong>の切り替えです。カード表示とリスト表示は別ボタン（下記）で切り替えます。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">「カード」と「リスト」表示の違いは？</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>レシピ一覧のフィルター右側にある <strong>カード / リスト</strong> で、見た目を切り替えられます（選択はブラウザに記憶されます）。</p>
+            <table>
+              <tr>
+                <th>モード</th>
+                <th>説明</th>
+              </tr>
+              <tr>
+                <td>カード</td>
+                <td>サムネイル付きカード。見た目で選びやすい標準表示</td>
+              </tr>
+              <tr>
+                <td>リスト</td>
+                <td>テーブル形式（画像なし）。件数が多いときに一覧性が高く、読み込みも軽い</td>
+              </tr>
+            </table>
+            <div class="tip">リスト表示でもコース別セクションは同じです。「通常/全表示」と組み合わせて使えます。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-item" data-cat="recipe">
+        <div class="qa-q" onclick="toggle(this)">
+          <span class="q-badge">Q</span>
+          <span class="q-text">件数は多いのにレシピが少ししか表示されない</span>
+          <span class="q-arrow">▼</span>
+        </div>
+        <div class="qa-a">
+          <div class="qa-a-inner">
+            <p>タイトルの件数（例: レシピ一覧 (21)）は、検索・フィルタ後に<strong>取得できた総数</strong>です。画面に出るのは次のとおりです。</p>
+            <ul>
+              <li><strong>自分のレシピ</strong>と<strong>マスターレシピ共有</strong>（管理者がONにした場合）は、メインのコース別一覧に表示されます。</li>
+              <li><strong>他ユーザーの公開レシピ</strong>は、🌐「他ユーザー公開」を押すと別枠で表示されます。</li>
+              <li>各セクションは「通常」モードでは一部だけ表示し、「▼ もっと見る」または「全表示」で増やせます。</li>
+            </ul>
+            <div class="tip">マスターレシピ共有がOFFの一般ユーザーは、自分のレシピ＋公開レシピのみが対象です。</div>
           </div>
         </div>
       </div>

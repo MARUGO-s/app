@@ -803,6 +803,68 @@ function AppContent() {
     setDisplayMode('normal');
   };
 
+  const renderRecipeFilterSelects = () => (
+    <>
+      <select
+        className="store-filter-select"
+        value={
+          selectedTag === NO_STORE_VALUE
+            ? NO_STORE_VALUE
+            : selectedTag === OTHER_STORE_VALUE
+              ? OTHER_STORE_VALUE
+              : (STORE_LIST.includes(selectedTag) ? selectedTag : "")
+        }
+        onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
+        aria-label="店舗で絞り込み"
+      >
+        <option value="">店舗</option>
+        {STORE_LIST.map(store => (
+          <option key={store} value={store}>{store} ({storeCounts[normalizeKey(store)] || 0})</option>
+        ))}
+        <option value={NO_STORE_VALUE}>未登録 ({noStoreCount})</option>
+        <option value={OTHER_STORE_VALUE}>その他 ({otherStoreCount})</option>
+      </select>
+
+      <select
+        className="store-filter-select"
+        value={allCourses.find((course) => normalizeKey(course) === normalizeKey(selectedTag)) || ""}
+        onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
+        aria-label="コースで絞り込み"
+      >
+        <option value="">コース</option>
+        {allCourses.sort().map(course => (
+          <option key={course} value={course}>{course} ({courseCounts[normalizeKey(course)] || 0})</option>
+        ))}
+      </select>
+
+      <select
+        className="store-filter-select"
+        value={allCategories.find((cat) => normalizeKey(cat) === normalizeKey(selectedTag)) || ""}
+        onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
+        aria-label="カテゴリーで絞り込み"
+      >
+        <option value="">カテゴリー</option>
+        {allCategories.sort().map(cat => (
+          <option key={cat} value={cat}>{cat} ({categoryCounts[normalizeKey(cat)] || 0})</option>
+        ))}
+      </select>
+
+      <select
+        className="store-filter-select"
+        value={allCountries.some((country) => normalizeKey(country) === normalizeKey(selectedTag)) ? selectedTag : ""}
+        onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
+        aria-label="国で絞り込み"
+      >
+        <option value="">国</option>
+        {allCountries.sort((a, b) => a.localeCompare(b, 'ja')).map((country) => (
+          <option key={country} value={country}>
+            {country} ({countryCounts[normalizeKey(country)] || 0})
+          </option>
+        ))}
+      </select>
+    </>
+  );
+
   const getDetailReturnParams = () => {
     const from = searchParams.get('from');
     const compositeId = searchParams.get('compositeId');
@@ -1344,7 +1406,11 @@ function AppContent() {
                 </span>
               )}
             </h2>
-            <div className="header-actions">
+            <div className="container-header__toolbar">
+              <div className="list-header-filters" aria-label="店舗・コース・カテゴリー・国で絞り込み">
+                {renderRecipeFilterSelects()}
+              </div>
+              <div className="header-actions">
               {(currentView === 'list' || currentView === 'trash') ? (
                 <>
                   {isSelectMode ? (
@@ -1597,6 +1663,7 @@ function AppContent() {
 
                 </>
               ) : null}
+              </div>
             </div>
           </div>
 
@@ -1654,61 +1721,11 @@ function AppContent() {
           )}
 
           <div className="tag-filter-container">
-            <select
-              className="store-filter-select"
-              value={
-                selectedTag === NO_STORE_VALUE
-                  ? NO_STORE_VALUE
-                  : selectedTag === OTHER_STORE_VALUE
-                    ? OTHER_STORE_VALUE
-                    : (STORE_LIST.includes(selectedTag) ? selectedTag : "")
-              }
-              onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
-            >
-              <option value="">店舗</option>
-              {STORE_LIST.map(store => (
-                <option key={store} value={store}>{store} ({storeCounts[normalizeKey(store)] || 0})</option>
-              ))}
-              <option value={NO_STORE_VALUE}>未登録 ({noStoreCount})</option>
-              <option value={OTHER_STORE_VALUE}>その他 ({otherStoreCount})</option>
-            </select>
+            <div className="tag-filter-dropdowns">
+              {renderRecipeFilterSelects()}
+            </div>
 
-            <select
-              className="store-filter-select"
-              value={allCourses.find((course) => normalizeKey(course) === normalizeKey(selectedTag)) || ""}
-              onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
-            >
-              <option value="">コース</option>
-              {allCourses.sort().map(course => (
-                <option key={course} value={course}>{course} ({courseCounts[normalizeKey(course)] || 0})</option>
-              ))}
-            </select>
-
-            <select
-              className="store-filter-select"
-              value={allCategories.find((cat) => normalizeKey(cat) === normalizeKey(selectedTag)) || ""}
-              onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
-            >
-              <option value="">カテゴリー</option>
-              {allCategories.sort().map(cat => (
-                <option key={cat} value={cat}>{cat} ({categoryCounts[normalizeKey(cat)] || 0})</option>
-              ))}
-            </select>
-
-            <select
-              className="store-filter-select"
-              value={allCountries.some((country) => normalizeKey(country) === normalizeKey(selectedTag)) ? selectedTag : ""}
-              onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
-            >
-              <option value="">国</option>
-              {allCountries.sort((a, b) => a.localeCompare(b, 'ja')).map((country) => (
-                <option key={country} value={country}>
-                  {country} ({countryCounts[normalizeKey(country)] || 0})
-                </option>
-              ))}
-            </select>
-
-            <div className="view-mode-toggle" style={{ marginLeft: '16px', display: 'flex', gap: '8px', borderLeft: '1px solid #ccc', paddingLeft: '16px', flexWrap: 'wrap' }}>
+            <div className="view-mode-toggle">
               <button
                 type="button"
                 className={`tag-filter-btn ${listLayoutMode === 'card' ? 'active' : ''}`}
@@ -1716,7 +1733,6 @@ function AppContent() {
                   setListLayoutMode('card');
                   try { window.localStorage.setItem('recipe-list-layout-mode', 'card'); } catch { /* ignore */ }
                 }}
-                style={{ minWidth: 'auto', padding: '4px 12px' }}
                 title="サムネイル付きカードで表示"
               >
                 カード
@@ -1728,17 +1744,15 @@ function AppContent() {
                   setListLayoutMode('list');
                   try { window.localStorage.setItem('recipe-list-layout-mode', 'list'); } catch { /* ignore */ }
                 }}
-                style={{ minWidth: 'auto', padding: '4px 12px' }}
                 title="テーブル形式で一覧表示（画像なし・高速）"
               >
                 リスト
               </button>
-              <span style={{ width: '1px', background: '#ccc', alignSelf: 'stretch', margin: '2px 0' }} aria-hidden="true" />
+              <span className="view-mode-toggle__divider" aria-hidden="true" />
               <button
                 type="button"
                 className={`tag-filter-btn ${displayMode === 'normal' ? 'active' : ''}`}
                 onClick={() => setDisplayMode('normal')}
-                style={{ minWidth: 'auto', padding: '4px 12px' }}
               >
                 通常
               </button>
@@ -1746,7 +1760,6 @@ function AppContent() {
                 type="button"
                 className={`tag-filter-btn ${displayMode === 'all' ? 'active' : ''}`}
                 onClick={() => setDisplayMode('all')}
-                style={{ minWidth: 'auto', padding: '4px 12px' }}
               >
                 全表示
               </button>
