@@ -757,7 +757,7 @@ export const DataManagement = ({ onBack }) => {
 
     const handleClassifyRecipeCourses = async () => {
         if (!window.confirm(
-            'あなたが所有するレシピのみ、コースを AI の判断で固定12種に上書きします（カテゴリーとは別の「提供順」です）。よろしいですか？',
+            'あなたが所有するレシピのみ、コースを AI の判断で固定13種に上書きします（カテゴリーとは別の「提供順」です）。よろしいですか？',
         )) return;
         setCourseClassifyLoading(true);
         setCourseClassifyStatus({ message: '処理を開始しています...', type: 'info' });

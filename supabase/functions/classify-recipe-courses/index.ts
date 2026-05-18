@@ -16,6 +16,7 @@ const GEMINI_BATCH_SIZE = 8;
 const RECIPE_COURSE_OPTIONS = [
   "アミューズ",
   "前菜",
+  "温菜",
   "スープ",
   "魚料理",
   "肉料理",
@@ -84,6 +85,7 @@ const CATEGORY_TO_COURSE_HINT: Record<string, RecipeCourse> = {
   "デザート・お菓子": "デザート",
   パン: "食パン",
   スープ: "スープ",
+  温菜: "温菜",
   取り込み: "その他",
 };
 
@@ -133,6 +135,7 @@ const normalizeRecipeCourse = (rawCourse: unknown, recipe: RecipeRow): RecipeCou
   const lower = trimmed.toLowerCase();
   if (/アミューズ|amuse|hors/i.test(lower)) return "アミューズ";
   if (/前菜|starter/i.test(lower)) return "前菜";
+  if (/温菜|温製|entrée|entree|温かい前菜/i.test(lower)) return "温菜";
   if (/スープ|soup|ポタージュ|コンソメ|ブイヨン/i.test(lower)) return "スープ";
   if (/魚|fish|seafood|サーモン/i.test(lower)) return "魚料理";
   if (/肉|meat|ビーフ|ポーク|鴨/i.test(lower)) return "肉料理";
@@ -198,12 +201,13 @@ const buildCompactRecipe = (row: RecipeRow) => ({
 
 const buildPrompt = (items: ReturnType<typeof buildCompactRecipe>[]) => `
 あなたはレストランの献立・レシピ管理の専門家です。
-各レシピについて「コース」（提供順・食事の位置）を次の12種類から1つ選んでください。
+各レシピについて「コース」（提供順・食事の位置）を次の13種類から1つ選んでください。
 ※ category（カテゴリー）はレシピの種類（ソース・パン等）であり、コースとは別です。コース欄に「ソース」「パン」等の種類名が入っていても誤りなので正しく振り直してください。
 
-【選べるコース（この12つのみ・表記は完全一致）】
+【選べるコース（この13つのみ・表記は完全一致）】
 - アミューズ … 一口の最初の一品
-- 前菜 … 前菜・スターター
+- 前菜 … 前菜・スターター（冷製含む）
+- 温菜 … 温かい前菜・温製の一品（Entrées chaudes 等。メインの魚・肉料理は除く）
 - スープ … コースとして出すスープ（categoryがスープの場合も多い）
 - 魚料理 … 魚・シーフードのメイン寄り
 - 肉料理 … 肉のメイン寄り
@@ -219,10 +223,11 @@ const buildPrompt = (items: ReturnType<typeof buildCompactRecipe>[]) => `
 - category が ソース/ドレッシング/ソース・ドレッシング/付け合わせ・飾り → 多くは「仕込み」
 - category が デザート・お菓子 → 「デザート」または「プティフール」
 - category が パン → 「食パン」
-- category が 料理/テリーヌ → 内容から 前菜/魚料理/肉料理 等を判断
+- category が 温菜 → 多くは「温菜」
+- category が 料理/テリーヌ → 内容から 前菜/温菜/魚料理/肉料理 等を判断
 
 【ルール】
-- course は上記12つのいずれかをそのまま出力
+- course は上記13つのいずれかをそのまま出力
 - currentCourse は参考。category と矛盾する場合は内容と category を優先
 - reason は25文字以内
 

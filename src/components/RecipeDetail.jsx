@@ -15,6 +15,8 @@ import { useToast } from '../contexts/useToast';
 import { SUPPORTED_LANGUAGES } from '../constants';
 import { normalizeUnit } from '../utils/unitUtils';
 import './RecipeDetail.css';
+import { FavoriteStarButton } from './FavoriteStarButton';
+import './FavoriteStarButton.css';
 import QRCode from "react-qr-code";
 
 const formatDate = (dateString) => {
@@ -473,7 +475,23 @@ const scaleQuantityText = (qty, mult) => {
     return formatScaledQuantity(num * multNum);
 };
 
-export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onHardDelete, isDeleted, onView, onDuplicate, onOpenCompositeCost, backLabel, onList, forceEditEnabled = false }) => {
+export const RecipeDetail = ({
+    recipe,
+    ownerLabel,
+    onBack,
+    onEdit,
+    onDelete,
+    onHardDelete,
+    isDeleted,
+    onView,
+    onDuplicate,
+    onOpenCompositeCost,
+    backLabel,
+    onList,
+    forceEditEnabled = false,
+    isFavorite = false,
+    onToggleFavorite = null,
+}) => {
     const { user } = useAuth();
     const toast = useToast();
     const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
@@ -2209,6 +2227,13 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                     />
                                     原文表示
                                 </label>
+                            )}
+                            {onToggleFavorite && (
+                                <FavoriteStarButton
+                                    size="lg"
+                                    isFavorite={isFavorite}
+                                    onToggle={() => onToggleFavorite(recipe.id)}
+                                />
                             )}
                             <Button variant="secondary" size="sm" onClick={() => setShowPrintModal(true)}>🖨️ プレビュー</Button>
                             <Button variant="secondary" size="sm" onClick={() => window.print()}>🖨️ 印刷</Button>

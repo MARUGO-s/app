@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Card } from './Card';
+import { FavoriteStarButton } from './FavoriteStarButton';
+import './FavoriteStarButton.css';
 import { normalizeRecipeCategory } from '../constants/recipeCategories';
 import {
     RECIPE_LIST_COURSE_ICONS,
@@ -68,11 +70,14 @@ const RecipeListTable = ({
     onToggleSelection,
     showOwner,
     ownerLabelFn,
+    favoriteIds,
+    onToggleFavorite,
 }) => (
     <div className="recipe-list-table-wrap" role="region" aria-label="レシピ一覧（リスト表示）">
         <table className="recipe-list-table">
             <thead>
                 <tr>
+                    {onToggleFavorite && <th className="recipe-list-table__favorite-head" aria-label="お気に入り" />}
                     <th>レシピ名</th>
                     <th>店舗</th>
                     <th>コース</th>
@@ -97,6 +102,15 @@ const RecipeListTable = ({
                                 }
                             }}
                         >
+                            {onToggleFavorite && (
+                                <td className="recipe-list-table__favorite-cell">
+                                    <FavoriteStarButton
+                                        size="sm"
+                                        isFavorite={favoriteIds?.has?.(String(recipe.id))}
+                                        onToggle={() => onToggleFavorite(recipe.id)}
+                                    />
+                                </td>
+                            )}
                             <td className="recipe-list-table__title" title={recipe.title}>
                                 {isSelectMode && (
                                     <span className={`recipe-list-table__checkbox ${isSelected ? 'checked' : ''}`} aria-hidden="true" />
@@ -129,7 +143,19 @@ const RecipeListTable = ({
     </div>
 );
 
-const RecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggleSelection, showOwner, ownerLabelFn, index = 0, mobileView = false }) => {
+const RecipeCard = ({
+    recipe,
+    isSelected,
+    isSelectMode,
+    onSelectRecipe,
+    onToggleSelection,
+    showOwner,
+    ownerLabelFn,
+    index = 0,
+    mobileView = false,
+    isFavorite = false,
+    onToggleFavorite,
+}) => {
     const style = {
         height: '100%',
         outline: 'none',
@@ -169,6 +195,15 @@ const RecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggle
                         <div className="recipe-card__image placeholder" />
                     )}
                     <div className="recipe-card__overlay" />
+
+                    {onToggleFavorite && !isSelectMode && (
+                        <FavoriteStarButton
+                            className="recipe-card__favorite"
+                            size="sm"
+                            isFavorite={isFavorite}
+                            onToggle={() => onToggleFavorite(recipe.id)}
+                        />
+                    )}
 
                     {isSelectMode && (
                         <div className="recipe-card__selection-overlay">
@@ -213,7 +248,21 @@ const RecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggle
     );
 };
 
-export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds, onToggleSelection, displayMode = 'normal', layoutMode = 'card', publicRecipeView = 'none', showOwner = false, ownerLabelFn, currentUser = null }) => {
+export const RecipeList = ({
+    recipes,
+    onSelectRecipe,
+    isSelectMode,
+    selectedIds,
+    onToggleSelection,
+    displayMode = 'normal',
+    layoutMode = 'card',
+    publicRecipeView = 'none',
+    showOwner = false,
+    ownerLabelFn,
+    currentUser = null,
+    favoriteIds = null,
+    onToggleFavorite = null,
+}) => {
     const [expandedSections, setExpandedSections] = useState({});
     const [isMobileView, setIsMobileView] = useState(() => isMobileViewport());
 
@@ -363,6 +412,8 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                         onToggleSelection={onToggleSelection}
                         showOwner={showOwner}
                         ownerLabelFn={ownerLabelFn}
+                        favoriteIds={favoriteIds}
+                        onToggleFavorite={onToggleFavorite}
                     />
                 ) : (
                     <div className="recipe-grid">
@@ -380,6 +431,8 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                                     ownerLabelFn={ownerLabelFn}
                                     index={index}
                                     mobileView={isMobileView}
+                                    isFavorite={favoriteIds?.has?.(String(recipe.id))}
+                                    onToggleFavorite={onToggleFavorite}
                                 />
                             );
                         })}

@@ -9,6 +9,7 @@ import { DataManagement } from './components/DataManagement';
 import { Card } from './components/Card';
 import { Button } from './components/Button';
 import { RecentRecipes } from './components/RecentRecipes';
+import { FavoriteRecipes } from './components/FavoriteRecipes';
 import { LevainGuide } from './components/LevainGuide';
 import { UserManagement } from './components/UserManagement';
 import { Inventory } from './components/Inventory';
@@ -79,6 +80,7 @@ const MOBILE_RECIPE_PAGE_LIMIT = 64;
 const DESKTOP_RECIPE_PAGE_LIMIT = 180;
 const NO_STORE_VALUE = '__NO_STORE__';
 const OTHER_STORE_VALUE = '__OTHER_STORE__';
+const FAVORITE_FILTER_TAG = 'favorite';
 const ADMIN_VIEW_ALL_USERS_RECIPES_KEY = 'recipe_admin_view_all_users';
 
 const readAdminViewAllUsersRecipes = (userId) => {
@@ -121,6 +123,7 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const [trashCount, setTrashCount] = useState(0);
   const [recentIds, setRecentIds] = useState([]);
+  const [favoriteIds, setFavoriteIds] = useState(() => new Set());
   const [authStuckFallback, setAuthStuckFallback] = useState(false);
   const [profilesById, setProfilesById] = useState({});
   const [profilesByDisplayId, setProfilesByDisplayId] = useState({});
@@ -417,6 +420,7 @@ function AppContent() {
     // ユーザーが切り替わった場合（ログアウト or アカウント切替）は即時クリア
     if (prevUserId !== null && prevUserId !== currentUserId) {
       setRecentIds([]);
+      setFavoriteIds(new Set());
     }
     prevUserIdRef.current = currentUserId;
 
@@ -437,6 +441,7 @@ function AppContent() {
 
     loadTrashCount();
     loadRecentHistory();
+    loadFavoriteRecipes();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user?.id]);
 
@@ -541,6 +546,45 @@ function AppContent() {
       // Supabaseが失敗しても、localStorageのキャッシュはすでに先出し表示済み
     }
   };
+
+  const loadFavoriteRecipes = async () => {
+    try {
+      const ids = await recipeService.fetchFavoriteRecipeIds(user?.id);
+      setFavoriteIds(new Set((ids || []).map(String)));
+    } catch (error) {
+      console.error('Failed to load favorites:', error);
+      setFavoriteIds(new Set());
+    }
+  };
+
+  const toggleFavorite = useCallback(async (recipeId) => {
+    if (!recipeId) return;
+    const id = String(recipeId);
+    let wasFavorite = false;
+
+    setFavoriteIds((prev) => {
+      wasFavorite = prev.has(id);
+      const next = new Set(prev);
+      if (wasFavorite) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+    try {
+      const ok = await recipeService.setFavorite(recipeId, !wasFavorite, user?.id);
+      if (!ok) throw new Error('save failed');
+      toast.success(wasFavorite ? 'お気に入りを解除しました' : 'お気に入りに追加しました');
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
+      setFavoriteIds((prev) => {
+        const next = new Set(prev);
+        if (wasFavorite) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+      toast.error('お気に入りの保存に失敗しました');
+    }
+  }, [user?.id, toast]);
 
   const addToHistory = async (id) => {
     if (!id) return;
@@ -773,6 +817,7 @@ function AppContent() {
       const matchesTag =
         selectedTag === 'すべて' ||
         (selectedTag === 'recent' && recentIds.some(id => String(id) === String(recipe.id))) ||
+        (selectedTag === FAVORITE_FILTER_TAG && favoriteIds.has(String(recipe.id))) ||
         (recipe.tags && recipe.tags.includes(selectedTag)) ||
         (selectedTag === NO_STORE_VALUE && !storeKey) ||
         (selectedTag === OTHER_STORE_VALUE && storeKey && !KNOWN_STORE_KEYS.has(storeKey)) ||
@@ -794,7 +839,7 @@ function AppContent() {
         (Array.isArray(recipe.ingredients) && recipe.ingredients.some(ing => (ing?.name || '').toLowerCase().includes(query)))
       );
     });
-  }, [recipes, selectedTag, recentIds, searchQuery]);
+  }, [recipes, selectedTag, recentIds, favoriteIds, searchQuery]);
 
   const resetListFilters = () => {
     setSelectedTag('すべて');
@@ -839,11 +884,18 @@ function AppContent() {
 
       <select
         className="store-filter-select"
-        value={allCategories.find((cat) => normalizeKey(cat) === normalizeKey(selectedTag)) || ""}
+        value={
+          selectedTag === FAVORITE_FILTER_TAG
+            ? FAVORITE_FILTER_TAG
+            : (allCategories.find((cat) => normalizeKey(cat) === normalizeKey(selectedTag)) || "")
+        }
         onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
         aria-label="カテゴリーで絞り込み"
       >
         <option value="">カテゴリー</option>
+        <option value={FAVORITE_FILTER_TAG}>
+          ★ お気に入り ({favoriteIds.size})
+        </option>
         {allCategories.sort().map(cat => (
           <option key={cat} value={cat}>{cat} ({categoryCounts[normalizeKey(cat)] || 0})</option>
         ))}
@@ -1407,7 +1459,7 @@ function AppContent() {
               )}
             </h2>
             <div className="container-header__toolbar">
-              <div className="list-header-filters" aria-label="店舗・コース・カテゴリー・国で絞り込み">
+              <div className="list-header-filters" aria-label="店舗・コース・カテゴリー・国・お気に入りで絞り込み">
                 {renderRecipeFilterSelects()}
               </div>
               <div className="header-actions">
@@ -1781,8 +1833,14 @@ function AppContent() {
               </div>
             ) : filteredRecipes.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '2rem', color: '#888' }}>
-                条件に一致するレシピがありません
-                <p style={{ marginTop: '0.5rem' }}>検索/絞り込み/公開表示の条件を確認してください</p>
+                {selectedTag === FAVORITE_FILTER_TAG
+                  ? 'お気に入りに登録したレシピがありません'
+                  : '条件に一致するレシピがありません'}
+                <p style={{ marginTop: '0.5rem' }}>
+                  {selectedTag === FAVORITE_FILTER_TAG
+                    ? 'レシピカードまたは詳細画面の ☆ をタップしてお気に入りに追加できます'
+                    : '検索/絞り込み/公開表示の条件を確認してください'}
+                </p>
                 <div style={{ marginTop: '1rem' }}>
                   <Button variant="secondary" size="sm" onClick={resetListFilters}>
                     フィルターをリセット
@@ -1791,8 +1849,14 @@ function AppContent() {
               </div>
             ) : (
               <div className="main-content-wrapper">
-                {currentView === 'list' && (
+                {currentView === 'list' && selectedTag !== FAVORITE_FILTER_TAG && (
                   <div className="recent-list-wrapper">
+                    <FavoriteRecipes
+                      recipes={recipes}
+                      favoriteIds={favoriteIds}
+                      onSelect={handleSelectRecipe}
+                      onToggleFavorite={toggleFavorite}
+                    />
                     <RecentRecipes
                       recipes={recipes}
                       recentIds={recentIds}
@@ -1813,6 +1877,8 @@ function AppContent() {
                     showOwner={user?.role === 'admin' && adminViewAllUsersRecipes}
                     ownerLabelFn={getRecipeOwnerLabel}
                     currentUser={user}
+                    favoriteIds={favoriteIds}
+                    onToggleFavorite={toggleFavorite}
                   />
                 </div>
               </div>
@@ -1875,6 +1941,8 @@ function AppContent() {
             baseId: String(selectedRecipe.id),
             from: 'detail',
           })}
+          isFavorite={favoriteIds.has(String(selectedRecipe.id))}
+          onToggleFavorite={toggleFavorite}
         />
       )}
 

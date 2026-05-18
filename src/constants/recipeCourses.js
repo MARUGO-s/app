@@ -1,7 +1,8 @@
-/** レシピ「コース」案A+Bハイブリッド（固定12種） */
+/** レシピ「コース」案A+Bハイブリッド（固定13種） */
 export const RECIPE_COURSE_OPTIONS = [
     'アミューズ',
     '前菜',
+    '温菜',
     'スープ',
     '魚料理',
     '肉料理',
@@ -18,6 +19,7 @@ export const RECIPE_COURSE_OPTIONS = [
 export const RECIPE_LIST_COURSE_ORDER = [
     'アミューズ',
     '前菜',
+    '温菜',
     'タパス・小皿',
     'スープ',
     '魚料理',
@@ -34,6 +36,7 @@ export const RECIPE_LIST_COURSE_ICONS = {
     プティフール: '🍬',
     アミューズ: '✨',
     前菜: '🥗',
+    温菜: '♨️',
     'タパス・小皿': '🫒',
     スープ: '🍲',
     魚料理: '🐟',
@@ -55,6 +58,10 @@ const EXACT_ALIAS_MAP = {
     'hors d\'oeuvre': 'アミューズ',
     オードブル: '前菜',
     starter: '前菜',
+    温菜: '温菜',
+    温製: '温菜',
+    entree: '温菜',
+    entrée: '温菜',
     soup: 'スープ',
     汁: 'スープ',
     ポタージュ: 'スープ',
@@ -95,6 +102,7 @@ const CATEGORY_TO_COURSE_HINT = {
     'デザート・お菓子': 'デザート',
     パン: '食パン',
     スープ: 'スープ',
+    温菜: '温菜',
     取り込み: 'その他',
 };
 
@@ -133,6 +141,7 @@ export const normalizeRecipeCourse = (rawCourse, recipe = null) => {
 
     if (/アミューズ|amuse|hors.d.oeuvre/i.test(lower)) return 'アミューズ';
     if (/前菜|starter|オードブル/i.test(lower)) return '前菜';
+    if (/温菜|温製|entrée|entree|温かい前菜/i.test(lower)) return '温菜';
     if (/スープ|soup|ポタージュ|potage|ビスク|bisque|コンソメ|consomme|ブイヨン/i.test(lower)) return 'スープ';
     if (/魚|fish|シーフード|seafood|サーモン|鮪|マグロ|鱸|鯛/i.test(lower)) return '魚料理';
     if (/肉|meat|ビーフ|beef|ポーク|pork|ラム|lamb|鴨|duck|フォアグラ/i.test(lower)) return '肉料理';
@@ -150,6 +159,7 @@ export const normalizeRecipeCourse = (rawCourse, recipe = null) => {
     if (fromCategory) return fromCategory;
 
     if (tags.some((tag) => /プティフール|petit/i.test(tag))) return 'プティフール';
+    if (tags.some((tag) => /温菜|温製/i.test(tag))) return '温菜';
     if (tags.some((tag) => /タパス|tapas/i.test(tag))) return 'タパス・小皿';
     if (tags.some((tag) => /ランチデリ|デリ/i.test(tag))) return '軽食・デリ';
 
