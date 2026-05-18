@@ -155,6 +155,25 @@
         gap: 10px;
     }
 
+    /* 旧ドラッグ並び替え用の pan-y を廃止し、縦スクロール・ピンチを妨げない */
+    .recipe-card {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .recipe-card__image,
+    .recipe-card__overlay,
+    .recipe-card__selection-overlay,
+    .recipe-card__tags {
+        pointer-events: none;
+        -webkit-user-drag: none;
+        user-select: none;
+    }
+
+    .recipe-list-table__row {
+        touch-action: manipulation;
+    }
+
     .recipe-card__content {
         padding: 10px;
     }

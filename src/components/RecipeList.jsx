@@ -131,10 +131,8 @@ const RecipeListTable = ({
 
 const RecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggleSelection, showOwner, ownerLabelFn, index = 0, mobileView = false }) => {
     const style = {
-        touchAction: 'pan-y',
         height: '100%',
         outline: 'none',
-        cursor: 'default'
     };
 
     const eagerThreshold = mobileView ? 4 : 8;
