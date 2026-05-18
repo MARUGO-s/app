@@ -160,6 +160,15 @@ const extractRawRecipes = (parsed: unknown): unknown[] => {
   return [];
 };
 
+const MAX_DESCRIPTION_LENGTH = 1000;
+
+const normalizeDescription = (raw: unknown) => {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  if (text.length <= MAX_DESCRIPTION_LENGTH) return text;
+  return `${text.slice(0, MAX_DESCRIPTION_LENGTH - 1)}…`;
+};
+
 const buildPrompt = (fileName: string) => `
 あなたはプロの料理研究家・レシピ編集者です。
 添付PDFから「料理レシピ」だけを抽出し、JSONで返してください。
@@ -170,18 +179,24 @@ const buildPrompt = (fileName: string) => `
 - 各料理の名称（title）
 - 材料（ingredients: name, quantity, unit）
 - 作り方（steps: 文字列の配列）
+- 説明（description）: PDFに「歴史と起源」「歴史・起源」など、料理の歴史・由来を述べる節がある場合、その節の本文のみを記載する（見出し行は含めない）。該当節が無い場合は空文字 ""
+
+【description の取り方（重要）】
+- 見出し例: 「◆ 歴史と起源」「歴史と起源」「History / Origins」など同義表記
+- 「◆ 材料・分量」「◆ 作り方」「◆ 科学的ポイント」など他の節の内容は description に入れない
+- 改行はそのまま保持してよい（1000文字以内に収める）
 
 【除外】
 - 巻頭・序文・解説・コラム・目次・ページ番号
 - レシピ以外の補足（相性の良いサラダ、Point 等）
+- 科学的ポイント・材料表・手順本文（各フィールドへ分離済みのため description には不要）
 
 【出力ルール（厳守）】
-- 有効なJSONのみ。説明文は禁止。
-- description は常に空文字 "" にする（トークン節約）
+- 有効なJSONのみ。JSON以外の説明は禁止。
 - group は使わず null にする
 - 手順・材料名にダブルクォート " を含めない（「」を使う）
 - 形式:
-{"recipes":[{"title":"料理名","description":"","ingredients":[{"name":"材料","quantity":"","unit":""}],"steps":["手順1"]}]}
+{"recipes":[{"title":"料理名","description":"歴史と起源の本文（無ければ空文字）","ingredients":[{"name":"材料","quantity":"","unit":""}],"steps":["手順1"]}]}
 - PDF内のレシピを漏れなく抽出する
 `;
 
@@ -399,7 +414,7 @@ const normalizeRecipe = (raw: unknown) => {
   return {
     title,
     name: title,
-    description: String(row.description || "").trim(),
+    description: normalizeDescription(row.description),
     ingredients,
     steps,
   };

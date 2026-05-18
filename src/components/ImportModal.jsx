@@ -936,6 +936,7 @@ export const ImportModal = ({ onClose, onImport, onImportBatch, initialMode = 'u
                                             </div>
                                             <div className="pdf-recipe-preview-meta">
                                                 材料 {ingCount} / 手順 {stepCount}
+                                                {(recipe.description || '').trim() ? ' / 説明あり' : ''}
                                             </div>
                                         </div>
                                     </label>
@@ -1063,7 +1064,7 @@ export const ImportModal = ({ onClose, onImport, onImportBatch, initialMode = 'u
                         ) : mode === 'pdf' ? (
                             <>
                                 <p>
-                                    複数レシピが載ったPDFから、料理名・材料・作り方を抽出して登録します。
+                                    複数レシピが載ったPDFから、料理名・材料・作り方を抽出して登録します。「歴史と起源」などの節がある場合は説明欄に入ります。
                                     解析には1〜2分かかることがあります（20MB以下）。
                                 </p>
                                 <div className="image-target-panel">
