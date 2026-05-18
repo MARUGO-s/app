@@ -152,6 +152,14 @@ function AppContent() {
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedRecipeIds, setSelectedRecipeIds] = useState(new Set());
   const [displayMode, setDisplayMode] = useState('normal'); // 'normal' | 'all'
+  const [listLayoutMode, setListLayoutMode] = useState(() => {
+    if (typeof window === 'undefined') return 'card';
+    try {
+      return window.localStorage.getItem('recipe-list-layout-mode') === 'list' ? 'list' : 'card';
+    } catch {
+      return 'card';
+    }
+  });
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [showBulkRestoreConfirm, setShowBulkRestoreConfirm] = useState(false);
   const [pcRecommendModalView, setPcRecommendModalView] = useState(null); // null | view string
@@ -1700,8 +1708,34 @@ function AppContent() {
               ))}
             </select>
 
-            <div className="view-mode-toggle" style={{ marginLeft: '16px', display: 'flex', gap: '8px', borderLeft: '1px solid #ccc', paddingLeft: '16px' }}>
+            <div className="view-mode-toggle" style={{ marginLeft: '16px', display: 'flex', gap: '8px', borderLeft: '1px solid #ccc', paddingLeft: '16px', flexWrap: 'wrap' }}>
               <button
+                type="button"
+                className={`tag-filter-btn ${listLayoutMode === 'card' ? 'active' : ''}`}
+                onClick={() => {
+                  setListLayoutMode('card');
+                  try { window.localStorage.setItem('recipe-list-layout-mode', 'card'); } catch { /* ignore */ }
+                }}
+                style={{ minWidth: 'auto', padding: '4px 12px' }}
+                title="サムネイル付きカードで表示"
+              >
+                カード
+              </button>
+              <button
+                type="button"
+                className={`tag-filter-btn ${listLayoutMode === 'list' ? 'active' : ''}`}
+                onClick={() => {
+                  setListLayoutMode('list');
+                  try { window.localStorage.setItem('recipe-list-layout-mode', 'list'); } catch { /* ignore */ }
+                }}
+                style={{ minWidth: 'auto', padding: '4px 12px' }}
+                title="テーブル形式で一覧表示（画像なし・高速）"
+              >
+                リスト
+              </button>
+              <span style={{ width: '1px', background: '#ccc', alignSelf: 'stretch', margin: '2px 0' }} aria-hidden="true" />
+              <button
+                type="button"
                 className={`tag-filter-btn ${displayMode === 'normal' ? 'active' : ''}`}
                 onClick={() => setDisplayMode('normal')}
                 style={{ minWidth: 'auto', padding: '4px 12px' }}
@@ -1709,6 +1743,7 @@ function AppContent() {
                 通常
               </button>
               <button
+                type="button"
                 className={`tag-filter-btn ${displayMode === 'all' ? 'active' : ''}`}
                 onClick={() => setDisplayMode('all')}
                 style={{ minWidth: 'auto', padding: '4px 12px' }}
@@ -1760,6 +1795,7 @@ function AppContent() {
                     selectedIds={selectedRecipeIds}
                     onToggleSelection={handleToggleSelection}
                     displayMode={displayMode}
+                    layoutMode={listLayoutMode}
                     publicRecipeView={publicRecipeView}
                     showOwner={user?.role === 'admin' && adminViewAllUsersRecipes}
                     ownerLabelFn={getRecipeOwnerLabel}

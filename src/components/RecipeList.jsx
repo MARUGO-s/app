@@ -55,6 +55,80 @@ const normalizeTags = (rawTags) => {
 /** recipeService._resolveMasterOwnerTags と同じ既定値 */
 const DEFAULT_MASTER_OWNER_TAGS = new Set(['owner:yoshito', 'owner:admin']);
 
+const displayMeta = (value) => {
+    const text = String(value ?? '').trim();
+    return text || '—';
+};
+
+const RecipeListTable = ({
+    recipes,
+    isSelectMode,
+    selectedIds,
+    onSelectRecipe,
+    onToggleSelection,
+    showOwner,
+    ownerLabelFn,
+}) => (
+    <div className="recipe-list-table-wrap" role="region" aria-label="レシピ一覧（リスト表示）">
+        <table className="recipe-list-table">
+            <thead>
+                <tr>
+                    <th>レシピ名</th>
+                    <th>店舗</th>
+                    <th>コース</th>
+                    <th>カテゴリー</th>
+                    <th>国</th>
+                    {showOwner && <th>作成者</th>}
+                    <th>登録日</th>
+                </tr>
+            </thead>
+            <tbody>
+                {recipes.map((recipe) => {
+                    const isSelected = selectedIds && selectedIds.has(recipe.id);
+                    return (
+                        <tr
+                            key={recipe.id}
+                            className={`recipe-list-table__row ${isSelected ? 'recipe-list-table__row--selected' : ''}`}
+                            onClick={() => {
+                                if (isSelectMode) {
+                                    onToggleSelection(recipe.id);
+                                } else {
+                                    onSelectRecipe(recipe);
+                                }
+                            }}
+                        >
+                            <td className="recipe-list-table__title" title={recipe.title}>
+                                {isSelectMode && (
+                                    <span className={`recipe-list-table__checkbox ${isSelected ? 'checked' : ''}`} aria-hidden="true" />
+                                )}
+                                <span className="recipe-list-table__title-text">{recipe.title}</span>
+                            </td>
+                            <td className="recipe-list-table__cell--meta" title={displayMeta(recipe.storeName)}>
+                                {displayMeta(recipe.storeName)}
+                            </td>
+                            <td className="recipe-list-table__cell--meta" title={displayMeta(recipe.course)}>
+                                {displayMeta(recipe.course)}
+                            </td>
+                            <td className="recipe-list-table__cell--meta" title={displayMeta(recipe.category)}>
+                                {displayMeta(recipe.category)}
+                            </td>
+                            <td className="recipe-list-table__cell--meta" title={displayMeta(recipe.country)}>
+                                {displayMeta(recipe.country)}
+                            </td>
+                            {showOwner && (
+                                <td className="recipe-list-table__cell--meta">
+                                    {typeof ownerLabelFn === 'function' ? displayMeta(ownerLabelFn(recipe)) : '—'}
+                                </td>
+                            )}
+                            <td className="recipe-list-table__cell--date">{formatDate(recipe.created_at)}</td>
+                        </tr>
+                    );
+                })}
+            </tbody>
+        </table>
+    </div>
+);
+
 const RecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggleSelection, showOwner, ownerLabelFn, index = 0, mobileView = false }) => {
     const style = {
         touchAction: 'pan-y',
@@ -141,7 +215,7 @@ const RecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggle
     );
 };
 
-export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds, onToggleSelection, displayMode = 'normal', publicRecipeView = 'none', showOwner = false, ownerLabelFn, currentUser = null }) => {
+export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds, onToggleSelection, displayMode = 'normal', layoutMode = 'card', publicRecipeView = 'none', showOwner = false, ownerLabelFn, currentUser = null }) => {
     const [expandedSections, setExpandedSections] = useState({});
     const [isMobileView, setIsMobileView] = useState(() => isMobileViewport());
 
@@ -213,23 +287,30 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
 
     const courseBuckets = splitRecipesByCourse(mainListRecipes);
 
-    // Dynamic limit based on screen width
-    // Mobile/Tablet (< 1024px): 8 items
-    // Desktop (>= 1024px): 9 items
-    const [limit, setLimit] = useState(typeof window !== 'undefined' && window.innerWidth >= 1024 ? 9 : 8);
+    const isListLayout = layoutMode === 'list';
+
+    // カード: 8〜9件 / リスト: コンパクトなので多めに表示
+    const [limit, setLimit] = useState(() => {
+        if (typeof window === 'undefined') return 9;
+        const wide = window.innerWidth >= 1024;
+        if (isListLayout) return wide ? 30 : 24;
+        return wide ? 9 : 8;
+    });
 
     React.useEffect(() => {
         const handleResize = () => {
-            if (window.innerWidth >= 1024) {
-                setLimit(9);
+            const wide = window.innerWidth >= 1024;
+            if (isListLayout) {
+                setLimit(wide ? 30 : 24);
             } else {
-                setLimit(8);
+                setLimit(wide ? 9 : 8);
             }
         };
 
+        handleResize();
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
-    }, []);
+    }, [isListLayout]);
 
     // Helper to render a section
     const renderSection = (title, items, icon, sectionKey, { showWhenEmpty = false, emptyMessage = '' } = {}) => {
@@ -275,25 +356,37 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                         </span>
                     )}
                 </h3>
-                <div className="recipe-grid">
-                    {displayItems.map((recipe, index) => {
-                        const isSelected = selectedIds && selectedIds.has(recipe.id);
-                        return (
-                            <RecipeCard
-                                key={recipe.id}
-                                recipe={recipe}
-                                isSelected={isSelected}
-                                isSelectMode={isSelectMode}
-                                onSelectRecipe={onSelectRecipe}
-                                onToggleSelection={onToggleSelection}
-                                showOwner={showOwner}
-                                ownerLabelFn={ownerLabelFn}
-                                index={index}
-                                mobileView={isMobileView}
-                            />
-                        );
-                    })}
-                </div>
+                {isListLayout ? (
+                    <RecipeListTable
+                        recipes={displayItems}
+                        isSelectMode={isSelectMode}
+                        selectedIds={selectedIds}
+                        onSelectRecipe={onSelectRecipe}
+                        onToggleSelection={onToggleSelection}
+                        showOwner={showOwner}
+                        ownerLabelFn={ownerLabelFn}
+                    />
+                ) : (
+                    <div className="recipe-grid">
+                        {displayItems.map((recipe, index) => {
+                            const isSelected = selectedIds && selectedIds.has(recipe.id);
+                            return (
+                                <RecipeCard
+                                    key={recipe.id}
+                                    recipe={recipe}
+                                    isSelected={isSelected}
+                                    isSelectMode={isSelectMode}
+                                    onSelectRecipe={onSelectRecipe}
+                                    onToggleSelection={onToggleSelection}
+                                    showOwner={showOwner}
+                                    ownerLabelFn={ownerLabelFn}
+                                    index={index}
+                                    mobileView={isMobileView}
+                                />
+                            );
+                        })}
+                    </div>
+                )}
                 {items.length === 0 && (
                     <div style={{ color: '#9ca3af', fontSize: '0.9rem', marginTop: '0.5rem' }}>
                         {emptyMessage || `${title}はありません`}
@@ -353,7 +446,7 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
     };
 
     return (
-        <div className="recipe-list-container">
+        <div className={`recipe-list-container${isListLayout ? ' recipe-list-container--list' : ''}`}>
             {renderPublicRecipeSections()}
             {renderCourseSections(courseBuckets)}
 
