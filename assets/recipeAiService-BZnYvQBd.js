@@ -1,4 +1,8 @@
 const n=`import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '../supabase';
+import {
+    buildRecipeAiMemoryContext,
+    logRecipeAiRun,
+} from './recipeAiLearningService';
 
 const SAKANA_PROVIDER_NAME = 'Sakana AI';
 const GROQ_PROVIDER_NAME = 'Groq';
@@ -37,6 +41,16 @@ const EVIDENCE_DISCIPLINE_RULES = \`
 - 材料リストに存在しない素材・添加物・技法を、解説や比較に持ち込まない。
 - 各エージェントのcontentは、可能な限り「根拠 → 判断 → 留保/改善」の順で書く。
 - 季節・薬膳・養生の文脈は扱わない。
+\`;
+
+const DIRECTION_LOCK_RULES = \`
+【事前確認回答の拘束ルール】
+- 「【事前確認で確定した方針】」がある場合、それは参考情報ではなく必須条件として扱う。
+- 特に、添加物・機能材の可否、禁止素材、原価許容、オペレーション制約、本場性の方針は、全エージェントと最終統合で必ず守る。
+- ユーザーが「一切使わない」と答えた添加物・機能材は、例示・推奨・代替候補としても軽々しく出さない。必要なら「その条件では不採用」と明記する。
+- ユーザーが「最小限なら可」と答えた場合も、むやみに使わず、使う必然性、用途、最小量の考え方を示す。
+- ユーザー回答と衝突する案を出してはいけない。衝突がある場合は、案を出す前にその衝突自体をリスクとして明記する。
+- 回答の要約を勝手に丸めず、実際の制約として配合、材料、工程、説明に反映する。
 \`;
 
 const WEB_RESEARCH_AGENT_PROTOCOL = \`
@@ -139,6 +153,23 @@ const CONVERSATION_OUTPUT_SCHEMA = \`
 }
 \`;
 
+const INTAKE_OUTPUT_SCHEMA = \`
+{
+  "summary": "なぜこの確認が必要かの要約。80〜180文字",
+  "questions": [
+    {
+      "id": "additive_policy",
+      "label": "質問の短い見出し",
+      "question": "ユーザーに確認したい具体的な質問文",
+      "rationale": "その質問が必要な理由",
+      "placeholder": "回答例や補足記入例",
+      "options": ["選択肢1", "選択肢2", "選択肢3"],
+      "required": true
+    }
+  ]
+}
+\`;
+
 const AGENT_DEFINITIONS = {
     research: {
         agentId: 'research',
@@ -217,6 +248,7 @@ const normalizeText = (value) => String(value ?? '')
     .trim();
 
 const normalizeArray = (value) => Array.isArray(value) ? value : [];
+const normalizeStringArray = (value) => normalizeArray(value).map(normalizeText).filter(Boolean);
 
 const readLocalStorage = (key) => {
     try {
@@ -684,6 +716,220 @@ const normalizeConversationMessages = (value) => {
     })).filter(item => item.content);
 };
 
+const buildFallbackIntake = (mode) => {
+    if (mode === 'improvement') {
+        return {
+            summary: '改善案を作る前に、何を守り、どこまで変えてよいかを確定すると、手戻りを減らせます。',
+            questions: [
+                {
+                    id: 'must_keep',
+                    label: '変えてはいけない核',
+                    question: 'このレシピで絶対に残したい点は何ですか。味の方向性、主素材、見た目、提供スタイルなどを具体的に教えてください。',
+                    rationale: '改善で料理の核を壊さないためです。',
+                    placeholder: '例: 鶏を主役にすること、冷製前菜として出すこと、現行の見た目は維持したい',
+                    options: [],
+                    required: true,
+                },
+                {
+                    id: 'additive_policy',
+                    label: '添加物・機能材の許容範囲',
+                    question: '食品添加物や機能材はどこまで許容しますか。増粘剤、安定剤、ブドウ糖、ビタミンC、発色補助、乳化補助などが候補になる場合があります。',
+                    rationale: '安定性と完成度をどこまで優先するかで改善方針が大きく変わるためです。',
+                    placeholder: '例: 一切使わない / 安定性のため最小限なら可 / 完成度優先で必要なら可',
+                    options: ['一切使わない', '安定性のため最小限なら可', '完成度優先で必要なら可'],
+                    required: true,
+                },
+                {
+                    id: 'main_goal',
+                    label: '今回の改善優先順位',
+                    question: '今回の改善で最優先なのは何ですか。味、香り、食感、安定性、原価、仕込み時間、提供速度などから優先順位を教えてください。',
+                    rationale: '改善案の判断軸を固定するためです。',
+                    placeholder: '例: 1. 安定性 2. 原価維持 3. 食感向上',
+                    options: ['味・香り優先', '食感・安定性優先', '原価優先', '仕込み・提供効率優先'],
+                    required: true,
+                },
+                {
+                    id: 'cost_tolerance',
+                    label: '原価許容',
+                    question: '原価はどこまで動かせますか。現状維持なのか、少し上がっても良いのか、下げたいのかを教えてください。',
+                    rationale: '採用できる素材や工程が変わるためです。',
+                    placeholder: '例: 現状維持 / 5%まで増は可 / 10%下げたい',
+                    options: ['現状維持', '少し上がっても可', '下げたい'],
+                    required: true,
+                },
+                {
+                    id: 'operation_constraints',
+                    label: 'オペレーション制約',
+                    question: '仕込み日数、提供直前の作業量、使用機材、保存日数などで制約があれば教えてください。',
+                    rationale: '実装できない改善案を避けるためです。',
+                    placeholder: '例: 前日仕込み可、当日提供は3分以内、真空機なし、冷蔵3日持たせたい',
+                    options: [],
+                    required: false,
+                },
+            ],
+        };
+    }
+
+    return {
+        summary: '商品開発前に、完成度と制約の優先順位を確定すると、再質問を減らしやすくなります。',
+        questions: [
+            {
+                id: 'additive_policy',
+                label: '添加物・機能材の許容範囲',
+                question: '食品添加物や機能材はどこまで許容しますか。料理によってはグァーガム、ブドウ糖、安定剤、乳化補助、ビタミンCなどが候補になります。',
+                rationale: '安定性と完成度の上げ方が大きく変わるためです。',
+                placeholder: '例: 一切使わない / 安定性のため最小限なら可 / 完成度優先で必要なら可',
+                options: ['一切使わない', '安定性のため最小限なら可', '完成度優先で必要なら可'],
+                required: true,
+            },
+            {
+                id: 'target_goal',
+                label: '狙う完成度と客層',
+                question: '誰に、どの時間帯・価格帯で出す料理ですか。高級感、親しみやすさ、軽さ、満足感など狙いも教えてください。',
+                rationale: '設計すべき味と構成が変わるためです。',
+                placeholder: '例: ランチ1500円前後、女性客多め、軽いが満足感は欲しい',
+                options: [],
+                required: true,
+            },
+            {
+                id: 'cost_priority',
+                label: '原価と品質の優先順位',
+                question: '原価はどのくらい重視しますか。品質最優先か、一定原価内か、低原価化を狙うかを教えてください。',
+                rationale: '素材選定と工程設計の基準になるためです。',
+                placeholder: '例: 原価優先 / 原価は中程度で品質重視 / 高品質最優先',
+                options: ['原価優先', 'バランス重視', '品質最優先'],
+                required: true,
+            },
+            {
+                id: 'operation_constraints',
+                label: '仕込み・提供制約',
+                question: '仕込み日数、当日提供時間、使用機材、保存日数などの制約はありますか。',
+                rationale: '現場で回る商品にするためです。',
+                placeholder: '例: 前日仕込み可、提供5分以内、アイスクリームマシンなし、冷蔵2日',
+                options: [],
+                required: true,
+            },
+            {
+                id: 'authenticity_policy',
+                label: '本場性と現場適応のバランス',
+                question: '本場寄りにしたいですか。それとも日本の店舗オペレーションや客層に合わせて調整してよいですか。',
+                rationale: '材料と味の着地点が変わるためです。',
+                placeholder: '例: 本場寄り / バランス型 / 現場適応優先',
+                options: ['本場寄り', 'バランス型', '現場適応優先'],
+                required: true,
+            },
+            {
+                id: 'ingredient_restrictions',
+                label: '使わない素材・条件',
+                question: 'アレルゲン、動物性の可否、アルコール、香料、保存料など、使わない条件があれば教えてください。',
+                rationale: '後から大きな作り直しを防ぐためです。',
+                placeholder: '例: 豚不可、アルコール不可、香料不可、卵は使える',
+                options: [],
+                required: false,
+            },
+        ],
+    };
+};
+
+const normalizeIntakeQuestion = (question, index) => ({
+    id: normalizeText(question?.id) || \`question_\${index + 1}\`,
+    label: normalizeText(question?.label) || \`確認項目 \${index + 1}\`,
+    question: normalizeText(question?.question),
+    rationale: normalizeText(question?.rationale),
+    placeholder: normalizeText(question?.placeholder),
+    options: normalizeStringArray(question?.options).slice(0, 6),
+    required: question?.required !== false,
+    answer: normalizeText(question?.answer),
+});
+
+const normalizeRecipeAiIntake = (payload, mode) => {
+    const fallback = buildFallbackIntake(mode);
+    const questions = normalizeArray(payload?.questions)
+        .map(normalizeIntakeQuestion)
+        .filter((item) => item.question)
+        .slice(0, 8);
+
+    return {
+        summary: normalizeText(payload?.summary) || fallback.summary,
+        questions: questions.length > 0 ? questions : fallback.questions,
+    };
+};
+
+export const serializeRecipeAiDirectionContext = (intake) => {
+    const questions = normalizeArray(intake?.questions)
+        .map(normalizeIntakeQuestion)
+        .filter((item) => item.answer);
+    if (questions.length === 0) return '';
+
+    return [
+        '【事前確認で確定した方針】',
+        ...questions.map((item) => \`- \${item.label}: \${item.answer}\`),
+    ].join('\\n');
+};
+
+export const generateRecipeAiIntake = async ({
+    mode = 'product',
+    brief = '',
+    recipe = null,
+    notes = '',
+    provider,
+}) => {
+    const normalizedMode = mode === 'improvement' ? 'improvement' : 'product';
+    const fallback = buildFallbackIntake(normalizedMode);
+
+    try {
+        const baseContext = normalizedMode === 'product'
+            ? ['【開発テーマ】', normalizeText(brief) || '未入力'].join('\\n')
+            : ['【既存レシピ】', serializeRecipeForAi(recipe), '', '【改善指示】', normalizeText(notes) || '特になし'].join('\\n');
+
+        const modeInstruction = normalizedMode === 'product'
+            ? \`
+あなたはレシピ開発前の要件定義を行うシェフです。
+まだレシピは作らず、先に確認すべき質問だけを返してください。
+質問は4〜7件。抽象語ではなく、厨房判断に直結する具体的な聞き方にしてください。
+必ず「食品添加物・機能材の許容範囲」の質問を含め、料理から推定できる場合は具体例も入れてください。
+例:
+- アイス系: グァーガム、ローカストビーンガム、ブドウ糖、安定剤、乳化補助
+- テリーヌ・シャルキュトリ系: ビタミンC、発色補助、ゲル化補助、増粘安定材
+- ソース・デザート系: ペクチン、ゼラチン、寒天、乳化補助、保存安定化
+\`
+            : \`
+あなたは既存レシピ改善前の要件定義を行うシェフです。
+まだ改善案は作らず、先に確認すべき質問だけを返してください。
+質問は4〜7件。現レシピの何を守り、何をどこまで変えてよいかを具体的に確認してください。
+必ず「食品添加物・機能材の許容範囲」の質問を含め、料理から推定できる場合は具体例も入れてください。
+\`;
+
+        const { parsed } = await callRecipeAiJson({
+            provider,
+            prompt: \`
+\${modeInstruction}
+
+\${baseContext}
+
+【質問設計ルール】
+- 質問は、ユーザーが一度答えれば開発・改善の方向性がかなり固まるものに絞る。
+- 「何か希望はありますか」のような広すぎる質問は禁止。
+- 原価、オペレーション、保存安定性、本場性、禁止素材のような論点を優先する。
+- 各質問には短い見出しを付ける。
+- options は、ユーザーが選びやすい代表的な選択肢がある場合のみ入れる。
+
+\${STRICT_JSON_OUTPUT_RULES}
+以下のJSONのみを返してください。
+\${INTAKE_OUTPUT_SCHEMA}
+\`,
+            instructions: 'You are a pre-briefing chef assistant. Ask concrete prerequisite questions before recipe generation. Return strict JSON only.',
+            maxOutputTokens: 2600,
+            timeoutMs: REQUEST_TIMEOUT_MS,
+        });
+
+        return normalizeRecipeAiIntake(parsed, normalizedMode);
+    } catch (error) {
+        console.warn('[recipeAiService] generateRecipeAiIntake failed', error);
+        return fallback;
+    }
+};
+
 const isRecipeReproposalRequest = (question) => {
     const text = normalizeText(question).toLowerCase();
     if (!text) return false;
@@ -726,6 +972,12 @@ const normalizeAiProposal = (proposal) => {
         agentMessages: normalizeAgentMessages(proposal?.agentMessages || proposal?.messages),
         sources: normalizeSources(proposal?.sources),
         audit: proposal?.audit && typeof proposal.audit === 'object' ? proposal.audit : null,
+        learningMeta: proposal?.learningMeta && typeof proposal.learningMeta === 'object'
+            ? {
+                runId: normalizeText(proposal.learningMeta?.runId),
+                modeFamily: normalizeText(proposal.learningMeta?.modeFamily),
+            }
+            : null,
     };
 };
 
@@ -853,7 +1105,7 @@ const settleAgent = async (args, index) => {
     }
 };
 
-const buildProductAgentPrompt = (agentId, brief) => {
+const buildProductAgentPrompt = (agentId, brief, memoryContext = '', directionContext = '') => {
     const roleInstructions = {
         research: \`
 あなたはWeb調査エージェントです。開発テーマに対して、専門メディア・料理学校・技術記事・シェフ情報を調べ、商品化に使える根拠だけを抽出してください。
@@ -875,6 +1127,10 @@ const buildProductAgentPrompt = (agentId, brief) => {
 【開発テーマ】
 \${normalizeText(brief)}
 
+\${memoryContext}
+
+\${directionContext}
+
 【評価軸】
 - 店舗オペレーションで再現しやすいこと
 - 味、香り、食感、見た目の狙いが明確なこと
@@ -882,6 +1138,7 @@ const buildProductAgentPrompt = (agentId, brief) => {
 - 仕込みと提供時の安定性、ロス、原価に配慮すること
 
 \${RECIPE_DEVELOPMENT_AGENT_PROTOCOL}
+\${directionContext ? DIRECTION_LOCK_RULES : ''}
 \${agentId === 'research' || agentId === 'globalComparison' || agentId === 'validator' ? WEB_RESEARCH_AGENT_PROTOCOL : ''}
 \${agentId === 'globalComparison' ? AUTHENTIC_SOURCE_COMPARISON_RULES : ''}
 \${EVIDENCE_DISCIPLINE_RULES}
@@ -891,7 +1148,7 @@ const buildProductAgentPrompt = (agentId, brief) => {
 \`;
 };
 
-const buildImprovementAgentPrompt = (agentId, recipeText, notes) => {
+const buildImprovementAgentPrompt = (agentId, recipeText, notes, memoryContext = '', directionContext = '') => {
     const roleInstructions = {
         heritage: \`
 あなたは料理文化調査エージェントです。料理名・ジャンル・クラシックとの距離感を調べ、既存レシピの方向性がどの文脈に近いかを判定してください。季節・薬膳・養生には触れないでください。\`,
@@ -917,6 +1174,10 @@ const buildImprovementAgentPrompt = (agentId, recipeText, notes) => {
 【ユーザー追加指示】
 \${normalizeText(notes) || '特になし'}
 
+\${memoryContext}
+
+\${directionContext}
+
 【改善軸】
 - 味、香り、食感、見た目の完成度
 - 手順のわかりやすさと再現性
@@ -924,6 +1185,7 @@ const buildImprovementAgentPrompt = (agentId, recipeText, notes) => {
 - 原価やロスを悪化させない現実的な変更
 - 安全性、アレルゲン、温度管理上の注意
 
+\${directionContext ? DIRECTION_LOCK_RULES : ''}
 \${agentId === 'heritage' || agentId === 'research' || agentId === 'globalComparison' || agentId === 'validator' ? WEB_RESEARCH_AGENT_PROTOCOL : ''}
 \${agentId === 'globalComparison' ? AUTHENTIC_SOURCE_COMPARISON_RULES : ''}
 \${EVIDENCE_DISCIPLINE_RULES}
@@ -933,7 +1195,7 @@ const buildImprovementAgentPrompt = (agentId, recipeText, notes) => {
 \`;
 };
 
-const buildCrossCheckPrompt = ({ recipeText, notes, agentFindings }) => \`
+const buildCrossCheckPrompt = ({ recipeText, notes, agentFindings, memoryContext = '', directionContext = '' }) => \`
 あなたは料理監修委員会の最終クロスチェック担当です。
 他の専門エージェントの所見と既存レシピを、Web検索で確認できる標準レシピ・専門記事・科学的知見と突き合わせ、過不足・未開示・事実誤認がないか独立して監査してください。
 
@@ -942,6 +1204,10 @@ const buildCrossCheckPrompt = ({ recipeText, notes, agentFindings }) => \`
 
 【ユーザー追加指示】
 \${normalizeText(notes) || '特になし'}
+
+\${memoryContext}
+
+\${directionContext}
 
 【他エージェントの所見】
 \${agentFindings}
@@ -954,6 +1220,7 @@ const buildCrossCheckPrompt = ({ recipeText, notes, agentFindings }) => \`
 - 海外・本場比較エージェントの所見がある場合、日本語圏だけの判断に偏っていないか
 - 季節・薬膳・養生の文脈は扱わない
 
+\${directionContext ? DIRECTION_LOCK_RULES : ''}
 \${WEB_RESEARCH_AGENT_PROTOCOL}
 \${AUTHENTIC_SOURCE_COMPARISON_RULES}
 \${EVIDENCE_DISCIPLINE_RULES}
@@ -967,12 +1234,16 @@ const buildCrossCheckPrompt = ({ recipeText, notes, agentFindings }) => \`
 }
 \`;
 
-const buildFinalProductPrompt = ({ brief, agentFindings }) => \`
+const buildFinalProductPrompt = ({ brief, agentFindings, memoryContext = '', directionContext = '' }) => \`
 あなたは統括シェフエージェントです。
 下記の専門エージェント所見をすべて統合し、新規商品として保存可能なレシピを1つ完成させてください。
 
 【開発テーマ】
 \${normalizeText(brief)}
+
+\${memoryContext}
+
+\${directionContext}
 
 【専門エージェント所見】
 \${agentFindings}
@@ -982,15 +1253,17 @@ const buildFinalProductPrompt = ({ brief, agentFindings }) => \`
 - 海外・本場比較エージェントの所見は、日本の店舗オペレーションに有効な差分だけ採用する。
 - 材料と工程は具体的にし、実際に保存して編集できる粒度にする。
 - エージェント所見にない材料や技法を無理に足さない。
+- 事前確認回答の制約を最優先で守る。特に添加物・機能材の可否は例外なく反映する。
 - 季節・薬膳・養生の文脈は扱わない。
 
+\${directionContext ? DIRECTION_LOCK_RULES : ''}
 \${EVIDENCE_DISCIPLINE_RULES}
 \${STRICT_JSON_OUTPUT_RULES}
 以下のJSONのみを返してください。
 \${PROPOSAL_OUTPUT_SCHEMA}
 \`;
 
-const buildFinalImprovementPrompt = ({ recipeText, notes, agentFindings, auditFindings }) => \`
+const buildFinalImprovementPrompt = ({ recipeText, notes, agentFindings, auditFindings, memoryContext = '', directionContext = '' }) => \`
 あなたは統括シェフエージェントです。
 下記の既存レシピについて、専門エージェントの調査・監査・クロスチェックを総合し、保存可能な改善レシピを1つ完成させてください。
 
@@ -999,6 +1272,10 @@ const buildFinalImprovementPrompt = ({ recipeText, notes, agentFindings, auditFi
 
 【ユーザー追加指示】
 \${normalizeText(notes) || '特になし'}
+
+\${memoryContext}
+
+\${directionContext}
 
 【専門エージェント所見】
 \${agentFindings}
@@ -1012,22 +1289,37 @@ const buildFinalImprovementPrompt = ({ recipeText, notes, agentFindings, auditFi
 - 海外・本場比較エージェントの所見は、日本の店舗オペレーションに有効な差分だけ採用する。
 - 分量・温度・時間は再現性を優先して具体的にする。
 - 原価やオペレーションを悪化させる変更は避ける。
+- 事前確認回答の制約を最優先で守る。特に添加物・機能材の可否は例外なく反映する。
 - 季節・薬膳・養生の文脈は扱わない。
 
+\${directionContext ? DIRECTION_LOCK_RULES : ''}
 \${EVIDENCE_DISCIPLINE_RULES}
 \${STRICT_JSON_OUTPUT_RULES}
 以下のJSONのみを返してください。
 \${PROPOSAL_OUTPUT_SCHEMA}
 \`;
 
-const buildConversationPrompt = ({ recipeText, currentProposalText, conversationText, question, forceReproposal }) => \`
-あなたは、レシピ改善提案の文脈を保持して会話する「会話調整エージェント」兼「統括シェフエージェント」です。
-ユーザーの追加質問に回答し、必要なら現在の改善案を更新してください。
+const buildProductConversationAgentPrompt = (agentId, recipeText, currentProposalText, conversationText, question, memoryContext = '', directionContext = '') => {
+    const roleInstructions = {
+        research: \`
+あなたはWeb調査エージェントです。現在の商品案とユーザー追加質問に対して、専門メディア・料理学校・技術記事・シェフ情報を調べ、回答と再設計に必要な根拠だけを抽出してください。\`,
+        globalComparison: \`
+あなたは海外・本場比較エージェントです。現在の商品案を日本語圏だけでなく、英語または本場圏の現地語ソースでも比較し、今回の質問に対して採用価値のある差分だけを示してください。\`,
+        synthesizer: \`
+あなたはレシピ統合エージェントです。現在の商品案と質問内容を踏まえ、配合・工程・提供オペレーションのどこをどう見直すべきかを統合してください。\`,
+        science: \`
+あなたは食品科学エージェントです。現在の商品案と質問内容に対して、食感・香り・歩留まり・安定性に関係する科学だけを抽出してください。\`,
+        validator: \`
+あなたは科学検証エージェントです。現在の商品案と質問内容を批判的に見て、温度、時間、分量、安全性、工程リスクの妥当性を確認してください。\`,
+    };
 
-【元レシピ】
+    return \`
+\${roleInstructions[agentId]}
+
+【現在のフォーム内容】
 \${recipeText}
 
-【現在の改善案とエージェント所見】
+【現在の商品案】
 \${currentProposalText}
 
 【これまでの会話】
@@ -1036,23 +1328,172 @@ const buildConversationPrompt = ({ recipeText, currentProposalText, conversation
 【今回のユーザー質問・修正依頼】
 \${normalizeText(question)}
 
+\${memoryContext}
+
+\${directionContext}
+
+【判断ルール】
+- 単なる説明要求でも、回答に必要な根拠と留保を整理する。
+- レシピ変更が必要なら、どの材料・工程・狙いをどう変えるべきかを明示する。
+- 現在の商品案にない材料や技法は、明確な理由がある場合だけ提案する。
+
+\${RECIPE_DEVELOPMENT_AGENT_PROTOCOL}
+\${directionContext ? DIRECTION_LOCK_RULES : ''}
+\${agentId === 'research' || agentId === 'globalComparison' || agentId === 'validator' ? WEB_RESEARCH_AGENT_PROTOCOL : ''}
+\${agentId === 'globalComparison' ? AUTHENTIC_SOURCE_COMPARISON_RULES : ''}
+\${EVIDENCE_DISCIPLINE_RULES}
+\${STRICT_JSON_OUTPUT_RULES}
+以下のJSONのみを返してください。
+\${AGENT_OUTPUT_SCHEMA}
+\`;
+};
+
+const buildImprovementConversationAgentPrompt = (agentId, recipeText, currentProposalText, conversationText, question, memoryContext = '', directionContext = '') => {
+    const roleInstructions = {
+        heritage: \`
+あなたは料理文化調査エージェントです。元レシピと現在の改善案がどの料理文脈に位置するかを見直し、今回の質問に対して文化的・技術的に無理のない回答を出してください。\`,
+        research: \`
+あなたは調理技術調査エージェントです。今回の質問に対して、同種料理の標準工程、プロの技術記事、実務的な調理ノウハウを照合してください。\`,
+        globalComparison: \`
+あなたは海外・本場比較エージェントです。元レシピと現在の改善案を日本語圏だけでなく、英語または本場圏の現地語ソースでも見直し、今回の質問に対して採用価値のある差分だけを示してください。\`,
+        synthesizer: \`
+あなたは配合監査エージェントです。現在の改善案に対して、今回の質問を踏まえた配合・工程・再現性の見直し点を監査してください。\`,
+        science: \`
+あなたは食品科学エージェントです。今回の質問に関係する材料と工程だけに絞って、食感・香り・歩留まり・安定性の科学的判断を示してください。\`,
+        validator: \`
+あなたは品質検証エージェントです。現在の改善案と今回の質問に対して、温度・時間・安全性・保存・工程リスクの妥当性を確認してください。\`,
+    };
+
+    return \`
+\${roleInstructions[agentId]}
+
+【元レシピ】
+\${recipeText}
+
+【現在の改善案】
+\${currentProposalText}
+
+【これまでの会話】
+\${conversationText}
+
+【今回のユーザー質問・修正依頼】
+\${normalizeText(question)}
+
+\${memoryContext}
+
+\${directionContext}
+
+【判断ルール】
+- 単なる説明要求でも、回答に必要な根拠と留保を整理する。
+- 改善案の変更が必要なら、どの材料・工程・狙いをどう変えるべきかを明示する。
+- 元レシピと現在案の意図から外れた変更は避ける。
+
+\${directionContext ? DIRECTION_LOCK_RULES : ''}
+\${agentId === 'heritage' || agentId === 'research' || agentId === 'globalComparison' || agentId === 'validator' ? WEB_RESEARCH_AGENT_PROTOCOL : ''}
+\${agentId === 'globalComparison' ? AUTHENTIC_SOURCE_COMPARISON_RULES : ''}
+\${EVIDENCE_DISCIPLINE_RULES}
+\${STRICT_JSON_OUTPUT_RULES}
+以下のJSONのみを返してください。
+\${AGENT_OUTPUT_SCHEMA}
+\`;
+};
+
+const buildConversationCrossCheckPrompt = ({ mode, recipeText, currentProposalText, conversationText, question, agentFindings, forceReproposal, memoryContext = '', directionContext = '' }) => \`
+あなたは料理監修委員会の最終クロスチェック担当です。
+現在案への追加質問に対する回答と、必要なレシピ更新が妥当かを、Web検索で確認できる標準レシピ・専門記事・科学的知見と突き合わせて独立監査してください。
+
+【モード】
+\${mode === 'product' ? '新規商品開発の会話継続' : '既存レシピ改善の会話継続'}
+
+【元レシピまたは現在フォーム内容】
+\${recipeText}
+
+【現在案】
+\${currentProposalText}
+
+【これまでの会話】
+\${conversationText}
+
+【今回のユーザー質問・修正依頼】
+\${normalizeText(question)}
+
+\${memoryContext}
+
+\${directionContext}
+
+【専門エージェント所見】
+\${agentFindings}
+
 【今回の処理モード】
 \${forceReproposal
         ? '再提案モード: ユーザーは会話内容を踏まえた新しい改善レシピ案を求めています。shouldUpdateProposalは必ずtrueにし、proposal.ingredientsとproposal.stepsを必ず完全な更新後レシピとして作り直してください。answerだけでレシピ本文を済ませてはいけません。'
         : '通常会話モード: 質問に直接回答し、必要がある場合だけproposalを更新してください。ただしproposalには常に完全な現在案を返してください。'}
 
 【応答ルール】
-- まず質問に直接答える。
-- ユーザーが「もっと軽く」「原価を下げて」「工程を短く」「この材料を抜いて」など改善方向を示した場合は、proposalを更新する。
-- ユーザーが「再度提示」「再提案」「レシピを作成」「このバージョン」などを求めた場合は、answerで説明するだけでなく、proposalを新しい改善レシピ案として必ず更新する。
-- 単なる確認質問や説明要求の場合も、proposalには現在案を維持した完全なレシピ案を返す。
-- 更新する場合は、keyChangesに「今回の会話で何を変えたか」を明記する。
-- 元レシピ、現在案、エージェント所見、過去会話の文脈から外れた材料や技法を勝手に追加しない。
-- 海外・本場比較が必要な質問では、日本語圏だけでなく英語または本場圏ソースも比較し、差分を明示する。
-- 季節・薬膳・養生の文脈は扱わない。
+- 回答が雰囲気や一般論に流れていないか
+- 材料・分量・工程に過剰や不足がないか
+- 温度・時間・安全性・保存上の重要事項が未確認のまま断定されていないか
+- 海外・本場比較が必要な質問で、日本語圏だけの判断に偏っていないか
+- 更新しない場合も、その判断理由が明確か
 
+\${directionContext ? DIRECTION_LOCK_RULES : ''}
 \${WEB_RESEARCH_AGENT_PROTOCOL}
 \${AUTHENTIC_SOURCE_COMPARISON_RULES}
+\${EVIDENCE_DISCIPLINE_RULES}
+\${STRICT_JSON_OUTPUT_RULES}
+以下のJSONのみを返してください。
+{
+  "content": "会話回答とレシピ更新方針に対する監査コメント。200〜320文字",
+  "findings": ["監査所見1", "監査所見2", "監査所見3"],
+  "risks": ["未確認事項やリスク。なければ空配列"],
+  "recommendations": ["最終修正方針1", "最終修正方針2"]
+}
+\`;
+
+const buildFinalConversationPrompt = ({ mode, recipeText, currentProposalText, conversationText, question, agentFindings, auditFindings, forceReproposal, memoryContext = '', directionContext = '' }) => \`
+あなたは統括シェフエージェントです。
+現在案に対する追加質問について、専門エージェント調査と最終監査を統合し、正確で保存可能な回答とレシピ案を返してください。
+
+【モード】
+\${mode === 'product' ? '新規商品開発の会話継続' : '既存レシピ改善の会話継続'}
+
+【元レシピまたは現在フォーム内容】
+\${recipeText}
+
+【現在案】
+\${currentProposalText}
+
+【これまでの会話】
+\${conversationText}
+
+【今回のユーザー質問・修正依頼】
+\${normalizeText(question)}
+
+\${memoryContext}
+
+\${directionContext}
+
+【専門エージェント所見】
+\${agentFindings}
+
+【最終クロスチェック】
+\${auditFindings}
+
+【今回の処理モード】
+\${forceReproposal
+        ? '再提案モード: ユーザーは会話内容を踏まえた新しいレシピ案を求めています。shouldUpdateProposalは必ずtrueにし、proposal.ingredientsとproposal.stepsを必ず完全な更新後レシピとして作り直してください。'
+        : '通常会話モード: 質問に直接答え、レシピ変更が必要な場合だけshouldUpdateProposalをtrueにしてください。ただしproposalには常に完全な現在の最良案を返してください。'}
+
+【統合ルール】
+- answerでは、質問への直接回答、根拠、留保、必要なら判断理由を簡潔にまとめる。
+- 一般論ではなく、元レシピ、現在案、調査結果、監査結果に接続して答える。
+- 更新する場合は、keyChangesに今回の会話で何を変えたかを明記する。
+- 更新しない場合も、proposalには現在の最良案を完全な形で返す。
+- 海外・本場比較エージェントの所見は、日本の店舗オペレーションに有効な差分だけ採用する。
+- 事前確認回答の制約を最優先で守る。特に添加物・機能材の可否は例外なく反映する。
+- 季節・薬膳・養生の文脈は扱わない。
+
+\${directionContext ? DIRECTION_LOCK_RULES : ''}
 \${EVIDENCE_DISCIPLINE_RULES}
 \${STRICT_JSON_OUTPUT_RULES}
 以下のJSONのみを返してください。
@@ -1098,26 +1539,35 @@ const mergeProposalContext = (currentProposal, nextProposal, extra = {}) => {
             ...normalizeAgentMessages(extra.agentMessages),
         ],
         sources: mergeSources(current.sources, normalizeSources(extra.sources)),
-        audit: current.audit,
+        audit: next.audit || current.audit,
+        learningMeta: next.learningMeta || current.learningMeta || null,
     });
 };
 
-export const generateProductRecipeDraft = async ({ brief, provider }) => {
+export const generateProductRecipeDraft = async ({ brief, provider, directionContext = '' }) => {
     const cleanBrief = normalizeText(brief);
     if (!cleanBrief) throw new Error('開発テーマを入力してください。');
+    const { memories, memoryContext } = await buildRecipeAiMemoryContext({
+        modeFamily: 'product',
+        recipe: {
+            title: cleanBrief,
+            description: cleanBrief,
+        },
+        question: cleanBrief,
+    });
 
     const agentOrder = ['research', 'globalComparison', 'synthesizer', 'science', 'validator'];
     const agentOutputs = await Promise.all(agentOrder.map((agentId, index) => settleAgent({
         agent: AGENT_DEFINITIONS[agentId],
         provider,
-        prompt: buildProductAgentPrompt(agentId, cleanBrief),
+        prompt: buildProductAgentPrompt(agentId, cleanBrief, memoryContext, directionContext),
         note: \`\${AGENT_DEFINITIONS[agentId].agentName}の調査・判断に使用\`,
     }, index)));
     const agentFindings = formatAgentFindings(agentOutputs);
 
     const { parsed, payload } = await callRecipeAiJson({
         provider,
-        prompt: buildFinalProductPrompt({ brief: cleanBrief, agentFindings }),
+        prompt: buildFinalProductPrompt({ brief: cleanBrief, agentFindings, memoryContext, directionContext }),
         instructions: 'You are the executive chef agent. Synthesize all specialist findings into one save-ready recipe. Return strict JSON only.',
         tools: [{ type: 'web_search' }],
         toolChoice: 'auto',
@@ -1131,20 +1581,51 @@ export const generateProductRecipeDraft = async ({ brief, provider }) => {
         extractSourcesFromProviderResponse(payload, '統括シェフエージェントの最終判断に使用', 'M', provider)
     );
 
-    return completeProposalWithMeta({
+    const proposal = completeProposalWithMeta({
         proposal: parsed,
         agentOutputs,
         finalSources: sources,
     });
+    const runId = await logRecipeAiRun({
+        modeFamily: 'product',
+        runKind: 'generate',
+        provider,
+        recipe: {
+            title: cleanBrief,
+            description: cleanBrief,
+        },
+        proposal,
+        question: cleanBrief,
+        answer: proposal.improvementSummary || proposal.description,
+        agentMessages: proposal.agentMessages,
+        sources: proposal.sources,
+        metadata: {
+            retrievedMemoryIds: memories.map((memory) => memory.id),
+            directionContext: normalizeText(directionContext),
+        },
+    });
+
+    return normalizeAiProposal({
+        ...proposal,
+        learningMeta: {
+            runId,
+            modeFamily: 'product',
+        },
+    });
 };
 
-export const generateRecipeImprovement = async ({ recipe, notes, provider }) => {
+export const generateRecipeImprovement = async ({ recipe, notes, provider, directionContext = '' }) => {
     const recipeText = serializeRecipeForAi(recipe);
+    const { memories, memoryContext } = await buildRecipeAiMemoryContext({
+        modeFamily: 'improvement',
+        recipe,
+        question: notes,
+    });
     const agentOrder = ['heritage', 'research', 'globalComparison', 'synthesizer', 'science', 'validator'];
     const agentOutputs = await Promise.all(agentOrder.map((agentId, index) => settleAgent({
         agent: AGENT_DEFINITIONS[agentId],
         provider,
-        prompt: buildImprovementAgentPrompt(agentId, recipeText, notes),
+        prompt: buildImprovementAgentPrompt(agentId, recipeText, notes, memoryContext, directionContext),
         note: \`\${AGENT_DEFINITIONS[agentId].agentName}の調査・判断に使用\`,
     }, index)));
     const agentFindings = formatAgentFindings(agentOutputs);
@@ -1152,14 +1633,14 @@ export const generateRecipeImprovement = async ({ recipe, notes, provider }) => 
     const auditOutput = await settleAgent({
         agent: AGENT_DEFINITIONS.auditor,
         provider,
-        prompt: buildCrossCheckPrompt({ recipeText, notes, agentFindings }),
+        prompt: buildCrossCheckPrompt({ recipeText, notes, agentFindings, memoryContext, directionContext }),
         note: '最終クロスチェックの裏取りに使用',
     }, agentOutputs.length);
 
     const auditFindings = formatAgentFindings([auditOutput]);
     const { parsed, payload } = await callRecipeAiJson({
         provider,
-        prompt: buildFinalImprovementPrompt({ recipeText, notes, agentFindings, auditFindings }),
+        prompt: buildFinalImprovementPrompt({ recipeText, notes, agentFindings, auditFindings, memoryContext, directionContext }),
         instructions: 'You are the executive chef agent. Synthesize all specialist findings and audit results into one save-ready improved recipe. Return strict JSON only.',
         tools: [{ type: 'web_search' }],
         toolChoice: 'auto',
@@ -1174,11 +1655,34 @@ export const generateRecipeImprovement = async ({ recipe, notes, provider }) => 
         extractSourcesFromProviderResponse(payload, '統括シェフエージェントの最終判断に使用', 'M', provider)
     );
 
-    return completeProposalWithMeta({
+    const proposal = completeProposalWithMeta({
         proposal: parsed,
         agentOutputs,
         auditOutput,
         finalSources: sources,
+    });
+    const runId = await logRecipeAiRun({
+        modeFamily: 'improvement',
+        runKind: 'generate',
+        provider,
+        recipe,
+        proposal,
+        question: notes,
+        answer: proposal.improvementSummary || proposal.description,
+        agentMessages: proposal.agentMessages,
+        sources: proposal.sources,
+        metadata: {
+            retrievedMemoryIds: memories.map((memory) => memory.id),
+            directionContext: normalizeText(directionContext),
+        },
+    });
+
+    return normalizeAiProposal({
+        ...proposal,
+        learningMeta: {
+            runId,
+            modeFamily: 'improvement',
+        },
     });
 };
 
@@ -1188,6 +1692,8 @@ export const continueRecipeAiConversation = async ({
     conversation,
     question,
     provider,
+    mode = 'improvement',
+    directionContext = '',
 }) => {
     const cleanQuestion = normalizeText(question);
     if (!cleanQuestion) {
@@ -1198,18 +1704,61 @@ export const continueRecipeAiConversation = async ({
     const recipeText = serializeRecipeForAi(recipe);
     const currentProposalText = serializeProposalForAi(proposal);
     const conversationText = formatConversationForPrompt(conversation);
-    const { parsed, payload } = await callRecipeAiJson({
+    const { memories, memoryContext } = await buildRecipeAiMemoryContext({
+        modeFamily: mode === 'product' ? 'product' : 'improvement',
+        recipe,
+        proposal,
+        question: cleanQuestion,
+    });
+
+    const isProductMode = mode === 'product';
+    const agentOrder = isProductMode
+        ? ['research', 'globalComparison', 'synthesizer', 'science', 'validator']
+        : ['heritage', 'research', 'globalComparison', 'synthesizer', 'science', 'validator'];
+
+    const agentOutputs = await Promise.all(agentOrder.map((agentId, index) => settleAgent({
+        agent: AGENT_DEFINITIONS[agentId],
         provider,
-        prompt: buildConversationPrompt({
+        prompt: isProductMode
+            ? buildProductConversationAgentPrompt(agentId, recipeText, currentProposalText, conversationText, cleanQuestion, memoryContext, directionContext)
+            : buildImprovementConversationAgentPrompt(agentId, recipeText, currentProposalText, conversationText, cleanQuestion, memoryContext, directionContext),
+        note: \`\${AGENT_DEFINITIONS[agentId].agentName}の会話回答・再評価に使用\`,
+    }, index)));
+
+    const agentFindings = formatAgentFindings(agentOutputs);
+    const auditOutput = await settleAgent({
+        agent: AGENT_DEFINITIONS.auditor,
+        provider,
+        prompt: buildConversationCrossCheckPrompt({
+            mode,
             recipeText,
             currentProposalText,
             conversationText,
             question: cleanQuestion,
+            agentFindings,
             forceReproposal,
+            memoryContext,
+            directionContext,
         }),
-        instructions: forceReproposal
-            ? 'You are a conversational executive chef agent. The user requested a revised recipe proposal. Return strict JSON only, set shouldUpdateProposal true, and include complete updated ingredients and steps in proposal.'
-            : 'You are a conversational executive chef agent. Answer the user and update the current recipe proposal when requested. Return strict JSON only.',
+        note: '会話回答・再評価の最終クロスチェックに使用',
+    }, agentOutputs.length);
+
+    const auditFindings = formatAgentFindings([auditOutput]);
+    const { parsed, payload } = await callRecipeAiJson({
+        provider,
+        prompt: buildFinalConversationPrompt({
+            mode,
+            recipeText,
+            currentProposalText,
+            conversationText,
+            question: cleanQuestion,
+            agentFindings,
+            auditFindings,
+            forceReproposal,
+            memoryContext,
+            directionContext,
+        }),
+        instructions: 'You are a conversational executive chef agent. Use the specialist findings and audit results to answer accurately and return strict JSON only.',
         tools: [{ type: 'web_search' }],
         toolChoice: 'auto',
         maxOutputTokens: 7000,
@@ -1222,35 +1771,61 @@ export const continueRecipeAiConversation = async ({
     if (forceReproposal && !hasRecipeProposalBody(parsed?.proposal)) {
         throw new Error('再提案の材料案・手順案を生成できませんでした。もう一度、追加したい材料や方向性を具体的に入力してください。');
     }
-    const agentMessages = normalizeAgentMessages(parsed?.agentMessages).length > 0
-        ? normalizeAgentMessages(parsed.agentMessages)
-        : [{
-            agentId: 'conversation',
-            agentName: '会話調整エージェント',
-            avatar: '💬',
-            content: normalizeText(parsed?.answer) || '文脈を踏まえて改善案を更新しました。',
-            timestamp: '12:01:00',
-        }];
     const shouldUpdateProposal = forceReproposal || Boolean(parsed?.shouldUpdateProposal);
+    const enrichedProposal = completeProposalWithMeta({
+        proposal: proposedUpdate,
+        agentOutputs,
+        auditOutput,
+        finalSources: mergeSources(
+            ...agentOutputs.map(output => output.sources),
+            auditOutput.sources,
+            sourceList
+        ),
+    });
     const updatedProposal = mergeProposalContext(
         proposal,
-        proposedUpdate,
+        enrichedProposal,
         {
-            agentMessages,
-            sources: sourceList,
+            agentMessages: enrichedProposal.agentMessages,
+            sources: enrichedProposal.sources,
         }
     );
     const answer = forceReproposal
         ? buildReproposalAnswer(updatedProposal)
         : normalizeText(parsed?.answer) || '文脈を踏まえた回答を生成できませんでした。';
+    const runId = await logRecipeAiRun({
+        modeFamily: isProductMode ? 'product' : 'improvement',
+        runKind: 'conversation',
+        provider,
+        recipe,
+        proposal: updatedProposal,
+        question: cleanQuestion,
+        answer,
+        agentMessages: updatedProposal.agentMessages,
+        sources: updatedProposal.sources,
+        metadata: {
+            forceReproposal,
+            shouldUpdateProposal,
+            retrievedMemoryIds: memories.map((memory) => memory.id),
+            conversation: normalizeConversationMessages(conversation).slice(-12),
+            directionContext: normalizeText(directionContext),
+        },
+    });
+    const finalProposal = normalizeAiProposal({
+        ...updatedProposal,
+        learningMeta: {
+            runId,
+            modeFamily: isProductMode ? 'product' : 'improvement',
+        },
+    });
 
     return {
         answer,
         shouldUpdateProposal,
         forceReproposal,
-        proposal: updatedProposal,
-        sources: sourceList,
-        agentMessages,
+        proposal: finalProposal,
+        sources: finalProposal.sources,
+        agentMessages: finalProposal.agentMessages,
     };
 };
 
