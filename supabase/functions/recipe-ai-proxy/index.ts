@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts"
 import { RateLimiter } from "../_shared/rate-limiter.ts"
+import { APILogger, getGroqCostBreakdown } from "../_shared/api-logger.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,6 +14,50 @@ const jsonResponse = (body: Record<string, unknown>, status: number) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     status,
   })
+
+const toPositiveInt = (value: unknown): number => {
+  const parsed = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : 0
+}
+
+const safeJsonParse = (value: string) => {
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
+const normalizeApiName = (provider: string) => {
+  if (provider === 'groq') return 'groq'
+  return 'sakana'
+}
+
+const extractUsageFromPayload = (payload: Record<string, unknown> | null) => {
+  if (!payload || typeof payload !== 'object') {
+    return { inputTokens: 0, outputTokens: 0 }
+  }
+
+  const usage = (payload as Record<string, unknown>)?.usage
+  if (usage && typeof usage === 'object') {
+    const typedUsage = usage as Record<string, unknown>
+    return {
+      inputTokens: toPositiveInt(
+        typedUsage.input_tokens
+        ?? typedUsage.prompt_tokens
+        ?? typedUsage.promptTokenCount
+      ),
+      outputTokens: toPositiveInt(
+        typedUsage.output_tokens
+        ?? typedUsage.completion_tokens
+        ?? typedUsage.output_text_tokens
+        ?? typedUsage.candidatesTokenCount
+      ),
+    }
+  }
+
+  return { inputTokens: 0, outputTokens: 0 }
+}
 
 // provider/endpoint ごとの転送先。ここに無い組み合わせは拒否する。
 // Sakana AI はサブスク用と従量課金（API）用でキーが別なので、格納先Secretも分ける。
@@ -72,9 +117,14 @@ serve(async (req) => {
   }
 
   const userId = String(jwtPayload.sub || '')
+  const userEmail = typeof jwtPayload.email === 'string' ? jwtPayload.email : null
   if (!userId) {
     return jsonResponse({ success: false, error: '認証情報が不正です。' }, 401)
   }
+
+  let apiLogger: APILogger | null = null
+  let requestMetadata: Record<string, unknown> | null = null
+  let requestSizeBytes = 0
 
   // DB ベースのレートリミット（AI改善案は1回の生成で8回前後呼ぶため窓を広めに取る）
   // この関数はAPIキーを返さない転送専用のため、RPC障害時はブロックしない（非strict）
@@ -90,22 +140,66 @@ serve(async (req) => {
     }, false)
     await limiter.check()
   } catch (rateLimitError) {
+    try {
+      apiLogger = new APILogger('recipe-ai-proxy', 'recipe-ai-proxy', null)
+      apiLogger.setUser(userId, userEmail)
+      await apiLogger.logRateLimit({
+        provider: null,
+        proxy_stage: 'local_rate_limit',
+        error: String((rateLimitError as Error).message || rateLimitError),
+      })
+    } catch {
+      // ignore logging failure
+    }
     return jsonResponse({ success: false, error: String((rateLimitError as Error).message) }, 429)
   }
 
   try {
     const { provider, endpoint, body } = await req.json()
+    const normalizedProvider = String(provider || '')
+    const requestModel = typeof body?.model === 'string' ? body.model : null
+    apiLogger = new APILogger(normalizeApiName(normalizedProvider), 'recipe-ai-proxy', requestModel)
+    apiLogger.setUser(userId, userEmail)
+    requestSizeBytes = JSON.stringify(body ?? {}).length
+    requestMetadata = {
+      provider: normalizedProvider,
+      proxy_endpoint: String(endpoint || ''),
+      request_model: requestModel,
+      tool_count: Array.isArray(body?.tools) ? body.tools.length : 0,
+      message_count: Array.isArray(body?.messages) ? body.messages.length : 0,
+      has_reasoning: Boolean(body?.reasoning),
+      has_response_format: Boolean(body?.response_format || body?.text?.format),
+    }
 
-    const target = PROVIDER_ENDPOINTS[String(provider)]?.[String(endpoint)]
+    const target = PROVIDER_ENDPOINTS[normalizedProvider]?.[String(endpoint)]
     if (!target) {
+      if (apiLogger) {
+        await apiLogger.logError('許可されていないプロバイダーまたはエンドポイントです。', {
+          ...requestMetadata,
+          proxy_stage: 'validate_target',
+        })
+      }
       return jsonResponse({ success: false, error: '許可されていないプロバイダーまたはエンドポイントです。' }, 400)
     }
     if (!body || typeof body !== 'object') {
+      if (apiLogger) {
+        await apiLogger.logError('リクエストボディが不正です。', {
+          ...requestMetadata,
+          proxy_stage: 'validate_body',
+        })
+      }
       return jsonResponse({ success: false, error: 'リクエストボディが不正です。' }, 400)
     }
 
     const apiKey = target.keyEnvs.map((env) => Deno.env.get(env)).find((value) => value)
     if (!apiKey) {
+      if (apiLogger) {
+        await apiLogger.logError(`${target.providerName} のAPIキーがサーバーに設定されていません。`, {
+          ...requestMetadata,
+          proxy_stage: 'load_api_key',
+          provider_name: target.providerName,
+        })
+      }
       return jsonResponse({ success: false, error: `${target.providerName} のAPIキーがサーバーに設定されていません。管理者に連絡してください。` }, 500)
     }
 
@@ -119,12 +213,66 @@ serve(async (req) => {
     })
 
     const responseText = await upstream.text()
+    const responseSizeBytes = responseText.length
+    const parsedPayload = safeJsonParse(responseText)
+    const usage = extractUsageFromPayload(parsedPayload)
+    const billing = normalizedProvider === 'groq'
+      ? getGroqCostBreakdown(requestModel || '', usage.inputTokens, usage.outputTokens)
+      : null
+
+    if (apiLogger) {
+      const metadata = {
+        ...requestMetadata,
+        provider_name: target.providerName,
+        upstream_url: target.url,
+        upstream_status: upstream.status,
+        usage,
+        billing_type: normalizedProvider === 'groq' ? 'token_weighted' : null,
+        billing_breakdown: billing ? {
+          model: billing.normalizedModel,
+          rate_per_1m_jpy: billing.ratePer1M,
+          input_tokens: billing.inputTokens,
+          output_tokens: billing.outputTokens,
+          input_cost_jpy: billing.inputCostJpy,
+          output_cost_jpy: billing.outputCostJpy,
+          total_cost_jpy: billing.totalCostJpy,
+        } : null,
+      }
+
+      if (upstream.ok) {
+        await apiLogger.logSuccess({
+          requestSizeBytes,
+          responseSizeBytes,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          estimatedCostJpy: billing?.totalCostJpy,
+          metadata,
+        })
+      } else if (upstream.status === 429) {
+        await apiLogger.logRateLimit(metadata)
+      } else {
+        await apiLogger.logError(`upstream ${upstream.status}`, {
+          ...metadata,
+          upstream_response_preview: responseText.slice(0, 800),
+        })
+      }
+    }
+
     return new Response(responseText, {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: upstream.status,
     })
   } catch (error) {
     console.error('❌ recipe-ai-proxy エラー:', error)
+    if (apiLogger) {
+      await apiLogger.logError(
+        error instanceof Error ? error.message : String(error),
+        {
+          ...(requestMetadata || {}),
+          proxy_stage: 'unhandled_exception',
+        },
+      )
+    }
     return jsonResponse({ success: false, error: 'サーバーエラーが発生しました。' }, 500)
   }
 })
