@@ -43,6 +43,15 @@ const EVIDENCE_DISCIPLINE_RULES = \`
 - 季節・薬膳・養生の文脈は扱わない。
 \`;
 
+const METRIC_UNIT_RULES = \`
+【単位ルール】
+- レシピ提案の分量表現は、材料欄・手順欄・回答文のすべてで必ず g または ml を使う。
+- 大さじ、小さじ、カップ、cup、tbsp、tsp、個、本、枚、少々、適量などの曖昧な単位や個数表現は使わない。
+- 卵、にんにく、板ゼラチンなども、そのまま個数で書かず、配合として扱える g または ml に換算して書く。
+- kg や L も使わず、必ず g または ml に統一する。
+- quantity は数値または数値レンジ、unit は "g" または "ml" のみとする。
+\`;
+
 const DIRECTION_LOCK_RULES = \`
 【事前確認回答の拘束ルール】
 - 「【事前確認で確定した方針】」がある場合、それは参考情報ではなく必須条件として扱う。
@@ -112,7 +121,7 @@ const PROPOSAL_OUTPUT_SCHEMA = \`
   "keyChanges": ["変更点1", "変更点2", "変更点3"],
   "warnings": ["注意点。なければ空配列"],
   "ingredients": [
-    { "name": "材料名", "quantity": "数値または範囲", "unit": "g/ml/個など", "note": "役割や注意点" }
+    { "name": "材料名", "quantity": "数値または範囲", "unit": "g または ml のみ", "note": "役割や注意点" }
   ],
   "steps": [
     { "text": "手順本文", "note": "狙い。不要なら空文字" }
@@ -135,7 +144,7 @@ const CONVERSATION_OUTPUT_SCHEMA = \`
     "keyChanges": ["更新点1", "更新点2"],
     "warnings": ["注意点。なければ空配列"],
     "ingredients": [
-      { "name": "材料名", "quantity": "数値または範囲", "unit": "g/ml/個など", "note": "役割や注意点" }
+      { "name": "材料名", "quantity": "数値または範囲", "unit": "g または ml のみ", "note": "役割や注意点" }
     ],
     "steps": [
       { "text": "手順本文", "note": "狙い。不要なら空文字" }
@@ -249,6 +258,8 @@ const normalizeText = (value) => String(value ?? '')
 
 const normalizeArray = (value) => Array.isArray(value) ? value : [];
 const normalizeStringArray = (value) => normalizeArray(value).map(normalizeText).filter(Boolean);
+const METRIC_ONLY_UNIT_VALUES = new Set(['g', 'ml']);
+const FORBIDDEN_RECIPE_UNIT_PATTERN = /\\b(?:kg|kilogram|kilograms|l|liter|liters|cup|cups|tbsp|tsp|teaspoon|teaspoons|tablespoon|tablespoons|cc)\\b|大さじ|小さじ|カップ|キロ|リットル|個|本|枚|少々|適量/i;
 
 const readLocalStorage = (key) => {
     try {
@@ -981,6 +992,34 @@ const normalizeAiProposal = (proposal) => {
     };
 };
 
+const validateMetricUnitsInProposal = (proposal) => {
+    const normalized = normalizeAiProposal(proposal);
+    const invalidIngredient = normalized.ingredients.find((item) => !METRIC_ONLY_UNIT_VALUES.has(item.unit));
+    if (invalidIngredient) {
+        throw new Error(\`AI提案の単位が不正です: \${invalidIngredient.name} は \${invalidIngredient.unit || '未設定'} でした。材料の unit は g または ml のみで返してください。\`);
+    }
+
+    const stepWithForbiddenUnit = normalized.steps.find((item) => FORBIDDEN_RECIPE_UNIT_PATTERN.test(item.text) || FORBIDDEN_RECIPE_UNIT_PATTERN.test(item.note));
+    if (stepWithForbiddenUnit) {
+        throw new Error(\`AI提案の手順に禁止単位が含まれています: \${stepWithForbiddenUnit.text}\`);
+    }
+
+    const warningWithForbiddenUnit = normalized.warnings.find((item) => FORBIDDEN_RECIPE_UNIT_PATTERN.test(item));
+    if (warningWithForbiddenUnit) {
+        throw new Error(\`AI提案の注意文に禁止単位が含まれています: \${warningWithForbiddenUnit}\`);
+    }
+
+    return normalized;
+};
+
+const validateMetricUnitsInConversationAnswer = (answer) => {
+    const normalizedAnswer = normalizeText(answer);
+    if (normalizedAnswer && FORBIDDEN_RECIPE_UNIT_PATTERN.test(normalizedAnswer)) {
+        throw new Error(\`AI回答に禁止単位が含まれています: \${normalizedAnswer}\`);
+    }
+    return normalizedAnswer;
+};
+
 const serializeProposalForAi = (proposal) => {
     const normalized = normalizeAiProposal(proposal);
     return [
@@ -1139,6 +1178,7 @@ const buildProductAgentPrompt = (agentId, brief, memoryContext = '', directionCo
 
 \${RECIPE_DEVELOPMENT_AGENT_PROTOCOL}
 \${directionContext ? DIRECTION_LOCK_RULES : ''}
+\${METRIC_UNIT_RULES}
 \${agentId === 'research' || agentId === 'globalComparison' || agentId === 'validator' ? WEB_RESEARCH_AGENT_PROTOCOL : ''}
 \${agentId === 'globalComparison' ? AUTHENTIC_SOURCE_COMPARISON_RULES : ''}
 \${EVIDENCE_DISCIPLINE_RULES}
@@ -1186,6 +1226,7 @@ const buildImprovementAgentPrompt = (agentId, recipeText, notes, memoryContext =
 - 安全性、アレルゲン、温度管理上の注意
 
 \${directionContext ? DIRECTION_LOCK_RULES : ''}
+\${METRIC_UNIT_RULES}
 \${agentId === 'heritage' || agentId === 'research' || agentId === 'globalComparison' || agentId === 'validator' ? WEB_RESEARCH_AGENT_PROTOCOL : ''}
 \${agentId === 'globalComparison' ? AUTHENTIC_SOURCE_COMPARISON_RULES : ''}
 \${EVIDENCE_DISCIPLINE_RULES}
@@ -1221,6 +1262,7 @@ const buildCrossCheckPrompt = ({ recipeText, notes, agentFindings, memoryContext
 - 季節・薬膳・養生の文脈は扱わない
 
 \${directionContext ? DIRECTION_LOCK_RULES : ''}
+\${METRIC_UNIT_RULES}
 \${WEB_RESEARCH_AGENT_PROTOCOL}
 \${AUTHENTIC_SOURCE_COMPARISON_RULES}
 \${EVIDENCE_DISCIPLINE_RULES}
@@ -1257,6 +1299,7 @@ const buildFinalProductPrompt = ({ brief, agentFindings, memoryContext = '', dir
 - 季節・薬膳・養生の文脈は扱わない。
 
 \${directionContext ? DIRECTION_LOCK_RULES : ''}
+\${METRIC_UNIT_RULES}
 \${EVIDENCE_DISCIPLINE_RULES}
 \${STRICT_JSON_OUTPUT_RULES}
 以下のJSONのみを返してください。
@@ -1293,6 +1336,7 @@ const buildFinalImprovementPrompt = ({ recipeText, notes, agentFindings, auditFi
 - 季節・薬膳・養生の文脈は扱わない。
 
 \${directionContext ? DIRECTION_LOCK_RULES : ''}
+\${METRIC_UNIT_RULES}
 \${EVIDENCE_DISCIPLINE_RULES}
 \${STRICT_JSON_OUTPUT_RULES}
 以下のJSONのみを返してください。
@@ -1339,6 +1383,7 @@ const buildProductConversationAgentPrompt = (agentId, recipeText, currentProposa
 
 \${RECIPE_DEVELOPMENT_AGENT_PROTOCOL}
 \${directionContext ? DIRECTION_LOCK_RULES : ''}
+\${METRIC_UNIT_RULES}
 \${agentId === 'research' || agentId === 'globalComparison' || agentId === 'validator' ? WEB_RESEARCH_AGENT_PROTOCOL : ''}
 \${agentId === 'globalComparison' ? AUTHENTIC_SOURCE_COMPARISON_RULES : ''}
 \${EVIDENCE_DISCIPLINE_RULES}
@@ -1389,6 +1434,7 @@ const buildImprovementConversationAgentPrompt = (agentId, recipeText, currentPro
 - 元レシピと現在案の意図から外れた変更は避ける。
 
 \${directionContext ? DIRECTION_LOCK_RULES : ''}
+\${METRIC_UNIT_RULES}
 \${agentId === 'heritage' || agentId === 'research' || agentId === 'globalComparison' || agentId === 'validator' ? WEB_RESEARCH_AGENT_PROTOCOL : ''}
 \${agentId === 'globalComparison' ? AUTHENTIC_SOURCE_COMPARISON_RULES : ''}
 \${EVIDENCE_DISCIPLINE_RULES}
@@ -1437,6 +1483,7 @@ const buildConversationCrossCheckPrompt = ({ mode, recipeText, currentProposalTe
 - 更新しない場合も、その判断理由が明確か
 
 \${directionContext ? DIRECTION_LOCK_RULES : ''}
+\${METRIC_UNIT_RULES}
 \${WEB_RESEARCH_AGENT_PROTOCOL}
 \${AUTHENTIC_SOURCE_COMPARISON_RULES}
 \${EVIDENCE_DISCIPLINE_RULES}
@@ -1494,6 +1541,7 @@ const buildFinalConversationPrompt = ({ mode, recipeText, currentProposalText, c
 - 季節・薬膳・養生の文脈は扱わない。
 
 \${directionContext ? DIRECTION_LOCK_RULES : ''}
+\${METRIC_UNIT_RULES}
 \${EVIDENCE_DISCIPLINE_RULES}
 \${STRICT_JSON_OUTPUT_RULES}
 以下のJSONのみを返してください。
@@ -1582,7 +1630,7 @@ export const generateProductRecipeDraft = async ({ brief, provider, directionCon
     );
 
     const proposal = completeProposalWithMeta({
-        proposal: parsed,
+        proposal: validateMetricUnitsInProposal(parsed),
         agentOutputs,
         finalSources: sources,
     });
@@ -1656,7 +1704,7 @@ export const generateRecipeImprovement = async ({ recipe, notes, provider, direc
     );
 
     const proposal = completeProposalWithMeta({
-        proposal: parsed,
+        proposal: validateMetricUnitsInProposal(parsed),
         agentOutputs,
         auditOutput,
         finalSources: sources,
@@ -1767,7 +1815,9 @@ export const continueRecipeAiConversation = async ({
     });
 
     const sourceList = extractSourcesFromProviderResponse(payload, '会話回答・追加改善の参照に使用', 'C', provider);
-    const proposedUpdate = parsed?.proposal || proposal;
+    const proposedUpdate = parsed?.proposal
+        ? validateMetricUnitsInProposal(parsed.proposal)
+        : proposal;
     if (forceReproposal && !hasRecipeProposalBody(parsed?.proposal)) {
         throw new Error('再提案の材料案・手順案を生成できませんでした。もう一度、追加したい材料や方向性を具体的に入力してください。');
     }
@@ -1792,7 +1842,7 @@ export const continueRecipeAiConversation = async ({
     );
     const answer = forceReproposal
         ? buildReproposalAnswer(updatedProposal)
-        : normalizeText(parsed?.answer) || '文脈を踏まえた回答を生成できませんでした。';
+        : validateMetricUnitsInConversationAnswer(parsed?.answer) || '文脈を踏まえた回答を生成できませんでした。';
     const runId = await logRecipeAiRun({
         modeFamily: isProductMode ? 'product' : 'improvement',
         runKind: 'conversation',
