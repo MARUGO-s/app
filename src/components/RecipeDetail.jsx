@@ -8,8 +8,6 @@ import {
     buildRecipePayloadFromAiProposal,
     continueRecipeAiConversation,
     generateRecipeImprovement,
-    getStoredRecipeAiSettings,
-    saveStoredRecipeAiSettings,
     isSakanaUnlocked,
     unlockSakana,
 } from '../services/recipeAiService';
@@ -22,6 +20,7 @@ import { unitConversionService } from '../services/unitConversionService';
 import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../contexts/useToast';
 import { SUPPORTED_LANGUAGES } from '../constants';
+import { getRecipeAiProgressConfig } from '../constants/recipeAiProgress';
 import { normalizeUnit } from '../utils/unitUtils';
 import './RecipeDetail.css';
 import { FavoriteStarButton } from './FavoriteStarButton';
@@ -537,22 +536,27 @@ export const RecipeDetail = ({
     const [uiTextCache, setUiTextCache] = React.useState({});
     const [isAiModalOpen, setIsAiModalOpen] = React.useState(false);
     const [isActionMenuOpen, setIsActionMenuOpen] = React.useState(false);
-    const [aiProvider, setAiProvider] = React.useState(() => getStoredRecipeAiSettings().provider);
+    const [aiProvider, setAiProvider] = React.useState('groq');
     const [sakanaUnlocked, setSakanaUnlocked] = React.useState(() => isSakanaUnlocked());
 
+    const ensureSakanaUnlockedForProvider = (provider) => {
+        if (!String(provider || '').startsWith('sakana') || sakanaUnlocked) return true;
+        const input = window.prompt('Sakana AIはロックされています。解除パスワードを入力してください。');
+        if (input === null) return false;
+        if (!unlockSakana(input)) {
+            toast.error('パスワードが違います。');
+            return false;
+        }
+        setSakanaUnlocked(true);
+        toast.success('Sakana AIのロックを解除しました。');
+        return true;
+    };
+
     const handleAiProviderChange = (value) => {
-        if (value.startsWith('sakana') && !sakanaUnlocked) {
-            const input = window.prompt('Sakana AIはロックされています。解除パスワードを入力してください。');
-            if (input === null) return;
-            if (!unlockSakana(input)) {
-                toast.error('パスワードが違います。');
-                return;
-            }
-            setSakanaUnlocked(true);
-            toast.success('Sakana AIのロックを解除しました。');
+        if (!ensureSakanaUnlockedForProvider(value)) {
+            return;
         }
         setAiProvider(value);
-        saveStoredRecipeAiSettings({ provider: value });
     };
     const [aiNotes, setAiNotes] = React.useState('');
     const [aiProposal, setAiProposal] = React.useState(null);
@@ -562,6 +566,13 @@ export const RecipeDetail = ({
     const [aiConversation, setAiConversation] = React.useState([]);
     const [aiConversationInput, setAiConversationInput] = React.useState('');
     const [isAiConversing, setIsAiConversing] = React.useState(false);
+    const [aiProgressMode, setAiProgressMode] = React.useState(null);
+    const [aiProgressStepIndex, setAiProgressStepIndex] = React.useState(0);
+    const aiProgressConfig = React.useMemo(
+        () => (aiProgressMode ? getRecipeAiProgressConfig(aiProgressMode) : null),
+        [aiProgressMode]
+    );
+    const isAiProgressOpen = Boolean(aiProgressConfig) && (isAiGenerating || isAiConversing);
 
     // Scaling State
     const [baseItem, setBaseItem] = React.useState('total'); // 'total', 'flourTotal', 'flour-0', 'other-1', etc.
@@ -622,6 +633,15 @@ export const RecipeDetail = ({
             mounted = false;
         };
     }, []);
+
+    React.useEffect(() => {
+        if (!isAiProgressOpen || !aiProgressConfig) return undefined;
+        setAiProgressStepIndex(0);
+        const intervalId = window.setInterval(() => {
+            setAiProgressStepIndex((current) => Math.min(current + 1, aiProgressConfig.steps.length - 1));
+        }, 2200);
+        return () => window.clearInterval(intervalId);
+    }, [isAiProgressOpen, aiProgressConfig]);
 
     const costAdjustedRecipe = React.useMemo(() => {
         const adjustItem = (item, options = {}) => {
@@ -785,6 +805,11 @@ export const RecipeDetail = ({
     };
 
     const handleGenerateAiImprovement = async () => {
+        if (!ensureSakanaUnlockedForProvider(aiProvider)) {
+            return;
+        }
+        setAiProgressMode('improvement-generate');
+        setAiProgressStepIndex(0);
         setIsAiGenerating(true);
         setAiError('');
         try {
@@ -809,6 +834,8 @@ export const RecipeDetail = ({
             setAiError(error?.message || 'AI改善案の作成に失敗しました。');
         } finally {
             setIsAiGenerating(false);
+            setAiProgressMode(null);
+            setAiProgressStepIndex(0);
         }
     };
 
@@ -822,7 +849,12 @@ export const RecipeDetail = ({
             setAiError('先にAI改善案を作成してください。');
             return;
         }
+        if (!ensureSakanaUnlockedForProvider(aiProvider)) {
+            return;
+        }
 
+        setAiProgressMode('improvement-conversation');
+        setAiProgressStepIndex(0);
         setIsAiConversing(true);
         setAiError('');
         const userMessage = { role: 'user', content: question };
@@ -844,6 +876,7 @@ export const RecipeDetail = ({
                 conversation: nextConversation,
                 question,
                 provider: aiProvider,
+                mode: 'improvement',
             });
 
             setAiProposal(response.proposal);
@@ -858,6 +891,8 @@ export const RecipeDetail = ({
             setAiConversation(nextConversation);
         } finally {
             setIsAiConversing(false);
+            setAiProgressMode(null);
+            setAiProgressStepIndex(0);
         }
     };
 
@@ -2735,6 +2770,49 @@ export const RecipeDetail = ({
                                 </div>
                             </div>
                         )}
+                        </div>
+                    </Modal>
+                )}
+
+                {!isDeleted && (
+                    <Modal
+                        isOpen={isAiProgressOpen}
+                        onClose={() => {}}
+                        title={aiProgressConfig?.title || 'AIエージェント進行中'}
+                        size="small"
+                        showCloseButton={false}
+                        maxWidth="520px"
+                    >
+                        <div className="recipe-ai-progress">
+                            <p className="recipe-ai-progress__description">
+                                {aiProgressConfig?.description}
+                            </p>
+                            <div className="recipe-ai-progress__status">
+                                <span className="recipe-ai-progress__pulse" />
+                                <div>
+                                    <strong>現在の工程</strong>
+                                    <p>{aiProgressConfig?.steps?.[aiProgressStepIndex] || '進行状況を確認中'}</p>
+                                </div>
+                            </div>
+                            <div className="recipe-ai-progress__bar" aria-hidden="true">
+                                <span
+                                    className="recipe-ai-progress__bar-fill"
+                                    style={{
+                                        width: `${(((aiProgressStepIndex + 1) / Math.max(aiProgressConfig?.steps?.length || 1, 1)) * 100).toFixed(0)}%`,
+                                    }}
+                                />
+                            </div>
+                            <div className="recipe-ai-progress__steps">
+                                {(aiProgressConfig?.steps || []).map((step, index) => (
+                                    <div
+                                        key={`${step}-${index}`}
+                                        className={`recipe-ai-progress__step${index < aiProgressStepIndex ? ' is-complete' : ''}${index === aiProgressStepIndex ? ' is-active' : ''}`}
+                                    >
+                                        <span className="recipe-ai-progress__step-index">{index + 1}</span>
+                                        <span className="recipe-ai-progress__step-label">{step}</span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </Modal>
                 )}

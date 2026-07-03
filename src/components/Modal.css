@@ -98,6 +98,143 @@
     color: #333;
 }
 
+.recipe-ai-progress {
+    display: grid;
+    gap: 16px;
+}
+
+.recipe-ai-progress__description {
+    margin: 0;
+    color: #475569;
+    line-height: 1.6;
+    font-size: 0.94rem;
+}
+
+.recipe-ai-progress__status {
+    display: grid;
+    grid-template-columns: 18px 1fr;
+    gap: 12px;
+    align-items: start;
+    padding: 14px 16px;
+    border: 1px solid #dbeafe;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #eff6ff, #f8fafc);
+}
+
+.recipe-ai-progress__status strong {
+    display: block;
+    color: #0f172a;
+    font-size: 0.92rem;
+    margin-bottom: 4px;
+}
+
+.recipe-ai-progress__status p {
+    margin: 0;
+    color: #334155;
+    line-height: 1.55;
+    font-size: 0.92rem;
+}
+
+.recipe-ai-progress__pulse {
+    width: 12px;
+    height: 12px;
+    margin-top: 4px;
+    border-radius: 999px;
+    background: #0ea5e9;
+    box-shadow: 0 0 0 rgba(14, 165, 233, 0.35);
+    animation: aiPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes aiPulse {
+    0% {
+        transform: scale(0.9);
+        box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.35);
+    }
+
+    70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 10px rgba(14, 165, 233, 0);
+    }
+
+    100% {
+        transform: scale(0.9);
+        box-shadow: 0 0 0 0 rgba(14, 165, 233, 0);
+    }
+}
+
+.recipe-ai-progress__bar {
+    height: 8px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    overflow: hidden;
+}
+
+.recipe-ai-progress__bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #0ea5e9, #22c55e);
+    transition: width 0.35s ease;
+}
+
+.recipe-ai-progress__steps {
+    display: grid;
+    gap: 8px;
+}
+
+.recipe-ai-progress__step {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+    color: #64748b;
+    transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.recipe-ai-progress__step.is-active {
+    border-color: #7dd3fc;
+    background: #f0f9ff;
+    color: #0f172a;
+}
+
+.recipe-ai-progress__step.is-complete {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+    color: #166534;
+}
+
+.recipe-ai-progress__step-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    color: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.recipe-ai-progress__step.is-active .recipe-ai-progress__step-index {
+    background: #0ea5e9;
+    color: #fff;
+}
+
+.recipe-ai-progress__step.is-complete .recipe-ai-progress__step-index {
+    background: #22c55e;
+    color: #fff;
+}
+
+.recipe-ai-progress__step-label {
+    line-height: 1.45;
+    font-size: 0.88rem;
+}
+
 /* モバイル対応 */
 @media (max-width: 600px) {
     .modal-overlay {
@@ -124,5 +261,21 @@
 
     .modal-body {
         padding: 20px;
+    }
+
+    .recipe-ai-progress__status {
+        grid-template-columns: 14px 1fr;
+    }
+
+    .recipe-ai-progress__step {
+        grid-template-columns: 24px 1fr;
+        gap: 8px;
+        padding: 9px 10px;
+    }
+
+    .recipe-ai-progress__step-index {
+        width: 24px;
+        height: 24px;
+        font-size: 0.72rem;
     }
 }

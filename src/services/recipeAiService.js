@@ -1020,14 +1020,27 @@ ${STRICT_JSON_OUTPUT_RULES}
 ${PROPOSAL_OUTPUT_SCHEMA}
 `;
 
-const buildConversationPrompt = ({ recipeText, currentProposalText, conversationText, question, forceReproposal }) => `
-あなたは、レシピ改善提案の文脈を保持して会話する「会話調整エージェント」兼「統括シェフエージェント」です。
-ユーザーの追加質問に回答し、必要なら現在の改善案を更新してください。
+const buildProductConversationAgentPrompt = (agentId, recipeText, currentProposalText, conversationText, question) => {
+    const roleInstructions = {
+        research: `
+あなたはWeb調査エージェントです。現在の商品案とユーザー追加質問に対して、専門メディア・料理学校・技術記事・シェフ情報を調べ、回答と再設計に必要な根拠だけを抽出してください。`,
+        globalComparison: `
+あなたは海外・本場比較エージェントです。現在の商品案を日本語圏だけでなく、英語または本場圏の現地語ソースでも比較し、今回の質問に対して採用価値のある差分だけを示してください。`,
+        synthesizer: `
+あなたはレシピ統合エージェントです。現在の商品案と質問内容を踏まえ、配合・工程・提供オペレーションのどこをどう見直すべきかを統合してください。`,
+        science: `
+あなたは食品科学エージェントです。現在の商品案と質問内容に対して、食感・香り・歩留まり・安定性に関係する科学だけを抽出してください。`,
+        validator: `
+あなたは科学検証エージェントです。現在の商品案と質問内容を批判的に見て、温度、時間、分量、安全性、工程リスクの妥当性を確認してください。`,
+    };
 
-【元レシピ】
+    return `
+${roleInstructions[agentId]}
+
+【現在のフォーム内容】
 ${recipeText}
 
-【現在の改善案とエージェント所見】
+【現在の商品案】
 ${currentProposalText}
 
 【これまでの会話】
@@ -1036,23 +1049,151 @@ ${conversationText}
 【今回のユーザー質問・修正依頼】
 ${normalizeText(question)}
 
+【判断ルール】
+- 単なる説明要求でも、回答に必要な根拠と留保を整理する。
+- レシピ変更が必要なら、どの材料・工程・狙いをどう変えるべきかを明示する。
+- 現在の商品案にない材料や技法は、明確な理由がある場合だけ提案する。
+
+${RECIPE_DEVELOPMENT_AGENT_PROTOCOL}
+${agentId === 'research' || agentId === 'globalComparison' || agentId === 'validator' ? WEB_RESEARCH_AGENT_PROTOCOL : ''}
+${agentId === 'globalComparison' ? AUTHENTIC_SOURCE_COMPARISON_RULES : ''}
+${EVIDENCE_DISCIPLINE_RULES}
+${STRICT_JSON_OUTPUT_RULES}
+以下のJSONのみを返してください。
+${AGENT_OUTPUT_SCHEMA}
+`;
+};
+
+const buildImprovementConversationAgentPrompt = (agentId, recipeText, currentProposalText, conversationText, question) => {
+    const roleInstructions = {
+        heritage: `
+あなたは料理文化調査エージェントです。元レシピと現在の改善案がどの料理文脈に位置するかを見直し、今回の質問に対して文化的・技術的に無理のない回答を出してください。`,
+        research: `
+あなたは調理技術調査エージェントです。今回の質問に対して、同種料理の標準工程、プロの技術記事、実務的な調理ノウハウを照合してください。`,
+        globalComparison: `
+あなたは海外・本場比較エージェントです。元レシピと現在の改善案を日本語圏だけでなく、英語または本場圏の現地語ソースでも見直し、今回の質問に対して採用価値のある差分だけを示してください。`,
+        synthesizer: `
+あなたは配合監査エージェントです。現在の改善案に対して、今回の質問を踏まえた配合・工程・再現性の見直し点を監査してください。`,
+        science: `
+あなたは食品科学エージェントです。今回の質問に関係する材料と工程だけに絞って、食感・香り・歩留まり・安定性の科学的判断を示してください。`,
+        validator: `
+あなたは品質検証エージェントです。現在の改善案と今回の質問に対して、温度・時間・安全性・保存・工程リスクの妥当性を確認してください。`,
+    };
+
+    return `
+${roleInstructions[agentId]}
+
+【元レシピ】
+${recipeText}
+
+【現在の改善案】
+${currentProposalText}
+
+【これまでの会話】
+${conversationText}
+
+【今回のユーザー質問・修正依頼】
+${normalizeText(question)}
+
+【判断ルール】
+- 単なる説明要求でも、回答に必要な根拠と留保を整理する。
+- 改善案の変更が必要なら、どの材料・工程・狙いをどう変えるべきかを明示する。
+- 元レシピと現在案の意図から外れた変更は避ける。
+
+${agentId === 'heritage' || agentId === 'research' || agentId === 'globalComparison' || agentId === 'validator' ? WEB_RESEARCH_AGENT_PROTOCOL : ''}
+${agentId === 'globalComparison' ? AUTHENTIC_SOURCE_COMPARISON_RULES : ''}
+${EVIDENCE_DISCIPLINE_RULES}
+${STRICT_JSON_OUTPUT_RULES}
+以下のJSONのみを返してください。
+${AGENT_OUTPUT_SCHEMA}
+`;
+};
+
+const buildConversationCrossCheckPrompt = ({ mode, recipeText, currentProposalText, conversationText, question, agentFindings, forceReproposal }) => `
+あなたは料理監修委員会の最終クロスチェック担当です。
+現在案への追加質問に対する回答と、必要なレシピ更新が妥当かを、Web検索で確認できる標準レシピ・専門記事・科学的知見と突き合わせて独立監査してください。
+
+【モード】
+${mode === 'product' ? '新規商品開発の会話継続' : '既存レシピ改善の会話継続'}
+
+【元レシピまたは現在フォーム内容】
+${recipeText}
+
+【現在案】
+${currentProposalText}
+
+【これまでの会話】
+${conversationText}
+
+【今回のユーザー質問・修正依頼】
+${normalizeText(question)}
+
+【専門エージェント所見】
+${agentFindings}
+
 【今回の処理モード】
 ${forceReproposal
         ? '再提案モード: ユーザーは会話内容を踏まえた新しい改善レシピ案を求めています。shouldUpdateProposalは必ずtrueにし、proposal.ingredientsとproposal.stepsを必ず完全な更新後レシピとして作り直してください。answerだけでレシピ本文を済ませてはいけません。'
         : '通常会話モード: 質問に直接回答し、必要がある場合だけproposalを更新してください。ただしproposalには常に完全な現在案を返してください。'}
 
 【応答ルール】
-- まず質問に直接答える。
-- ユーザーが「もっと軽く」「原価を下げて」「工程を短く」「この材料を抜いて」など改善方向を示した場合は、proposalを更新する。
-- ユーザーが「再度提示」「再提案」「レシピを作成」「このバージョン」などを求めた場合は、answerで説明するだけでなく、proposalを新しい改善レシピ案として必ず更新する。
-- 単なる確認質問や説明要求の場合も、proposalには現在案を維持した完全なレシピ案を返す。
-- 更新する場合は、keyChangesに「今回の会話で何を変えたか」を明記する。
-- 元レシピ、現在案、エージェント所見、過去会話の文脈から外れた材料や技法を勝手に追加しない。
-- 海外・本場比較が必要な質問では、日本語圏だけでなく英語または本場圏ソースも比較し、差分を明示する。
-- 季節・薬膳・養生の文脈は扱わない。
+- 回答が雰囲気や一般論に流れていないか
+- 材料・分量・工程に過剰や不足がないか
+- 温度・時間・安全性・保存上の重要事項が未確認のまま断定されていないか
+- 海外・本場比較が必要な質問で、日本語圏だけの判断に偏っていないか
+- 更新しない場合も、その判断理由が明確か
 
 ${WEB_RESEARCH_AGENT_PROTOCOL}
 ${AUTHENTIC_SOURCE_COMPARISON_RULES}
+${EVIDENCE_DISCIPLINE_RULES}
+${STRICT_JSON_OUTPUT_RULES}
+以下のJSONのみを返してください。
+{
+  "content": "会話回答とレシピ更新方針に対する監査コメント。200〜320文字",
+  "findings": ["監査所見1", "監査所見2", "監査所見3"],
+  "risks": ["未確認事項やリスク。なければ空配列"],
+  "recommendations": ["最終修正方針1", "最終修正方針2"]
+}
+`;
+
+const buildFinalConversationPrompt = ({ mode, recipeText, currentProposalText, conversationText, question, agentFindings, auditFindings, forceReproposal }) => `
+あなたは統括シェフエージェントです。
+現在案に対する追加質問について、専門エージェント調査と最終監査を統合し、正確で保存可能な回答とレシピ案を返してください。
+
+【モード】
+${mode === 'product' ? '新規商品開発の会話継続' : '既存レシピ改善の会話継続'}
+
+【元レシピまたは現在フォーム内容】
+${recipeText}
+
+【現在案】
+${currentProposalText}
+
+【これまでの会話】
+${conversationText}
+
+【今回のユーザー質問・修正依頼】
+${normalizeText(question)}
+
+【専門エージェント所見】
+${agentFindings}
+
+【最終クロスチェック】
+${auditFindings}
+
+【今回の処理モード】
+${forceReproposal
+        ? '再提案モード: ユーザーは会話内容を踏まえた新しいレシピ案を求めています。shouldUpdateProposalは必ずtrueにし、proposal.ingredientsとproposal.stepsを必ず完全な更新後レシピとして作り直してください。'
+        : '通常会話モード: 質問に直接答え、レシピ変更が必要な場合だけshouldUpdateProposalをtrueにしてください。ただしproposalには常に完全な現在の最良案を返してください。'}
+
+【統合ルール】
+- answerでは、質問への直接回答、根拠、留保、必要なら判断理由を簡潔にまとめる。
+- 一般論ではなく、元レシピ、現在案、調査結果、監査結果に接続して答える。
+- 更新する場合は、keyChangesに今回の会話で何を変えたかを明記する。
+- 更新しない場合も、proposalには現在の最良案を完全な形で返す。
+- 海外・本場比較エージェントの所見は、日本の店舗オペレーションに有効な差分だけ採用する。
+- 季節・薬膳・養生の文脈は扱わない。
+
 ${EVIDENCE_DISCIPLINE_RULES}
 ${STRICT_JSON_OUTPUT_RULES}
 以下のJSONのみを返してください。
@@ -1098,7 +1239,7 @@ const mergeProposalContext = (currentProposal, nextProposal, extra = {}) => {
             ...normalizeAgentMessages(extra.agentMessages),
         ],
         sources: mergeSources(current.sources, normalizeSources(extra.sources)),
-        audit: current.audit,
+        audit: next.audit || current.audit,
     });
 };
 
@@ -1188,6 +1329,7 @@ export const continueRecipeAiConversation = async ({
     conversation,
     question,
     provider,
+    mode = 'improvement',
 }) => {
     const cleanQuestion = normalizeText(question);
     if (!cleanQuestion) {
@@ -1198,18 +1340,51 @@ export const continueRecipeAiConversation = async ({
     const recipeText = serializeRecipeForAi(recipe);
     const currentProposalText = serializeProposalForAi(proposal);
     const conversationText = formatConversationForPrompt(conversation);
-    const { parsed, payload } = await callRecipeAiJson({
+
+    const isProductMode = mode === 'product';
+    const agentOrder = isProductMode
+        ? ['research', 'globalComparison', 'synthesizer', 'science', 'validator']
+        : ['heritage', 'research', 'globalComparison', 'synthesizer', 'science', 'validator'];
+
+    const agentOutputs = await Promise.all(agentOrder.map((agentId, index) => settleAgent({
+        agent: AGENT_DEFINITIONS[agentId],
         provider,
-        prompt: buildConversationPrompt({
+        prompt: isProductMode
+            ? buildProductConversationAgentPrompt(agentId, recipeText, currentProposalText, conversationText, cleanQuestion)
+            : buildImprovementConversationAgentPrompt(agentId, recipeText, currentProposalText, conversationText, cleanQuestion),
+        note: `${AGENT_DEFINITIONS[agentId].agentName}の会話回答・再評価に使用`,
+    }, index)));
+
+    const agentFindings = formatAgentFindings(agentOutputs);
+    const auditOutput = await settleAgent({
+        agent: AGENT_DEFINITIONS.auditor,
+        provider,
+        prompt: buildConversationCrossCheckPrompt({
+            mode,
             recipeText,
             currentProposalText,
             conversationText,
             question: cleanQuestion,
+            agentFindings,
             forceReproposal,
         }),
-        instructions: forceReproposal
-            ? 'You are a conversational executive chef agent. The user requested a revised recipe proposal. Return strict JSON only, set shouldUpdateProposal true, and include complete updated ingredients and steps in proposal.'
-            : 'You are a conversational executive chef agent. Answer the user and update the current recipe proposal when requested. Return strict JSON only.',
+        note: '会話回答・再評価の最終クロスチェックに使用',
+    }, agentOutputs.length);
+
+    const auditFindings = formatAgentFindings([auditOutput]);
+    const { parsed, payload } = await callRecipeAiJson({
+        provider,
+        prompt: buildFinalConversationPrompt({
+            mode,
+            recipeText,
+            currentProposalText,
+            conversationText,
+            question: cleanQuestion,
+            agentFindings,
+            auditFindings,
+            forceReproposal,
+        }),
+        instructions: 'You are a conversational executive chef agent. Use the specialist findings and audit results to answer accurately and return strict JSON only.',
         tools: [{ type: 'web_search' }],
         toolChoice: 'auto',
         maxOutputTokens: 7000,
@@ -1222,22 +1397,23 @@ export const continueRecipeAiConversation = async ({
     if (forceReproposal && !hasRecipeProposalBody(parsed?.proposal)) {
         throw new Error('再提案の材料案・手順案を生成できませんでした。もう一度、追加したい材料や方向性を具体的に入力してください。');
     }
-    const agentMessages = normalizeAgentMessages(parsed?.agentMessages).length > 0
-        ? normalizeAgentMessages(parsed.agentMessages)
-        : [{
-            agentId: 'conversation',
-            agentName: '会話調整エージェント',
-            avatar: '💬',
-            content: normalizeText(parsed?.answer) || '文脈を踏まえて改善案を更新しました。',
-            timestamp: '12:01:00',
-        }];
     const shouldUpdateProposal = forceReproposal || Boolean(parsed?.shouldUpdateProposal);
+    const enrichedProposal = completeProposalWithMeta({
+        proposal: proposedUpdate,
+        agentOutputs,
+        auditOutput,
+        finalSources: mergeSources(
+            ...agentOutputs.map(output => output.sources),
+            auditOutput.sources,
+            sourceList
+        ),
+    });
     const updatedProposal = mergeProposalContext(
         proposal,
-        proposedUpdate,
+        enrichedProposal,
         {
-            agentMessages,
-            sources: sourceList,
+            agentMessages: enrichedProposal.agentMessages,
+            sources: enrichedProposal.sources,
         }
     );
     const answer = forceReproposal
@@ -1249,8 +1425,8 @@ export const continueRecipeAiConversation = async ({
         shouldUpdateProposal,
         forceReproposal,
         proposal: updatedProposal,
-        sources: sourceList,
-        agentMessages,
+        sources: updatedProposal.sources,
+        agentMessages: updatedProposal.agentMessages,
     };
 };
 
