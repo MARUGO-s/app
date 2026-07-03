@@ -7,10 +7,13 @@ import { recipeService } from '../services/recipeService';
 import {
     buildRecipePayloadFromAiProposal,
     continueRecipeAiConversation,
+    generateRecipeAiIntake,
     generateRecipeImprovement,
     isSakanaUnlocked,
+    serializeRecipeAiDirectionContext,
     unlockSakana,
 } from '../services/recipeAiService';
+import { recordRecipeAiAdoption } from '../services/recipeAiLearningService';
 import {
     categoryCostOverrideService,
     getRecipeCostCategories,
@@ -559,9 +562,11 @@ export const RecipeDetail = ({
         setAiProvider(value);
     };
     const [aiNotes, setAiNotes] = React.useState('');
+    const [aiIntake, setAiIntake] = React.useState(null);
     const [aiProposal, setAiProposal] = React.useState(null);
     const [aiError, setAiError] = React.useState('');
     const [isAiGenerating, setIsAiGenerating] = React.useState(false);
+    const [isAiPreparingQuestions, setIsAiPreparingQuestions] = React.useState(false);
     const [isSavingAiProposal, setIsSavingAiProposal] = React.useState(false);
     const [aiConversation, setAiConversation] = React.useState([]);
     const [aiConversationInput, setAiConversationInput] = React.useState('');
@@ -804,26 +809,81 @@ export const RecipeDetail = ({
         }
     };
 
+    const handleAiIntakeAnswerChange = (questionId, answer) => {
+        setAiIntake((current) => {
+            if (!current) return current;
+            return {
+                ...current,
+                questions: (current.questions || []).map((question) => (
+                    question.id === questionId
+                        ? { ...question, answer }
+                        : question
+                )),
+            };
+        });
+    };
+
+    const loadAiImprovementIntake = async () => {
+        if (!ensureSakanaUnlockedForProvider(aiProvider)) {
+            return null;
+        }
+        let recipeForAi = sourceRecipe || recipe;
+        const hasLoadedContent = Array.isArray(recipeForAi?.steps) && Array.isArray(recipeForAi?.ingredients);
+        if (!hasLoadedContent && recipe?.id) {
+            recipeForAi = await recipeService.getRecipe(recipe.id);
+            setFullRecipe(recipeForAi);
+        }
+
+        setIsAiPreparingQuestions(true);
+        setAiError('');
+        try {
+            const intake = await generateRecipeAiIntake({
+                mode: 'improvement',
+                recipe: recipeForAi,
+                notes: aiNotes,
+                provider: aiProvider,
+            });
+            setAiIntake(intake);
+            toast.success('方向性の確認項目を作成しました。回答後に改善を開始してください。');
+            return { intake, recipeForAi };
+        } catch (error) {
+            console.error('[RecipeDetail] AI intake generation failed:', error);
+            setAiError(error?.message || '確認項目の作成に失敗しました。');
+            return null;
+        } finally {
+            setIsAiPreparingQuestions(false);
+        }
+    };
+
     const handleGenerateAiImprovement = async () => {
         if (!ensureSakanaUnlockedForProvider(aiProvider)) {
             return;
         }
+        let recipeForAi = sourceRecipe || recipe;
+        const hasLoadedContent = Array.isArray(recipeForAi?.steps) && Array.isArray(recipeForAi?.ingredients);
+        if (!hasLoadedContent && recipe?.id) {
+            recipeForAi = await recipeService.getRecipe(recipe.id);
+            setFullRecipe(recipeForAi);
+        }
+        if (!aiIntake?.questions?.length) {
+            await loadAiImprovementIntake();
+            return;
+        }
+        if ((aiIntake.questions || []).some((questionItem) => questionItem?.required !== false && !String(questionItem?.answer || '').trim())) {
+            setAiError('AIの確認項目に回答してから改善を開始してください。');
+            return;
+        }
+
         setAiProgressMode('improvement-generate');
         setAiProgressStepIndex(0);
         setIsAiGenerating(true);
         setAiError('');
         try {
-            let recipeForAi = sourceRecipe || recipe;
-            const hasLoadedContent = Array.isArray(recipeForAi?.steps) && Array.isArray(recipeForAi?.ingredients);
-            if (!hasLoadedContent && recipe?.id) {
-                recipeForAi = await recipeService.getRecipe(recipe.id);
-                setFullRecipe(recipeForAi);
-            }
-
             const proposal = await generateRecipeImprovement({
                 recipe: recipeForAi,
                 notes: aiNotes,
                 provider: aiProvider,
+                directionContext: serializeRecipeAiDirectionContext(aiIntake),
             });
             setAiProposal(proposal);
             setAiConversation([]);
@@ -877,6 +937,7 @@ export const RecipeDetail = ({
                 question,
                 provider: aiProvider,
                 mode: 'improvement',
+                directionContext: serializeRecipeAiDirectionContext(aiIntake),
             });
 
             setAiProposal(response.proposal);
@@ -913,6 +974,21 @@ export const RecipeDetail = ({
             if (!asNew) {
                 setFullRecipe(savedRecipe);
             }
+            await recordRecipeAiAdoption({
+                modeFamily: 'improvement',
+                proposal: aiProposal,
+                finalRecipe: savedRecipe,
+                baseRecipe: sourceRecipe || recipe,
+                sourceRunId: aiProposal?.learningMeta?.runId || null,
+                adoptionType: asNew ? 'accepted_proposal' : 'edited_after_ai',
+                feedbackNote: asNew ? 'AI改善案を別レシピとして保存' : 'AI改善案で既存レシピを上書き保存',
+                question: [...aiConversation].reverse().find((item) => item?.role === 'user')?.content || '',
+                answer: [...aiConversation].reverse().find((item) => item?.role === 'assistant')?.content || '',
+                metadata: {
+                    asNew,
+                    conversation: aiConversation.slice(-12),
+                },
+            });
             onAiRecipeSaved?.(savedRecipe, { asNew });
             toast.success(asNew ? 'AI改善案を別レシピとして保存しました。' : 'AI改善案でレシピを上書きしました。');
         } catch (error) {
@@ -2603,6 +2679,61 @@ export const RecipeDetail = ({
                                     disabled={isAiGenerating || isSavingAiProposal}
                                 />
                             </label>
+                            <div className="recipe-ai-form__actions">
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    isLoading={isAiPreparingQuestions}
+                                    disabled={isAiGenerating || isAiConversing || isSavingAiProposal}
+                                    onClick={loadAiImprovementIntake}
+                                >
+                                    方向性の確認項目を出す
+                                </Button>
+                            </div>
+                            {aiIntake?.questions?.length > 0 && (
+                                <div className="recipe-ai-intake">
+                                    <div className="recipe-ai-intake__header">
+                                        <strong>改善前の確認項目</strong>
+                                        {aiIntake.summary && <p>{formatAiDisplayText(aiIntake.summary)}</p>}
+                                    </div>
+                                    <div className="recipe-ai-intake__list">
+                                        {aiIntake.questions.map((question, index) => (
+                                            <div className="recipe-ai-intake__item" key={question.id || index}>
+                                                <div className="recipe-ai-intake__title-row">
+                                                    <strong>{question.label || `確認項目 ${index + 1}`}</strong>
+                                                    {question.required !== false && <span>必須</span>}
+                                                </div>
+                                                <p className="recipe-ai-intake__question">{question.question}</p>
+                                                {question.rationale && (
+                                                    <p className="recipe-ai-intake__rationale">{question.rationale}</p>
+                                                )}
+                                                {question.options?.length > 0 && (
+                                                    <div className="recipe-ai-intake__options">
+                                                        {question.options.map((option) => (
+                                                            <button
+                                                                key={option}
+                                                                type="button"
+                                                                className={`recipe-ai-intake__option${String(question.answer || '').trim() === option ? ' is-active' : ''}`}
+                                                                onClick={() => handleAiIntakeAnswerChange(question.id, option)}
+                                                            >
+                                                                {option}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <textarea
+                                                    className="recipe-ai-form__textarea recipe-ai-intake__answer"
+                                                    value={question.answer || ''}
+                                                    onChange={(e) => handleAiIntakeAnswerChange(question.id, e.target.value)}
+                                                    placeholder={question.placeholder || '回答を入力'}
+                                                    disabled={isAiGenerating || isAiConversing || isSavingAiProposal}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             <Button
                                 type="button"
                                 variant="primary"
@@ -2611,7 +2742,7 @@ export const RecipeDetail = ({
                                 disabled={isAiGenerating || isSavingAiProposal}
                                 onClick={handleGenerateAiImprovement}
                             >
-                                エージェント改善を開始
+                                {aiIntake?.questions?.length ? '回答内容でエージェント改善を開始' : 'まず方向性を確認する'}
                             </Button>
                             {aiError && <div className="recipe-ai-form__error">{aiError}</div>}
                         </div>

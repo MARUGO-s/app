@@ -1079,9 +1079,12 @@ function AppContent() {
         setSearchParams({ view: 'detail', id: savedRecipe.id, ...getDetailReturnParams(), ...replacementParams }); // Better UX: Show the new recipe
       }
 
+      return savedRecipe;
+
     } catch (error) {
       console.error("Failed to save recipe:", error);
       toast.error(`保存に失敗しました\nエラー: ${error.message || error.error_description || JSON.stringify(error)}`);
+      return null;
     }
   };
 
