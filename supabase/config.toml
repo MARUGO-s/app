@@ -414,3 +414,9 @@ entrypoint = "./functions/classify-recipe-categories/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/classify-recipe-courses/index.ts"
+
+[functions.recipe-ai-proxy]
+enabled = true
+# 関数内で JWT を検証するため、ゲートウェイ側検証は無効化
+verify_jwt = false
+entrypoint = "./functions/recipe-ai-proxy/index.ts"

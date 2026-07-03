@@ -1139,7 +1139,14 @@ function AppContent() {
 
     typedRecipeData.sourceUrl = sourceUrl;
     if (sourceUrl?.startsWith('pdf:')) {
-      typedRecipeData.category = '取り込み';
+      // PDF取り込み: AI/プレビューで決めたカテゴリを尊重し、無ければ「取り込み」。
+      typedRecipeData.category = normalizeRecipeCategory(recipeData.category, recipeData) || '取り込み';
+      // 親デザート名（1皿を構成する複数パーツのまとまり）をタグに残す。
+      const dishName = String(recipeData.dishName || '').trim();
+      if (dishName) {
+        const existingTags = Array.isArray(typedRecipeData.tags) ? typedRecipeData.tags : [];
+        typedRecipeData.tags = Array.from(new Set([...existingTags, dishName]));
+      }
     } else if (sourceUrl) {
       typedRecipeData.category = '取り込み';
     }
@@ -1147,7 +1154,7 @@ function AppContent() {
     setSearchParams({ view: 'create' });
   };
 
-  const handleImportRecipeBatch = async (recipes, importOptions = {}, sourceLabel = '') => {
+  const handleImportRecipeBatch = async (recipes, importOptions = {}) => {
     if (!user?.id) {
       toast.warning('ログインが必要です');
       return;
@@ -1161,11 +1168,19 @@ function AppContent() {
         const raw = recipes[i];
         const title = String(raw?.title || raw?.name || `レシピ ${i + 1}`).trim();
         try {
+          // 各パーツのカテゴリ（AI/プレビュー由来）を尊重。無ければ「取り込み」。
+          const category = normalizeRecipeCategory(raw?.category, raw) || '取り込み';
           const payload = mapImportedRecipeToSavePayload(raw, {
-            category: '取り込み',
+            category,
             sourceUrl: '',
             importOptions,
           });
+          // 親デザート名を全パーツ共通のタグとして付与（テーブル形式は維持）。
+          const dishName = String(raw?.dishName || '').trim();
+          if (dishName) {
+            const existingTags = Array.isArray(payload.tags) ? payload.tags : [];
+            payload.tags = Array.from(new Set([...existingTags, dishName]));
+          }
           await recipeService.createRecipe(payload, user);
           successCount += 1;
         } catch (error) {
@@ -1935,6 +1950,18 @@ function AppContent() {
           onView={addToHistory}
           onHardDelete={handleHardDeleteRecipe}
           onDuplicate={handleDuplicate}
+          onAiRecipeSaved={(savedRecipe, { asNew } = {}) => {
+            setRecipes(prevRecipes => {
+              const filtered = prevRecipes.filter(r => String(r.id) !== String(savedRecipe.id));
+              if (asNew) {
+                return [savedRecipe, ...filtered];
+              }
+              return prevRecipes.map(r => String(r.id) === String(savedRecipe.id) ? savedRecipe : r);
+            });
+            if (asNew) {
+              setSearchParams({ view: 'detail', id: savedRecipe.id, ...getDetailReturnParams() });
+            }
+          }}
           forceEditEnabled={searchParams.get('from') === 'composite-cost-edit' || searchParams.get('from') === 'composite-cost'}
           onOpenCompositeCost={() => setSearchParams({
             view: 'composite-cost',

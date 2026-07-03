@@ -13,6 +13,14 @@ import { applyImportedRecipeType } from '../utils/importRecipeType';
 import { mapImportedRecipeToSavePayload } from '../utils/importedRecipeMapper';
 import { recipeService } from '../services/recipeService';
 import {
+    continueRecipeAiConversation,
+    generateProductRecipeDraft,
+    getStoredRecipeAiSettings,
+    saveStoredRecipeAiSettings,
+    isSakanaUnlocked,
+    unlockSakana,
+} from '../services/recipeAiService';
+import {
     loadRecipeMetaSuggestions,
     rememberRecipeMetaFields,
 } from '../services/recipeMetaSuggestionService';
@@ -22,6 +30,13 @@ import { useToast } from '../contexts/useToast';
 import './RecipeForm.css';
 import './RecipeFormMock.css';
 import { ImportModal } from './ImportModal';
+
+const formatAiDisplayText = (value) => String(value ?? '')
+    .replace(/\\r\\n|\\n|\\r/g, '\n')
+    .replace(/\\t/g, ' ')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 
 export const RecipeForm = ({ onSave, onCancel, initialData }) => {
     const safeInitialData = initialData || {};
@@ -158,6 +173,30 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         servings: [],
         storeName: STORE_LIST,
     });
+    const [aiBrief, setAiBrief] = useState('');
+    const [aiDraft, setAiDraft] = useState(null);
+    const [aiError, setAiError] = useState('');
+    const [isAiGenerating, setIsAiGenerating] = useState(false);
+    const [aiConversation, setAiConversation] = useState([]);
+    const [aiConversationInput, setAiConversationInput] = useState('');
+    const [isAiConversing, setIsAiConversing] = useState(false);
+    const [aiProvider, setAiProvider] = useState(() => getStoredRecipeAiSettings().provider);
+    const [sakanaUnlocked, setSakanaUnlocked] = useState(() => isSakanaUnlocked());
+
+    const handleAiProviderChange = (value) => {
+        if (value.startsWith('sakana') && !sakanaUnlocked) {
+            const input = window.prompt('Sakana AIはロックされています。解除パスワードを入力してください。');
+            if (input === null) return;
+            if (!unlockSakana(input)) {
+                toast.error('パスワードが違います。');
+                return;
+            }
+            setSakanaUnlocked(true);
+            toast.success('Sakana AIのロックを解除しました。');
+        }
+        setAiProvider(value);
+        saveStoredRecipeAiSettings({ provider: value });
+    };
 
     useEffect(() => {
         if (!user?.id) return undefined;
@@ -359,6 +398,115 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
             console.error(err);
             toast.error(err?.message || '一括登録に失敗しました');
             throw err;
+        }
+    };
+
+    const applyAiDraftToForm = (draft) => {
+        if (!draft) return;
+
+        const ingredientGroupId = crypto.randomUUID();
+        const mappedIngredients = (draft.ingredients || []).map((item) => ({
+            id: crypto.randomUUID(),
+            name: item.name || '',
+            quantity: item.quantity || '',
+            unit: item.unit || '',
+            cost: '',
+            purchaseCost: '',
+            note: item.note || '',
+            groupId: ingredientGroupId,
+        }));
+        const mappedSteps = (draft.steps || []).map((item) => ({
+            id: crypto.randomUUID(),
+            text: item.text || '',
+        }));
+
+        setFormData(prev => ({
+            ...prev,
+            title: draft.title || prev.title,
+            description: draft.description || draft.improvementSummary || prev.description,
+            course: draft.course || prev.course,
+            category: draft.category || prev.category,
+            country: draft.country || prev.country,
+            servings: draft.servings || prev.servings,
+            type: 'normal',
+            ingredients: mappedIngredients.length > 0 ? mappedIngredients : prev.ingredients,
+            ingredientGroups: mappedIngredients.length > 0 ? [{ id: ingredientGroupId, name: '材料' }] : prev.ingredientGroups,
+            steps: mappedSteps.length > 0 ? mappedSteps : prev.steps,
+            stepGroups: [],
+            ingredientSections: undefined,
+            stepSections: undefined,
+            flours: [],
+            breadIngredients: [],
+        }));
+        setWorkTab('ingredients');
+    };
+
+    const handleGenerateAiDraft = async () => {
+        const brief = [aiBrief, formData.title, formData.description].map(v => String(v || '').trim()).filter(Boolean).join('\n');
+        if (!brief) {
+            setAiError('開発テーマかレシピ名を入力してください。');
+            return;
+        }
+
+        setIsAiGenerating(true);
+        setAiError('');
+        try {
+            const draft = await generateProductRecipeDraft({
+                brief,
+                provider: aiProvider,
+            });
+            setAiDraft(draft);
+            applyAiDraftToForm(draft);
+            setAiConversation([]);
+            setAiConversationInput('');
+            toast.success('AIドラフトをフォームに反映しました。');
+        } catch (error) {
+            console.error('[RecipeForm] AI draft generation failed:', error);
+            setAiError(error?.message || 'AIドラフトの生成に失敗しました。');
+        } finally {
+            setIsAiGenerating(false);
+        }
+    };
+
+    const handleAskAiDraftFollowUp = async () => {
+        const question = aiConversationInput.trim();
+        if (!question) {
+            setAiError('追加の質問または修正内容を入力してください。');
+            return;
+        }
+        if (!aiDraft) {
+            setAiError('先にAIドラフトを作成してください。');
+            return;
+        }
+
+        setIsAiConversing(true);
+        setAiError('');
+        const userMessage = { role: 'user', content: question };
+        const nextConversation = [...aiConversation, userMessage];
+        setAiConversation(nextConversation);
+        setAiConversationInput('');
+
+        try {
+            const response = await continueRecipeAiConversation({
+                recipe: formData,
+                proposal: aiDraft,
+                conversation: nextConversation,
+                question,
+                provider: aiProvider,
+            });
+            setAiDraft(response.proposal);
+            applyAiDraftToForm(response.proposal);
+            setAiConversation([
+                ...nextConversation,
+                { role: 'assistant', content: response.answer },
+            ]);
+            toast.success(response.forceReproposal ? '会話内容を踏まえて新しいドラフトを作成しました。' : response.shouldUpdateProposal ? '会話内容をドラフトに反映しました。' : 'AIが文脈を踏まえて回答しました。');
+        } catch (error) {
+            console.error('[RecipeForm] AI draft conversation failed:', error);
+            setAiError(error?.message || 'AI会話の実行に失敗しました。');
+            setAiConversation(nextConversation);
+        } finally {
+            setIsAiConversing(false);
         }
     };
 
@@ -628,6 +776,118 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
 
                     <div className="recipe-form-mock__grid">
                         <aside className="recipe-form-mock__col recipe-form-mock__col--side">
+                            {!safeInitialData?.id && (
+                                <Card className="recipe-form-mock__card recipe-form-mock__card--ai">
+                                    <div className="recipe-form-mock__card-title">マルチAI商品開発</div>
+                                    <div className="recipe-ai-form">
+                                        <label className="recipe-ai-form__label">
+                                            AIプロバイダー
+                                            <select
+                                                className="recipe-ai-form__select"
+                                                value={aiProvider}
+                                                onChange={(e) => handleAiProviderChange(e.target.value)}
+                                                disabled={isAiGenerating}
+                                            >
+                                                <option value="groq">Groq</option>
+                                                <option value="sakana-subscription">{sakanaUnlocked ? 'Sakana AI（サブスク）' : '🔒 Sakana AI（サブスク）'}</option>
+                                                <option value="sakana-payg">{sakanaUnlocked ? 'Sakana AI（従量課金）' : '🔒 Sakana AI（従量課金）'}</option>
+                                            </select>
+                                        </label>
+                                        <label className="recipe-ai-form__label">
+                                            開発テーマ
+                                            <textarea
+                                                className="recipe-ai-form__textarea"
+                                                value={aiBrief}
+                                                onChange={(e) => setAiBrief(e.target.value)}
+                                                placeholder="例: ランチ向けの軽い魚料理。仕込みは前日可、提供は5分以内。"
+                                                disabled={isAiGenerating}
+                                            />
+                                        </label>
+                                        <Button
+                                            type="button"
+                                            variant="primary"
+                                            size="sm"
+                                            block
+                                            isLoading={isAiGenerating}
+                                            onClick={handleGenerateAiDraft}
+                                        >
+                                            エージェント開発を開始
+                                        </Button>
+                                        {aiError && <div className="recipe-ai-form__error">{aiError}</div>}
+                                        {aiDraft?.agentMessages?.length > 0 && (
+                                            <div className="recipe-ai-form__agents">
+                                                <strong>エージェント所見</strong>
+                                                {aiDraft.agentMessages.map((message, index) => (
+                                                    <div className="recipe-ai-agent-line" key={`${message.agentId}-${index}`}>
+                                                        <span>{message.avatar}</span>
+                                                        <div>
+                                                            <b>{message.agentName}</b>
+                                                            <p>{formatAiDisplayText(message.content)}</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {aiDraft?.keyChanges?.length > 0 && (
+                                            <div className="recipe-ai-form__result">
+                                                <strong>反映した要点</strong>
+                                                <ul>
+                                                    {aiDraft.keyChanges.slice(0, 4).map((item, index) => (
+                                                        <li key={`${item}-${index}`}>{item}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                        {aiDraft?.sources?.length > 0 && (
+                                            <div className="recipe-ai-form__sources">
+                                                <strong>参照ソース</strong>
+                                                {aiDraft.sources.slice(0, 4).map((source) => (
+                                                    <a key={source.url} href={source.url} target="_blank" rel="noreferrer">
+                                                        {source.id ? `[${source.id}] ` : ''}{source.title || source.url}
+                                                    </a>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {aiDraft && (
+                                            <div className="recipe-ai-form__conversation">
+                                                <strong>続けて相談・再開発</strong>
+                                                {aiConversation.length > 0 && (
+                                                    <div className="recipe-ai-form__conversation-messages">
+                                                        {aiConversation.map((message, index) => (
+                                                            <div
+                                                                className={`recipe-ai-form__conversation-message recipe-ai-form__conversation-message--${message.role === 'assistant' ? 'assistant' : 'user'}`}
+                                                                key={`${message.role}-${index}-${message.content.slice(0, 16)}`}
+                                                            >
+                                                                <span>{message.role === 'assistant' ? 'AI' : '質問'}</span>
+                                                                <p>{formatAiDisplayText(message.content)}</p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <textarea
+                                                    className="recipe-ai-form__textarea"
+                                                    value={aiConversationInput}
+                                                    onChange={(e) => setAiConversationInput(e.target.value)}
+                                                    placeholder="例: もっと原価を下げたい / 仕込みを前日に寄せたい / 肉を使わない案に変えて"
+                                                    disabled={isAiConversing || isAiGenerating}
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    block
+                                                    isLoading={isAiConversing}
+                                                    disabled={isAiConversing || isAiGenerating || !aiConversationInput.trim()}
+                                                    onClick={handleAskAiDraftFollowUp}
+                                                >
+                                                    文脈つきで質問・再開発
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </Card>
+                            )}
+
                             <Card className="recipe-form-mock__card recipe-form-mock__card--notes">
                                 <div className="recipe-form-mock__card-title">メモ</div>
                                 <Input

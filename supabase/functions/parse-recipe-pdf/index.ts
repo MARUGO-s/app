@@ -169,19 +169,54 @@ const normalizeDescription = (raw: unknown) => {
   return `${text.slice(0, MAX_DESCRIPTION_LENGTH - 1)}…`;
 };
 
+// レシピ「カテゴリー」固定リスト（フロントの RECIPE_CATEGORY_OPTIONS と一致させること。
+// '取り込み' は取り込み元マーカーなのでAIには選ばせない）
+const RECIPE_CATEGORIES = [
+  "料理",
+  "煮込み料理",
+  "温菜",
+  "冷菜",
+  "スープ",
+  "テリーヌ",
+  "ソース",
+  "ドレッシング",
+  "ソース・ドレッシング",
+  "付け合わせ・飾り",
+  "デザート・お菓子",
+  "パン",
+  "その他",
+];
+
 const buildPrompt = (fileName: string) => `
 あなたはプロの料理研究家・レシピ編集者です。
 添付PDFから「料理レシピ」だけを抽出し、JSONで返してください。
 
 【入力PDFファイル名】${fileName || "不明"}
 
-【抽出対象】
-- 各料理の名称（title）
-- 材料（ingredients: name, quantity, unit）
-- 作り方（steps: 文字列の配列）
-- 説明（description）: PDFに「歴史と起源」「歴史・起源」など、料理の歴史・由来を述べる節がある場合、その節の本文のみを記載する（見出し行は含めない）。該当節が無い場合は空文字 ""
+【重要・1皿が複数の完成品で構成される場合】
+- 1つの料理／デザートが、複数の「完成品（パーツ）」の組み合わせで仕上がる場合があります
+  （例: デザート1皿が「コンポート」「アイス／フローズン」「クランブル」「ソース」「盛り付け」で構成）。
+- その場合、各パーツを「別々のレシピ」として1件ずつ抽出してください（1パーツ=1レシピ）。
+- 「1. 〜」「2. 〜」のように番号付きの小見出しがあるときは、その単位で分割します。
 
-【description の取り方（重要）】
+【抽出対象（各レシピごと）】
+- title: そのパーツ／料理の名称
+- ingredients: 材料（name, quantity, unit）
+- steps: 作り方（文字列の配列）
+- description: PDFに「歴史と起源」など料理の歴史・由来を述べる節がある場合のみ、その節の本文（見出し行は含めない）。無ければ空文字 ""
+- category: 下記リストから、そのパーツの性質に最も合うものを1つだけ選ぶ
+- dishName: そのパーツが属する「完成した1皿（料理／デザート）の名称」。同じ皿に属する全パーツで同一の値にする。単独の料理なら title と同じでよい
+
+【category の選び方（リストから厳密に1つ）】
+${RECIPE_CATEGORIES.map((c) => `- ${c}`).join("\n")}
+分類のヒント:
+- デザートの構成要素（コンポート/アイス/フローズン/ムース/クリーム/ジュレ/クランブル/スポンジ/メレンゲ 等）→「デザート・お菓子」
+- 盛り付け・飾り・ガーニッシュ・トッピングの工程 →「付け合わせ・飾り」
+- ソース／クーリ／ピューレ等のかけるもの →「ソース」（ドレッシング寄りなら「ドレッシング」）
+- スープ・ポタージュ →「スープ」、煮込み →「煮込み料理」、パン・生地もの →「パン」
+- どれにも当てはまらない料理は「料理」、判断できなければ「その他」
+
+【description の取り方】
 - 見出し例: 「◆ 歴史と起源」「歴史と起源」「History / Origins」など同義表記
 - 「◆ 材料・分量」「◆ 作り方」「◆ 科学的ポイント」など他の節の内容は description に入れない
 - 改行はそのまま保持してよい（1000文字以内に収める）
@@ -194,10 +229,11 @@ const buildPrompt = (fileName: string) => `
 【出力ルール（厳守）】
 - 有効なJSONのみ。JSON以外の説明は禁止。
 - group は使わず null にする
+- category は必ず上記リストの文字列のいずれかと完全一致させる
 - 手順・材料名にダブルクォート " を含めない（「」を使う）
 - 形式:
-{"recipes":[{"title":"料理名","description":"歴史と起源の本文（無ければ空文字）","ingredients":[{"name":"材料","quantity":"","unit":""}],"steps":["手順1"]}]}
-- PDF内のレシピを漏れなく抽出する
+{"recipes":[{"title":"パーツ名","dishName":"完成した1皿の名称","category":"デザート・お菓子","description":"歴史と起源の本文（無ければ空文字）","ingredients":[{"name":"材料","quantity":"","unit":""}],"steps":["手順1"]}]}
+- PDF内のレシピ（パーツ）を漏れなく抽出する
 `;
 
 const RECIPE_RESPONSE_SCHEMA = {
@@ -209,6 +245,8 @@ const RECIPE_RESPONSE_SCHEMA = {
         type: "object",
         properties: {
           title: { type: "string" },
+          dishName: { type: "string" },
+          category: { type: "string" },
           description: { type: "string" },
           ingredients: {
             type: "array",
@@ -388,6 +426,12 @@ const normalizeIngredient = (ing: unknown) => {
   };
 };
 
+const normalizeCategory = (raw: unknown) => {
+  const text = String(raw || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  return RECIPE_CATEGORIES.includes(text) ? text : "";
+};
+
 const normalizeRecipe = (raw: unknown) => {
   if (!raw || typeof raw !== "object") return null;
   const row = raw as Record<string, unknown>;
@@ -414,6 +458,8 @@ const normalizeRecipe = (raw: unknown) => {
   return {
     title,
     name: title,
+    dishName: String(row.dishName || "").replace(/\s+/g, " ").trim(),
+    category: normalizeCategory(row.category),
     description: normalizeDescription(row.description),
     ingredients,
     steps,

@@ -314,6 +314,177 @@
     border-color: rgba(245, 158, 11, 0.22);
 }
 
+.recipe-form-mock .recipe-form-mock__card--ai.glass-card {
+    --card-accent: #38bdf8;
+    --card-accent-ring: rgba(56, 189, 248, 0.20);
+    background: linear-gradient(180deg, rgba(14, 165, 233, 0.16), var(--mock-surface));
+    border-color: rgba(56, 189, 248, 0.28);
+}
+
+.recipe-form-mock .recipe-ai-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.recipe-form-mock .recipe-ai-form__label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--mock-muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+}
+
+.recipe-form-mock .recipe-ai-form__input,
+.recipe-form-mock .recipe-ai-form__select,
+.recipe-form-mock .recipe-ai-form__textarea {
+    width: 100%;
+    border: 1px solid var(--mock-border-strong);
+    border-radius: 12px;
+    background: var(--mock-input);
+    color: var(--mock-text);
+    padding: 9px 10px;
+    font: inherit;
+    outline: none;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.recipe-form-mock .recipe-ai-form__textarea {
+    min-height: 92px;
+    resize: vertical;
+}
+
+.recipe-form-mock .recipe-ai-form__input:focus,
+.recipe-form-mock .recipe-ai-form__select:focus,
+.recipe-form-mock .recipe-ai-form__textarea:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.recipe-form-mock .recipe-ai-form__error {
+    border: 1px solid rgba(248, 113, 113, 0.34);
+    border-radius: 12px;
+    background: rgba(127, 29, 29, 0.28);
+    color: #fecaca;
+    padding: 9px 10px;
+    font-size: 0.82rem;
+    line-height: 1.5;
+}
+
+.recipe-form-mock .recipe-ai-form__result {
+    border: 1px solid rgba(56, 189, 248, 0.26);
+    border-radius: 12px;
+    background: rgba(14, 165, 233, 0.10);
+    color: var(--mock-text);
+    padding: 10px 12px;
+    font-size: 0.84rem;
+}
+
+.recipe-form-mock .recipe-ai-form__result ul {
+    margin: 8px 0 0;
+    padding-left: 1.15rem;
+    color: var(--mock-muted);
+    line-height: 1.5;
+}
+
+.recipe-form-mock .recipe-ai-form__agents,
+.recipe-form-mock .recipe-ai-form__sources {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.12);
+    color: var(--mock-text);
+    padding: 10px 12px;
+    font-size: 0.82rem;
+}
+
+.recipe-form-mock .recipe-ai-agent-line {
+    display: grid;
+    grid-template-columns: 24px 1fr;
+    gap: 8px;
+    margin-top: 9px;
+}
+
+.recipe-form-mock .recipe-ai-agent-line b {
+    color: var(--mock-text);
+}
+
+.recipe-form-mock .recipe-ai-agent-line p {
+    margin: 3px 0 0;
+    color: var(--mock-muted);
+    line-height: 1.5;
+    white-space: pre-line;
+}
+
+.recipe-form-mock .recipe-ai-form__sources {
+    display: grid;
+    gap: 7px;
+}
+
+.recipe-form-mock .recipe-ai-form__sources a {
+    color: #bae6fd;
+    text-decoration: none;
+    line-height: 1.35;
+}
+
+.recipe-form-mock .recipe-ai-form__sources a:hover {
+    text-decoration: underline;
+}
+
+.recipe-form-mock .recipe-ai-form__conversation {
+    display: grid;
+    gap: 10px;
+    border: 1px solid rgba(56, 189, 248, 0.22);
+    border-radius: 12px;
+    background: rgba(14, 165, 233, 0.08);
+    color: var(--mock-text);
+    padding: 10px 12px;
+    font-size: 0.82rem;
+}
+
+.recipe-form-mock .recipe-ai-form__conversation-messages {
+    display: grid;
+    gap: 8px;
+    max-height: 220px;
+    overflow: auto;
+}
+
+.recipe-form-mock .recipe-ai-form__conversation-message {
+    display: grid;
+    grid-template-columns: 42px 1fr;
+    gap: 7px;
+}
+
+.recipe-form-mock .recipe-ai-form__conversation-message span {
+    border-radius: 999px;
+    padding: 3px 6px;
+    text-align: center;
+    font-size: 0.68rem;
+    font-weight: 900;
+}
+
+.recipe-form-mock .recipe-ai-form__conversation-message--user span {
+    background: rgba(255, 255, 255, 0.16);
+    color: var(--mock-text);
+}
+
+.recipe-form-mock .recipe-ai-form__conversation-message--assistant span {
+    background: rgba(56, 189, 248, 0.18);
+    color: #bae6fd;
+}
+
+.recipe-form-mock .recipe-ai-form__conversation-message p {
+    margin: 0;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.12);
+    color: var(--mock-muted);
+    padding: 7px 9px;
+    line-height: 1.5;
+    white-space: pre-line;
+}
+
 .recipe-form-mock__tips-list {
     padding-left: 1.1rem;
     color: var(--mock-muted);

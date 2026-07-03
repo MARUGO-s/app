@@ -5,6 +5,7 @@ import { Button } from './Button';
 import { useToast } from '../contexts/useToast';
 import { parseRecipePdfFile } from '../utils/parseRecipePdf';
 import { normalizeImportedRecipe } from '../utils/importedRecipeMapper';
+import { RECIPE_CATEGORY_OPTIONS, normalizeRecipeCategory } from '../constants/recipeCategories';
 import './ImportModal.css';
 
 export const ImportModal = ({ onClose, onImport, onImportBatch, initialMode = 'url' }) => {
@@ -19,6 +20,12 @@ export const ImportModal = ({ onClose, onImport, onImportBatch, initialMode = 'u
     const [pdfFile, setPdfFile] = useState(null);
     const [pdfRecipes, setPdfRecipes] = useState([]);
     const [pdfSelected, setPdfSelected] = useState(() => new Set());
+    // 抽出した各レシピのカテゴリ（AI分類を初期値とし、プレビューで修正可能）。pdfRecipes と同じ index で対応。
+    const [pdfCategories, setPdfCategories] = useState([]);
+    // 登録方法: 'separate'（それぞれ独立したレシピ）/ 'merge'（1つのレシピに統合してパーツごとにセクション分け）
+    const [pdfRegisterMode, setPdfRegisterMode] = useState('separate');
+    const [pdfMergeTitle, setPdfMergeTitle] = useState('');
+    const [pdfMergeCategory, setPdfMergeCategory] = useState('');
     const [importAsBreadPdf, setImportAsBreadPdf] = useState(false);
     const [importAsBread, setImportAsBread] = useState(false);
     // Image analysis engine preference. This is only a hint; the server may still fall back.
@@ -302,6 +309,10 @@ export const ImportModal = ({ onClose, onImport, onImportBatch, initialMode = 'u
         setPdfFile(normalizePdfFile(file));
         setPdfRecipes([]);
         setPdfSelected(new Set());
+        setPdfCategories([]);
+        setPdfRegisterMode('separate');
+        setPdfMergeTitle('');
+        setPdfMergeCategory('');
         setError(null);
     };
 
@@ -509,6 +520,17 @@ export const ImportModal = ({ onClose, onImport, onImportBatch, initialMode = 'u
             const { recipes, partial, warning } = await parseRecipePdfFile(pdfFile);
             setPdfRecipes(recipes);
             setPdfSelected(new Set(recipes.map((_, index) => index)));
+            // AIが返した category を正規化して各レシピの既定カテゴリにする（無ければタイトル等から推測）。
+            const cats = recipes.map((r) => normalizeRecipeCategory(r?.category, r));
+            setPdfCategories(cats);
+            // 「1つに統合」時の既定値: 名前=親デザート名（無ければ各パーツ名を連結）、カテゴリ=最頻カテゴリ
+            const parentDish = recipes.map((r) => String(r?.dishName || '').trim()).find(Boolean) || '';
+            const joinedTitles = recipes.map((r) => r?.title || r?.name).filter(Boolean).join(' / ');
+            setPdfMergeTitle(parentDish || joinedTitles);
+            const freq = {};
+            cats.forEach((c) => { freq[c] = (freq[c] || 0) + 1; });
+            setPdfMergeCategory(cats.slice().sort((a, b) => (freq[b] || 0) - (freq[a] || 0))[0] || 'デザート・お菓子');
+            setPdfRegisterMode('separate');
             setMode('pdf-preview');
             if (partial && warning) {
                 toast.warning(warning);
@@ -532,16 +554,94 @@ export const ImportModal = ({ onClose, onImport, onImportBatch, initialMode = 'u
         });
     };
 
+    const setPdfCategory = (index, value) => {
+        setPdfCategories((prev) => {
+            const next = [...prev];
+            next[index] = value;
+            return next;
+        });
+    };
+
     const handlePdfImportToForm = () => {
-        const selected = getSelectedPdfRecipes();
-        if (selected.length !== 1) {
+        const selectedIndexes = pdfRecipes.map((_, i) => i).filter((i) => pdfSelected.has(i));
+        if (selectedIndexes.length !== 1) {
             setError('編集画面へ反映するには、レシピを1件だけ選択してください');
             return;
         }
+        const idx = selectedIndexes[0];
         const importOptions = { mode: 'pdf', recipeType: importAsBreadPdf ? 'bread' : 'normal' };
-        const finalRecipe = normalizeImportedRecipe(selected[0]);
+        const finalRecipe = normalizeImportedRecipe(pdfRecipes[idx]);
+        finalRecipe.category = pdfCategories[idx] || normalizeRecipeCategory(pdfRecipes[idx]?.category, pdfRecipes[idx]);
+        finalRecipe.dishName = String(pdfRecipes[idx]?.dishName || '').trim();
         onImport(finalRecipe, `pdf:${pdfFile?.name || ''}`, importOptions);
         onClose();
+    };
+
+    // 選択した複数パーツを「1つのレシピ」に統合する。各パーツはパーツ名のセクション（group）として
+    // 材料・手順を分けて保持する（既存のグループ機能で表示・原価計算に対応）。
+    const buildMergedRecipe = (selectedIndexes) => {
+        const title = (pdfMergeTitle || '').trim()
+            || selectedIndexes.map((i) => pdfRecipes[i]?.title || pdfRecipes[i]?.name).filter(Boolean).join(' / ');
+        const category = pdfMergeCategory
+            || normalizeRecipeCategory(pdfRecipes[selectedIndexes[0]]?.category, pdfRecipes[selectedIndexes[0]]);
+        const ingredients = [];
+        const steps = [];
+        const descParts = [];
+        selectedIndexes.forEach((i, order) => {
+            const part = normalizeImportedRecipe(pdfRecipes[i]);
+            const sectionName = String(part.title || part.name || `パーツ${order + 1}`).trim();
+            (Array.isArray(part.ingredients) ? part.ingredients : []).forEach((ing) => {
+                ingredients.push({ ...ing, group: sectionName });
+            });
+            (Array.isArray(part.steps) ? part.steps : []).forEach((s) => {
+                const text = typeof s === 'string' ? s : (s?.text || '');
+                if (text) steps.push({ text, group: sectionName });
+            });
+            const desc = String(part.description || '').trim();
+            if (desc) descParts.push(`【${sectionName}】\n${desc}`);
+        });
+        return {
+            title,
+            name: title,
+            category,
+            dishName: title,
+            description: descParts.join('\n\n'),
+            ingredients,
+            steps,
+        };
+    };
+
+    const handlePdfMergeRegister = async ({ toForm = false } = {}) => {
+        const selectedIndexes = pdfRecipes.map((_, i) => i).filter((i) => pdfSelected.has(i));
+        if (selectedIndexes.length === 0) {
+            setError('統合するレシピを1件以上選択してください');
+            return;
+        }
+        const merged = buildMergedRecipe(selectedIndexes);
+        if (!merged.title) {
+            setError('統合後のレシピ名を入力してください');
+            return;
+        }
+        // 統合は常に通常レシピ（パン用分割は行わない）
+        const importOptions = { mode: 'pdf', recipeType: 'normal' };
+
+        if (toForm || !onImportBatch) {
+            onImport(normalizeImportedRecipe(merged), `pdf:${pdfFile?.name || ''}`, importOptions);
+            onClose();
+            return;
+        }
+
+        setIsLoading(true);
+        setError(null);
+        try {
+            await onImportBatch([merged], importOptions, `pdf:${pdfFile?.name || ''}`);
+            onClose();
+        } catch (err) {
+            console.error(err);
+            setError(err?.message || '統合登録に失敗しました');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handlePdfRegisterBatch = async () => {
@@ -562,7 +662,13 @@ export const ImportModal = ({ onClose, onImport, onImportBatch, initialMode = 'u
         setError(null);
         try {
             const importOptions = { mode: 'pdf', recipeType: importAsBreadPdf ? 'bread' : 'normal' };
-            const normalized = selected.map((r) => normalizeImportedRecipe(r));
+            const selectedIndexes = pdfRecipes.map((_, i) => i).filter((i) => pdfSelected.has(i));
+            const normalized = selectedIndexes.map((i) => {
+                const rec = normalizeImportedRecipe(pdfRecipes[i]);
+                rec.category = pdfCategories[i] || normalizeRecipeCategory(pdfRecipes[i]?.category, pdfRecipes[i]);
+                rec.dishName = String(pdfRecipes[i]?.dishName || '').trim();
+                return rec;
+            });
             await onImportBatch(normalized, importOptions, `pdf:${pdfFile?.name || ''}`);
             onClose();
         } catch (err) {
@@ -913,33 +1019,111 @@ export const ImportModal = ({ onClose, onImport, onImportBatch, initialMode = 'u
                     <>
                         <p style={{ fontSize: '0.9rem', color: '#555', marginBottom: '12px' }}>
                             {pdfFile?.name && <span>ファイル: {pdfFile.name}<br /></span>}
-                            {pdfRecipes.length}件を検出しました。登録するレシピにチェックを入れてください。
+                            {pdfRecipes.length}件を検出しました。登録方法を選び、登録するレシピにチェックを入れてください。
                         </p>
+                        <div className="pdf-register-mode">
+                            <div className="pdf-register-mode-title">登録方法</div>
+                            <label className={`pdf-register-mode-option ${pdfRegisterMode === 'separate' ? 'active' : ''}`}>
+                                <input
+                                    type="radio"
+                                    name="pdfRegisterMode"
+                                    checked={pdfRegisterMode === 'separate'}
+                                    onChange={() => { setPdfRegisterMode('separate'); setError(null); }}
+                                />
+                                <span>
+                                    <strong>それぞれ独立したレシピとして登録</strong>
+                                    <small>各パーツを別々のレシピに（カテゴリ別）</small>
+                                </span>
+                            </label>
+                            <label className={`pdf-register-mode-option ${pdfRegisterMode === 'merge' ? 'active' : ''}`}>
+                                <input
+                                    type="radio"
+                                    name="pdfRegisterMode"
+                                    checked={pdfRegisterMode === 'merge'}
+                                    onChange={() => { setPdfRegisterMode('merge'); setError(null); }}
+                                />
+                                <span>
+                                    <strong>1つのレシピに統合</strong>
+                                    <small>選択したパーツを1レシピにまとめ、パーツごとにセクション分け</small>
+                                </span>
+                            </label>
+                        </div>
+                        {pdfRegisterMode === 'merge' && (
+                            <div className="pdf-merge-settings">
+                                <label className="pdf-merge-field">
+                                    <span>統合後のレシピ名</span>
+                                    <input
+                                        type="text"
+                                        value={pdfMergeTitle}
+                                        onChange={(e) => setPdfMergeTitle(e.target.value)}
+                                        placeholder="例: 桃のコンポート / フローズンヨーグルト / クランブル"
+                                    />
+                                </label>
+                                <label className="pdf-merge-field">
+                                    <span>カテゴリ</span>
+                                    <select
+                                        value={pdfMergeCategory}
+                                        onChange={(e) => setPdfMergeCategory(e.target.value)}
+                                    >
+                                        {RECIPE_CATEGORY_OPTIONS.map((opt) => (
+                                            <option key={opt} value={opt}>{opt}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                            </div>
+                        )}
                         <div className="pdf-recipe-preview-list">
                             {pdfRecipes.map((recipe, index) => {
                                 const ingCount = Array.isArray(recipe.ingredients) ? recipe.ingredients.length : 0;
                                 const stepCount = Array.isArray(recipe.steps) ? recipe.steps.length : 0;
                                 const checked = pdfSelected.has(index);
+                                const dishName = String(recipe.dishName || '').trim();
+                                const category = pdfCategories[index] || '';
                                 return (
-                                    <label
+                                    <div
                                         key={`pdf-recipe-${index}`}
                                         className={`pdf-recipe-preview-item ${checked ? 'is-selected' : ''}`}
                                     >
-                                        <input
-                                            type="checkbox"
-                                            checked={checked}
-                                            onChange={() => togglePdfRecipeSelection(index)}
-                                        />
-                                        <div className="pdf-recipe-preview-body">
-                                            <div className="pdf-recipe-preview-title">
-                                                {recipe.title || recipe.name || `レシピ ${index + 1}`}
+                                        <label className="pdf-recipe-preview-main">
+                                            <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={() => togglePdfRecipeSelection(index)}
+                                            />
+                                            <div className="pdf-recipe-preview-body">
+                                                <div className="pdf-recipe-preview-title">
+                                                    {recipe.title || recipe.name || `レシピ ${index + 1}`}
+                                                </div>
+                                                <div className="pdf-recipe-preview-meta">
+                                                    材料 {ingCount} / 手順 {stepCount}
+                                                    {(recipe.description || '').trim() ? ' / 説明あり' : ''}
+                                                </div>
+                                                {dishName && (
+                                                    <div className="pdf-recipe-preview-dish">🍽 {dishName}</div>
+                                                )}
                                             </div>
-                                            <div className="pdf-recipe-preview-meta">
-                                                材料 {ingCount} / 手順 {stepCount}
-                                                {(recipe.description || '').trim() ? ' / 説明あり' : ''}
+                                        </label>
+                                        {pdfRegisterMode === 'separate' ? (
+                                            <div className="pdf-recipe-preview-category">
+                                                <span className="pdf-recipe-category-label">カテゴリ</span>
+                                                <select
+                                                    className="pdf-recipe-category-select"
+                                                    value={category}
+                                                    onChange={(e) => setPdfCategory(index, e.target.value)}
+                                                >
+                                                    {RECIPE_CATEGORY_OPTIONS.map((opt) => (
+                                                        <option key={opt} value={opt}>{opt}</option>
+                                                    ))}
+                                                </select>
                                             </div>
-                                        </div>
-                                    </label>
+                                        ) : (
+                                            checked && (
+                                                <div className="pdf-recipe-preview-section">
+                                                    セクション「{recipe.title || recipe.name || `パーツ ${index + 1}`}」として統合
+                                                </div>
+                                            )
+                                        )}
+                                    </div>
                                 );
                             })}
                         </div>
@@ -947,25 +1131,51 @@ export const ImportModal = ({ onClose, onImport, onImportBatch, initialMode = 'u
                             <div className="error-text pdf-preview-error">{error}</div>
                         )}
                         <div className="modal-actions" style={{ flexDirection: 'column', gap: '8px' }}>
-                            <Button
-                                type="button"
-                                variant="primary"
-                                onClick={handlePdfRegisterBatch}
-                                isLoading={isLoading}
-                                disabled={pdfSelected.size === 0}
-                                style={{ width: '100%' }}
-                            >
-                                選択した{pdfSelected.size}件を登録
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                onClick={handlePdfImportToForm}
-                                disabled={isLoading || pdfSelected.size !== 1}
-                                style={{ width: '100%' }}
-                            >
-                                1件を編集画面へ反映
-                            </Button>
+                            {pdfRegisterMode === 'merge' ? (
+                                <>
+                                    <Button
+                                        type="button"
+                                        variant="primary"
+                                        onClick={() => handlePdfMergeRegister({ toForm: false })}
+                                        isLoading={isLoading}
+                                        disabled={pdfSelected.size === 0}
+                                        style={{ width: '100%' }}
+                                    >
+                                        選択した{pdfSelected.size}件を1つのレシピに統合して登録
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        onClick={() => handlePdfMergeRegister({ toForm: true })}
+                                        disabled={isLoading || pdfSelected.size === 0}
+                                        style={{ width: '100%' }}
+                                    >
+                                        統合して編集画面で確認
+                                    </Button>
+                                </>
+                            ) : (
+                                <>
+                                    <Button
+                                        type="button"
+                                        variant="primary"
+                                        onClick={handlePdfRegisterBatch}
+                                        isLoading={isLoading}
+                                        disabled={pdfSelected.size === 0}
+                                        style={{ width: '100%' }}
+                                    >
+                                        選択した{pdfSelected.size}件を登録
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        onClick={handlePdfImportToForm}
+                                        disabled={isLoading || pdfSelected.size !== 1}
+                                        style={{ width: '100%' }}
+                                    >
+                                        1件を編集画面へ反映
+                                    </Button>
+                                </>
+                            )}
                             <Button
                                 type="button"
                                 variant="ghost"
