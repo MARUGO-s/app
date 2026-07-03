@@ -1953,15 +1953,18 @@ function AppContent() {
           onView={addToHistory}
           onHardDelete={handleHardDeleteRecipe}
           onDuplicate={handleDuplicate}
-          onAiRecipeSaved={(savedRecipe, { asNew } = {}) => {
+          onAiRecipeSaved={(savedRecipe, { asNew, replacedOriginal = false, originalRecipeId = null } = {}) => {
             setRecipes(prevRecipes => {
-              const filtered = prevRecipes.filter(r => String(r.id) !== String(savedRecipe.id));
-              if (asNew) {
+              const filtered = prevRecipes.filter(r =>
+                String(r.id) !== String(savedRecipe.id)
+                && (!replacedOriginal || String(r.id) !== String(originalRecipeId))
+              );
+              if (asNew || replacedOriginal) {
                 return [savedRecipe, ...filtered];
               }
               return prevRecipes.map(r => String(r.id) === String(savedRecipe.id) ? savedRecipe : r);
             });
-            if (asNew) {
+            if (asNew || replacedOriginal) {
               setSearchParams({ view: 'detail', id: savedRecipe.id, ...getDetailReturnParams() });
             }
           }}

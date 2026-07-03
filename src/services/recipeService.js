@@ -951,7 +951,7 @@ export const recipeService = {
     async getDeletedCount(currentUser = null) {
         if (!currentUser) return 0;
 
-        const { data, error, count } = await supabase
+        const { data, error } = await supabase
             .from('deleted_recipes')
             .select('*', { count: 'exact' })
 
@@ -964,7 +964,7 @@ export const recipeService = {
             // 1. Get the recipe to be deleted
             const { data: recipe, error: fetchError } = await supabase
                 .from('recipes')
-                .select('*')
+                .select('*, recipe_sources(url)')
                 .eq('id', id)
                 .single()
 
@@ -981,6 +981,11 @@ export const recipeService = {
                     prep_time: recipe.prep_time,
                     cook_time: recipe.cook_time,
                     servings: recipe.servings,
+                    course: recipe.course,
+                    category: recipe.category,
+                    country: recipe.country,
+                    store_name: recipe.store_name,
+                    source_url: (recipe.recipe_sources && recipe.recipe_sources.length > 0) ? recipe.recipe_sources[0].url : null,
                     tags: recipe.tags,
                     ingredients: recipe.ingredients,
                     steps: recipe.steps,
@@ -1027,7 +1032,7 @@ export const recipeService = {
         // 2. Insert back into recipes (new ID will be generated, or we could force the old one if we disabled identity generation, but easier to just create new)
         // We will prioritize "original_id" if we want, but let's just make a new insert to be safe.
         // Actually, let's treat it as a new insert to be safe.
-        const { error: insertError } = await supabase
+        const { data: restoredRecipe, error: insertError } = await supabase
             .from('recipes')
             .insert([{
                 title: deletedRecipe.title,
@@ -1036,13 +1041,29 @@ export const recipeService = {
                 prep_time: deletedRecipe.prep_time,
                 cook_time: deletedRecipe.cook_time,
                 servings: deletedRecipe.servings,
+                course: deletedRecipe.course,
+                category: deletedRecipe.category,
+                country: deletedRecipe.country,
+                store_name: deletedRecipe.store_name,
                 tags: deletedRecipe.tags,
                 ingredients: deletedRecipe.ingredients,
                 steps: deletedRecipe.steps,
                 created_at: deletedRecipe.created_at
             }])
+            .select()
+            .single()
 
         if (insertError) throw insertError
+
+        if (deletedRecipe.source_url) {
+            const { error: sourceError } = await supabase
+                .from('recipe_sources')
+                .insert([{
+                    recipe_id: restoredRecipe?.id,
+                    url: deletedRecipe.source_url
+                }]);
+            if (sourceError) throw sourceError;
+        }
 
         // 3. Delete from deleted_recipes
         const { error: deleteError } = await supabase
@@ -1695,6 +1716,7 @@ const fromDbFormat = (recipe) => {
 
 const fromDeletedDbFormat = (recipe) => ({
     ...fromDbFormat(recipe),
+    sourceUrl: recipe?.source_url || ((recipe.recipe_sources && recipe.recipe_sources.length > 0) ? recipe.recipe_sources[0].url : ''),
     deletedAt: recipe.deleted_at,
     originalId: recipe.original_id
 })

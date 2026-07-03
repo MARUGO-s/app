@@ -493,6 +493,142 @@ const scaleQuantityText = (qty, mult) => {
     return formatScaledQuantity(num * multNum);
 };
 
+const normalizeDiffText = (value) => String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const normalizeDiffKey = (value) => normalizeDiffText(value).toLowerCase();
+
+const formatDiffAmount = (quantity, unit) => {
+    const safeQuantity = normalizeDiffText(quantity);
+    const safeUnit = normalizeDiffText(unit);
+    return [safeQuantity, safeUnit].filter(Boolean).join('');
+};
+
+const isSameMeasuredAmount = (left, right) => {
+    const leftQuantity = parseQuantityValue(left?.quantity);
+    const rightQuantity = parseQuantityValue(right?.quantity);
+    const leftUnit = normalizeUnit(left?.unit);
+    const rightUnit = normalizeUnit(right?.unit);
+
+    if (Number.isFinite(leftQuantity) && Number.isFinite(rightQuantity) && leftUnit && rightUnit) {
+        return leftUnit === rightUnit && Math.abs(leftQuantity - rightQuantity) < 0.0001;
+    }
+
+    return formatDiffAmount(left?.quantity, left?.unit) === formatDiffAmount(right?.quantity, right?.unit);
+};
+
+const buildAiProposalDiff = (originalRecipe, proposal) => {
+    const originalIngredients = Array.isArray(originalRecipe?.ingredients) ? originalRecipe.ingredients : [];
+    const proposalIngredients = Array.isArray(proposal?.ingredients) ? proposal.ingredients : [];
+    const originalSteps = Array.isArray(originalRecipe?.steps) ? originalRecipe.steps : [];
+    const proposalSteps = Array.isArray(proposal?.steps) ? proposal.steps : [];
+
+    const originalIngredientBuckets = new Map();
+    originalIngredients.forEach((item, index) => {
+        const key = normalizeDiffKey(item?.name);
+        if (!key) return;
+        const list = originalIngredientBuckets.get(key) || [];
+        list.push({ item, index });
+        originalIngredientBuckets.set(key, list);
+    });
+
+    const usedOriginalIngredientIndexes = new Set();
+    const ingredientRows = proposalIngredients.map((item, index) => {
+        const key = normalizeDiffKey(item?.name);
+        const sameNameCandidates = key ? (originalIngredientBuckets.get(key) || []) : [];
+        let matched = sameNameCandidates.find((candidate) => !usedOriginalIngredientIndexes.has(candidate.index)) || null;
+
+        if (!matched && originalIngredients[index] && !usedOriginalIngredientIndexes.has(index)) {
+            matched = { item: originalIngredients[index], index };
+        }
+
+        if (matched) {
+            usedOriginalIngredientIndexes.add(matched.index);
+        }
+
+        const previousItem = matched?.item || null;
+        const amountChanged = previousItem ? !isSameMeasuredAmount(previousItem, item) : false;
+        const noteChanged = previousItem
+            ? normalizeDiffText(previousItem?.note) !== normalizeDiffText(item?.note)
+            : false;
+        const nameChanged = previousItem
+            ? normalizeDiffKey(previousItem?.name) !== normalizeDiffKey(item?.name)
+            : false;
+
+        return {
+            item,
+            index,
+            status: previousItem
+                ? ((amountChanged || noteChanged || nameChanged) ? 'changed' : 'unchanged')
+                : 'added',
+            previousItem,
+            amountChanged,
+            noteChanged,
+            nameChanged,
+            previousAmountLabel: previousItem ? formatDiffAmount(previousItem?.quantity, previousItem?.unit) : '',
+            nextAmountLabel: formatDiffAmount(item?.quantity, item?.unit),
+        };
+    });
+
+    const removedIngredients = originalIngredients
+        .map((item, index) => ({ item, index }))
+        .filter(({ index }) => !usedOriginalIngredientIndexes.has(index));
+
+    const stepChanges = [];
+    const maxStepLength = Math.max(originalSteps.length, proposalSteps.length);
+    for (let index = 0; index < maxStepLength; index += 1) {
+        const originalStep = originalSteps[index];
+        const proposalStep = proposalSteps[index];
+        const previousText = normalizeDiffText(typeof originalStep === 'string' ? originalStep : originalStep?.text);
+        const nextText = normalizeDiffText(typeof proposalStep === 'string' ? proposalStep : proposalStep?.text);
+        const previousNote = normalizeDiffText(originalStep?.note);
+        const nextNote = normalizeDiffText(proposalStep?.note);
+
+        if (previousText && nextText) {
+            if (previousText !== nextText || previousNote !== nextNote) {
+                stepChanges.push({
+                    type: 'changed',
+                    index,
+                    previousText,
+                    nextText,
+                    previousNote,
+                    nextNote,
+                });
+            }
+            continue;
+        }
+
+        if (!previousText && nextText) {
+            stepChanges.push({
+                type: 'added',
+                index,
+                nextText,
+                nextNote,
+            });
+            continue;
+        }
+
+        if (previousText && !nextText) {
+            stepChanges.push({
+                type: 'removed',
+                index,
+                previousText,
+                previousNote,
+            });
+        }
+    }
+
+    return {
+        ingredientRows,
+        ingredientChanges: ingredientRows.filter((row) => row.status === 'changed'),
+        addedIngredients: ingredientRows.filter((row) => row.status === 'added'),
+        removedIngredients,
+        stepChanges,
+        hasAnyChanges: ingredientRows.some((row) => row.status !== 'unchanged') || removedIngredients.length > 0 || stepChanges.length > 0,
+    };
+};
+
 export const RecipeDetail = ({
     recipe,
     ownerLabel,
@@ -617,6 +753,10 @@ export const RecipeDetail = ({
 
     // Source recipe for original-language references (prefer full detail once loaded)
     const sourceRecipe = fullRecipe || recipe;
+    const aiProposalDiff = React.useMemo(
+        () => buildAiProposalDiff(sourceRecipe, aiProposal),
+        [sourceRecipe, aiProposal]
+    );
 
     // Determines which data to show
     const displayRecipe = currentLang === 'ORIGINAL' ? fullRecipe : (translationCache[currentLang] || fullRecipe);
@@ -967,30 +1107,57 @@ export const RecipeDetail = ({
         setIsSavingAiProposal(true);
         setAiError('');
         try {
-            const payload = buildRecipePayloadFromAiProposal(sourceRecipe || recipe, aiProposal, { asNew });
-            const savedRecipe = asNew
-                ? await recipeService.createRecipe(payload, user)
-                : await recipeService.updateRecipe(payload, user);
-            if (!asNew) {
-                setFullRecipe(savedRecipe);
+            const originalRecipe = sourceRecipe || recipe;
+            const shouldReplaceViaTrash = !asNew;
+            const payload = buildRecipePayloadFromAiProposal(originalRecipe, aiProposal, { asNew: true });
+            const savedRecipe = await recipeService.createRecipe(payload, user);
+            let replacedOriginal = false;
+            let trashMoveError = null;
+            if (shouldReplaceViaTrash) {
+                try {
+                    await recipeService.deleteRecipe(originalRecipe.id);
+                    replacedOriginal = true;
+                } catch (error) {
+                    trashMoveError = error;
+                    console.error('[RecipeDetail] Original recipe trash move failed after AI replacement save:', error);
+                }
             }
+            setFullRecipe(savedRecipe);
             await recordRecipeAiAdoption({
                 modeFamily: 'improvement',
                 proposal: aiProposal,
                 finalRecipe: savedRecipe,
-                baseRecipe: sourceRecipe || recipe,
+                baseRecipe: originalRecipe,
                 sourceRunId: aiProposal?.learningMeta?.runId || null,
-                adoptionType: asNew ? 'accepted_proposal' : 'edited_after_ai',
-                feedbackNote: asNew ? 'AI改善案を別レシピとして保存' : 'AI改善案で既存レシピを上書き保存',
+                adoptionType: asNew ? 'accepted_proposal' : (replacedOriginal ? 'replaced_original_via_trash' : 'accepted_proposal'),
+                feedbackNote: asNew
+                    ? 'AI改善案を別レシピとして保存'
+                    : (replacedOriginal
+                        ? 'AI改善案で既存レシピを置き換え。元レシピはゴミ箱へ移動'
+                        : 'AI改善案を新規保存。元レシピのゴミ箱移動は失敗したため元レシピも残存'),
                 question: [...aiConversation].reverse().find((item) => item?.role === 'user')?.content || '',
                 answer: [...aiConversation].reverse().find((item) => item?.role === 'assistant')?.content || '',
                 metadata: {
                     asNew,
+                    replacedOriginal,
+                    originalRecipeId: originalRecipe?.id || null,
+                    trashMoveFailed: Boolean(trashMoveError),
                     conversation: aiConversation.slice(-12),
                 },
             });
-            onAiRecipeSaved?.(savedRecipe, { asNew });
-            toast.success(asNew ? 'AI改善案を別レシピとして保存しました。' : 'AI改善案でレシピを上書きしました。');
+            onAiRecipeSaved?.(savedRecipe, {
+                asNew: asNew || !replacedOriginal,
+                replacedOriginal,
+                originalRecipeId: originalRecipe?.id || null,
+            });
+            if (asNew) {
+                toast.success('AI改善案を別レシピとして保存しました。');
+            } else if (replacedOriginal) {
+                toast.success('AI改善案で新規登録し、元レシピはゴミ箱へ移動しました。');
+            } else {
+                toast.warning('AI改善案は新規保存しましたが、元レシピのゴミ箱移動に失敗したため元レシピも残っています。');
+                setAiError('AI改善案は保存済みです。元レシピのゴミ箱移動だけ失敗したため、必要なら元レシピを通常の削除でゴミ箱へ移してください。');
+            }
         } catch (error) {
             console.error('[RecipeDetail] AI proposal save failed:', error);
             setAiError(error?.message || 'AI改善案の保存に失敗しました。');
@@ -2783,6 +2950,88 @@ export const RecipeDetail = ({
                                     </div>
                                 )}
 
+                                {aiProposalDiff.hasAnyChanges && (
+                                    <div className="recipe-ai-result__block recipe-ai-result__diff">
+                                        <h4>元レシピとの差分</h4>
+
+                                        {aiProposalDiff.ingredientChanges.length > 0 && (
+                                            <div className="recipe-ai-result__diff-section">
+                                                <h5>材料の変更</h5>
+                                                <ul>
+                                                    {aiProposalDiff.ingredientChanges.map((row) => (
+                                                        <li key={`ingredient-change-${row.index}-${row.item.name}`}>
+                                                            <strong>{row.item.name}</strong>
+                                                            {row.amountChanged && (
+                                                                <span>{row.previousAmountLabel || '未設定'} → {row.nextAmountLabel || '未設定'}</span>
+                                                            )}
+                                                            {row.noteChanged && (
+                                                                <em>
+                                                                    注記: {normalizeDiffText(row.previousItem?.note) || 'なし'} → {normalizeDiffText(row.item?.note) || 'なし'}
+                                                                </em>
+                                                            )}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        {aiProposalDiff.addedIngredients.length > 0 && (
+                                            <div className="recipe-ai-result__diff-section">
+                                                <h5>追加された材料</h5>
+                                                <ul>
+                                                    {aiProposalDiff.addedIngredients.map((row) => (
+                                                        <li key={`ingredient-added-${row.index}-${row.item.name}`}>
+                                                            <strong>{row.item.name}</strong>
+                                                            <span>{row.nextAmountLabel || '未設定'}</span>
+                                                            {row.item.note && <em>{row.item.note}</em>}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        {aiProposalDiff.removedIngredients.length > 0 && (
+                                            <div className="recipe-ai-result__diff-section">
+                                                <h5>削除された材料</h5>
+                                                <ul>
+                                                    {aiProposalDiff.removedIngredients.map(({ item, index }) => (
+                                                        <li key={`ingredient-removed-${index}-${item?.name || 'unknown'}`}>
+                                                            <strong>{item?.name || '名称未設定'}</strong>
+                                                            <span>{formatDiffAmount(item?.quantity, item?.unit) || '未設定'}</span>
+                                                            {item?.note && <em>{item.note}</em>}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        {aiProposalDiff.stepChanges.length > 0 && (
+                                            <div className="recipe-ai-result__diff-section">
+                                                <h5>手順の変更</h5>
+                                                <ul>
+                                                    {aiProposalDiff.stepChanges.map((change) => (
+                                                        <li key={`step-change-${change.type}-${change.index}`}>
+                                                            <strong>手順 {change.index + 1}</strong>
+                                                            {change.type === 'changed' && (
+                                                                <>
+                                                                    <span>{change.previousText}</span>
+                                                                    <em>→ {change.nextText}</em>
+                                                                </>
+                                                            )}
+                                                            {change.type === 'added' && (
+                                                                <em>追加: {change.nextText}</em>
+                                                            )}
+                                                            {change.type === 'removed' && (
+                                                                <em>削除: {change.previousText}</em>
+                                                            )}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 {aiProposal.warnings?.length > 0 && (
                                     <div className="recipe-ai-result__block recipe-ai-result__block--warning">
                                         <h4>注意点</h4>
@@ -2798,11 +3047,17 @@ export const RecipeDetail = ({
                                     <div className="recipe-ai-result__block">
                                         <h4>材料案</h4>
                                         <ol>
-                                            {aiProposal.ingredients.map((item, index) => (
-                                                <li key={`${item.name}-${index}`}>
-                                                    <strong>{item.name}</strong>
-                                                    <span>{[item.quantity, item.unit].filter(Boolean).join('')}</span>
-                                                    {item.note && <em>{item.note}</em>}
+                                            {aiProposalDiff.ingredientRows.map((row, index) => (
+                                                <li key={`${row.item.name}-${index}`}>
+                                                    <strong>{row.item.name}</strong>
+                                                    <span>{[row.item.quantity, row.item.unit].filter(Boolean).join('')}</span>
+                                                    {row.status === 'changed' && row.amountChanged && (
+                                                        <small className="recipe-ai-result__delta">変更: {row.previousAmountLabel || '未設定'} → {row.nextAmountLabel || '未設定'}</small>
+                                                    )}
+                                                    {row.status === 'added' && (
+                                                        <small className="recipe-ai-result__delta recipe-ai-result__delta--added">新規追加</small>
+                                                    )}
+                                                    {row.item.note && <em>{row.item.note}</em>}
                                                 </li>
                                             ))}
                                         </ol>
@@ -2876,6 +3131,11 @@ export const RecipeDetail = ({
                                     {!canOverwriteWithAi && (
                                         <span className="recipe-ai-result__readonly-note">
                                             このレシピは閲覧専用のため、上書き保存はできません。
+                                        </span>
+                                    )}
+                                    {canOverwriteWithAi && (
+                                        <span className="recipe-ai-result__readonly-note">
+                                            上書き保存を選んでも、元レシピはゴミ箱へ移動し、改善案を新規登録します。
                                         </span>
                                     )}
                                     <Button
