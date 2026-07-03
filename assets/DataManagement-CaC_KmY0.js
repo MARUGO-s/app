@@ -1,26 +1,111 @@
 const n=`/* DataManagement.css */
 
+/* データ管理は画面幅いっぱいに使う（親 .container の max-width を緩める） */
+main.app-main:has(.dashboard-container) {
+    max-width: none;
+    width: 100%;
+    box-sizing: border-box;
+}
+
 .dashboard-container {
     display: flex;
     flex-direction: column;
     height: auto;
     padding-bottom: 2rem;
-    max-width: 1600px;
-    margin: 0 auto;
+    width: 100%;
+    max-width: none;
+    margin: 0;
     padding: 0 1rem;
+    box-sizing: border-box;
 }
+
 
 @media (min-width: 750px) {
     .dashboard-container {
-        height: calc(100vh - 100px);
-        padding-bottom: 0;
+        height: auto;
+        min-height: calc(100vh - 100px);
+        padding-bottom: 2rem;
     }
 
-    /* Ingredient master / CSV import can get long: let the page grow so footer stays at the bottom. */
     .dashboard-container.dashboard-container--auto-height {
         height: auto;
         min-height: calc(100vh - 100px);
         padding-bottom: 2rem;
+    }
+
+    /* 登録データ一覧: 右パネル内の表が縦の残りスペースをすべて使う（中途半端な高さで切らない） */
+    .app-layout:has(.dashboard-container--fill-viewport) {
+        min-height: 100dvh;
+    }
+
+    .app-layout:has(.dashboard-container--fill-viewport) .app-main {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .app-layout:has(.dashboard-container--fill-viewport) .app-footer {
+        flex-shrink: 0;
+        margin-top: 0;
+    }
+
+    .dashboard-container.dashboard-container--fill-viewport {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto;
+        max-height: none;
+        padding-bottom: 0;
+        overflow: visible;
+    }
+
+    .dashboard-container--fill-viewport > .dashboard-header,
+    .dashboard-container--fill-viewport > .tabs-container,
+    .dashboard-container--fill-viewport > .voice-feature-card {
+        flex-shrink: 0;
+    }
+
+    .dashboard-container--fill-viewport > .dashboard-content {
+        flex: 1 1 auto;
+        min-height: calc(100dvh - 11rem);
+        height: auto;
+        overflow: hidden;
+        align-self: stretch;
+        grid-template-rows: minmax(0, 1fr);
+    }
+
+    .dashboard-container--fill-viewport.dashboard-container--admin-chrome > .dashboard-content {
+        min-height: calc(100dvh - 28rem);
+    }
+
+    .dashboard-container--fill-viewport .dashboard-main {
+        min-height: 0;
+        height: 100%;
+        max-height: 100%;
+        align-self: stretch;
+    }
+
+    .dashboard-container--fill-viewport .dashboard-sidebar {
+        max-height: 100%;
+        overflow-y: auto;
+        align-self: stretch;
+    }
+
+    .dashboard-container--fill-viewport .main-toolbar {
+        flex-shrink: 0;
+    }
+
+    .dashboard-container--fill-viewport .table-wrapper {
+        flex: 1 1 0;
+        min-height: 0;
+        max-height: none;
+        overflow: auto;
+    }
+
+    .dashboard-container--fill-viewport .dup-list {
+        max-height: none;
+        flex: 1 1 auto;
+        min-height: 0;
     }
 }
 
@@ -158,14 +243,17 @@ const n=`/* DataManagement.css */
     grid-template-columns: 1fr;
     height: auto;
     gap: 1.5rem;
-    flex: 1;
+    flex: 1 1 auto;
     min-height: 0;
+    width: 100%;
+    align-items: stretch;
 }
 
 @media (min-width: 750px) {
     .dashboard-content {
-        /* User requested: Others (Left), Data List (Right) */
-        grid-template-columns: 320px 1fr;
+        /* 左: 操作パネル / 右: 登録データ（残り幅をすべて使用） */
+        grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+        align-items: stretch;
     }
 }
 
@@ -223,9 +311,10 @@ const n=`/* DataManagement.css */
     border-radius: 6px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     overflow: hidden;
-    /* Contain the table scroll */
     min-width: 0;
-    /* Critical for grid item to shrink properly */
+    width: 100%;
+    min-height: 360px;
+    align-self: stretch;
 }
 
 .main-toolbar {
@@ -234,7 +323,27 @@ const n=`/* DataManagement.css */
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
     background: #f8f9fa;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.main-toolbar__actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex: 1 1 280px;
+    justify-content: flex-end;
+    min-width: 0;
+}
+
+.main-toolbar__actions .input-group {
+    flex: 1 1 200px;
+    min-width: 140px;
+    max-width: 480px;
+    margin-bottom: 0;
 }
 
 .search-bar {
@@ -243,17 +352,21 @@ const n=`/* DataManagement.css */
 
 /* Enterprise Table Styling */
 .table-wrapper {
-    flex: 1;
+    flex: 1 1 auto;
+    width: 100%;
     overflow: auto;
     position: relative;
+    min-height: 200px;
+    -webkit-overflow-scrolling: touch;
 }
 
 .enterprise-table {
     width: 100%;
+    min-width: max(100%, 720px);
     border-collapse: collapse;
     font-size: 0.85rem;
-    /* Dense font */
     color: #333;
+    table-layout: fixed;
 }
 
 .enterprise-table thead {
@@ -285,6 +398,28 @@ const n=`/* DataManagement.css */
     padding: 6px 12px;
     border-bottom: 1px solid #eee;
     vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.enterprise-table .col-date {
+    width: 11%;
+}
+
+.enterprise-table .col-vendor {
+    width: 26%;
+}
+
+.enterprise-table .col-name {
+    width: 48%;
+    white-space: normal;
+    word-break: break-word;
+    overflow: visible;
+    text-overflow: unset;
+}
+
+.enterprise-table .col-price {
+    width: 15%;
 }
 
 .enterprise-table tr:nth-child(even) {
@@ -308,7 +443,6 @@ const n=`/* DataManagement.css */
 
 .col-date {
     white-space: nowrap;
-    width: 120px;
 }
 
 .no-data {
@@ -649,7 +783,7 @@ const n=`/* DataManagement.css */
 
 @media (min-width: 750px) {
     .dup-list {
-        max-height: calc(100vh - 320px);
+        max-height: 50vh;
     }
 }
 

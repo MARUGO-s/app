@@ -473,10 +473,16 @@ const n=`.modal-overlay {
 
 .pdf-recipe-preview-item {
     display: flex;
-    gap: 10px;
-    align-items: flex-start;
+    flex-direction: column;
+    align-items: stretch;
     padding: 10px 12px;
     border-bottom: 1px solid #f0f0f0;
+}
+
+.pdf-recipe-preview-main {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
     cursor: pointer;
 }
 
@@ -486,6 +492,129 @@ const n=`.modal-overlay {
 
 .pdf-recipe-preview-item.is-selected {
     background: #fff8e1;
+}
+
+.pdf-recipe-preview-dish {
+    font-size: 0.78rem;
+    color: #b08900;
+    margin-top: 3px;
+}
+
+.pdf-recipe-preview-category {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding-left: 26px;
+}
+
+.pdf-recipe-category-label {
+    font-size: 0.78rem;
+    color: #777;
+    white-space: nowrap;
+}
+
+.pdf-recipe-category-select {
+    flex: 1;
+    max-width: 220px;
+    padding: 5px 8px;
+    font-size: 0.85rem;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: #fff;
+    color: #222;
+}
+
+.pdf-recipe-preview-section {
+    margin-top: 8px;
+    padding-left: 26px;
+    font-size: 0.8rem;
+    color: #b06a00;
+}
+
+/* 登録方法（独立 / 統合）の選択 */
+.pdf-register-mode {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    background: #fafafa;
+}
+
+.pdf-register-mode-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #888;
+}
+
+.pdf-register-mode-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid #e3e3e3;
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+}
+
+.pdf-register-mode-option.active {
+    border-color: #ff8c00;
+    background: #fff8ef;
+}
+
+.pdf-register-mode-option input {
+    margin-top: 3px;
+}
+
+.pdf-register-mode-option span {
+    display: flex;
+    flex-direction: column;
+}
+
+.pdf-register-mode-option strong {
+    font-size: 0.9rem;
+    color: #222;
+}
+
+.pdf-register-mode-option small {
+    font-size: 0.76rem;
+    color: #888;
+}
+
+.pdf-merge-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px dashed #ffba66;
+    border-radius: 8px;
+    background: #fffaf3;
+}
+
+.pdf-merge-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pdf-merge-field > span {
+    font-size: 0.78rem;
+    color: #777;
+}
+
+.pdf-merge-field input,
+.pdf-merge-field select {
+    padding: 7px 9px;
+    font-size: 0.9rem;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: #fff;
+    color: #222;
 }
 
 .pdf-recipe-preview-title {

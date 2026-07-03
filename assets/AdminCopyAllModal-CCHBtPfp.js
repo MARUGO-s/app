@@ -84,7 +84,7 @@ export const AdminCopyAllModal = ({
     return (
         <Modal
             isOpen={isOpen}
-            onClose={() => { if (!loading) onClose(); }}
+            onClose={onClose}
             title="管理者データの一斉配布"
             maxWidth="550px"
         >

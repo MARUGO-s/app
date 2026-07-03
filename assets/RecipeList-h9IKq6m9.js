@@ -1,5 +1,7 @@
 const e=`import React, { useState } from 'react';
 import { Card } from './Card';
+import { FavoriteStarButton } from './FavoriteStarButton';
+import './FavoriteStarButton.css';
 import { normalizeRecipeCategory } from '../constants/recipeCategories';
 import {
     RECIPE_LIST_COURSE_ICONS,
@@ -36,6 +38,25 @@ const formatDate = (dateString) => {
     return \`\${date.getFullYear()}/\${String(date.getMonth() + 1).padStart(2, '0')}/\${String(date.getDate()).padStart(2, '0')}\`;
 };
 
+const normalizeTags = (rawTags) => {
+    if (Array.isArray(rawTags)) {
+        return rawTags
+            .flatMap(tag => String(tag || '').split(/[,、]/))
+            .map(tag => tag.trim())
+            .filter(Boolean);
+    }
+    if (typeof rawTags === 'string') {
+        return rawTags
+            .split(/[,、]/)
+            .map(tag => tag.trim())
+            .filter(Boolean);
+    }
+    return [];
+};
+
+/** recipeService._resolveMasterOwnerTags と同じ既定値 */
+const DEFAULT_MASTER_OWNER_TAGS = new Set(['owner:yoshito', 'owner:admin']);
+
 const displayMeta = (value) => {
     const text = String(value ?? '').trim();
     return text || '—';
@@ -49,11 +70,14 @@ const RecipeListTable = ({
     onToggleSelection,
     showOwner,
     ownerLabelFn,
+    favoriteIds,
+    onToggleFavorite,
 }) => (
-    <div className="recipe-list-table-wrap">
+    <div className="recipe-list-table-wrap" role="region" aria-label="レシピ一覧（リスト表示）">
         <table className="recipe-list-table">
             <thead>
                 <tr>
+                    {onToggleFavorite && <th className="recipe-list-table__favorite-head" aria-label="お気に入り" />}
                     <th>レシピ名</th>
                     <th>店舗</th>
                     <th>コース</th>
@@ -78,20 +102,39 @@ const RecipeListTable = ({
                                 }
                             }}
                         >
-                            <td className="recipe-list-table__title">
+                            {onToggleFavorite && (
+                                <td className="recipe-list-table__favorite-cell">
+                                    <FavoriteStarButton
+                                        size="sm"
+                                        isFavorite={favoriteIds?.has?.(String(recipe.id))}
+                                        onToggle={() => onToggleFavorite(recipe.id)}
+                                    />
+                                </td>
+                            )}
+                            <td className="recipe-list-table__title" title={recipe.title}>
                                 {isSelectMode && (
                                     <span className={\`recipe-list-table__checkbox \${isSelected ? 'checked' : ''}\`} aria-hidden="true" />
                                 )}
-                                {recipe.title}
+                                <span className="recipe-list-table__title-text">{recipe.title}</span>
                             </td>
-                            <td>{displayMeta(recipe.storeName)}</td>
-                            <td>{displayMeta(recipe.course)}</td>
-                            <td>{displayMeta(recipe.category)}</td>
-                            <td>{displayMeta(recipe.country)}</td>
+                            <td className="recipe-list-table__cell--meta" title={displayMeta(recipe.storeName)}>
+                                {displayMeta(recipe.storeName)}
+                            </td>
+                            <td className="recipe-list-table__cell--meta" title={displayMeta(recipe.course)}>
+                                {displayMeta(recipe.course)}
+                            </td>
+                            <td className="recipe-list-table__cell--meta" title={displayMeta(recipe.category)}>
+                                {displayMeta(recipe.category)}
+                            </td>
+                            <td className="recipe-list-table__cell--meta" title={displayMeta(recipe.country)}>
+                                {displayMeta(recipe.country)}
+                            </td>
                             {showOwner && (
-                                <td>{typeof ownerLabelFn === 'function' ? displayMeta(ownerLabelFn(recipe)) : '—'}</td>
+                                <td className="recipe-list-table__cell--meta">
+                                    {typeof ownerLabelFn === 'function' ? displayMeta(ownerLabelFn(recipe)) : '—'}
+                                </td>
                             )}
-                            <td>{formatDate(recipe.created_at)}</td>
+                            <td className="recipe-list-table__cell--date">{formatDate(recipe.created_at)}</td>
                         </tr>
                     );
                 })}
@@ -100,28 +143,22 @@ const RecipeListTable = ({
     </div>
 );
 
-const normalizeTags = (rawTags) => {
-    if (Array.isArray(rawTags)) {
-        return rawTags
-            .flatMap(tag => String(tag || '').split(/[,、]/))
-            .map(tag => tag.trim())
-            .filter(Boolean);
-    }
-    if (typeof rawTags === 'string') {
-        return rawTags
-            .split(/[,、]/)
-            .map(tag => tag.trim())
-            .filter(Boolean);
-    }
-    return [];
-};
-
-const RecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggleSelection, showOwner, ownerLabelFn, index = 0, mobileView = false }) => {
+const RecipeCard = ({
+    recipe,
+    isSelected,
+    isSelectMode,
+    onSelectRecipe,
+    onToggleSelection,
+    showOwner,
+    ownerLabelFn,
+    index = 0,
+    mobileView = false,
+    isFavorite = false,
+    onToggleFavorite,
+}) => {
     const style = {
-        touchAction: 'pan-y',
         height: '100%',
         outline: 'none',
-        cursor: 'default'
     };
 
     const eagerThreshold = mobileView ? 4 : 8;
@@ -158,6 +195,15 @@ const RecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggle
                         <div className="recipe-card__image placeholder" />
                     )}
                     <div className="recipe-card__overlay" />
+
+                    {onToggleFavorite && !isSelectMode && (
+                        <FavoriteStarButton
+                            className="recipe-card__favorite"
+                            size="sm"
+                            isFavorite={isFavorite}
+                            onToggle={() => onToggleFavorite(recipe.id)}
+                        />
+                    )}
 
                     {isSelectMode && (
                         <div className="recipe-card__selection-overlay">
@@ -202,7 +248,21 @@ const RecipeCard = ({ recipe, isSelected, isSelectMode, onSelectRecipe, onToggle
     );
 };
 
-export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds, onToggleSelection, displayMode = 'normal', publicRecipeView = 'none', showOwner = false, ownerLabelFn, currentUser = null }) => {
+export const RecipeList = ({
+    recipes,
+    onSelectRecipe,
+    isSelectMode,
+    selectedIds,
+    onToggleSelection,
+    displayMode = 'normal',
+    layoutMode = 'card',
+    publicRecipeView = 'none',
+    showOwner = false,
+    ownerLabelFn,
+    currentUser = null,
+    favoriteIds = null,
+    onToggleFavorite = null,
+}) => {
     const [expandedSections, setExpandedSections] = useState({});
     const [isMobileView, setIsMobileView] = useState(() => isMobileViewport());
 
@@ -242,43 +302,62 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
         return ownerTags.some(tag => myOwnerTags.has(tag));
     };
 
-    // 1. Filter into categories (Priority: Public -> Bread -> Sauce -> Decoration -> Dessert -> Cooking)
-    // Adjust priority based on user likelyhood. Dessert might contain sauces?
-    // User requested separation, so Sauce/Decoration should pull out from Dessert/Cooking.
+    const isMasterSharedRecipe = (recipe) => {
+        if (!currentUser?.showMasterRecipes) return false;
+        const ownerTags = normalizeTags(recipe?.tags).filter(tag => tag.startsWith('owner:'));
+        return ownerTags.some(tag => DEFAULT_MASTER_OWNER_TAGS.has(tag));
+    };
 
-    // Public category (all published recipes)
+    // メイン一覧: 自分のレシピ + 非公開 + マスター共有（fetchRecipes と同じ見える範囲）
+    const isMainListRecipe = (recipe) => {
+        if (isOwnedByCurrentUser(recipe)) return true;
+        if (!isPublicRecipe(recipe)) return true;
+        if (isMasterSharedRecipe(recipe)) return true;
+        return false;
+    };
+
     const publicRecipes = recipes.filter(r => isPublicRecipe(r));
     const myPublicRecipes = publicRecipes.filter(r => isOwnedByCurrentUser(r));
-    const otherUsersPublicRecipes = publicRecipes.filter(r => !isOwnedByCurrentUser(r));
-    const nonPublicShared = recipes.filter(r => !isPublicRecipe(r));
+    const otherUsersPublicRecipes = publicRecipes.filter(
+        r => !isOwnedByCurrentUser(r) && !isMasterSharedRecipe(r),
+    );
+    const mainListRecipes = recipes.filter(isMainListRecipe);
 
-    // If all available recipes are public, avoid looking "empty" by auto-showing a public section.
+    // メインに出せるレシピがあるときは自動で「自分が公開中」だけにしない
     const effectivePublicRecipeView = (() => {
         if (publicRecipeView !== 'none') return publicRecipeView;
-        if (publicRecipes.length === 0 || nonPublicShared.length > 0) return 'none';
+        if (mainListRecipes.length > 0) return 'none';
+        if (publicRecipes.length === 0) return 'none';
         if (myPublicRecipes.length > 0) return 'mine';
         return 'others';
     })();
 
-    const courseBuckets = splitRecipesByCourse(nonPublicShared);
+    const courseBuckets = splitRecipesByCourse(mainListRecipes);
 
-    // Dynamic limit based on screen width
-    // Mobile/Tablet (< 1024px): 8 items
-    // Desktop (>= 1024px): 9 items
-    const [limit, setLimit] = useState(typeof window !== 'undefined' && window.innerWidth >= 1024 ? 9 : 8);
+    const isListLayout = layoutMode === 'list';
+
+    // カード: 8〜9件 / リスト: コンパクトなので多めに表示
+    const [limit, setLimit] = useState(() => {
+        if (typeof window === 'undefined') return 9;
+        const wide = window.innerWidth >= 1024;
+        if (isListLayout) return wide ? 30 : 24;
+        return wide ? 9 : 8;
+    });
 
     React.useEffect(() => {
         const handleResize = () => {
-            if (window.innerWidth >= 1024) {
-                setLimit(9);
+            const wide = window.innerWidth >= 1024;
+            if (isListLayout) {
+                setLimit(wide ? 30 : 24);
             } else {
-                setLimit(8);
+                setLimit(wide ? 9 : 8);
             }
         };
 
+        handleResize();
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
-    }, []);
+    }, [isListLayout]);
 
     // Helper to render a section
     const renderSection = (title, items, icon, sectionKey, { showWhenEmpty = false, emptyMessage = '' } = {}) => {
@@ -324,7 +403,7 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                         </span>
                     )}
                 </h3>
-                {isAllMode ? (
+                {isListLayout ? (
                     <RecipeListTable
                         recipes={displayItems}
                         isSelectMode={isSelectMode}
@@ -333,6 +412,8 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                         onToggleSelection={onToggleSelection}
                         showOwner={showOwner}
                         ownerLabelFn={ownerLabelFn}
+                        favoriteIds={favoriteIds}
+                        onToggleFavorite={onToggleFavorite}
                     />
                 ) : (
                     <div className="recipe-grid">
@@ -350,6 +431,8 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
                                     ownerLabelFn={ownerLabelFn}
                                     index={index}
                                     mobileView={isMobileView}
+                                    isFavorite={favoriteIds?.has?.(String(recipe.id))}
+                                    onToggleFavorite={onToggleFavorite}
                                 />
                             );
                         })}
@@ -413,19 +496,9 @@ export const RecipeList = ({ recipes, onSelectRecipe, isSelectMode, selectedIds,
         );
     };
 
-    const shouldShowPublicHiddenHint =
-        effectivePublicRecipeView === 'none' &&
-        publicRecipes.length > 0 &&
-        nonPublicShared.length === 0;
-
     return (
-        <div className="recipe-list-container">
+        <div className={\`recipe-list-container\${isListLayout ? ' recipe-list-container--list' : ''}\`}>
             {renderPublicRecipeSections()}
-            {shouldShowPublicHiddenHint && (
-                <div className="recipe-list-empty-hint">
-                    公開レシピは非表示です。上の「自分公開中」または「他ユーザー公開」を押すと表示されます。
-                </div>
-            )}
             {renderCourseSections(courseBuckets)}
 
             {/* Fallback if no recipes at all */}

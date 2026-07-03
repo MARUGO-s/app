@@ -7,7 +7,8 @@ export const Modal = ({
     title,
     children,
     size = 'medium',
-    showCloseButton = true
+    showCloseButton = true,
+    maxWidth,
 }) => {
     useEffect(() => {
         if (isOpen) {
@@ -42,7 +43,10 @@ export const Modal = ({
 
     return (
         <div className="modal-overlay" onClick={handleBackdropClick}>
-            <div className={\`modal-content modal-\${size}\`}>
+            <div
+                className={\`modal-content modal-\${size}\`}
+                style={maxWidth ? { maxWidth } : undefined}
+            >
                 <div className="modal-header">
                     <h3 className="modal-title">{title}</h3>
                     {showCloseButton && (

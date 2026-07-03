@@ -1175,6 +1175,125 @@ export const recipeService = {
         return false;
     },
 
+    async fetchFavoriteRecipeIds(explicitUserId = null) {
+        const userId = explicitUserId || (await this._getCurrentUserId());
+        if (!userId) return [];
+
+        const { data, error } = await withTimeout(
+            supabase
+                .from('recipe_favorites')
+                .select('recipe_id, favorited_at')
+                .eq('viewer_user_id', userId)
+                .order('favorited_at', { ascending: false }),
+            10000,
+            'recipe_favorites.select'
+        );
+        if (error) throw error;
+
+        return (data || [])
+            .map((item) => String(item.recipe_id || '').trim())
+            .filter(Boolean);
+    },
+
+    async setFavorite(recipeId, isFavorite, explicitUserId = null) {
+        const userId = explicitUserId || (await this._getCurrentUserId());
+        if (!userId || !recipeId) return false;
+
+        const byKeys = (query) => query
+            .eq('viewer_user_id', userId)
+            .eq('recipe_id', recipeId);
+
+        if (!isFavorite) {
+            const { error } = await withTimeout(
+                byKeys(supabase.from('recipe_favorites').delete()),
+                10000,
+                'recipe_favorites.delete'
+            );
+            if (error) {
+                console.error('[recipe_favorites] delete failed', {
+                    userId,
+                    recipeId,
+                    error: toLoggableError(error),
+                });
+                return false;
+            }
+            return true;
+        }
+
+        const favoritedAt = new Date().toISOString();
+        const { data: existing, error: selectError } = await withTimeout(
+            byKeys(
+                supabase
+                    .from('recipe_favorites')
+                    .select('id')
+                    .limit(1)
+                    .maybeSingle()
+            ),
+            10000,
+            'recipe_favorites.select(existing)'
+        );
+        if (selectError) {
+            console.error('[recipe_favorites] select failed', {
+                userId,
+                recipeId,
+                error: toLoggableError(selectError),
+            });
+            return false;
+        }
+
+        if (existing?.id) {
+            const { error: updateError } = await withTimeout(
+                byKeys(
+                    supabase
+                        .from('recipe_favorites')
+                        .update({ favorited_at: favoritedAt })
+                ),
+                10000,
+                'recipe_favorites.update(existing)'
+            );
+            if (!updateError) return true;
+            console.error('[recipe_favorites] update failed', {
+                userId,
+                recipeId,
+                error: toLoggableError(updateError),
+            });
+            return false;
+        }
+
+        const { error: insertError } = await withTimeout(
+            supabase
+                .from('recipe_favorites')
+                .insert({
+                    viewer_user_id: userId,
+                    recipe_id: recipeId,
+                    favorited_at: favoritedAt,
+                }),
+            10000,
+            'recipe_favorites.insert(new)'
+        );
+        if (!insertError) return true;
+
+        if (String(insertError?.code || '') === '23505') {
+            const { error: raceUpdateError } = await withTimeout(
+                byKeys(
+                    supabase
+                        .from('recipe_favorites')
+                        .update({ favorited_at: favoritedAt })
+                ),
+                10000,
+                'recipe_favorites.update(race-duplicate)'
+            );
+            return !raceUpdateError;
+        }
+
+        console.error('[recipe_favorites] insert failed', {
+            userId,
+            recipeId,
+            error: toLoggableError(insertError),
+        });
+        return false;
+    },
+
     async updateOrder(items) {
         // items: [{ id, order_index }]
         // Supabase upsert can work for bulk updates if we carefully construct it,

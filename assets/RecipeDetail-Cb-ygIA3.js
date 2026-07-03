@@ -5,6 +5,15 @@ import { Modal } from './Modal';
 import { translationService } from '../services/translationService';
 import { recipeService } from '../services/recipeService';
 import {
+    buildRecipePayloadFromAiProposal,
+    continueRecipeAiConversation,
+    generateRecipeImprovement,
+    getStoredRecipeAiSettings,
+    saveStoredRecipeAiSettings,
+    isSakanaUnlocked,
+    unlockSakana,
+} from '../services/recipeAiService';
+import {
     categoryCostOverrideService,
     getRecipeCostCategories,
     computeRecipeTotalCostTaxIncluded,
@@ -15,6 +24,8 @@ import { useToast } from '../contexts/useToast';
 import { SUPPORTED_LANGUAGES } from '../constants';
 import { normalizeUnit } from '../utils/unitUtils';
 import './RecipeDetail.css';
+import { FavoriteStarButton } from './FavoriteStarButton';
+import './FavoriteStarButton.css';
 import QRCode from "react-qr-code";
 
 const formatDate = (dateString) => {
@@ -22,6 +33,13 @@ const formatDate = (dateString) => {
     const date = new Date(dateString);
     return \`\${date.getFullYear()}/\${String(date.getMonth() + 1).padStart(2, '0')}/\${String(date.getDate()).padStart(2, '0')}\`;
 };
+
+const formatAiDisplayText = (value) => String(value ?? '')
+    .replace(/\\\\r\\\\n|\\\\n|\\\\r/g, '\\n')
+    .replace(/\\\\t/g, ' ')
+    .replace(/\\*\\*([^*]+)\\*\\*/g, '$1')
+    .replace(/\\n{3,}/g, '\\n\\n')
+    .trim();
 
 const toFiniteCurrencyNumber = (value) => {
     if (value == null) return NaN;
@@ -473,7 +491,24 @@ const scaleQuantityText = (qty, mult) => {
     return formatScaledQuantity(num * multNum);
 };
 
-export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onHardDelete, isDeleted, onView, onDuplicate, onOpenCompositeCost, backLabel, onList, forceEditEnabled = false }) => {
+export const RecipeDetail = ({
+    recipe,
+    ownerLabel,
+    onBack,
+    onEdit,
+    onDelete,
+    onHardDelete,
+    isDeleted,
+    onView,
+    onDuplicate,
+    onOpenCompositeCost,
+    backLabel,
+    onList,
+    forceEditEnabled = false,
+    isFavorite = false,
+    onToggleFavorite = null,
+    onAiRecipeSaved = null,
+}) => {
     const { user } = useAuth();
     const toast = useToast();
     const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
@@ -500,6 +535,32 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
     const [groupUsageAmountByCategory, setGroupUsageAmountByCategory] = React.useState(new Map());
     const [conversionMap, setConversionMap] = React.useState(new Map());
     const [uiTextCache, setUiTextCache] = React.useState({});
+    const [isAiModalOpen, setIsAiModalOpen] = React.useState(false);
+    const [aiProvider, setAiProvider] = React.useState(() => getStoredRecipeAiSettings().provider);
+    const [sakanaUnlocked, setSakanaUnlocked] = React.useState(() => isSakanaUnlocked());
+
+    const handleAiProviderChange = (value) => {
+        if (value.startsWith('sakana') && !sakanaUnlocked) {
+            const input = window.prompt('Sakana AIはロックされています。解除パスワードを入力してください。');
+            if (input === null) return;
+            if (!unlockSakana(input)) {
+                toast.error('パスワードが違います。');
+                return;
+            }
+            setSakanaUnlocked(true);
+            toast.success('Sakana AIのロックを解除しました。');
+        }
+        setAiProvider(value);
+        saveStoredRecipeAiSettings({ provider: value });
+    };
+    const [aiNotes, setAiNotes] = React.useState('');
+    const [aiProposal, setAiProposal] = React.useState(null);
+    const [aiError, setAiError] = React.useState('');
+    const [isAiGenerating, setIsAiGenerating] = React.useState(false);
+    const [isSavingAiProposal, setIsSavingAiProposal] = React.useState(false);
+    const [aiConversation, setAiConversation] = React.useState([]);
+    const [aiConversationInput, setAiConversationInput] = React.useState('');
+    const [isAiConversing, setIsAiConversing] = React.useState(false);
 
     // Scaling State
     const [baseItem, setBaseItem] = React.useState('total'); // 'total', 'flourTotal', 'flour-0', 'other-1', etc.
@@ -693,6 +754,7 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
     // Actually, logic in service says "No owner tag -> Visible". So let's say "Can Edit" if (No Owner OR Owner is Me OR Admin).
     const hasOwnerTag = recipe.tags && recipe.tags.some(t => t.startsWith('owner:'));
     const canEdit = !hasOwnerTag || isOwner;
+    const canOverwriteWithAi = canEdit || forceEditEnabled || user?.role === 'admin';
 
     // Toggle Public Handler
     const handleTogglePublic = async () => {
@@ -718,6 +780,110 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
             console.error("Failed to toggle public", e);
             toast.error("公開設定の変更に失敗しました");
             setIsPublic(!newStatus); // Revert
+        }
+    };
+
+    const handleGenerateAiImprovement = async () => {
+        setIsAiGenerating(true);
+        setAiError('');
+        try {
+            let recipeForAi = sourceRecipe || recipe;
+            const hasLoadedContent = Array.isArray(recipeForAi?.steps) && Array.isArray(recipeForAi?.ingredients);
+            if (!hasLoadedContent && recipe?.id) {
+                recipeForAi = await recipeService.getRecipe(recipe.id);
+                setFullRecipe(recipeForAi);
+            }
+
+            const proposal = await generateRecipeImprovement({
+                recipe: recipeForAi,
+                notes: aiNotes,
+                provider: aiProvider,
+            });
+            setAiProposal(proposal);
+            setAiConversation([]);
+            setAiConversationInput('');
+            toast.success('AI改善案を作成しました。');
+        } catch (error) {
+            console.error('[RecipeDetail] AI improvement failed:', error);
+            setAiError(error?.message || 'AI改善案の作成に失敗しました。');
+        } finally {
+            setIsAiGenerating(false);
+        }
+    };
+
+    const handleAskAiFollowUp = async () => {
+        const question = aiConversationInput.trim();
+        if (!question) {
+            setAiError('追加の質問または修正内容を入力してください。');
+            return;
+        }
+        if (!aiProposal) {
+            setAiError('先にAI改善案を作成してください。');
+            return;
+        }
+
+        setIsAiConversing(true);
+        setAiError('');
+        const userMessage = { role: 'user', content: question };
+        const nextConversation = [...aiConversation, userMessage];
+        setAiConversation(nextConversation);
+        setAiConversationInput('');
+
+        try {
+            let recipeForAi = sourceRecipe || recipe;
+            const hasLoadedContent = Array.isArray(recipeForAi?.steps) && Array.isArray(recipeForAi?.ingredients);
+            if (!hasLoadedContent && recipe?.id) {
+                recipeForAi = await recipeService.getRecipe(recipe.id);
+                setFullRecipe(recipeForAi);
+            }
+
+            const response = await continueRecipeAiConversation({
+                recipe: recipeForAi,
+                proposal: aiProposal,
+                conversation: nextConversation,
+                question,
+                provider: aiProvider,
+            });
+
+            setAiProposal(response.proposal);
+            setAiConversation([
+                ...nextConversation,
+                { role: 'assistant', content: response.answer },
+            ]);
+            toast.success(response.forceReproposal ? '会話内容を踏まえて新しい改善案を作成しました。' : response.shouldUpdateProposal ? '会話内容を改善案に反映しました。' : 'AIが文脈を踏まえて回答しました。');
+        } catch (error) {
+            console.error('[RecipeDetail] AI conversation failed:', error);
+            setAiError(error?.message || 'AI会話の実行に失敗しました。');
+            setAiConversation(nextConversation);
+        } finally {
+            setIsAiConversing(false);
+        }
+    };
+
+    const saveAiProposal = async ({ asNew }) => {
+        if (!aiProposal) return;
+        if (!asNew && !canOverwriteWithAi) {
+            toast.warning('このレシピは上書きできません。別レシピとして保存してください。');
+            return;
+        }
+
+        setIsSavingAiProposal(true);
+        setAiError('');
+        try {
+            const payload = buildRecipePayloadFromAiProposal(sourceRecipe || recipe, aiProposal, { asNew });
+            const savedRecipe = asNew
+                ? await recipeService.createRecipe(payload, user)
+                : await recipeService.updateRecipe(payload, user);
+            if (!asNew) {
+                setFullRecipe(savedRecipe);
+            }
+            onAiRecipeSaved?.(savedRecipe, { asNew });
+            toast.success(asNew ? 'AI改善案を別レシピとして保存しました。' : 'AI改善案でレシピを上書きしました。');
+        } catch (error) {
+            console.error('[RecipeDetail] AI proposal save failed:', error);
+            setAiError(error?.message || 'AI改善案の保存に失敗しました。');
+        } finally {
+            setIsSavingAiProposal(false);
         }
     };
 
@@ -2210,6 +2376,21 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                                     原文表示
                                 </label>
                             )}
+                            {onToggleFavorite && (
+                                <FavoriteStarButton
+                                    size="lg"
+                                    isFavorite={isFavorite}
+                                    onToggle={() => onToggleFavorite(recipe.id)}
+                                />
+                            )}
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                isLoading={isAiGenerating}
+                                onClick={() => setIsAiModalOpen(true)}
+                            >
+                                🤖 AI改善{aiProposal ? '（作成済み）' : ''}
+                            </Button>
                             <Button variant="secondary" size="sm" onClick={() => setShowPrintModal(true)}>🖨️ プレビュー</Button>
                             <Button variant="secondary" size="sm" onClick={() => window.print()}>🖨️ 印刷</Button>
                             <Button variant="secondary" size="sm" onClick={handleDuplicateClick}>複製</Button>
@@ -2318,6 +2499,215 @@ export const RecipeDetail = ({ recipe, ownerLabel, onBack, onEdit, onDelete, onH
                     <span>📅 登録: {formatDate(recipe.created_at)}</span>
                     {recipe.updated_at && <span>🔄 更新: {formatDate(recipe.updated_at)}</span>}
                 </div>
+
+                {!isDeleted && (
+                    <Modal
+                        isOpen={isAiModalOpen}
+                        onClose={() => setIsAiModalOpen(false)}
+                        title="AI改善提案"
+                        size="large"
+                    >
+                        <div className="recipe-ai-modal">
+                        <p className="recipe-ai-modal__description">
+                            各AIエージェントが料理文化・技術・配合・食品科学・品質を個別に調査し、統括シェフが改善案に統合します。
+                            生成中にこのポップアップを閉じても処理は続行されます。
+                        </p>
+                        <div className="recipe-ai-form recipe-ai-form--detail">
+                            <div className="recipe-ai-form__controls">
+                                <label className="recipe-ai-form__label">
+                                    AIプロバイダー
+                                    <select
+                                        className="recipe-ai-form__select"
+                                        value={aiProvider}
+                                        onChange={(e) => handleAiProviderChange(e.target.value)}
+                                        disabled={isAiGenerating || isSavingAiProposal}
+                                    >
+                                        <option value="groq">Groq</option>
+                                        <option value="sakana-subscription">{sakanaUnlocked ? 'Sakana AI（サブスク）' : '🔒 Sakana AI（サブスク）'}</option>
+                                        <option value="sakana-payg">{sakanaUnlocked ? 'Sakana AI（従量課金）' : '🔒 Sakana AI（従量課金）'}</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <label className="recipe-ai-form__label">
+                                改善指示
+                                <textarea
+                                    className="recipe-ai-form__textarea"
+                                    value={aiNotes}
+                                    onChange={(e) => setAiNotes(e.target.value)}
+                                    placeholder="例: 提供時間を短くしたい、仕込みで品質を安定させたい、原価は上げずに香りを強くしたい。"
+                                    disabled={isAiGenerating || isSavingAiProposal}
+                                />
+                            </label>
+                            <Button
+                                type="button"
+                                variant="primary"
+                                size="sm"
+                                isLoading={isAiGenerating}
+                                disabled={isAiGenerating || isSavingAiProposal}
+                                onClick={handleGenerateAiImprovement}
+                            >
+                                エージェント改善を開始
+                            </Button>
+                            {aiError && <div className="recipe-ai-form__error">{aiError}</div>}
+                        </div>
+
+                        {aiProposal && (
+                            <div className="recipe-ai-result">
+                                <div className="recipe-ai-result__summary">
+                                    <span>改善案プレビュー</span>
+                                    <h3>{aiProposal.title || 'AI改善レシピ'}</h3>
+                                    {(aiProposal.improvementSummary || aiProposal.description) && (
+                                        <p>{formatAiDisplayText(aiProposal.improvementSummary || aiProposal.description)}</p>
+                                    )}
+                                </div>
+
+                                {aiProposal.agentMessages?.length > 0 && (
+                                    <div className="recipe-ai-result__block recipe-ai-result__agents">
+                                        <h4>エージェント所見</h4>
+                                        {aiProposal.agentMessages.map((message, index) => (
+                                            <div className="recipe-ai-agent-line" key={\`\${message.agentId}-\${index}\`}>
+                                                <span>{message.avatar}</span>
+                                                <div>
+                                                    <b>{message.agentName}</b>
+                                                    <p>{formatAiDisplayText(message.content)}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {aiProposal.keyChanges?.length > 0 && (
+                                    <div className="recipe-ai-result__block">
+                                        <h4>主な変更点</h4>
+                                        <ul>
+                                            {aiProposal.keyChanges.map((item, index) => (
+                                                <li key={\`\${item}-\${index}\`}>{item}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+
+                                {aiProposal.warnings?.length > 0 && (
+                                    <div className="recipe-ai-result__block recipe-ai-result__block--warning">
+                                        <h4>注意点</h4>
+                                        <ul>
+                                            {aiProposal.warnings.map((item, index) => (
+                                                <li key={\`\${item}-\${index}\`}>{item}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+
+                                <div className="recipe-ai-result__preview-grid">
+                                    <div className="recipe-ai-result__block">
+                                        <h4>材料案</h4>
+                                        <ol>
+                                            {aiProposal.ingredients.map((item, index) => (
+                                                <li key={\`\${item.name}-\${index}\`}>
+                                                    <strong>{item.name}</strong>
+                                                    <span>{[item.quantity, item.unit].filter(Boolean).join('')}</span>
+                                                    {item.note && <em>{item.note}</em>}
+                                                </li>
+                                            ))}
+                                        </ol>
+                                    </div>
+                                    <div className="recipe-ai-result__block">
+                                        <h4>手順案</h4>
+                                        <ol>
+                                            {aiProposal.steps.map((item, index) => (
+                                                <li key={\`\${item.text}-\${index}\`}>
+                                                    {item.text}
+                                                    {item.note && <em>{item.note}</em>}
+                                                </li>
+                                            ))}
+                                        </ol>
+                                    </div>
+                                </div>
+
+                                {aiProposal.sources?.length > 0 && (
+                                    <div className="recipe-ai-result__block recipe-ai-result__sources">
+                                        <h4>参照ソース</h4>
+                                        <div>
+                                            {aiProposal.sources.slice(0, 8).map((source) => (
+                                                <a key={source.url} href={source.url} target="_blank" rel="noreferrer">
+                                                    {source.id ? \`[\${source.id}] \` : ''}{source.title || source.url}
+                                                </a>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="recipe-ai-result__block recipe-ai-conversation">
+                                    <h4>続けて相談・再改善</h4>
+                                    <p className="recipe-ai-conversation__hint">
+                                        元レシピ、改善案、エージェント所見、これまでの会話を踏まえて回答します。必要な場合はこの改善案自体も更新します。
+                                    </p>
+                                    {aiConversation.length > 0 && (
+                                        <div className="recipe-ai-conversation__messages">
+                                            {aiConversation.map((message, index) => (
+                                                <div
+                                                    className={\`recipe-ai-conversation__message recipe-ai-conversation__message--\${message.role === 'assistant' ? 'assistant' : 'user'}\`}
+                                                    key={\`\${message.role}-\${index}-\${message.content.slice(0, 16)}\`}
+                                                >
+                                                    <span>{message.role === 'assistant' ? 'AI' : '質問'}</span>
+                                                    <p>{formatAiDisplayText(message.content)}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <textarea
+                                        className="recipe-ai-conversation__input"
+                                        value={aiConversationInput}
+                                        onChange={(e) => setAiConversationInput(e.target.value)}
+                                        placeholder="例: もっと原価を下げたい。鶏肉を使わずに同じ満足感にできますか？ / この改善案の弱点は？"
+                                        disabled={isAiConversing || isAiGenerating || isSavingAiProposal}
+                                    />
+                                    <div className="recipe-ai-conversation__actions">
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            isLoading={isAiConversing}
+                                            disabled={isAiConversing || isAiGenerating || isSavingAiProposal || !aiConversationInput.trim()}
+                                            onClick={handleAskAiFollowUp}
+                                        >
+                                            文脈つきで質問・再改善
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                <div className="recipe-ai-result__actions">
+                                    {!canOverwriteWithAi && (
+                                        <span className="recipe-ai-result__readonly-note">
+                                            このレシピは閲覧専用のため、上書き保存はできません。
+                                        </span>
+                                    )}
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        size="sm"
+                                        isLoading={isSavingAiProposal}
+                                        disabled={isSavingAiProposal || isAiGenerating}
+                                        onClick={() => saveAiProposal({ asNew: true })}
+                                    >
+                                        別レシピとして保存
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="primary"
+                                        size="sm"
+                                        isLoading={isSavingAiProposal}
+                                        disabled={isSavingAiProposal || isAiGenerating || !canOverwriteWithAi}
+                                        onClick={() => saveAiProposal({ asNew: false })}
+                                    >
+                                        このレシピに上書き
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                        </div>
+                    </Modal>
+                )}
 
                 <div className="recipe-detail__content">
                     <div className="recipe-detail__main">

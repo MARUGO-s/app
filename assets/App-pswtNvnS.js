@@ -9,6 +9,7 @@ import { DataManagement } from './components/DataManagement';
 import { Card } from './components/Card';
 import { Button } from './components/Button';
 import { RecentRecipes } from './components/RecentRecipes';
+import { FavoriteRecipes } from './components/FavoriteRecipes';
 import { LevainGuide } from './components/LevainGuide';
 import { UserManagement } from './components/UserManagement';
 import { Inventory } from './components/Inventory';
@@ -79,6 +80,7 @@ const MOBILE_RECIPE_PAGE_LIMIT = 64;
 const DESKTOP_RECIPE_PAGE_LIMIT = 180;
 const NO_STORE_VALUE = '__NO_STORE__';
 const OTHER_STORE_VALUE = '__OTHER_STORE__';
+const FAVORITE_FILTER_TAG = 'favorite';
 const ADMIN_VIEW_ALL_USERS_RECIPES_KEY = 'recipe_admin_view_all_users';
 
 const readAdminViewAllUsersRecipes = (userId) => {
@@ -121,6 +123,7 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const [trashCount, setTrashCount] = useState(0);
   const [recentIds, setRecentIds] = useState([]);
+  const [favoriteIds, setFavoriteIds] = useState(() => new Set());
   const [authStuckFallback, setAuthStuckFallback] = useState(false);
   const [profilesById, setProfilesById] = useState({});
   const [profilesByDisplayId, setProfilesByDisplayId] = useState({});
@@ -152,6 +155,14 @@ function AppContent() {
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedRecipeIds, setSelectedRecipeIds] = useState(new Set());
   const [displayMode, setDisplayMode] = useState('normal'); // 'normal' | 'all'
+  const [listLayoutMode, setListLayoutMode] = useState(() => {
+    if (typeof window === 'undefined') return 'card';
+    try {
+      return window.localStorage.getItem('recipe-list-layout-mode') === 'list' ? 'list' : 'card';
+    } catch {
+      return 'card';
+    }
+  });
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [showBulkRestoreConfirm, setShowBulkRestoreConfirm] = useState(false);
   const [pcRecommendModalView, setPcRecommendModalView] = useState(null); // null | view string
@@ -409,6 +420,7 @@ function AppContent() {
     // ユーザーが切り替わった場合（ログアウト or アカウント切替）は即時クリア
     if (prevUserId !== null && prevUserId !== currentUserId) {
       setRecentIds([]);
+      setFavoriteIds(new Set());
     }
     prevUserIdRef.current = currentUserId;
 
@@ -429,6 +441,7 @@ function AppContent() {
 
     loadTrashCount();
     loadRecentHistory();
+    loadFavoriteRecipes();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user?.id]);
 
@@ -533,6 +546,45 @@ function AppContent() {
       // Supabaseが失敗しても、localStorageのキャッシュはすでに先出し表示済み
     }
   };
+
+  const loadFavoriteRecipes = async () => {
+    try {
+      const ids = await recipeService.fetchFavoriteRecipeIds(user?.id);
+      setFavoriteIds(new Set((ids || []).map(String)));
+    } catch (error) {
+      console.error('Failed to load favorites:', error);
+      setFavoriteIds(new Set());
+    }
+  };
+
+  const toggleFavorite = useCallback(async (recipeId) => {
+    if (!recipeId) return;
+    const id = String(recipeId);
+    let wasFavorite = false;
+
+    setFavoriteIds((prev) => {
+      wasFavorite = prev.has(id);
+      const next = new Set(prev);
+      if (wasFavorite) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+    try {
+      const ok = await recipeService.setFavorite(recipeId, !wasFavorite, user?.id);
+      if (!ok) throw new Error('save failed');
+      toast.success(wasFavorite ? 'お気に入りを解除しました' : 'お気に入りに追加しました');
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
+      setFavoriteIds((prev) => {
+        const next = new Set(prev);
+        if (wasFavorite) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+      toast.error('お気に入りの保存に失敗しました');
+    }
+  }, [user?.id, toast]);
 
   const addToHistory = async (id) => {
     if (!id) return;
@@ -765,6 +817,7 @@ function AppContent() {
       const matchesTag =
         selectedTag === 'すべて' ||
         (selectedTag === 'recent' && recentIds.some(id => String(id) === String(recipe.id))) ||
+        (selectedTag === FAVORITE_FILTER_TAG && favoriteIds.has(String(recipe.id))) ||
         (recipe.tags && recipe.tags.includes(selectedTag)) ||
         (selectedTag === NO_STORE_VALUE && !storeKey) ||
         (selectedTag === OTHER_STORE_VALUE && storeKey && !KNOWN_STORE_KEYS.has(storeKey)) ||
@@ -786,7 +839,7 @@ function AppContent() {
         (Array.isArray(recipe.ingredients) && recipe.ingredients.some(ing => (ing?.name || '').toLowerCase().includes(query)))
       );
     });
-  }, [recipes, selectedTag, recentIds, searchQuery]);
+  }, [recipes, selectedTag, recentIds, favoriteIds, searchQuery]);
 
   const resetListFilters = () => {
     setSelectedTag('すべて');
@@ -794,6 +847,75 @@ function AppContent() {
     setPublicRecipeView('none');
     setDisplayMode('normal');
   };
+
+  const renderRecipeFilterSelects = () => (
+    <>
+      <select
+        className="store-filter-select"
+        value={
+          selectedTag === NO_STORE_VALUE
+            ? NO_STORE_VALUE
+            : selectedTag === OTHER_STORE_VALUE
+              ? OTHER_STORE_VALUE
+              : (STORE_LIST.includes(selectedTag) ? selectedTag : "")
+        }
+        onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
+        aria-label="店舗で絞り込み"
+      >
+        <option value="">店舗</option>
+        {STORE_LIST.map(store => (
+          <option key={store} value={store}>{store} ({storeCounts[normalizeKey(store)] || 0})</option>
+        ))}
+        <option value={NO_STORE_VALUE}>未登録 ({noStoreCount})</option>
+        <option value={OTHER_STORE_VALUE}>その他 ({otherStoreCount})</option>
+      </select>
+
+      <select
+        className="store-filter-select"
+        value={allCourses.find((course) => normalizeKey(course) === normalizeKey(selectedTag)) || ""}
+        onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
+        aria-label="コースで絞り込み"
+      >
+        <option value="">コース</option>
+        {allCourses.sort().map(course => (
+          <option key={course} value={course}>{course} ({courseCounts[normalizeKey(course)] || 0})</option>
+        ))}
+      </select>
+
+      <select
+        className="store-filter-select"
+        value={
+          selectedTag === FAVORITE_FILTER_TAG
+            ? FAVORITE_FILTER_TAG
+            : (allCategories.find((cat) => normalizeKey(cat) === normalizeKey(selectedTag)) || "")
+        }
+        onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
+        aria-label="カテゴリーで絞り込み"
+      >
+        <option value="">カテゴリー</option>
+        <option value={FAVORITE_FILTER_TAG}>
+          ★ お気に入り ({favoriteIds.size})
+        </option>
+        {allCategories.sort().map(cat => (
+          <option key={cat} value={cat}>{cat} ({categoryCounts[normalizeKey(cat)] || 0})</option>
+        ))}
+      </select>
+
+      <select
+        className="store-filter-select"
+        value={allCountries.some((country) => normalizeKey(country) === normalizeKey(selectedTag)) ? selectedTag : ""}
+        onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
+        aria-label="国で絞り込み"
+      >
+        <option value="">国</option>
+        {allCountries.sort((a, b) => a.localeCompare(b, 'ja')).map((country) => (
+          <option key={country} value={country}>
+            {country} ({countryCounts[normalizeKey(country)] || 0})
+          </option>
+        ))}
+      </select>
+    </>
+  );
 
   const getDetailReturnParams = () => {
     const from = searchParams.get('from');
@@ -1017,7 +1139,14 @@ function AppContent() {
 
     typedRecipeData.sourceUrl = sourceUrl;
     if (sourceUrl?.startsWith('pdf:')) {
-      typedRecipeData.category = '取り込み';
+      // PDF取り込み: AI/プレビューで決めたカテゴリを尊重し、無ければ「取り込み」。
+      typedRecipeData.category = normalizeRecipeCategory(recipeData.category, recipeData) || '取り込み';
+      // 親デザート名（1皿を構成する複数パーツのまとまり）をタグに残す。
+      const dishName = String(recipeData.dishName || '').trim();
+      if (dishName) {
+        const existingTags = Array.isArray(typedRecipeData.tags) ? typedRecipeData.tags : [];
+        typedRecipeData.tags = Array.from(new Set([...existingTags, dishName]));
+      }
     } else if (sourceUrl) {
       typedRecipeData.category = '取り込み';
     }
@@ -1025,7 +1154,7 @@ function AppContent() {
     setSearchParams({ view: 'create' });
   };
 
-  const handleImportRecipeBatch = async (recipes, importOptions = {}, sourceLabel = '') => {
+  const handleImportRecipeBatch = async (recipes, importOptions = {}) => {
     if (!user?.id) {
       toast.warning('ログインが必要です');
       return;
@@ -1039,11 +1168,19 @@ function AppContent() {
         const raw = recipes[i];
         const title = String(raw?.title || raw?.name || \`レシピ \${i + 1}\`).trim();
         try {
+          // 各パーツのカテゴリ（AI/プレビュー由来）を尊重。無ければ「取り込み」。
+          const category = normalizeRecipeCategory(raw?.category, raw) || '取り込み';
           const payload = mapImportedRecipeToSavePayload(raw, {
-            category: '取り込み',
+            category,
             sourceUrl: '',
             importOptions,
           });
+          // 親デザート名を全パーツ共通のタグとして付与（テーブル形式は維持）。
+          const dishName = String(raw?.dishName || '').trim();
+          if (dishName) {
+            const existingTags = Array.isArray(payload.tags) ? payload.tags : [];
+            payload.tags = Array.from(new Set([...existingTags, dishName]));
+          }
           await recipeService.createRecipe(payload, user);
           successCount += 1;
         } catch (error) {
@@ -1336,7 +1473,11 @@ function AppContent() {
                 </span>
               )}
             </h2>
-            <div className="header-actions">
+            <div className="container-header__toolbar">
+              <div className="list-header-filters" aria-label="店舗・コース・カテゴリー・国・お気に入りで絞り込み">
+                {renderRecipeFilterSelects()}
+              </div>
+              <div className="header-actions">
               {(currentView === 'list' || currentView === 'trash') ? (
                 <>
                   {isSelectMode ? (
@@ -1589,6 +1730,7 @@ function AppContent() {
 
                 </>
               ) : null}
+              </div>
             </div>
           </div>
 
@@ -1646,72 +1788,45 @@ function AppContent() {
           )}
 
           <div className="tag-filter-container">
-            <select
-              className="store-filter-select"
-              value={
-                selectedTag === NO_STORE_VALUE
-                  ? NO_STORE_VALUE
-                  : selectedTag === OTHER_STORE_VALUE
-                    ? OTHER_STORE_VALUE
-                    : (STORE_LIST.includes(selectedTag) ? selectedTag : "")
-              }
-              onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
-            >
-              <option value="">店舗</option>
-              {STORE_LIST.map(store => (
-                <option key={store} value={store}>{store} ({storeCounts[normalizeKey(store)] || 0})</option>
-              ))}
-              <option value={NO_STORE_VALUE}>未登録 ({noStoreCount})</option>
-              <option value={OTHER_STORE_VALUE}>その他 ({otherStoreCount})</option>
-            </select>
+            <div className="tag-filter-dropdowns">
+              {renderRecipeFilterSelects()}
+            </div>
 
-            <select
-              className="store-filter-select"
-              value={allCourses.find((course) => normalizeKey(course) === normalizeKey(selectedTag)) || ""}
-              onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
-            >
-              <option value="">コース</option>
-              {allCourses.sort().map(course => (
-                <option key={course} value={course}>{course} ({courseCounts[normalizeKey(course)] || 0})</option>
-              ))}
-            </select>
-
-            <select
-              className="store-filter-select"
-              value={allCategories.find((cat) => normalizeKey(cat) === normalizeKey(selectedTag)) || ""}
-              onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
-            >
-              <option value="">カテゴリー</option>
-              {allCategories.sort().map(cat => (
-                <option key={cat} value={cat}>{cat} ({categoryCounts[normalizeKey(cat)] || 0})</option>
-              ))}
-            </select>
-
-            <select
-              className="store-filter-select"
-              value={allCountries.some((country) => normalizeKey(country) === normalizeKey(selectedTag)) ? selectedTag : ""}
-              onChange={(e) => setSelectedTag(e.target.value || 'すべて')}
-            >
-              <option value="">国</option>
-              {allCountries.sort((a, b) => a.localeCompare(b, 'ja')).map((country) => (
-                <option key={country} value={country}>
-                  {country} ({countryCounts[normalizeKey(country)] || 0})
-                </option>
-              ))}
-            </select>
-
-            <div className="view-mode-toggle" style={{ marginLeft: '16px', display: 'flex', gap: '8px', borderLeft: '1px solid #ccc', paddingLeft: '16px' }}>
+            <div className="view-mode-toggle">
               <button
+                type="button"
+                className={\`tag-filter-btn \${listLayoutMode === 'card' ? 'active' : ''}\`}
+                onClick={() => {
+                  setListLayoutMode('card');
+                  try { window.localStorage.setItem('recipe-list-layout-mode', 'card'); } catch { /* ignore */ }
+                }}
+                title="サムネイル付きカードで表示"
+              >
+                カード
+              </button>
+              <button
+                type="button"
+                className={\`tag-filter-btn \${listLayoutMode === 'list' ? 'active' : ''}\`}
+                onClick={() => {
+                  setListLayoutMode('list');
+                  try { window.localStorage.setItem('recipe-list-layout-mode', 'list'); } catch { /* ignore */ }
+                }}
+                title="テーブル形式で一覧表示（画像なし・高速）"
+              >
+                リスト
+              </button>
+              <span className="view-mode-toggle__divider" aria-hidden="true" />
+              <button
+                type="button"
                 className={\`tag-filter-btn \${displayMode === 'normal' ? 'active' : ''}\`}
                 onClick={() => setDisplayMode('normal')}
-                style={{ minWidth: 'auto', padding: '4px 12px' }}
               >
                 通常
               </button>
               <button
+                type="button"
                 className={\`tag-filter-btn \${displayMode === 'all' ? 'active' : ''}\`}
                 onClick={() => setDisplayMode('all')}
-                style={{ minWidth: 'auto', padding: '4px 12px' }}
               >
                 全表示
               </button>
@@ -1733,8 +1848,14 @@ function AppContent() {
               </div>
             ) : filteredRecipes.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '2rem', color: '#888' }}>
-                条件に一致するレシピがありません
-                <p style={{ marginTop: '0.5rem' }}>検索/絞り込み/公開表示の条件を確認してください</p>
+                {selectedTag === FAVORITE_FILTER_TAG
+                  ? 'お気に入りに登録したレシピがありません'
+                  : '条件に一致するレシピがありません'}
+                <p style={{ marginTop: '0.5rem' }}>
+                  {selectedTag === FAVORITE_FILTER_TAG
+                    ? 'レシピカードまたは詳細画面の ☆ をタップしてお気に入りに追加できます'
+                    : '検索/絞り込み/公開表示の条件を確認してください'}
+                </p>
                 <div style={{ marginTop: '1rem' }}>
                   <Button variant="secondary" size="sm" onClick={resetListFilters}>
                     フィルターをリセット
@@ -1743,8 +1864,14 @@ function AppContent() {
               </div>
             ) : (
               <div className="main-content-wrapper">
-                {currentView === 'list' && (
+                {currentView === 'list' && selectedTag !== FAVORITE_FILTER_TAG && (
                   <div className="recent-list-wrapper">
+                    <FavoriteRecipes
+                      recipes={recipes}
+                      favoriteIds={favoriteIds}
+                      onSelect={handleSelectRecipe}
+                      onToggleFavorite={toggleFavorite}
+                    />
                     <RecentRecipes
                       recipes={recipes}
                       recentIds={recentIds}
@@ -1760,10 +1887,13 @@ function AppContent() {
                     selectedIds={selectedRecipeIds}
                     onToggleSelection={handleToggleSelection}
                     displayMode={displayMode}
+                    layoutMode={listLayoutMode}
                     publicRecipeView={publicRecipeView}
                     showOwner={user?.role === 'admin' && adminViewAllUsersRecipes}
                     ownerLabelFn={getRecipeOwnerLabel}
                     currentUser={user}
+                    favoriteIds={favoriteIds}
+                    onToggleFavorite={toggleFavorite}
                   />
                 </div>
               </div>
@@ -1820,12 +1950,26 @@ function AppContent() {
           onView={addToHistory}
           onHardDelete={handleHardDeleteRecipe}
           onDuplicate={handleDuplicate}
+          onAiRecipeSaved={(savedRecipe, { asNew } = {}) => {
+            setRecipes(prevRecipes => {
+              const filtered = prevRecipes.filter(r => String(r.id) !== String(savedRecipe.id));
+              if (asNew) {
+                return [savedRecipe, ...filtered];
+              }
+              return prevRecipes.map(r => String(r.id) === String(savedRecipe.id) ? savedRecipe : r);
+            });
+            if (asNew) {
+              setSearchParams({ view: 'detail', id: savedRecipe.id, ...getDetailReturnParams() });
+            }
+          }}
           forceEditEnabled={searchParams.get('from') === 'composite-cost-edit' || searchParams.get('from') === 'composite-cost'}
           onOpenCompositeCost={() => setSearchParams({
             view: 'composite-cost',
             baseId: String(selectedRecipe.id),
             from: 'detail',
           })}
+          isFavorite={favoriteIds.has(String(selectedRecipe.id))}
+          onToggleFavorite={toggleFavorite}
         />
       )}
 

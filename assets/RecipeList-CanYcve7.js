@@ -155,6 +155,25 @@ const n=`.recipe-grid {
         gap: 10px;
     }
 
+    /* 旧ドラッグ並び替え用の pan-y を廃止し、縦スクロール・ピンチを妨げない */
+    .recipe-card {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .recipe-card__image,
+    .recipe-card__overlay,
+    .recipe-card__selection-overlay,
+    .recipe-card__tags {
+        pointer-events: none;
+        -webkit-user-drag: none;
+        user-select: none;
+    }
+
+    .recipe-list-table__row {
+        touch-action: manipulation;
+    }
+
     .recipe-card__content {
         padding: 10px;
     }
@@ -324,6 +343,10 @@ const n=`.recipe-grid {
     box-shadow: 0 4px 8px rgba(235, 96, 21, 0.3);
 }
 
+.recipe-list-container--list .recipe-section {
+    margin-bottom: 1.5rem !important;
+}
+
 .recipe-list-table-wrap {
     width: 100%;
     overflow-x: auto;
@@ -331,6 +354,8 @@ const n=`.recipe-grid {
     border-radius: var(--radius-md);
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(255, 255, 255, 0.98);
+    max-height: min(70vh, 640px);
+    -webkit-overflow-scrolling: touch;
 }
 
 .recipe-list-table {
@@ -341,19 +366,30 @@ const n=`.recipe-grid {
     color: #222;
 }
 
+.recipe-list-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
 .recipe-list-table th,
 .recipe-list-table td {
-    padding: 0.55rem 0.75rem;
+    padding: 0.45rem 0.65rem;
     border-bottom: 1px solid #e8e8e8;
     text-align: left;
     vertical-align: middle;
 }
 
 .recipe-list-table th {
-    background: #f5f5f5;
+    background: #f0f0f0;
     font-weight: 600;
     white-space: nowrap;
     color: #444;
+    box-shadow: 0 1px 0 #e0e0e0;
+}
+
+.recipe-list-table tbody tr:nth-child(even) {
+    background: #fafafa;
 }
 
 .recipe-list-table__row {
@@ -373,6 +409,46 @@ const n=`.recipe-grid {
     font-weight: 600;
     color: #111;
     min-width: 10rem;
+    max-width: 22rem;
+}
+
+.recipe-list-table__title-text {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.recipe-list-table__cell--meta {
+    max-width: 8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #555;
+}
+
+.recipe-list-table__cell--date {
+    white-space: nowrap;
+    color: #666;
+    font-size: 0.82rem;
+}
+
+@media (max-width: 700px) {
+    .recipe-list-table {
+        min-width: 560px;
+        font-size: 0.82rem;
+    }
+
+    .recipe-list-table-wrap {
+        max-height: min(60vh, 480px);
+    }
+
+    .recipe-list-table th,
+    .recipe-list-table td {
+        padding: 0.4rem 0.5rem;
+    }
 }
 
 .recipe-list-table__checkbox {

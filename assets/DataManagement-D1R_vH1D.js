@@ -135,9 +135,13 @@ export const DataManagement = ({ onBack }) => {
     const [searchQuery, setSearchQuery] = useState('');
 
     // Allow deep-linking: ?view=data&tab=csv-import
+    useEffect(() => () => {
+        document.body.style.overflow = '';
+    }, []);
+
     useEffect(() => {
         const tab = searchParams.get('tab');
-        if (tab === 'price' || tab === 'ingredients' || tab === 'csv-import' || tab === 'duplicates') {
+        if (tab === 'price' || tab === 'ingredients' || tab === 'csv-import' || tab === 'duplicates' || tab === 'trash' || tab === 'backup-management') {
             setActiveTab(tab);
         }
         // Only apply on mount; internal tab buttons control subsequent changes.
@@ -649,8 +653,13 @@ export const DataManagement = ({ onBack }) => {
     };
 
     const closeCopyModal = () => {
-        if (copyInProgress) return;
+        if (copyInProgress) {
+            const ok = window.confirm('コピー処理中です。モーダルを閉じますか？');
+            if (!ok) return;
+            setCopyInProgress(false);
+        }
         setCopyConfirming(false);
+        setCopyResult(null);
         setCopyModalOpen(false);
     };
 
@@ -757,7 +766,7 @@ export const DataManagement = ({ onBack }) => {
 
     const handleClassifyRecipeCourses = async () => {
         if (!window.confirm(
-            'あなたが所有するレシピのみ、コースを AI の判断で固定12種に上書きします（カテゴリーとは別の「提供順」です）。よろしいですか？',
+            'あなたが所有するレシピのみ、コースを AI の判断で固定13種に上書きします（カテゴリーとは別の「提供順」です）。よろしいですか？',
         )) return;
         setCourseClassifyLoading(true);
         setCourseClassifyStatus({ message: '処理を開始しています...', type: 'info' });
@@ -820,7 +829,9 @@ export const DataManagement = ({ onBack }) => {
             className={[
                 'dashboard-container',
                 'fade-in',
-                (activeTab === 'ingredients' || activeTab === 'csv-import') ? 'dashboard-container--auto-height' : '',
+                'dashboard-container--auto-height',
+                (activeTab === 'price' || activeTab === 'duplicates') ? 'dashboard-container--fill-viewport' : '',
+                (user?.role === 'admin' && activeTab === 'price') ? 'dashboard-container--admin-chrome' : '',
             ].filter(Boolean).join(' ')}
         >
             {/* Header */}
@@ -1515,12 +1526,12 @@ export const DataManagement = ({ onBack }) => {
                                     全 {filteredAndSortedData.length.toLocaleString()} 件
                                 </span>
                             </div>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <div className="main-toolbar__actions">
                                 <Input
                                     placeholder="検索 (日付, 業者名, 材料名)..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    style={{ width: '250px', fontSize: '0.9rem' }}
+                                    style={{ width: '100%', fontSize: '0.9rem' }}
                                 />
                                 <Button variant="secondary" size="sm" onClick={loadData}>↻ 更新</Button>
                             </div>
@@ -1535,16 +1546,16 @@ export const DataManagement = ({ onBack }) => {
                                 <table className="enterprise-table">
                                     <thead>
                                         <tr>
-                                            <th onClick={() => handleSort('dateStr')} style={{ width: '120px' }}>
+                                            <th className="col-date" onClick={() => handleSort('dateStr')}>
                                                 納品日 {sortConfig.key === 'dateStr' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                                             </th>
-                                            <th onClick={() => handleSort('vendor')}>
+                                            <th className="col-vendor" onClick={() => handleSort('vendor')}>
                                                 業者名 {sortConfig.key === 'vendor' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                                             </th>
-                                            <th onClick={() => handleSort('name')}>
+                                            <th className="col-name" onClick={() => handleSort('name')}>
                                                 材料名 {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                                             </th>
-                                            <th style={{ textAlign: 'right', width: '150px' }}>
+                                            <th className="col-price col-number" style={{ textAlign: 'right' }}>
                                                 単価 (円)
                                             </th>
                                         </tr>
@@ -1560,9 +1571,9 @@ export const DataManagement = ({ onBack }) => {
                                             filteredAndSortedData.map((item, index) => (
                                                 <tr key={index}>
                                                     <td className="col-date">{item.dateStr || '-'}</td>
-                                                    <td>{item.vendor || '-'}</td>
-                                                    <td style={{ fontWeight: '500' }}>{item.name}</td>
-                                                    <td className="col-number">
+                                                    <td className="col-vendor">{item.vendor || '-'}</td>
+                                                    <td className="col-name" style={{ fontWeight: '500' }}>{item.name}</td>
+                                                    <td className="col-number col-price">
                                                         {item.price ? item.price.toLocaleString() : '-'}
                                                         {item.unit && <span style={{ color: '#888', fontSize: '0.85em', marginLeft: '4px' }}>/ {item.unit}</span>}
                                                     </td>
@@ -1958,6 +1969,11 @@ export const DataManagement = ({ onBack }) => {
             <AdminCopyAllModal
                 isOpen={adminCopyAllOpen}
                 onClose={() => {
+                    if (adminCopyAllLoading) {
+                        const ok = window.confirm('配布処理中です。モーダルを閉じますか？');
+                        if (!ok) return;
+                        setAdminCopyAllLoading(false);
+                    }
                     setAdminCopyAllOpen(false);
                     setAdminCopyAllStatus(null);
                     setAdminCopyAllResult(null);
@@ -1973,7 +1989,7 @@ export const DataManagement = ({ onBack }) => {
                 isOpen={summaryModalOpen}
                 onClose={() => setSummaryModalOpen(false)}
                 title="原価更新サマリー"
-                maxWidth="800px"
+                size="large"
             >
                 <div className="summary-tabs">
                     <button 
