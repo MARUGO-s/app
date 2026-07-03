@@ -536,6 +536,7 @@ export const RecipeDetail = ({
     const [conversionMap, setConversionMap] = React.useState(new Map());
     const [uiTextCache, setUiTextCache] = React.useState({});
     const [isAiModalOpen, setIsAiModalOpen] = React.useState(false);
+    const [isActionMenuOpen, setIsActionMenuOpen] = React.useState(false);
     const [aiProvider, setAiProvider] = React.useState(() => getStoredRecipeAiSettings().provider);
     const [sakanaUnlocked, setSakanaUnlocked] = React.useState(() => isSakanaUnlocked());
 
@@ -2319,7 +2320,36 @@ export const RecipeDetail = ({
                         )}
                     </div>
                     {!isDeleted && (
-                        <div className="recipe-detail__actions">
+                        <button
+                            type="button"
+                            className="recipe-detail__menu-toggle no-print"
+                            onClick={() => setIsActionMenuOpen(true)}
+                            aria-label="操作メニューを開く"
+                        >
+                            ☰ メニュー
+                        </button>
+                    )}
+                    {!isDeleted && isActionMenuOpen && (
+                        <div
+                            className="recipe-detail__menu-backdrop no-print"
+                            onClick={() => setIsActionMenuOpen(false)}
+                        />
+                    )}
+                    {!isDeleted && (
+                        <div
+                            className={`recipe-detail__actions recipe-detail__actions--menu${isActionMenuOpen ? ' is-open' : ''}`}
+                            onClick={(e) => {
+                                // ドロワー内のボタン操作後は自動で閉じる（select・チェックボックスは開いたまま）
+                                if (e.target.closest('button')) setIsActionMenuOpen(false);
+                            }}
+                        >
+                            <button
+                                type="button"
+                                className="recipe-detail__menu-close"
+                                onClick={() => setIsActionMenuOpen(false)}
+                            >
+                                ✕ 閉じる
+                            </button>
 
                             {/* Public Toggle (Owner Only) */}
                             {canEdit && (user?.displayId === 'yoshito' || user?.role === 'admin') && (

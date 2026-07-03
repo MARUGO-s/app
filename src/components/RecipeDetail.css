@@ -1818,34 +1818,119 @@
     font-size: 0.9rem;
 }
 
-/* スマホ: ヘッダー操作ボタン群を3列グリッドで整列（インラインmarginはリセット） */
+/* スマホ: ヘッダー操作ボタン群はハンバーガーメニューのスライドドロワーに収納 */
+.recipe-detail__header {
+    position: relative;
+}
+
+.recipe-detail__menu-toggle,
+.recipe-detail__menu-close,
+.recipe-detail__menu-backdrop {
+    display: none;
+}
+
 @media (max-width: 749px) {
-    .recipe-detail__actions {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
-        align-items: stretch;
+    .recipe-detail__menu-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        position: absolute;
+        top: 0;
+        right: 0;
+        padding: 8px 14px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        background: #fff;
+        color: #1f2937;
+        font-size: 0.9rem;
+        font-weight: 700;
+        cursor: pointer;
     }
 
-    .recipe-detail__actions > * {
+    .recipe-detail__menu-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        z-index: 990;
+    }
+
+    .recipe-detail__actions--menu {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: min(78vw, 300px);
+        display: flex;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        align-items: stretch;
+        gap: 10px;
+        padding: 16px;
+        background: #fff;
+        box-shadow: -12px 0 30px rgba(0, 0, 0, 0.25);
+        overflow-y: auto;
+        z-index: 995;
+        transform: translateX(105%);
+        transition: transform 0.25s ease;
+    }
+
+    .recipe-detail__actions--menu.is-open {
+        transform: translateX(0);
+    }
+
+    .recipe-detail__actions--menu > * {
         margin: 0 !important;
         width: 100%;
         min-width: 0;
     }
 
-    .recipe-detail__actions > button {
-        padding-left: 6px;
-        padding-right: 6px;
+    .recipe-detail__actions--menu .favorite-star-btn {
+        width: auto;
+        align-self: flex-start;
     }
 
-    .recipe-detail__actions select.language-select {
-        grid-column: span 2;
+    .recipe-detail__actions--menu select.language-select {
         width: 100%;
     }
 
-    .recipe-detail__actions .favorite-star-btn {
-        width: auto;
-        justify-self: center;
-        align-self: center;
+    .recipe-detail__menu-close {
+        display: inline-flex;
+        justify-content: center;
+        padding: 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        background: #f8fafc;
+        color: #334155;
+        font-weight: 700;
+        cursor: pointer;
+    }
+}
+
+/* スマホ: メタ情報カード（コース/カテゴリー/国/店舗名/分量）は縦積みの行レイアウトにして
+   1文字ずつ縦に折れる崩れを防ぐ */
+@media screen and (max-width: 749px) {
+    .recipe-detail__meta {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .recipe-detail__meta .meta-item {
+        flex-direction: row;
+        align-items: baseline;
+        gap: 12px;
+    }
+
+    .recipe-detail__meta .meta-label {
+        flex: 0 0 76px;
+        font-size: 0.72rem;
+        line-height: 1.4;
+    }
+
+    .recipe-detail__meta .meta-value {
+        flex: 1;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        line-height: 1.5;
     }
 }
