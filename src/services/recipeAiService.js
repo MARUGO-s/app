@@ -45,11 +45,11 @@ const EVIDENCE_DISCIPLINE_RULES = `
 
 const METRIC_UNIT_RULES = `
 【単位ルール】
-- レシピ提案の分量表現は、材料欄・手順欄・回答文のすべてで必ず g または ml を使う。
-- 大さじ、小さじ、カップ、cup、tbsp、tsp、個、本、枚、少々、適量などの曖昧な単位や個数表現は使わない。
-- 卵、にんにく、板ゼラチンなども、そのまま個数で書かず、配合として扱える g または ml に換算して書く。
-- kg や L も使わず、必ず g または ml に統一する。
-- quantity は数値または数値レンジ、unit は "g" または "ml" のみとする。
+- 材料欄の quantity は数値または数値レンジ、unit は "g" または "ml" のみとする。
+- 材料欄では大さじ、小さじ、カップ、cup、tbsp、tsp、個、本、枚、少々、適量などの曖昧な単位や個数表現は使わない。
+- 卵、にんにく、板ゼラチンなども、そのまま個数で書かず、配合として扱える g または ml に換算して書く。kg や L も使わず g または ml に統一する。
+- 手順や回答の文章でも分量は g または ml を基準にする。作業の説明上どうしても個数・本数などの表現が必要な場合は、必ず g または ml の目安を併記する（例: 生地を1本約260gに分割）。
+- 「少々」「適量」のような計量できない表現は文章中でも使わず、必ず具体的な g または ml で書く。
 `;
 
 const DIRECTION_LOCK_RULES = `
@@ -996,33 +996,42 @@ const normalizeAiProposal = (proposal) => {
     };
 };
 
+// 「1本約260g」のようにg/ml換算が併記されていれば計量可能とみなす
+const hasMetricAmountHint = (text) => /[0-9０-９]\s*(?:g|ml)/i.test(String(text ?? ''));
+
 const validateMetricUnitsInProposal = (proposal) => {
     const normalized = normalizeAiProposal(proposal);
+
+    // 材料欄のunitは原価計算・在庫連携の基盤なのでg/ml以外は受け付けない（ここだけ厳格チェック）
     const invalidIngredient = normalized.ingredients.find((item) => !METRIC_ONLY_UNIT_VALUES.has(item.unit));
     if (invalidIngredient) {
         throw new Error(`AI提案の単位が不正です: ${invalidIngredient.name} は ${invalidIngredient.unit || '未設定'} でした。材料の unit は g または ml のみで返してください。`);
     }
 
-    const stepWithForbiddenUnit = normalized.steps.find((item) => FORBIDDEN_RECIPE_UNIT_PATTERN.test(item.text) || FORBIDDEN_RECIPE_UNIT_PATTERN.test(item.note));
-    if (stepWithForbiddenUnit) {
-        throw new Error(`AI提案の手順に禁止単位が含まれています: ${stepWithForbiddenUnit.text}`);
-    }
-
-    const warningWithForbiddenUnit = normalized.warnings.find((item) => FORBIDDEN_RECIPE_UNIT_PATTERN.test(item));
-    if (warningWithForbiddenUnit) {
-        throw new Error(`AI提案の注意文に禁止単位が含まれています: ${warningWithForbiddenUnit}`);
+    // 手順・注意文は自然な日本語として個数・本数などの表現を含み得るため、提案を破棄しない。
+    // g/ml換算の併記がない曖昧な分量表現だけを注意点として利用者に知らせる
+    const isAmbiguousAmountText = (text) => Boolean(text)
+        && FORBIDDEN_RECIPE_UNIT_PATTERN.test(text)
+        && !hasMetricAmountHint(text);
+    const ambiguousTexts = [
+        ...normalized.steps
+            .filter((item) => isAmbiguousAmountText(item.text) || isAmbiguousAmountText(item.note))
+            .map((item) => item.text),
+        ...normalized.warnings.filter((item) => isAmbiguousAmountText(item)),
+    ];
+    if (ambiguousTexts.length > 0) {
+        console.warn('[recipeAiService] 手順・注意文にg/ml換算のない分量表現が含まれています:', ambiguousTexts);
+        normalized.warnings = [
+            ...normalized.warnings,
+            '一部の手順にg/ml換算のない分量表現が含まれています。正確な分量は材料欄のg/ml表記を基準にしてください。',
+        ];
     }
 
     return normalized;
 };
 
-const validateMetricUnitsInConversationAnswer = (answer) => {
-    const normalizedAnswer = normalizeText(answer);
-    if (normalizedAnswer && FORBIDDEN_RECIPE_UNIT_PATTERN.test(normalizedAnswer)) {
-        throw new Error(`AI回答に禁止単位が含まれています: ${normalizedAnswer}`);
-    }
-    return normalizedAnswer;
-};
+// 会話回答は文章なので単位表現の検閲はしない（材料データには影響しないため）
+const validateMetricUnitsInConversationAnswer = (answer) => normalizeText(answer);
 
 const serializeProposalForAi = (proposal) => {
     const normalized = normalizeAiProposal(proposal);
