@@ -619,14 +619,147 @@ const buildAiProposalDiff = (originalRecipe, proposal) => {
         }
     }
 
+    const previousTitle = normalizeDiffText(originalRecipe?.title);
+    const nextTitle = normalizeDiffText(proposal?.title);
+    const titleChanged = Boolean(previousTitle && nextTitle && previousTitle !== nextTitle);
+
     return {
         ingredientRows,
         ingredientChanges: ingredientRows.filter((row) => row.status === 'changed'),
         addedIngredients: ingredientRows.filter((row) => row.status === 'added'),
         removedIngredients,
         stepChanges,
-        hasAnyChanges: ingredientRows.some((row) => row.status !== 'unchanged') || removedIngredients.length > 0 || stepChanges.length > 0,
+        titleChanged,
+        previousTitle,
+        nextTitle,
+        hasAnyChanges: ingredientRows.some((row) => row.status !== 'unchanged') || removedIngredients.length > 0 || stepChanges.length > 0 || titleChanged,
     };
+};
+
+const INLINE_DIFF_MAX_LENGTH = 400;
+
+// 変更前後の文を文字単位LCSで比較し、削除/追加/共通のセグメント列を返す。
+// 長文や全面的な書き換えで意味のある差分にならない場合は null（全文並記にフォールバック）
+const buildInlineTextDiff = (previousText, nextText) => {
+    const prev = Array.from(previousText || '');
+    const next = Array.from(nextText || '');
+    if (!prev.length || !next.length) return null;
+    if (prev.length > INLINE_DIFF_MAX_LENGTH || next.length > INLINE_DIFF_MAX_LENGTH) return null;
+
+    const cols = next.length + 1;
+    const dp = new Uint16Array((prev.length + 1) * cols);
+    for (let i = prev.length - 1; i >= 0; i -= 1) {
+        for (let j = next.length - 1; j >= 0; j -= 1) {
+            dp[i * cols + j] = prev[i] === next[j]
+                ? dp[(i + 1) * cols + j + 1] + 1
+                : Math.max(dp[(i + 1) * cols + j], dp[i * cols + j + 1]);
+        }
+    }
+
+    const segments = [];
+    const pushSegment = (type, text) => {
+        if (!text) return;
+        const last = segments[segments.length - 1];
+        if (last && last.type === type) {
+            last.text += text;
+        } else {
+            segments.push({ type, text });
+        }
+    };
+
+    let i = 0;
+    let j = 0;
+    while (i < prev.length && j < next.length) {
+        if (prev[i] === next[j]) {
+            pushSegment('same', prev[i]);
+            i += 1;
+            j += 1;
+        } else if (dp[(i + 1) * cols + j] >= dp[i * cols + j + 1]) {
+            pushSegment('removed', prev[i]);
+            i += 1;
+        } else {
+            pushSegment('added', next[j]);
+            j += 1;
+        }
+    }
+    pushSegment('removed', prev.slice(i).join(''));
+    pushSegment('added', next.slice(j).join(''));
+
+    // 変更部に挟まれた1文字だけの共通部分は前後の変更に取り込み、差分の細切れを防ぐ
+    const folded = segments.map((segment, index) => {
+        const before = segments[index - 1];
+        const after = segments[index + 1];
+        if (
+            segment.type === 'same'
+            && Array.from(segment.text).length <= 1
+            && before && before.type !== 'same'
+            && after && after.type !== 'same'
+        ) {
+            return [{ type: 'removed', text: segment.text }, { type: 'added', text: segment.text }];
+        }
+        return [segment];
+    }).flat();
+
+    // 連続する変更ブロック内は「削除→追加」の順に並べ直す
+    const normalized = [];
+    let pendingRemoved = '';
+    let pendingAdded = '';
+    const flushPending = () => {
+        if (pendingRemoved) normalized.push({ type: 'removed', text: pendingRemoved });
+        if (pendingAdded) normalized.push({ type: 'added', text: pendingAdded });
+        pendingRemoved = '';
+        pendingAdded = '';
+    };
+    folded.forEach((segment) => {
+        if (segment.type === 'same') {
+            flushPending();
+            const last = normalized[normalized.length - 1];
+            if (last && last.type === 'same') {
+                last.text += segment.text;
+            } else {
+                normalized.push({ ...segment });
+            }
+        } else if (segment.type === 'removed') {
+            pendingRemoved += segment.text;
+        } else {
+            pendingAdded += segment.text;
+        }
+    });
+    flushPending();
+
+    if (!normalized.some((segment) => segment.type !== 'same')) return null;
+
+    // 共通部分が2割未満なら全文書き換えとみなしハイライトしない
+    const sameLength = normalized
+        .filter((segment) => segment.type === 'same')
+        .reduce((total, segment) => total + Array.from(segment.text).length, 0);
+    if (sameLength < Math.min(prev.length, next.length) * 0.2) return null;
+
+    return normalized;
+};
+
+const InlineDiffText = ({ previousText, nextText }) => {
+    const segments = React.useMemo(
+        () => buildInlineTextDiff(previousText, nextText),
+        [previousText, nextText]
+    );
+    if (!segments) {
+        return (
+            <>
+                <span>{previousText}</span>
+                <em>→ {nextText}</em>
+            </>
+        );
+    }
+    return (
+        <span className="recipe-ai-diff-inline">
+            {segments.map((segment, index) => {
+                if (segment.type === 'removed') return <del key={`removed-${index}`}>{segment.text}</del>;
+                if (segment.type === 'added') return <ins key={`added-${index}`}>{segment.text}</ins>;
+                return <React.Fragment key={`same-${index}`}>{segment.text}</React.Fragment>;
+            })}
+        </span>
+    );
 };
 
 export const RecipeDetail = ({
@@ -757,6 +890,11 @@ export const RecipeDetail = ({
         () => buildAiProposalDiff(sourceRecipe, aiProposal),
         [sourceRecipe, aiProposal]
     );
+    const stepChangeTypeByIndex = React.useMemo(() => {
+        const map = new Map();
+        aiProposalDiff.stepChanges.forEach((change) => map.set(change.index, change.type));
+        return map;
+    }, [aiProposalDiff]);
 
     // Determines which data to show
     const displayRecipe = currentLang === 'ORIGINAL' ? fullRecipe : (translationCache[currentLang] || fullRecipe);
@@ -2950,9 +3088,22 @@ export const RecipeDetail = ({
                                     </div>
                                 )}
 
-                                {aiProposalDiff.hasAnyChanges && (
+                                {aiProposalDiff.hasAnyChanges ? (
                                     <div className="recipe-ai-result__block recipe-ai-result__diff">
                                         <h4>元レシピとの差分</h4>
+                                        <p className="recipe-ai-result__diff-hint">
+                                            <del className="recipe-ai-diff-inline__legend-removed">赤の取り消し線</del>が削除された部分、
+                                            <ins className="recipe-ai-diff-inline__legend-added">緑</ins>が追加された部分です。
+                                        </p>
+
+                                        {aiProposalDiff.titleChanged && (
+                                            <div className="recipe-ai-result__diff-section">
+                                                <h5>タイトルの変更</h5>
+                                                <p className="recipe-ai-result__diff-text">
+                                                    <InlineDiffText previousText={aiProposalDiff.previousTitle} nextText={aiProposalDiff.nextTitle} />
+                                                </p>
+                                            </div>
+                                        )}
 
                                         {aiProposalDiff.ingredientChanges.length > 0 && (
                                             <div className="recipe-ai-result__diff-section">
@@ -3014,21 +3165,30 @@ export const RecipeDetail = ({
                                                             <strong>手順 {change.index + 1}</strong>
                                                             {change.type === 'changed' && (
                                                                 <>
-                                                                    <span>{change.previousText}</span>
-                                                                    <em>→ {change.nextText}</em>
+                                                                    {change.previousText !== change.nextText && (
+                                                                        <InlineDiffText previousText={change.previousText} nextText={change.nextText} />
+                                                                    )}
+                                                                    {change.previousNote !== change.nextNote && (
+                                                                        <em>注記: {change.previousNote || 'なし'} → {change.nextNote || 'なし'}</em>
+                                                                    )}
                                                                 </>
                                                             )}
                                                             {change.type === 'added' && (
-                                                                <em>追加: {change.nextText}</em>
+                                                                <span className="recipe-ai-diff-inline"><ins>追加: {change.nextText}</ins></span>
                                                             )}
                                                             {change.type === 'removed' && (
-                                                                <em>削除: {change.previousText}</em>
+                                                                <span className="recipe-ai-diff-inline"><del>削除: {change.previousText}</del></span>
                                                             )}
                                                         </li>
                                                     ))}
                                                 </ul>
                                             </div>
                                         )}
+                                    </div>
+                                ) : (
+                                    <div className="recipe-ai-result__block recipe-ai-result__diff">
+                                        <h4>元レシピとの差分</h4>
+                                        <p className="recipe-ai-result__diff-empty">材料・手順に変更はありません。</p>
                                     </div>
                                 )}
 
@@ -3065,12 +3225,21 @@ export const RecipeDetail = ({
                                     <div className="recipe-ai-result__block">
                                         <h4>手順案</h4>
                                         <ol>
-                                            {aiProposal.steps.map((item, index) => (
-                                                <li key={`${item.text}-${index}`}>
-                                                    {item.text}
-                                                    {item.note && <em>{item.note}</em>}
-                                                </li>
-                                            ))}
+                                            {aiProposal.steps.map((item, index) => {
+                                                const changeType = stepChangeTypeByIndex.get(index);
+                                                return (
+                                                    <li key={`${item.text}-${index}`}>
+                                                        {item.text}
+                                                        {changeType === 'changed' && (
+                                                            <small className="recipe-ai-result__delta">変更あり</small>
+                                                        )}
+                                                        {changeType === 'added' && (
+                                                            <small className="recipe-ai-result__delta recipe-ai-result__delta--added">新規追加</small>
+                                                        )}
+                                                        {item.note && <em>{item.note}</em>}
+                                                    </li>
+                                                );
+                                            })}
                                         </ol>
                                     </div>
                                 </div>
