@@ -261,8 +261,9 @@ const normalizeStringArray = (value) => normalizeArray(value).map(normalizeText)
 const METRIC_ONLY_UNIT_VALUES = new Set(['g', 'ml']);
 // 個・本・枚・カップ・キロ・リットルは「本体」「基本」「個別」「一枚一枚」などの誤検知を避けるため、
 // 直前にアラビア数字（または半・数）がある場合のみ単位として扱う。
-// 英字単位は \b だと「2kg」のような数字密着を拾えないため、英字非隣接を境界条件にする
-const FORBIDDEN_RECIPE_UNIT_PATTERN = /(?<![a-z])(?:kg|kilograms?|liters?|l|cups?|tbsp|tsp|teaspoons?|tablespoons?|cc)(?![a-z])|大さじ|小さじ|(?:[0-9０-９]+(?:[.．][0-9０-９]+)?|[半数])\s*(?:個|本|枚|カップ|キロ|リットル)|少々|適量/i;
+// 英字単位は \b だと「2kg」のような数字密着を拾えないため、英字非隣接を境界条件にする。
+// 単独の l は「L字」「Lサイズ」と区別できないため、直前に数字がある場合のみ単位として扱う
+const FORBIDDEN_RECIPE_UNIT_PATTERN = /(?<![a-z])(?:kg|kilograms?|liters?|cups?|tbsp|tsp|teaspoons?|tablespoons?|cc)(?![a-z])|[0-9０-９]\s*l(?![a-z])|大さじ|小さじ|(?:[0-9０-９]+(?:[.．][0-9０-９]+)?|[半数])\s*(?:個|本|枚|カップ|キロ|リットル)|少々|適量/i;
 
 const readLocalStorage = (key) => {
     try {
