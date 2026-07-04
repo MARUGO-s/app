@@ -1892,13 +1892,68 @@ export const continueRecipeAiConversation = async ({
     };
 };
 
+// パンレシピの粉振り分け用: 元レシピの粉リストに名前一致しない新規材料でも、粉系の名称なら粉欄に入れる
+const BREAD_FLOUR_NAME_PATTERN = /(?:強力|薄力|中力|準強力|全粒|ライ麦|米|そば|大麦|玄米)粉|小麦粉|セモリナ|デュラム|flour/i;
+
+const generateIngredientId = () => (
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+);
+
 export const buildRecipePayloadFromAiProposal = (baseRecipe, proposal, { asNew = false } = {}) => {
     const normalized = normalizeAiProposal(proposal);
     const base = baseRecipe || {};
+    const isBread = base.type === 'bread';
     const title = normalized.title || base.title || 'AI改善レシピ';
     const nextTitle = asNew && normalizeText(title) === normalizeText(base.title)
         ? `${title}（AI改善案）`
         : title;
+
+    // 元レシピがパン配合の場合はtypeと粉/その他の構造を維持したまま提案を反映する
+    let type = 'normal';
+    let flours = [];
+    let breadIngredients = [];
+    let ingredients = normalized.ingredients.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        cost: '',
+        purchaseCost: '',
+        note: item.note,
+    }));
+
+    if (isBread) {
+        type = 'bread';
+        const baseBreadItems = [...(Array.isArray(base.flours) ? base.flours : []), ...(Array.isArray(base.breadIngredients) ? base.breadIngredients : [])];
+        const toNameKey = (value) => normalizeText(value).toLowerCase();
+        const baseFlourNameKeys = new Set(
+            (Array.isArray(base.flours) ? base.flours : []).map((item) => toNameKey(item?.name)).filter(Boolean)
+        );
+
+        normalized.ingredients.forEach((item) => {
+            const nameKey = toNameKey(item.name);
+            const matchedBaseItem = baseBreadItems.find((baseItem) => toNameKey(baseItem?.name) === nameKey) || null;
+            const built = {
+                id: matchedBaseItem?.id || generateIngredientId(),
+                name: item.name,
+                quantity: item.quantity,
+                unit: item.unit,
+                cost: '',
+                purchaseCost: '',
+                note: item.note,
+                isAlcohol: matchedBaseItem?.isAlcohol ?? false,
+                itemCategory: matchedBaseItem?.itemCategory ?? null,
+            };
+            const isFlour = baseFlourNameKeys.has(nameKey) || BREAD_FLOUR_NAME_PATTERN.test(item.name);
+            if (isFlour) {
+                flours.push(built);
+            } else {
+                breadIngredients.push(built);
+            }
+        });
+        ingredients = [...flours, ...breadIngredients];
+    }
 
     return {
         ...base,
@@ -1910,22 +1965,15 @@ export const buildRecipePayloadFromAiProposal = (baseRecipe, proposal, { asNew =
         country: normalized.country || base.country || '',
         storeName: base.storeName || base.store_name || '',
         servings: normalized.servings || base.servings || '',
-        type: 'normal',
+        type,
         image: base.image || '',
         sourceUrl: base.sourceUrl || '',
         tags: Array.from(new Set([...(Array.isArray(base.tags) ? base.tags : []), 'AI改善', 'マルチエージェント'])).filter(Boolean),
-        ingredients: normalized.ingredients.map((item) => ({
-            name: item.name,
-            quantity: item.quantity,
-            unit: item.unit,
-            cost: '',
-            purchaseCost: '',
-            note: item.note,
-        })),
+        ingredients,
         ingredientGroups: [],
         steps: normalized.steps.map((item) => ({ text: item.text })),
         stepGroups: [],
-        flours: [],
-        breadIngredients: [],
+        flours,
+        breadIngredients,
     };
 };
