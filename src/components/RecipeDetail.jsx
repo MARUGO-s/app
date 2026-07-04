@@ -685,13 +685,13 @@ const buildInlineTextDiff = (previousText, nextText) => {
     pushSegment('removed', prev.slice(i).join(''));
     pushSegment('added', next.slice(j).join(''));
 
-    // 変更部に挟まれた1文字だけの共通部分は前後の変更に取り込み、差分の細切れを防ぐ
+    // 変更部に挟まれた短い共通部分（助詞・句読点など）は前後の変更に取り込み、差分の細切れを防ぐ
     const folded = segments.map((segment, index) => {
         const before = segments[index - 1];
         const after = segments[index + 1];
         if (
             segment.type === 'same'
-            && Array.from(segment.text).length <= 1
+            && Array.from(segment.text).length <= 2
             && before && before.type !== 'same'
             && after && after.type !== 'same'
         ) {
@@ -729,38 +729,67 @@ const buildInlineTextDiff = (previousText, nextText) => {
 
     if (!normalized.some((segment) => segment.type !== 'same')) return null;
 
-    // 共通部分が2割未満なら全文書き換えとみなしハイライトしない
+    // 共通部分が3割未満なら全文書き換えとみなしハイライトしない
     const sameLength = normalized
         .filter((segment) => segment.type === 'same')
         .reduce((total, segment) => total + Array.from(segment.text).length, 0);
-    if (sameLength < Math.min(prev.length, next.length) * 0.2) return null;
+    if (sameLength < Math.min(prev.length, next.length) * 0.3) return null;
 
     return normalized;
 };
 
-const InlineDiffText = ({ previousText, nextText }) => {
+// 変更前・変更後を1行ずつに分けて表示する（削除部分は変更前の行で赤、追加部分は変更後の行で緑）
+const DiffTextPair = ({ previousText, nextText }) => {
     const segments = React.useMemo(
         () => buildInlineTextDiff(previousText, nextText),
         [previousText, nextText]
     );
-    if (!segments) {
-        return (
-            <>
-                <span>{previousText}</span>
-                <em>→ {nextText}</em>
-            </>
-        );
-    }
+    // 全文書き換え（差分が取れない）場合は行全体をハイライトする
+    const oldSegments = segments
+        ? segments.filter((segment) => segment.type !== 'added')
+        : [{ type: 'removed', text: previousText }];
+    const newSegments = segments
+        ? segments.filter((segment) => segment.type !== 'removed')
+        : [{ type: 'added', text: nextText }];
     return (
-        <span className="recipe-ai-diff-inline">
-            {segments.map((segment, index) => {
-                if (segment.type === 'removed') return <del key={`removed-${index}`}>{segment.text}</del>;
-                if (segment.type === 'added') return <ins key={`added-${index}`}>{segment.text}</ins>;
-                return <React.Fragment key={`same-${index}`}>{segment.text}</React.Fragment>;
-            })}
+        <span className="recipe-ai-diff-pair">
+            <span className="recipe-ai-diff-pair__line">
+                <span className="recipe-ai-diff-pair__label recipe-ai-diff-pair__label--old">変更前</span>
+                <span className="recipe-ai-diff-pair__text">
+                    {oldSegments.map((segment, index) => (
+                        segment.type === 'removed'
+                            ? <del key={`old-${index}`}>{segment.text}</del>
+                            : <React.Fragment key={`old-${index}`}>{segment.text}</React.Fragment>
+                    ))}
+                </span>
+            </span>
+            <span className="recipe-ai-diff-pair__line">
+                <span className="recipe-ai-diff-pair__label recipe-ai-diff-pair__label--new">変更後</span>
+                <span className="recipe-ai-diff-pair__text">
+                    {newSegments.map((segment, index) => (
+                        segment.type === 'added'
+                            ? <ins key={`new-${index}`}>{segment.text}</ins>
+                            : <React.Fragment key={`new-${index}`}>{segment.text}</React.Fragment>
+                    ))}
+                </span>
+            </span>
         </span>
     );
 };
+
+// 追加・削除された手順を1行で表示する
+const DiffTextSingle = ({ type, text }) => (
+    <span className="recipe-ai-diff-pair">
+        <span className="recipe-ai-diff-pair__line">
+            <span className={`recipe-ai-diff-pair__label recipe-ai-diff-pair__label--${type === 'added' ? 'new' : 'old'}`}>
+                {type === 'added' ? '追加' : '削除'}
+            </span>
+            <span className="recipe-ai-diff-pair__text">
+                {type === 'added' ? <ins>{text}</ins> : <del>{text}</del>}
+            </span>
+        </span>
+    </span>
+);
 
 export const RecipeDetail = ({
     recipe,
@@ -3092,15 +3121,15 @@ export const RecipeDetail = ({
                                     <div className="recipe-ai-result__block recipe-ai-result__diff">
                                         <h4>元レシピとの差分</h4>
                                         <p className="recipe-ai-result__diff-hint">
-                                            <del className="recipe-ai-diff-inline__legend-removed">赤の取り消し線</del>が削除された部分、
-                                            <ins className="recipe-ai-diff-inline__legend-added">緑</ins>が追加された部分です。
+                                            変更前の行の<del className="recipe-ai-diff-inline__legend-removed">赤い部分</del>が削られ、
+                                            変更後の行の<ins className="recipe-ai-diff-inline__legend-added">緑の部分</ins>に置き換わります。
                                         </p>
 
                                         {aiProposalDiff.titleChanged && (
                                             <div className="recipe-ai-result__diff-section">
                                                 <h5>タイトルの変更</h5>
                                                 <p className="recipe-ai-result__diff-text">
-                                                    <InlineDiffText previousText={aiProposalDiff.previousTitle} nextText={aiProposalDiff.nextTitle} />
+                                                    <DiffTextPair previousText={aiProposalDiff.previousTitle} nextText={aiProposalDiff.nextTitle} />
                                                 </p>
                                             </div>
                                         )}
@@ -3166,7 +3195,7 @@ export const RecipeDetail = ({
                                                             {change.type === 'changed' && (
                                                                 <>
                                                                     {change.previousText !== change.nextText && (
-                                                                        <InlineDiffText previousText={change.previousText} nextText={change.nextText} />
+                                                                        <DiffTextPair previousText={change.previousText} nextText={change.nextText} />
                                                                     )}
                                                                     {change.previousNote !== change.nextNote && (
                                                                         <em>注記: {change.previousNote || 'なし'} → {change.nextNote || 'なし'}</em>
@@ -3174,10 +3203,10 @@ export const RecipeDetail = ({
                                                                 </>
                                                             )}
                                                             {change.type === 'added' && (
-                                                                <span className="recipe-ai-diff-inline"><ins>追加: {change.nextText}</ins></span>
+                                                                <DiffTextSingle type="added" text={change.nextText} />
                                                             )}
                                                             {change.type === 'removed' && (
-                                                                <span className="recipe-ai-diff-inline"><del>削除: {change.previousText}</del></span>
+                                                                <DiffTextSingle type="removed" text={change.previousText} />
                                                             )}
                                                         </li>
                                                     ))}
