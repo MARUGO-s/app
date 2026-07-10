@@ -2,97 +2,6 @@ const n=`.recipe-form {
     padding: 0 var(--space-sm);
 }
 
-.recipe-ai-form__actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-.recipe-ai-intake {
-    border: 1px solid rgba(148, 163, 184, 0.26);
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.78);
-    padding: 12px;
-    display: grid;
-    gap: 12px;
-}
-
-.recipe-ai-intake__header p,
-.recipe-ai-intake__question,
-.recipe-ai-intake__rationale {
-    margin: 4px 0 0;
-    line-height: 1.55;
-}
-
-.recipe-ai-intake__header p,
-.recipe-ai-intake__rationale {
-    color: #64748b;
-    font-size: 0.85rem;
-}
-
-.recipe-ai-intake__list {
-    display: grid;
-    gap: 10px;
-}
-
-.recipe-ai-intake__item {
-    border: 1px solid rgba(203, 213, 225, 0.9);
-    border-radius: 12px;
-    background: rgba(248, 250, 252, 0.95);
-    padding: 10px;
-}
-
-.recipe-ai-intake__title-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    align-items: center;
-}
-
-.recipe-ai-intake__title-row span {
-    flex: 0 0 auto;
-    border-radius: 999px;
-    background: rgba(14, 165, 233, 0.12);
-    color: #075985;
-    padding: 2px 8px;
-    font-size: 0.72rem;
-    font-weight: 800;
-}
-
-.recipe-ai-intake__question {
-    color: #0f172a;
-}
-
-.recipe-ai-intake__options {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-top: 10px;
-}
-
-.recipe-ai-intake__option {
-    border: 1px solid #cbd5e1;
-    border-radius: 999px;
-    background: #ffffff;
-    color: #334155;
-    padding: 6px 10px;
-    font: inherit;
-    font-size: 0.8rem;
-    cursor: pointer;
-}
-
-.recipe-ai-intake__option.is-active {
-    border-color: #0284c7;
-    background: rgba(14, 165, 233, 0.12);
-    color: #075985;
-    font-weight: 800;
-}
-
-.recipe-ai-intake__answer {
-    margin-top: 10px;
-    min-height: 72px;
-}
-
 @media (min-width: 900px) {
     .recipe-form {
         padding: 0;
@@ -655,5 +564,4 @@ h3 {
 .group-delete-btn:hover {
     text-decoration: underline;
     opacity: 0.9;
-}
-`;export{n as default};
+}`;export{n as default};

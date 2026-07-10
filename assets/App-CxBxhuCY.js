@@ -1079,12 +1079,9 @@ function AppContent() {
         setSearchParams({ view: 'detail', id: savedRecipe.id, ...getDetailReturnParams(), ...replacementParams }); // Better UX: Show the new recipe
       }
 
-      return savedRecipe;
-
     } catch (error) {
       console.error("Failed to save recipe:", error);
       toast.error(\`保存に失敗しました\\nエラー: \${error.message || error.error_description || JSON.stringify(error)}\`);
-      return null;
     }
   };
 
@@ -1157,7 +1154,7 @@ function AppContent() {
     setSearchParams({ view: 'create' });
   };
 
-  const handleImportRecipeBatch = async (recipes, importOptions = {}) => {
+  const handleImportRecipeBatch = async (recipes, importOptions = {}, sourceLabel = '') => {
     if (!user?.id) {
       toast.warning('ログインが必要です');
       return;
@@ -1953,21 +1950,6 @@ function AppContent() {
           onView={addToHistory}
           onHardDelete={handleHardDeleteRecipe}
           onDuplicate={handleDuplicate}
-          onAiRecipeSaved={(savedRecipe, { asNew, replacedOriginal = false, originalRecipeId = null } = {}) => {
-            setRecipes(prevRecipes => {
-              const filtered = prevRecipes.filter(r =>
-                String(r.id) !== String(savedRecipe.id)
-                && (!replacedOriginal || String(r.id) !== String(originalRecipeId))
-              );
-              if (asNew || replacedOriginal) {
-                return [savedRecipe, ...filtered];
-              }
-              return prevRecipes.map(r => String(r.id) === String(savedRecipe.id) ? savedRecipe : r);
-            });
-            if (asNew || replacedOriginal) {
-              setSearchParams({ view: 'detail', id: savedRecipe.id, ...getDetailReturnParams() });
-            }
-          }}
           forceEditEnabled={searchParams.get('from') === 'composite-cost-edit' || searchParams.get('from') === 'composite-cost'}
           onOpenCompositeCost={() => setSearchParams({
             view: 'composite-cost',

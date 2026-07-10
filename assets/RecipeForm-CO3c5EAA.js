@@ -13,33 +13,15 @@ import { applyImportedRecipeType } from '../utils/importRecipeType';
 import { mapImportedRecipeToSavePayload } from '../utils/importedRecipeMapper';
 import { recipeService } from '../services/recipeService';
 import {
-    continueRecipeAiConversation,
-    generateRecipeAiIntake,
-    generateProductRecipeDraft,
-    isSakanaUnlocked,
-    serializeRecipeAiDirectionContext,
-    unlockSakana,
-} from '../services/recipeAiService';
-import { recordRecipeAiAdoption } from '../services/recipeAiLearningService';
-import {
     loadRecipeMetaSuggestions,
     rememberRecipeMetaFields,
 } from '../services/recipeMetaSuggestionService';
 import { RecipeMetaDatalist } from './RecipeMetaDatalist';
 import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../contexts/useToast';
-import { Modal } from './Modal';
-import { getRecipeAiProgressConfig } from '../constants/recipeAiProgress';
 import './RecipeForm.css';
 import './RecipeFormMock.css';
 import { ImportModal } from './ImportModal';
-
-const formatAiDisplayText = (value) => String(value ?? '')
-    .replace(/\\\\r\\\\n|\\\\n|\\\\r/g, '\\n')
-    .replace(/\\\\t/g, ' ')
-    .replace(/\\*\\*([^*]+)\\*\\*/g, '$1')
-    .replace(/\\n{3,}/g, '\\n\\n')
-    .trim();
 
 export const RecipeForm = ({ onSave, onCancel, initialData }) => {
     const safeInitialData = initialData || {};
@@ -176,44 +158,6 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         servings: [],
         storeName: STORE_LIST,
     });
-    const [aiBrief, setAiBrief] = useState('');
-    const [aiDraft, setAiDraft] = useState(null);
-    const [aiError, setAiError] = useState('');
-    const [isAiGenerating, setIsAiGenerating] = useState(false);
-    const [aiConversation, setAiConversation] = useState([]);
-    const [aiConversationInput, setAiConversationInput] = useState('');
-    const [aiIntake, setAiIntake] = useState(null);
-    const [isAiConversing, setIsAiConversing] = useState(false);
-    const [isAiPreparingQuestions, setIsAiPreparingQuestions] = useState(false);
-    const [aiProvider, setAiProvider] = useState('groq');
-    const [sakanaUnlocked, setSakanaUnlocked] = useState(() => isSakanaUnlocked());
-    const [aiProgressMode, setAiProgressMode] = useState(null);
-    const [aiProgressStepIndex, setAiProgressStepIndex] = useState(0);
-    const aiProgressConfig = useMemo(
-        () => (aiProgressMode ? getRecipeAiProgressConfig(aiProgressMode) : null),
-        [aiProgressMode]
-    );
-    const isAiProgressOpen = Boolean(aiProgressConfig) && (isAiGenerating || isAiConversing);
-
-    const ensureSakanaUnlockedForProvider = (provider) => {
-        if (!String(provider || '').startsWith('sakana') || sakanaUnlocked) return true;
-        const input = window.prompt('Sakana AIはロックされています。解除パスワードを入力してください。');
-        if (input === null) return false;
-        if (!unlockSakana(input)) {
-            toast.error('パスワードが違います。');
-            return false;
-        }
-        setSakanaUnlocked(true);
-        toast.success('Sakana AIのロックを解除しました。');
-        return true;
-    };
-
-    const handleAiProviderChange = (value) => {
-        if (!ensureSakanaUnlockedForProvider(value)) {
-            return;
-        }
-        setAiProvider(value);
-    };
 
     useEffect(() => {
         if (!user?.id) return undefined;
@@ -244,15 +188,6 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
             isMounted = false;
         };
     }, []);
-
-    useEffect(() => {
-        if (!isAiProgressOpen || !aiProgressConfig) return undefined;
-        setAiProgressStepIndex(0);
-        const intervalId = window.setInterval(() => {
-            setAiProgressStepIndex((current) => Math.min(current + 1, aiProgressConfig.steps.length - 1));
-        }, 2200);
-        return () => window.clearInterval(intervalId);
-    }, [isAiProgressOpen, aiProgressConfig]);
 
     const handleImportedRecipe = (importedData, sourceUrl = '', importOptions = {}) => {
         const importTypeMode = importOptions?.mode === 'image'
@@ -427,187 +362,6 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         }
     };
 
-    const applyAiDraftToForm = (draft) => {
-        if (!draft) return;
-
-        const ingredientGroupId = crypto.randomUUID();
-        const mappedIngredients = (draft.ingredients || []).map((item) => ({
-            id: crypto.randomUUID(),
-            name: item.name || '',
-            quantity: item.quantity || '',
-            unit: item.unit || '',
-            cost: '',
-            purchaseCost: '',
-            note: item.note || '',
-            groupId: ingredientGroupId,
-        }));
-        const mappedSteps = (draft.steps || []).map((item) => ({
-            id: crypto.randomUUID(),
-            text: item.text || '',
-        }));
-
-        setFormData(prev => ({
-            ...prev,
-            title: draft.title || prev.title,
-            description: draft.description || draft.improvementSummary || prev.description,
-            course: draft.course || prev.course,
-            category: draft.category || prev.category,
-            country: draft.country || prev.country,
-            servings: draft.servings || prev.servings,
-            type: 'normal',
-            ingredients: mappedIngredients.length > 0 ? mappedIngredients : prev.ingredients,
-            ingredientGroups: mappedIngredients.length > 0 ? [{ id: ingredientGroupId, name: '材料' }] : prev.ingredientGroups,
-            steps: mappedSteps.length > 0 ? mappedSteps : prev.steps,
-            stepGroups: [],
-            ingredientSections: undefined,
-            stepSections: undefined,
-            flours: [],
-            breadIngredients: [],
-        }));
-        setWorkTab('ingredients');
-    };
-
-    const hasMissingRequiredAiIntakeAnswers = (intake) => (intake?.questions || [])
-        .some((question) => question?.required !== false && !String(question?.answer || '').trim());
-
-    const handleAiIntakeAnswerChange = (questionId, answer) => {
-        setAiIntake((current) => {
-            if (!current) return current;
-            return {
-                ...current,
-                questions: (current.questions || []).map((question) => (
-                    question.id === questionId
-                        ? { ...question, answer }
-                        : question
-                )),
-            };
-        });
-    };
-
-    const loadAiDraftIntake = async () => {
-        const brief = [aiBrief, formData.title, formData.description].map(v => String(v || '').trim()).filter(Boolean).join('\\n');
-        if (!brief) {
-            setAiError('開発テーマかレシピ名を入力してください。');
-            return null;
-        }
-        if (!ensureSakanaUnlockedForProvider(aiProvider)) {
-            return null;
-        }
-
-        setIsAiPreparingQuestions(true);
-        setAiError('');
-        try {
-            const intake = await generateRecipeAiIntake({
-                mode: 'product',
-                brief,
-                provider: aiProvider,
-            });
-            setAiIntake(intake);
-            toast.success('方向性の確認項目を作成しました。回答後に開発を開始してください。');
-            return intake;
-        } catch (error) {
-            console.error('[RecipeForm] AI intake generation failed:', error);
-            setAiError(error?.message || '確認項目の作成に失敗しました。');
-            return null;
-        } finally {
-            setIsAiPreparingQuestions(false);
-        }
-    };
-
-    const handleGenerateAiDraft = async () => {
-        const brief = [aiBrief, formData.title, formData.description].map(v => String(v || '').trim()).filter(Boolean).join('\\n');
-        if (!brief) {
-            setAiError('開発テーマかレシピ名を入力してください。');
-            return;
-        }
-        if (!ensureSakanaUnlockedForProvider(aiProvider)) {
-            return;
-        }
-        if (!aiIntake?.questions?.length) {
-            await loadAiDraftIntake();
-            return;
-        }
-        if (hasMissingRequiredAiIntakeAnswers(aiIntake)) {
-            setAiError('AIの確認項目に回答してから開発を開始してください。');
-            return;
-        }
-
-        setAiProgressMode('product-generate');
-        setAiProgressStepIndex(0);
-        setIsAiGenerating(true);
-        setAiError('');
-        try {
-            const draft = await generateProductRecipeDraft({
-                brief,
-                provider: aiProvider,
-                directionContext: serializeRecipeAiDirectionContext(aiIntake),
-            });
-            setAiDraft(draft);
-            applyAiDraftToForm(draft);
-            setAiConversation([]);
-            setAiConversationInput('');
-            toast.success('AIドラフトをフォームに反映しました。');
-        } catch (error) {
-            console.error('[RecipeForm] AI draft generation failed:', error);
-            setAiError(error?.message || 'AIドラフトの生成に失敗しました。');
-        } finally {
-            setIsAiGenerating(false);
-            setAiProgressMode(null);
-            setAiProgressStepIndex(0);
-        }
-    };
-
-    const handleAskAiDraftFollowUp = async () => {
-        const question = aiConversationInput.trim();
-        if (!question) {
-            setAiError('追加の質問または修正内容を入力してください。');
-            return;
-        }
-        if (!aiDraft) {
-            setAiError('先にAIドラフトを作成してください。');
-            return;
-        }
-        if (!ensureSakanaUnlockedForProvider(aiProvider)) {
-            return;
-        }
-
-        setAiProgressMode('product-conversation');
-        setAiProgressStepIndex(0);
-        setIsAiConversing(true);
-        setAiError('');
-        const userMessage = { role: 'user', content: question };
-        const nextConversation = [...aiConversation, userMessage];
-        setAiConversation(nextConversation);
-        setAiConversationInput('');
-
-        try {
-            const response = await continueRecipeAiConversation({
-                recipe: formData,
-                proposal: aiDraft,
-                conversation: nextConversation,
-                question,
-                provider: aiProvider,
-                mode: 'product',
-                directionContext: serializeRecipeAiDirectionContext(aiIntake),
-            });
-            setAiDraft(response.proposal);
-            applyAiDraftToForm(response.proposal);
-            setAiConversation([
-                ...nextConversation,
-                { role: 'assistant', content: response.answer },
-            ]);
-            toast.success(response.forceReproposal ? '会話内容を踏まえて新しいドラフトを作成しました。' : response.shouldUpdateProposal ? '会話内容をドラフトに反映しました。' : 'AIが文脈を踏まえて回答しました。');
-        } catch (error) {
-            console.error('[RecipeForm] AI draft conversation failed:', error);
-            setAiError(error?.message || 'AI会話の実行に失敗しました。');
-            setAiConversation(nextConversation);
-        } finally {
-            setIsAiConversing(false);
-            setAiProgressMode(null);
-            setAiProgressStepIndex(0);
-        }
-    };
-
     const handleDrag = (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -669,7 +423,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         return formData.steps?.length || 0;
     }, [formData.stepSections, formData.steps]);
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
         // Basic validation could go here
 
@@ -744,7 +498,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
             storeName: formData.storeName,
         }, user);
 
-        const payload = {
+        onSave({
             ...formData,
             ingredients: finalIngredients,
             ingredientGroups: finalGroups,
@@ -756,23 +510,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
             // Clean up temporary UI state
             ingredientSections: undefined,
             stepSections: undefined,
-        };
-
-        const savedRecipe = await onSave(payload);
-        if (savedRecipe && aiDraft) {
-            await recordRecipeAiAdoption({
-                modeFamily: 'product',
-                proposal: aiDraft,
-                finalRecipe: savedRecipe,
-                baseRecipe: payload,
-                sourceRunId: aiDraft?.learningMeta?.runId || null,
-                adoptionType: 'accepted_proposal',
-                feedbackNote: 'AI商品開発ドラフトをレシピとして保存',
-                metadata: {
-                    isEdit,
-                },
-            });
-        }
+        });
     };
 
     const isEdit = Boolean(safeInitialData?.id);
@@ -787,46 +525,6 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                     initialMode={importMode}
                 />
             )}
-            <Modal
-                isOpen={isAiProgressOpen}
-                onClose={() => {}}
-                title={aiProgressConfig?.title || 'AIエージェント進行中'}
-                size="small"
-                showCloseButton={false}
-                maxWidth="520px"
-            >
-                <div className="recipe-ai-progress">
-                    <p className="recipe-ai-progress__description">
-                        {aiProgressConfig?.description}
-                    </p>
-                    <div className="recipe-ai-progress__status">
-                        <span className="recipe-ai-progress__pulse" />
-                        <div>
-                            <strong>現在の工程</strong>
-                            <p>{aiProgressConfig?.steps?.[aiProgressStepIndex] || '進行状況を確認中'}</p>
-                        </div>
-                    </div>
-                    <div className="recipe-ai-progress__bar" aria-hidden="true">
-                        <span
-                            className="recipe-ai-progress__bar-fill"
-                            style={{
-                                width: \`\${(((aiProgressStepIndex + 1) / Math.max(aiProgressConfig?.steps?.length || 1, 1)) * 100).toFixed(0)}%\`,
-                            }}
-                        />
-                    </div>
-                    <div className="recipe-ai-progress__steps">
-                        {(aiProgressConfig?.steps || []).map((step, index) => (
-                            <div
-                                key={\`\${step}-\${index}\`}
-                                className={\`recipe-ai-progress__step\${index < aiProgressStepIndex ? ' is-complete' : ''}\${index === aiProgressStepIndex ? ' is-active' : ''}\`}
-                            >
-                                <span className="recipe-ai-progress__step-index">{index + 1}</span>
-                                <span className="recipe-ai-progress__step-label">{step}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </Modal>
             <div className="recipe-form-mock__page">
                 <div className="recipe-form-mock__commandbar" role="banner">
                     <div className="recipe-form-mock__commandbar-inner">
@@ -930,174 +628,6 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
 
                     <div className="recipe-form-mock__grid">
                         <aside className="recipe-form-mock__col recipe-form-mock__col--side">
-                            {!safeInitialData?.id && (
-                                <Card className="recipe-form-mock__card recipe-form-mock__card--ai">
-                                    <div className="recipe-form-mock__card-title">マルチAI商品開発</div>
-                                    <div className="recipe-ai-form">
-                                        <label className="recipe-ai-form__label">
-                                            AIプロバイダー
-                                            <select
-                                                className="recipe-ai-form__select"
-                                                value={aiProvider}
-                                                onChange={(e) => handleAiProviderChange(e.target.value)}
-                                                disabled={isAiGenerating}
-                                            >
-                                                <option value="groq">Groq</option>
-                                                <option value="sakana-subscription">{sakanaUnlocked ? 'Sakana AI（サブスク）' : '🔒 Sakana AI（サブスク）'}</option>
-                                                <option value="sakana-payg">{sakanaUnlocked ? 'Sakana AI（従量課金）' : '🔒 Sakana AI（従量課金）'}</option>
-                                            </select>
-                                        </label>
-                                        <label className="recipe-ai-form__label">
-                                            開発テーマ
-                                            <textarea
-                                                className="recipe-ai-form__textarea"
-                                                value={aiBrief}
-                                                onChange={(e) => setAiBrief(e.target.value)}
-                                                placeholder="例: ランチ向けの軽い魚料理。仕込みは前日可、提供は5分以内。"
-                                                disabled={isAiGenerating}
-                                            />
-                                        </label>
-                                        <div className="recipe-ai-form__actions">
-                                            <Button
-                                                type="button"
-                                                variant="secondary"
-                                                size="sm"
-                                                block
-                                                isLoading={isAiPreparingQuestions}
-                                                disabled={isAiGenerating || isAiConversing}
-                                                onClick={loadAiDraftIntake}
-                                            >
-                                                方向性の確認項目を出す
-                                            </Button>
-                                        </div>
-                                        {aiIntake?.questions?.length > 0 && (
-                                            <div className="recipe-ai-intake">
-                                                <div className="recipe-ai-intake__header">
-                                                    <strong>開発前の確認項目</strong>
-                                                    {aiIntake.summary && <p>{formatAiDisplayText(aiIntake.summary)}</p>}
-                                                </div>
-                                                <div className="recipe-ai-intake__list">
-                                                    {aiIntake.questions.map((question, index) => (
-                                                        <div className="recipe-ai-intake__item" key={question.id || index}>
-                                                            <div className="recipe-ai-intake__title-row">
-                                                                <strong>{question.label || \`確認項目 \${index + 1}\`}</strong>
-                                                                {question.required !== false && <span>必須</span>}
-                                                            </div>
-                                                            <p className="recipe-ai-intake__question">{question.question}</p>
-                                                            {question.rationale && (
-                                                                <p className="recipe-ai-intake__rationale">{question.rationale}</p>
-                                                            )}
-                                                            {question.options?.length > 0 && (
-                                                                <div className="recipe-ai-intake__options">
-                                                                    {question.options.map((option) => (
-                                                                        <button
-                                                                            key={option}
-                                                                            type="button"
-                                                                            className={\`recipe-ai-intake__option\${String(question.answer || '').trim() === option ? ' is-active' : ''}\`}
-                                                                            onClick={() => handleAiIntakeAnswerChange(question.id, option)}
-                                                                        >
-                                                                            {option}
-                                                                        </button>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                            <textarea
-                                                                className="recipe-ai-form__textarea recipe-ai-intake__answer"
-                                                                value={question.answer || ''}
-                                                                onChange={(e) => handleAiIntakeAnswerChange(question.id, e.target.value)}
-                                                                placeholder={question.placeholder || '回答を入力'}
-                                                                disabled={isAiGenerating || isAiConversing}
-                                                            />
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                        <Button
-                                            type="button"
-                                            variant="primary"
-                                            size="sm"
-                                            block
-                                            isLoading={isAiGenerating}
-                                            onClick={handleGenerateAiDraft}
-                                        >
-                                            {aiIntake?.questions?.length ? '回答内容でエージェント開発を開始' : 'まず方向性を確認する'}
-                                        </Button>
-                                        {aiError && <div className="recipe-ai-form__error">{aiError}</div>}
-                                        {aiDraft?.agentMessages?.length > 0 && (
-                                            <div className="recipe-ai-form__agents">
-                                                <strong>エージェント所見</strong>
-                                                {aiDraft.agentMessages.map((message, index) => (
-                                                    <div className="recipe-ai-agent-line" key={\`\${message.agentId}-\${index}\`}>
-                                                        <span>{message.avatar}</span>
-                                                        <div>
-                                                            <b>{message.agentName}</b>
-                                                            <p>{formatAiDisplayText(message.content)}</p>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                        {aiDraft?.keyChanges?.length > 0 && (
-                                            <div className="recipe-ai-form__result">
-                                                <strong>反映した要点</strong>
-                                                <ul>
-                                                    {aiDraft.keyChanges.slice(0, 4).map((item, index) => (
-                                                        <li key={\`\${item}-\${index}\`}>{item}</li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        )}
-                                        {aiDraft?.sources?.length > 0 && (
-                                            <div className="recipe-ai-form__sources">
-                                                <strong>参照ソース</strong>
-                                                {aiDraft.sources.slice(0, 4).map((source) => (
-                                                    <a key={source.url} href={source.url} target="_blank" rel="noreferrer">
-                                                        {source.id ? \`[\${source.id}] \` : ''}{source.title || source.url}
-                                                    </a>
-                                                ))}
-                                            </div>
-                                        )}
-                                        {aiDraft && (
-                                            <div className="recipe-ai-form__conversation">
-                                                <strong>続けて相談・再開発</strong>
-                                                {aiConversation.length > 0 && (
-                                                    <div className="recipe-ai-form__conversation-messages">
-                                                        {aiConversation.map((message, index) => (
-                                                            <div
-                                                                className={\`recipe-ai-form__conversation-message recipe-ai-form__conversation-message--\${message.role === 'assistant' ? 'assistant' : 'user'}\`}
-                                                                key={\`\${message.role}-\${index}-\${message.content.slice(0, 16)}\`}
-                                                            >
-                                                                <span>{message.role === 'assistant' ? 'AI' : '質問'}</span>
-                                                                <p>{formatAiDisplayText(message.content)}</p>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                                <textarea
-                                                    className="recipe-ai-form__textarea"
-                                                    value={aiConversationInput}
-                                                    onChange={(e) => setAiConversationInput(e.target.value)}
-                                                    placeholder="例: もっと原価を下げたい / 仕込みを前日に寄せたい / 肉を使わない案に変えて"
-                                                    disabled={isAiConversing || isAiGenerating}
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    block
-                                                    isLoading={isAiConversing}
-                                                    disabled={isAiConversing || isAiGenerating || !aiConversationInput.trim()}
-                                                    onClick={handleAskAiDraftFollowUp}
-                                                >
-                                                    文脈つきで質問・再開発
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </Card>
-                            )}
-
                             <Card className="recipe-form-mock__card recipe-form-mock__card--notes">
                                 <div className="recipe-form-mock__card-title">メモ</div>
                                 <Input
