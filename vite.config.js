@@ -6,6 +6,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: '/app/',
+  build: {
+    target: ['es2020', 'safari14'],
+  },
   server: {
     host: '127.0.0.1',
     port: Number(process.env.PORT) || 3000,
