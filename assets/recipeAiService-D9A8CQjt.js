@@ -2167,6 +2167,45 @@ export const generateRecipeImprovement = async ({ recipe, notes, provider, direc
     });
 };
 
+const analyzeConversationQuestionRelevance = async ({ question, recipeText, currentProposalText }) => {
+    const systemInstruction = \`あなたはAIルーティングエージェントです。
+ユーザーからの「改善提案に対する追加質問・修正指示」を分析し、以下の専門家エージェントのうち、この質問に回答するため、あるいはレシピを再検討するために「新しくWeb調査や専門検証を実行する必要があるエージェントのID」を配列で返してください。
+
+エージェント一覧:
+- 'heritage' (料理文化調査): 料理の歴史的由来、正統性、名前の文脈などに関する質問の場合のみ選択。
+- 'research' (Web調査): 特定ের材料や製法、代替食材についての一般的な調査が必要な場合。
+- 'globalComparison' (海外・本場比較): 海外の標準製法、海外の他レシピとの比較などの調査が必要な場合。
+- 'synthesizer' (レシピ統合): 材料の配合率、分量、工程の手順などの「具体的な構成」についての変更指示の場合。
+- 'science' (食品科学検証): 火入れの理屈、食感への科学的影響、化学変化、保存性などの理屈に関する質問の場合。
+- 'validator' (科学・安全性検証): 温度管理、衛生状態、再現性、アレルギーなど安全性に関する質問の場合。
+
+指示：
+- 質問内容に関連しないエージェントは一切起動しないよう、厳密に選別してください。
+- 配合や手順の具体的な変更が伴わない純粋な質問（例：「この工程の意味は何ですか？」「別のやり方はありますか？」）の場合は、材料の再構成を伴わないため、'synthesizer'も不要と判断できます。
+- 返却フォーマット: 以下の構造の JSON のみ。余計な説明文やマークダウンのコードブロックは一切含めず、純粋なJSON文字列としてのみ出力してください。
+{
+  "activeAgentIds": ["science", "synthesizer"]
+}\`;
+
+    const promptText = \`【改善対象レシピ】\\n\${recipeText}\\n\\n【前回の提案内容】\\n\${currentProposalText}\\n\\n【追加の質問・修正指示】\\n\${question}\`;
+
+    try {
+        const { parsed } = await callRecipeAiJson({
+            provider: 'groq',
+            prompt: promptText,
+            instructions: systemInstruction,
+            maxOutputTokens: 500,
+            timeoutMs: 15000,
+        });
+        if (Array.isArray(parsed?.activeAgentIds)) {
+            return parsed.activeAgentIds.map(v => String(v).trim());
+        }
+    } catch (e) {
+        console.warn('[analyzeConversationQuestionRelevance] Routing failed, fallback to all active:', e);
+    }
+    return ['heritage', 'research', 'globalComparison', 'synthesizer', 'science', 'validator'];
+};
+
 export const continueRecipeAiConversation = async ({
     recipe,
     proposal,
@@ -2205,14 +2244,53 @@ export const continueRecipeAiConversation = async ({
         directionContext,
     };
 
-    const agentOutputs = await Promise.all(agentOrder.map((agentId, index) => settleAgent({
-        agent: AGENT_DEFINITIONS[agentId],
-        ...pickAgentPlan({ agentId, mainProvider: provider, routeContext }),
-        prompt: isProductMode
-            ? buildProductConversationAgentPrompt(agentId, recipeText, currentProposalText, conversationText, cleanQuestion, memoryContext, directionContext)
-            : buildImprovementConversationAgentPrompt(agentId, recipeText, currentProposalText, conversationText, cleanQuestion, memoryContext, directionContext),
-        note: \`\${AGENT_DEFINITIONS[agentId].agentName}の会話回答・再評価に使用\`,
-    }, index)));
+    // ユーザーの質問・指示に関連するエージェントを自動選別する
+    const activeAgentIds = await analyzeConversationQuestionRelevance({
+        question: cleanQuestion,
+        recipeText,
+        currentProposalText,
+    });
+
+    const previousAgentMessages = proposal?.agentMessages || [];
+
+    const agentOutputs = await Promise.all(agentOrder.map(async (agentId, index) => {
+        const hasCache = previousAgentMessages.some(m => m.agentId === agentId && m.content);
+        const shouldRun = activeAgentIds.includes(agentId) || !hasCache;
+
+        if (shouldRun) {
+            return await settleAgent({
+                agent: AGENT_DEFINITIONS[agentId],
+                ...pickAgentPlan({ agentId, mainProvider: provider, routeContext }),
+                prompt: isProductMode
+                    ? buildProductConversationAgentPrompt(agentId, recipeText, currentProposalText, conversationText, cleanQuestion, memoryContext, directionContext)
+                    : buildImprovementConversationAgentPrompt(agentId, recipeText, currentProposalText, conversationText, cleanQuestion, memoryContext, directionContext),
+                note: \`\${AGENT_DEFINITIONS[agentId].agentName}の会話回答・再評価に使用\`,
+            }, index);
+        } else {
+            const cached = previousAgentMessages.find(m => m.agentId === agentId);
+            return {
+                agent: AGENT_DEFINITIONS[agentId],
+                result: {
+                    content: cached?.content || '(前回の調査結果に問題は見つかりませんでした。)',
+                    findings: [],
+                    risks: [],
+                    recommendations: [],
+                },
+                sources: [],
+                inputTokens: 0,
+                outputTokens: 0,
+                estimatedCostJpy: 0,
+                status: 'success',
+                message: {
+                    agentId,
+                    agentName: AGENT_DEFINITIONS[agentId].agentName,
+                    avatar: AGENT_DEFINITIONS[agentId].avatar,
+                    content: cached?.content || '(前回の調査結果に問題は見つかりませんでした。)',
+                    timestamp: cached?.timestamp || new Date().toLocaleTimeString('ja-JP', { hour12: false }),
+                }
+            };
+        }
+    }));
 
     const agentFindings = formatAgentFindings(agentOutputs);
     const auditPlan = pickAgentPlan({ agentId: 'auditor', mainProvider: provider, routeContext });
