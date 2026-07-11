@@ -875,6 +875,7 @@ export const RecipeDetail = ({
     const [isSavingHtmlExport, setIsSavingHtmlExport] = React.useState(false);
     const [aiProgressMode, setAiProgressMode] = React.useState(null);
     const [aiProgressStepIndex, setAiProgressStepIndex] = React.useState(0);
+    const [isAiFinishingProgress, setIsAiFinishingProgress] = React.useState(false);
     const aiProgressConfig = React.useMemo(
         () => (aiProgressMode ? getRecipeAiProgressConfig(aiProgressMode) : null),
         [aiProgressMode]
@@ -953,13 +954,25 @@ export const RecipeDetail = ({
     }, []);
 
     React.useEffect(() => {
-        if (!isAiProgressOpen || !aiProgressConfig) return undefined;
-        setAiProgressStepIndex(0);
+        if (!isAiProgressOpen || !aiProgressConfig) {
+            setIsAiFinishingProgress(false);
+            return undefined;
+        }
+        
+        // 通常時はゆっくり2.2秒間隔、通信完了後の駆け抜け演出中は250ms間隔
+        const intervalTime = isAiFinishingProgress ? 250 : 2200;
+        
         const intervalId = window.setInterval(() => {
-            setAiProgressStepIndex((current) => Math.min(current + 1, aiProgressConfig.steps.length - 1));
-        }, 2200);
+            setAiProgressStepIndex((current) => {
+                if (current < aiProgressConfig.steps.length - 1) {
+                    return current + 1;
+                }
+                return current;
+            });
+        }, intervalTime);
+
         return () => window.clearInterval(intervalId);
-    }, [isAiProgressOpen, aiProgressConfig]);
+    }, [isAiProgressOpen, aiProgressConfig, isAiFinishingProgress]);
 
     const costAdjustedRecipe = React.useMemo(() => {
         const adjustItem = (item, options = {}) => {
@@ -1239,6 +1252,7 @@ export const RecipeDetail = ({
 
         setAiProgressMode('improvement-generate');
         setAiProgressStepIndex(0);
+        setIsAiFinishingProgress(false);
         setIsAiGenerating(true);
         setAiError('');
         try {
@@ -1248,6 +1262,25 @@ export const RecipeDetail = ({
                 provider: aiProvider,
                 directionContext: serializeRecipeAiDirectionContext(aiIntake),
             });
+
+            // 1. 通信が完了したら、高速駆け抜けフラグをオンにする
+            setIsAiFinishingProgress(true);
+
+            // 2. 進行インジケータが最終ステップに達するまで待機する
+            const stepsCount = getRecipeAiProgressConfig('improvement-generate')?.steps?.length || 10;
+            await new Promise((resolve) => {
+                const checkTimer = window.setInterval(() => {
+                    setAiProgressStepIndex((current) => {
+                        if (current >= stepsCount - 1) {
+                            window.clearInterval(checkTimer);
+                            // 3. 最終ステップに到達したら、1.2秒間待ってユーザーに完了状態を見せる
+                            window.setTimeout(resolve, 1200);
+                        }
+                        return current;
+                    });
+                }, 100);
+            });
+
             setAiProposal(proposal);
             setAiConversation([]);
             setAiConversationInput('');
@@ -1259,6 +1292,7 @@ export const RecipeDetail = ({
             setIsAiGenerating(false);
             setAiProgressMode(null);
             setAiProgressStepIndex(0);
+            setIsAiFinishingProgress(false);
         }
     };
 
@@ -1327,6 +1361,7 @@ export const RecipeDetail = ({
         // 改善案再作成の時は、進捗ダイアログ（Modal）を表示する
         setAiProgressMode('improvement-conversation');
         setAiProgressStepIndex(0);
+        setIsAiFinishingProgress(false);
         setIsAiGenerating(true);
         setAiError('');
 
@@ -1350,6 +1385,24 @@ export const RecipeDetail = ({
                 directionContext: serializeRecipeAiDirectionContext(aiIntake),
             });
 
+            // 1. 通信が完了したら、高速駆け抜けフラグをオンにする
+            setIsAiFinishingProgress(true);
+
+            // 2. 進行インジケータが最終ステップに達するまで待機する
+            const stepsCount = getRecipeAiProgressConfig('improvement-conversation')?.steps?.length || 10;
+            await new Promise((resolve) => {
+                const checkTimer = window.setInterval(() => {
+                    setAiProgressStepIndex((current) => {
+                        if (current >= stepsCount - 1) {
+                            window.clearInterval(checkTimer);
+                            // 3. 最終ステップに到達したら、1.2秒間待ってユーザーに完了状態を見せる
+                            window.setTimeout(resolve, 1200);
+                        }
+                        return current;
+                    });
+                }, 100);
+            });
+
             setAiProposal(response.proposal);
             setAiConversation([
                 ...aiConversation,
@@ -1363,6 +1416,7 @@ export const RecipeDetail = ({
             setIsAiGenerating(false);
             setAiProgressMode(null);
             setAiProgressStepIndex(0);
+            setIsAiFinishingProgress(false);
         }
     };
 
