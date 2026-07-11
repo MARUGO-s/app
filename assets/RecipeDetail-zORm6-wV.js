@@ -1584,12 +1584,20 @@ export const RecipeDetail = ({
 </body>
 </html>\`;
 
-            // 1. Save to DB
-            const savedRow = await saveRecipeAiHtmlExport(recipe.id, title, html, {
+            // 1. Save to DB (現在のレシピIDに保存)
+            const exportMeta = {
                 proposalTitle: aiProposal?.title,
                 agentCount: agentPlanList.length,
                 chatCount: aiConversation.length
-            });
+            };
+            const savedRow = await saveRecipeAiHtmlExport(recipe.id, title, html, exportMeta);
+
+            // 元レシピ（AI改善前の別レシピ）にも同時に紐付けて保存する
+            const originalRecipeForExport = sourceRecipe || recipe;
+            if (originalRecipeForExport?.id && originalRecipeForExport.id !== recipe.id) {
+                await saveRecipeAiHtmlExport(originalRecipeForExport.id, title, html, exportMeta)
+                    .catch(err => console.warn('[RecipeDetail] HTML export cross-link to original recipe failed:', err));
+            }
 
             // Update local state
             setHtmlExports(prev => [savedRow, ...prev]);
