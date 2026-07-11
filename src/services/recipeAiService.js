@@ -229,6 +229,13 @@ const AGENT_DEFINITIONS = {
         sourcePrefix: 'X',
         usesWeb: true,
     },
+    rebuttal: {
+        agentId: 'rebuttal',
+        agentName: '反証エージェント',
+        avatar: '⚔️',
+        sourcePrefix: 'C',
+        usesWeb: false,
+    },
     master: {
         agentId: 'master',
         agentName: '統括シェフエージェント',
@@ -988,6 +995,7 @@ const normalizeAiProposal = (proposal) => {
         agentMessages: normalizeAgentMessages(proposal?.agentMessages || proposal?.messages),
         sources: normalizeSources(proposal?.sources),
         audit: proposal?.audit && typeof proposal.audit === 'object' ? proposal.audit : null,
+        rebuttal: proposal?.rebuttal && typeof proposal.rebuttal === 'object' ? proposal.rebuttal : null,
         learningMeta: proposal?.learningMeta && typeof proposal.learningMeta === 'object'
             ? {
                 runId: normalizeText(proposal.learningMeta?.runId),
@@ -1357,6 +1365,114 @@ ${STRICT_JSON_OUTPUT_RULES}
 ${PROPOSAL_OUTPUT_SCHEMA}
 `;
 
+const buildRebuttalPrompt = ({ contextBlock, draftText, memoryContext = '', directionContext = '' }) => `
+あなたは反証エージェントです。統括シェフが作成した下記のドラフト配合を、採用前に意図的に批判する役割です。
+賛辞は不要です。「内容が薄い」「主張と数値が一致しない」点を具体的に暴いてください。
+
+${contextBlock}
+
+【ドラフト配合（反証対象）】
+${draftText}
+
+${memoryContext}
+
+${directionContext}
+
+【必須反証項目】
+- 配合の完全性: 塩・水分・油脂・酸・糖など基本要素の欠落。パン生地なら加水率・塩分率・イースト比をベーカーズ%で概算し、現実的な範囲か判定する
+- 数値の具体性: 分量が曖昧・不自然でないか。材料の合計量と分量（servings）が釣り合うか
+- 主張との整合: 改善要約・主な変更が、材料・分量・手順に実際に反映されているか。「言っただけ」の変更を指摘する
+- 手順の密度: 温度・時間・状態の判断基準が書かれているか。抜けている工程（予熱・休ませ・乳化・冷却など）はないか
+- 内容の薄さ: 材料数・手順数・説明が題材に対して不足していないか
+
+${METRIC_UNIT_RULES}
+${STRICT_JSON_OUTPUT_RULES}
+以下のJSONのみを返してください。
+{
+  "content": "反証の総括。ドラフトの弱点を200〜320文字で明確に述べる",
+  "findings": ["具体的な欠陥指摘1", "具体的な欠陥指摘2", "具体的な欠陥指摘3"],
+  "risks": ["このまま採用した場合の失敗リスク。なければ空配列"],
+  "recommendations": ["修正指示1（数値を含めて具体的に）", "修正指示2"]
+}
+`;
+
+const buildRevisionPrompt = ({ contextBlock, draftText, rebuttalFindings, memoryContext = '', directionContext = '' }) => `
+あなたは統括シェフエージェントです。
+自身が作成した下記ドラフト配合に対して、反証エージェントから指摘が出ました。指摘をすべて検討し、修正した完成版レシピを返してください。
+
+${contextBlock}
+
+【ドラフト配合】
+${draftText}
+
+【反証エージェントの指摘】
+${rebuttalFindings}
+
+${memoryContext}
+
+${directionContext}
+
+【修正ルール】
+- 妥当な指摘はすべて材料・分量・手順の実データに反映する。要約文だけの反映は禁止。
+- 指摘が誤りと判断した場合は、採用しなかった理由を warnings に残す。
+- ドラフトの良い部分は維持し、材料・手順を不必要に削らない。
+- 改善要約・主な変更は修正後の内容と一致させる。
+- 季節・薬膳・養生の文脈は扱わない。
+
+${directionContext ? DIRECTION_LOCK_RULES : ''}
+${METRIC_UNIT_RULES}
+${EVIDENCE_DISCIPLINE_RULES}
+${STRICT_JSON_OUTPUT_RULES}
+以下のJSONのみを返してください。
+${PROPOSAL_OUTPUT_SCHEMA}
+`;
+
+// ドラフト配合を反証エージェントに批判させ、統括シェフが指摘を反映した完成版を返す。
+// 反証・修正のどちらで失敗してもドラフトを失わない（フォールバック優先）。
+const runRebuttalAndRevise = async ({ provider, draftParsed, contextBlock, memoryContext, directionContext, rebuttalIndex }) => {
+    const draftText = serializeProposalForAi(draftParsed);
+    const rebuttalOutput = await settleAgent({
+        agent: AGENT_DEFINITIONS.rebuttal,
+        provider,
+        prompt: buildRebuttalPrompt({ contextBlock, draftText, memoryContext, directionContext }),
+        note: '反証エージェントのドラフト批判に使用',
+    }, rebuttalIndex);
+
+    const hasCritique = Boolean(
+        rebuttalOutput.result.content
+        || rebuttalOutput.result.findings.length > 0
+        || rebuttalOutput.result.recommendations.length > 0
+    );
+    if (!hasCritique) return { finalParsed: draftParsed, rebuttalOutput };
+
+    try {
+        const { parsed } = await callRecipeAiJson({
+            provider,
+            prompt: buildRevisionPrompt({
+                contextBlock,
+                draftText,
+                rebuttalFindings: formatAgentFindings([rebuttalOutput]),
+                memoryContext,
+                directionContext,
+            }),
+            instructions: 'You are the executive chef agent. Revise your draft recipe to address every valid critique from the rebuttal agent. Return strict JSON only.',
+            maxOutputTokens: 7000,
+            timeoutMs: REQUEST_TIMEOUT_MS,
+            reasoningEffort: 'high',
+        });
+        const revised = normalizeAiProposal(parsed);
+        if (revised.ingredients.length === 0 || revised.steps.length === 0) {
+            console.warn('[recipeAiService] 反証後の修正案が不完全なためドラフトを採用します');
+            return { finalParsed: draftParsed, rebuttalOutput };
+        }
+        validateMetricUnitsInProposal(parsed);
+        return { finalParsed: parsed, rebuttalOutput };
+    } catch (error) {
+        console.warn('[recipeAiService] 反証後の修正生成に失敗したためドラフトを採用します', error);
+        return { finalParsed: draftParsed, rebuttalOutput };
+    }
+};
+
 const buildProductConversationAgentPrompt = (agentId, recipeText, currentProposalText, conversationText, question, memoryContext = '', directionContext = '') => {
     const roleInstructions = {
         research: `
@@ -1562,21 +1678,23 @@ ${STRICT_JSON_OUTPUT_RULES}
 ${CONVERSATION_OUTPUT_SCHEMA}
 `;
 
-const completeProposalWithMeta = ({ proposal, agentOutputs, auditOutput, finalSources }) => normalizeAiProposal({
+const completeProposalWithMeta = ({ proposal, agentOutputs, auditOutput, rebuttalOutput, finalSources }) => normalizeAiProposal({
     ...proposal,
     agentMessages: [
         ...agentOutputs.map(output => output.message),
         ...(auditOutput ? [auditOutput.message] : []),
+        ...(rebuttalOutput ? [rebuttalOutput.message] : []),
         {
             agentId: AGENT_DEFINITIONS.master.agentId,
             agentName: AGENT_DEFINITIONS.master.agentName,
             avatar: AGENT_DEFINITIONS.master.avatar,
             content: normalizeText(proposal?.improvementSummary || proposal?.description || '全エージェントの所見を統合し、保存可能なレシピ案に整理しました。'),
-            timestamp: `12:00:${String((agentOutputs.length + (auditOutput ? 2 : 1)) * 10).padStart(2, '0')}`,
+            timestamp: `12:00:${String((agentOutputs.length + (auditOutput ? 1 : 0) + (rebuttalOutput ? 1 : 0) + 1) * 10).padStart(2, '0')}`,
         },
     ],
     sources: finalSources,
     audit: auditOutput?.result || null,
+    rebuttal: rebuttalOutput?.result || null,
 });
 
 const mergeProposalContext = (currentProposal, nextProposal, extra = {}) => {
@@ -1638,14 +1756,25 @@ export const generateProductRecipeDraft = async ({ brief, provider, directionCon
         reasoningEffort: 'high',
     });
 
+    // 統括シェフのドラフトを反証エージェントに批判させ、指摘を反映した完成版に差し替える
+    const { finalParsed, rebuttalOutput } = await runRebuttalAndRevise({
+        provider,
+        draftParsed: parsed,
+        contextBlock: ['【開発テーマ】', cleanBrief].join('\n'),
+        memoryContext,
+        directionContext,
+        rebuttalIndex: agentOutputs.length,
+    });
+
     const sources = mergeSources(
         ...agentOutputs.map(output => output.sources),
         extractSourcesFromProviderResponse(payload, '統括シェフエージェントの最終判断に使用', 'M', provider)
     );
 
     const proposal = completeProposalWithMeta({
-        proposal: validateMetricUnitsInProposal(parsed),
+        proposal: validateMetricUnitsInProposal(finalParsed),
         agentOutputs,
+        rebuttalOutput,
         finalSources: sources,
     });
     const runId = await logRecipeAiRun({
@@ -1711,6 +1840,16 @@ export const generateRecipeImprovement = async ({ recipe, notes, provider, direc
         reasoningEffort: 'high',
     });
 
+    // 統括シェフのドラフトを反証エージェントに批判させ、指摘を反映した完成版に差し替える
+    const { finalParsed, rebuttalOutput } = await runRebuttalAndRevise({
+        provider,
+        draftParsed: parsed,
+        contextBlock: ['【既存レシピ】', recipeText, '', '【ユーザー追加指示】', normalizeText(notes) || '特になし'].join('\n'),
+        memoryContext,
+        directionContext,
+        rebuttalIndex: agentOutputs.length + 1,
+    });
+
     const sources = mergeSources(
         ...agentOutputs.map(output => output.sources),
         auditOutput.sources,
@@ -1718,9 +1857,10 @@ export const generateRecipeImprovement = async ({ recipe, notes, provider, direc
     );
 
     const proposal = completeProposalWithMeta({
-        proposal: validateMetricUnitsInProposal(parsed),
+        proposal: validateMetricUnitsInProposal(finalParsed),
         agentOutputs,
         auditOutput,
+        rebuttalOutput,
         finalSources: sources,
     });
     const runId = await logRecipeAiRun({
