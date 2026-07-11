@@ -325,3 +325,129 @@
   text-align: center;
   opacity: 0.6;
 }
+
+/* Group Accordion Styles */
+.logs-groups-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.log-group-accordion {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.log-group-accordion:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.log-group-accordion.is-expanded {
+  border-color: rgba(77, 171, 247, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.log-group-header {
+  display: flex;
+  align-items: center;
+  padding: 14px 20px;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  user-select: none;
+  gap: 16px;
+  transition: background-color 0.2s;
+  flex-wrap: wrap;
+}
+
+.log-group-header:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.log-group-header__toggle-icon {
+  font-size: 12px;
+  opacity: 0.7;
+  width: 16px;
+  transition: transform 0.2s;
+}
+
+.log-group-header__info {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex: 1;
+  flex-wrap: wrap;
+  min-width: 250px;
+}
+
+.log-group-header__time {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.log-group-header__user {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.log-group-header__models {
+  font-size: 12px;
+  opacity: 0.65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 400px;
+}
+
+.log-group-header__cost-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 14px;
+}
+
+.log-group-header__cost-label {
+  opacity: 0.8;
+}
+
+.log-group-header__cost-value {
+  font-weight: 700;
+  color: #4dabf7;
+  font-size: 16px;
+}
+
+.log-group-header__unpriced-badge {
+  font-size: 10px;
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.log-group-content {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.15);
+  overflow-x: auto;
+}
+
+/* ネストされたテーブル用の微調整 */
+.log-group-content .logs-table {
+  background: transparent;
+  border: none;
+}
+
+.log-group-content .logs-table th {
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 13px;
+  padding: 10px 14px;
+}
+
+.log-group-content .logs-table td {
+  padding: 10px 14px;
+  font-size: 13px;
+}
