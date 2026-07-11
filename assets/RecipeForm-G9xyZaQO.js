@@ -637,7 +637,9 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
             toast.success('AIが質問に回答しました。');
         } catch (error) {
             console.error('[RecipeForm] AI Q&A failed:', error);
-            setAiError(error?.message || 'AI回答の生成に失敗しました。');
+            const errMsg = error?.message || 'AI回答の生成に失敗しました。';
+            setAiError(errMsg);
+            toast.error(errMsg);
             setAiConversation(nextConversation);
         } finally {
             setIsAiConversing(false);
@@ -1301,6 +1303,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                                 >
                                                     相談・Q&Aを送信
                                                 </Button>
+                                                {aiError && <div className="recipe-ai-form__error" style={{ marginTop: '0.5rem' }}>{aiError}</div>}
                                             </div>
                                         )}
                                     </div>
