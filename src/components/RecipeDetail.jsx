@@ -870,6 +870,7 @@ export const RecipeDetail = ({
     const [aiConversation, setAiConversation] = React.useState([]);
     const [aiConversationInput, setAiConversationInput] = React.useState('');
     const [isAiConversing, setIsAiConversing] = React.useState(false);
+    const [isHistoryModalOpen, setIsHistoryModalOpen] = React.useState(false);
     const [htmlExports, setHtmlExports] = React.useState([]);
     const [isSavingHtmlExport, setIsSavingHtmlExport] = React.useState(false);
     const [aiProgressMode, setAiProgressMode] = React.useState(null);
@@ -3174,6 +3175,22 @@ export const RecipeDetail = ({
                                     onToggle={() => onToggleFavorite(recipe.id)}
                                 />
                             )}
+                            {htmlExports.length > 0 && (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => setIsHistoryModalOpen(true)}
+                                    style={{
+                                        background: 'linear-gradient(135deg, #0284c7, #3b82f6)',
+                                        color: '#ffffff',
+                                        fontWeight: 'bold',
+                                        boxShadow: '0 2px 4px rgba(37, 99, 235, 0.25)',
+                                        border: 'none',
+                                    }}
+                                >
+                                    🗂️ AI分析レポート ({htmlExports.length})
+                                </Button>
+                            )}
                             <Button
                                 variant="secondary"
                                 size="sm"
@@ -4809,6 +4826,65 @@ export const RecipeDetail = ({
                         </section>
                     </div>
                 </div >
+
+                {/* AI分析レポート履歴モーダル */}
+                <Modal
+                    isOpen={isHistoryModalOpen}
+                    onClose={() => setIsHistoryModalOpen(false)}
+                    title="🗂️ AI分析レポート保存履歴"
+                    size="medium"
+                >
+                    <div style={{ padding: '1rem 0' }}>
+                        <p style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '1.5rem' }}>
+                            このレシピに紐づいてデータベースに保存された、過去のAI分析・エージェント所見レポートの一覧です。
+                        </p>
+                        {htmlExports.length === 0 ? (
+                            <p style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem 0' }}>保存されたレポートはありません。</p>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '450px', overflowY: 'auto' }}>
+                                {htmlExports.map((exp) => (
+                                    <div key={exp.id} style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        padding: '0.85rem 1rem',
+                                        backgroundColor: '#f8fafc',
+                                        border: '1px solid #e2e8f0',
+                                        borderRadius: '8px',
+                                        fontSize: '0.9rem'
+                                    }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', textAlign: 'left' }}>
+                                            <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{exp.title}</span>
+                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                                保存日時: {new Date(exp.created_at).toLocaleString()} | エージェント所見 {exp.metadata?.agentCount || 0}件 {exp.metadata?.chatCount > 0 ? `| 会話 ${exp.metadata.chatCount}回` : ''}
+                                            </span>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                            <Button
+                                                type="button"
+                                                variant="primary"
+                                                size="sm"
+                                                onClick={() => handlePreviewHtmlExport(exp)}
+                                                style={{ padding: '4px 12px' }}
+                                            >
+                                                表示
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="danger"
+                                                size="sm"
+                                                onClick={() => handleDeleteHtmlExport(exp.id)}
+                                                style={{ padding: '4px 12px' }}
+                                            >
+                                                削除
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </Modal>
 
                 {/* 印刷プレビューモーダル */}
                 <Modal
