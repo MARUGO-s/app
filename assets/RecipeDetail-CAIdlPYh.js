@@ -5,6 +5,16 @@ import { Modal } from './Modal';
 import { translationService } from '../services/translationService';
 import { recipeService } from '../services/recipeService';
 import {
+    buildRecipePayloadFromAiProposal,
+    continueRecipeAiConversation,
+    generateRecipeAiIntake,
+    generateRecipeImprovement,
+    isSakanaUnlocked,
+    serializeRecipeAiDirectionContext,
+    unlockSakana,
+} from '../services/recipeAiService';
+import { recordRecipeAiAdoption } from '../services/recipeAiLearningService';
+import {
     categoryCostOverrideService,
     getRecipeCostCategories,
     computeRecipeTotalCostTaxIncluded,
@@ -13,6 +23,7 @@ import { unitConversionService } from '../services/unitConversionService';
 import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../contexts/useToast';
 import { SUPPORTED_LANGUAGES } from '../constants';
+import { getRecipeAiProgressConfig } from '../constants/recipeAiProgress';
 import { normalizeUnit } from '../utils/unitUtils';
 import './RecipeDetail.css';
 import { FavoriteStarButton } from './FavoriteStarButton';
@@ -24,6 +35,13 @@ const formatDate = (dateString) => {
     const date = new Date(dateString);
     return \`\${date.getFullYear()}/\${String(date.getMonth() + 1).padStart(2, '0')}/\${String(date.getDate()).padStart(2, '0')}\`;
 };
+
+const formatAiDisplayText = (value) => String(value ?? '')
+    .replace(/\\\\r\\\\n|\\\\n|\\\\r/g, '\\n')
+    .replace(/\\\\t/g, ' ')
+    .replace(/\\*\\*([^*]+)\\*\\*/g, '$1')
+    .replace(/\\n{3,}/g, '\\n\\n')
+    .trim();
 
 const toFiniteCurrencyNumber = (value) => {
     if (value == null) return NaN;
@@ -475,6 +493,304 @@ const scaleQuantityText = (qty, mult) => {
     return formatScaledQuantity(num * multNum);
 };
 
+const normalizeDiffText = (value) => String(value ?? '')
+    .replace(/\\s+/g, ' ')
+    .trim();
+
+const normalizeDiffKey = (value) => normalizeDiffText(value).toLowerCase();
+
+const formatDiffAmount = (quantity, unit) => {
+    const safeQuantity = normalizeDiffText(quantity);
+    const safeUnit = normalizeDiffText(unit);
+    return [safeQuantity, safeUnit].filter(Boolean).join('');
+};
+
+const isSameMeasuredAmount = (left, right) => {
+    const leftQuantity = parseQuantityValue(left?.quantity);
+    const rightQuantity = parseQuantityValue(right?.quantity);
+    const leftUnit = normalizeUnit(left?.unit);
+    const rightUnit = normalizeUnit(right?.unit);
+
+    if (Number.isFinite(leftQuantity) && Number.isFinite(rightQuantity) && leftUnit && rightUnit) {
+        return leftUnit === rightUnit && Math.abs(leftQuantity - rightQuantity) < 0.0001;
+    }
+
+    return formatDiffAmount(left?.quantity, left?.unit) === formatDiffAmount(right?.quantity, right?.unit);
+};
+
+const buildAiProposalDiff = (originalRecipe, proposal) => {
+    const originalIngredients = Array.isArray(originalRecipe?.ingredients) ? originalRecipe.ingredients : [];
+    const proposalIngredients = Array.isArray(proposal?.ingredients) ? proposal.ingredients : [];
+    const originalSteps = Array.isArray(originalRecipe?.steps) ? originalRecipe.steps : [];
+    const proposalSteps = Array.isArray(proposal?.steps) ? proposal.steps : [];
+
+    const originalIngredientBuckets = new Map();
+    originalIngredients.forEach((item, index) => {
+        const key = normalizeDiffKey(item?.name);
+        if (!key) return;
+        const list = originalIngredientBuckets.get(key) || [];
+        list.push({ item, index });
+        originalIngredientBuckets.set(key, list);
+    });
+
+    const usedOriginalIngredientIndexes = new Set();
+    const ingredientRows = proposalIngredients.map((item, index) => {
+        const key = normalizeDiffKey(item?.name);
+        const sameNameCandidates = key ? (originalIngredientBuckets.get(key) || []) : [];
+        let matched = sameNameCandidates.find((candidate) => !usedOriginalIngredientIndexes.has(candidate.index)) || null;
+
+        if (!matched && originalIngredients[index] && !usedOriginalIngredientIndexes.has(index)) {
+            matched = { item: originalIngredients[index], index };
+        }
+
+        if (matched) {
+            usedOriginalIngredientIndexes.add(matched.index);
+        }
+
+        const previousItem = matched?.item || null;
+        const amountChanged = previousItem ? !isSameMeasuredAmount(previousItem, item) : false;
+        const noteChanged = previousItem
+            ? normalizeDiffText(previousItem?.note) !== normalizeDiffText(item?.note)
+            : false;
+        const nameChanged = previousItem
+            ? normalizeDiffKey(previousItem?.name) !== normalizeDiffKey(item?.name)
+            : false;
+
+        return {
+            item,
+            index,
+            status: previousItem
+                ? ((amountChanged || noteChanged || nameChanged) ? 'changed' : 'unchanged')
+                : 'added',
+            previousItem,
+            amountChanged,
+            noteChanged,
+            nameChanged,
+            previousAmountLabel: previousItem ? formatDiffAmount(previousItem?.quantity, previousItem?.unit) : '',
+            nextAmountLabel: formatDiffAmount(item?.quantity, item?.unit),
+        };
+    });
+
+    const removedIngredients = originalIngredients
+        .map((item, index) => ({ item, index }))
+        .filter(({ index }) => !usedOriginalIngredientIndexes.has(index));
+
+    const stepChanges = [];
+    const maxStepLength = Math.max(originalSteps.length, proposalSteps.length);
+    for (let index = 0; index < maxStepLength; index += 1) {
+        const originalStep = originalSteps[index];
+        const proposalStep = proposalSteps[index];
+        const previousText = normalizeDiffText(typeof originalStep === 'string' ? originalStep : originalStep?.text);
+        const nextText = normalizeDiffText(typeof proposalStep === 'string' ? proposalStep : proposalStep?.text);
+        const previousNote = normalizeDiffText(originalStep?.note);
+        const nextNote = normalizeDiffText(proposalStep?.note);
+
+        if (previousText && nextText) {
+            if (previousText !== nextText || previousNote !== nextNote) {
+                stepChanges.push({
+                    type: 'changed',
+                    index,
+                    previousText,
+                    nextText,
+                    previousNote,
+                    nextNote,
+                });
+            }
+            continue;
+        }
+
+        if (!previousText && nextText) {
+            stepChanges.push({
+                type: 'added',
+                index,
+                nextText,
+                nextNote,
+            });
+            continue;
+        }
+
+        if (previousText && !nextText) {
+            stepChanges.push({
+                type: 'removed',
+                index,
+                previousText,
+                previousNote,
+            });
+        }
+    }
+
+    const previousTitle = normalizeDiffText(originalRecipe?.title);
+    const nextTitle = normalizeDiffText(proposal?.title);
+    const titleChanged = Boolean(previousTitle && nextTitle && previousTitle !== nextTitle);
+
+    return {
+        ingredientRows,
+        ingredientChanges: ingredientRows.filter((row) => row.status === 'changed'),
+        addedIngredients: ingredientRows.filter((row) => row.status === 'added'),
+        removedIngredients,
+        stepChanges,
+        titleChanged,
+        previousTitle,
+        nextTitle,
+        hasAnyChanges: ingredientRows.some((row) => row.status !== 'unchanged') || removedIngredients.length > 0 || stepChanges.length > 0 || titleChanged,
+    };
+};
+
+const INLINE_DIFF_MAX_LENGTH = 400;
+
+// 変更前後の文を文字単位LCSで比較し、削除/追加/共通のセグメント列を返す。
+// 長文や全面的な書き換えで意味のある差分にならない場合は null（全文並記にフォールバック）
+const buildInlineTextDiff = (previousText, nextText) => {
+    const prev = Array.from(previousText || '');
+    const next = Array.from(nextText || '');
+    if (!prev.length || !next.length) return null;
+    if (prev.length > INLINE_DIFF_MAX_LENGTH || next.length > INLINE_DIFF_MAX_LENGTH) return null;
+
+    const cols = next.length + 1;
+    const dp = new Uint16Array((prev.length + 1) * cols);
+    for (let i = prev.length - 1; i >= 0; i -= 1) {
+        for (let j = next.length - 1; j >= 0; j -= 1) {
+            dp[i * cols + j] = prev[i] === next[j]
+                ? dp[(i + 1) * cols + j + 1] + 1
+                : Math.max(dp[(i + 1) * cols + j], dp[i * cols + j + 1]);
+        }
+    }
+
+    const segments = [];
+    const pushSegment = (type, text) => {
+        if (!text) return;
+        const last = segments[segments.length - 1];
+        if (last && last.type === type) {
+            last.text += text;
+        } else {
+            segments.push({ type, text });
+        }
+    };
+
+    let i = 0;
+    let j = 0;
+    while (i < prev.length && j < next.length) {
+        if (prev[i] === next[j]) {
+            pushSegment('same', prev[i]);
+            i += 1;
+            j += 1;
+        } else if (dp[(i + 1) * cols + j] >= dp[i * cols + j + 1]) {
+            pushSegment('removed', prev[i]);
+            i += 1;
+        } else {
+            pushSegment('added', next[j]);
+            j += 1;
+        }
+    }
+    pushSegment('removed', prev.slice(i).join(''));
+    pushSegment('added', next.slice(j).join(''));
+
+    // 変更部に挟まれた短い共通部分（助詞・句読点など）は前後の変更に取り込み、差分の細切れを防ぐ
+    const folded = segments.map((segment, index) => {
+        const before = segments[index - 1];
+        const after = segments[index + 1];
+        if (
+            segment.type === 'same'
+            && Array.from(segment.text).length <= 2
+            && before && before.type !== 'same'
+            && after && after.type !== 'same'
+        ) {
+            return [{ type: 'removed', text: segment.text }, { type: 'added', text: segment.text }];
+        }
+        return [segment];
+    }).flat();
+
+    // 連続する変更ブロック内は「削除→追加」の順に並べ直す
+    const normalized = [];
+    let pendingRemoved = '';
+    let pendingAdded = '';
+    const flushPending = () => {
+        if (pendingRemoved) normalized.push({ type: 'removed', text: pendingRemoved });
+        if (pendingAdded) normalized.push({ type: 'added', text: pendingAdded });
+        pendingRemoved = '';
+        pendingAdded = '';
+    };
+    folded.forEach((segment) => {
+        if (segment.type === 'same') {
+            flushPending();
+            const last = normalized[normalized.length - 1];
+            if (last && last.type === 'same') {
+                last.text += segment.text;
+            } else {
+                normalized.push({ ...segment });
+            }
+        } else if (segment.type === 'removed') {
+            pendingRemoved += segment.text;
+        } else {
+            pendingAdded += segment.text;
+        }
+    });
+    flushPending();
+
+    if (!normalized.some((segment) => segment.type !== 'same')) return null;
+
+    // 共通部分が3割未満なら全文書き換えとみなしハイライトしない
+    const sameLength = normalized
+        .filter((segment) => segment.type === 'same')
+        .reduce((total, segment) => total + Array.from(segment.text).length, 0);
+    if (sameLength < Math.min(prev.length, next.length) * 0.3) return null;
+
+    return normalized;
+};
+
+// 変更前・変更後を1行ずつに分けて表示する（削除部分は変更前の行で赤、追加部分は変更後の行で緑）
+const DiffTextPair = ({ previousText, nextText }) => {
+    const segments = React.useMemo(
+        () => buildInlineTextDiff(previousText, nextText),
+        [previousText, nextText]
+    );
+    // 全文書き換え（差分が取れない）場合は行全体をハイライトする
+    const oldSegments = segments
+        ? segments.filter((segment) => segment.type !== 'added')
+        : [{ type: 'removed', text: previousText }];
+    const newSegments = segments
+        ? segments.filter((segment) => segment.type !== 'removed')
+        : [{ type: 'added', text: nextText }];
+    return (
+        <span className="recipe-ai-diff-pair">
+            <span className="recipe-ai-diff-pair__line">
+                <span className="recipe-ai-diff-pair__label recipe-ai-diff-pair__label--old">変更前</span>
+                <span className="recipe-ai-diff-pair__text">
+                    {oldSegments.map((segment, index) => (
+                        segment.type === 'removed'
+                            ? <del key={\`old-\${index}\`}>{segment.text}</del>
+                            : <React.Fragment key={\`old-\${index}\`}>{segment.text}</React.Fragment>
+                    ))}
+                </span>
+            </span>
+            <span className="recipe-ai-diff-pair__line">
+                <span className="recipe-ai-diff-pair__label recipe-ai-diff-pair__label--new">変更後</span>
+                <span className="recipe-ai-diff-pair__text">
+                    {newSegments.map((segment, index) => (
+                        segment.type === 'added'
+                            ? <ins key={\`new-\${index}\`}>{segment.text}</ins>
+                            : <React.Fragment key={\`new-\${index}\`}>{segment.text}</React.Fragment>
+                    ))}
+                </span>
+            </span>
+        </span>
+    );
+};
+
+// 追加・削除された手順を1行で表示する
+const DiffTextSingle = ({ type, text }) => (
+    <span className="recipe-ai-diff-pair">
+        <span className="recipe-ai-diff-pair__line">
+            <span className={\`recipe-ai-diff-pair__label recipe-ai-diff-pair__label--\${type === 'added' ? 'new' : 'old'}\`}>
+                {type === 'added' ? '追加' : '削除'}
+            </span>
+            <span className="recipe-ai-diff-pair__text">
+                {type === 'added' ? <ins>{text}</ins> : <del>{text}</del>}
+            </span>
+        </span>
+    </span>
+);
+
 export const RecipeDetail = ({
     recipe,
     ownerLabel,
@@ -491,6 +807,7 @@ export const RecipeDetail = ({
     forceEditEnabled = false,
     isFavorite = false,
     onToggleFavorite = null,
+    onAiRecipeSaved = null,
 }) => {
     const { user } = useAuth();
     const toast = useToast();
@@ -518,6 +835,47 @@ export const RecipeDetail = ({
     const [groupUsageAmountByCategory, setGroupUsageAmountByCategory] = React.useState(new Map());
     const [conversionMap, setConversionMap] = React.useState(new Map());
     const [uiTextCache, setUiTextCache] = React.useState({});
+    const [isAiModalOpen, setIsAiModalOpen] = React.useState(false);
+    const [isActionMenuOpen, setIsActionMenuOpen] = React.useState(false);
+    const [aiProvider, setAiProvider] = React.useState('groq');
+    const [sakanaUnlocked, setSakanaUnlocked] = React.useState(() => isSakanaUnlocked());
+
+    const ensureSakanaUnlockedForProvider = (provider) => {
+        if (!String(provider || '').startsWith('sakana') || sakanaUnlocked) return true;
+        const input = window.prompt('Sakana AIはロックされています。解除パスワードを入力してください。');
+        if (input === null) return false;
+        if (!unlockSakana(input)) {
+            toast.error('パスワードが違います。');
+            return false;
+        }
+        setSakanaUnlocked(true);
+        toast.success('Sakana AIのロックを解除しました。');
+        return true;
+    };
+
+    const handleAiProviderChange = (value) => {
+        if (!ensureSakanaUnlockedForProvider(value)) {
+            return;
+        }
+        setAiProvider(value);
+    };
+    const [aiNotes, setAiNotes] = React.useState('');
+    const [aiIntake, setAiIntake] = React.useState(null);
+    const [aiProposal, setAiProposal] = React.useState(null);
+    const [aiError, setAiError] = React.useState('');
+    const [isAiGenerating, setIsAiGenerating] = React.useState(false);
+    const [isAiPreparingQuestions, setIsAiPreparingQuestions] = React.useState(false);
+    const [isSavingAiProposal, setIsSavingAiProposal] = React.useState(false);
+    const [aiConversation, setAiConversation] = React.useState([]);
+    const [aiConversationInput, setAiConversationInput] = React.useState('');
+    const [isAiConversing, setIsAiConversing] = React.useState(false);
+    const [aiProgressMode, setAiProgressMode] = React.useState(null);
+    const [aiProgressStepIndex, setAiProgressStepIndex] = React.useState(0);
+    const aiProgressConfig = React.useMemo(
+        () => (aiProgressMode ? getRecipeAiProgressConfig(aiProgressMode) : null),
+        [aiProgressMode]
+    );
+    const isAiProgressOpen = Boolean(aiProgressConfig) && (isAiGenerating || isAiConversing);
 
     // Scaling State
     const [baseItem, setBaseItem] = React.useState('total'); // 'total', 'flourTotal', 'flour-0', 'other-1', etc.
@@ -557,6 +915,15 @@ export const RecipeDetail = ({
 
     // Source recipe for original-language references (prefer full detail once loaded)
     const sourceRecipe = fullRecipe || recipe;
+    const aiProposalDiff = React.useMemo(
+        () => buildAiProposalDiff(sourceRecipe, aiProposal),
+        [sourceRecipe, aiProposal]
+    );
+    const stepChangeTypeByIndex = React.useMemo(() => {
+        const map = new Map();
+        aiProposalDiff.stepChanges.forEach((change) => map.set(change.index, change.type));
+        return map;
+    }, [aiProposalDiff]);
 
     // Determines which data to show
     const displayRecipe = currentLang === 'ORIGINAL' ? fullRecipe : (translationCache[currentLang] || fullRecipe);
@@ -578,6 +945,15 @@ export const RecipeDetail = ({
             mounted = false;
         };
     }, []);
+
+    React.useEffect(() => {
+        if (!isAiProgressOpen || !aiProgressConfig) return undefined;
+        setAiProgressStepIndex(0);
+        const intervalId = window.setInterval(() => {
+            setAiProgressStepIndex((current) => Math.min(current + 1, aiProgressConfig.steps.length - 1));
+        }, 2200);
+        return () => window.clearInterval(intervalId);
+    }, [isAiProgressOpen, aiProgressConfig]);
 
     const costAdjustedRecipe = React.useMemo(() => {
         const adjustItem = (item, options = {}) => {
@@ -711,6 +1087,7 @@ export const RecipeDetail = ({
     // Actually, logic in service says "No owner tag -> Visible". So let's say "Can Edit" if (No Owner OR Owner is Me OR Admin).
     const hasOwnerTag = recipe.tags && recipe.tags.some(t => t.startsWith('owner:'));
     const canEdit = !hasOwnerTag || isOwner;
+    const canOverwriteWithAi = canEdit || forceEditEnabled || user?.role === 'admin';
 
     // Toggle Public Handler
     const handleTogglePublic = async () => {
@@ -736,6 +1113,223 @@ export const RecipeDetail = ({
             console.error("Failed to toggle public", e);
             toast.error("公開設定の変更に失敗しました");
             setIsPublic(!newStatus); // Revert
+        }
+    };
+
+    const handleAiIntakeAnswerChange = (questionId, answer) => {
+        setAiIntake((current) => {
+            if (!current) return current;
+            return {
+                ...current,
+                questions: (current.questions || []).map((question) => (
+                    question.id === questionId
+                        ? { ...question, answer }
+                        : question
+                )),
+            };
+        });
+    };
+
+    const loadAiImprovementIntake = async () => {
+        if (!ensureSakanaUnlockedForProvider(aiProvider)) {
+            return null;
+        }
+        let recipeForAi = sourceRecipe || recipe;
+        const hasLoadedContent = Array.isArray(recipeForAi?.steps) && Array.isArray(recipeForAi?.ingredients);
+        if (!hasLoadedContent && recipe?.id) {
+            recipeForAi = await recipeService.getRecipe(recipe.id);
+            setFullRecipe(recipeForAi);
+        }
+
+        setIsAiPreparingQuestions(true);
+        setAiError('');
+        try {
+            const intake = await generateRecipeAiIntake({
+                mode: 'improvement',
+                recipe: recipeForAi,
+                notes: aiNotes,
+                provider: aiProvider,
+            });
+            setAiIntake(intake);
+            toast.success('方向性の確認項目を作成しました。回答後に改善を開始してください。');
+            return { intake, recipeForAi };
+        } catch (error) {
+            console.error('[RecipeDetail] AI intake generation failed:', error);
+            setAiError(error?.message || '確認項目の作成に失敗しました。');
+            return null;
+        } finally {
+            setIsAiPreparingQuestions(false);
+        }
+    };
+
+    const handleGenerateAiImprovement = async () => {
+        if (!ensureSakanaUnlockedForProvider(aiProvider)) {
+            return;
+        }
+        let recipeForAi = sourceRecipe || recipe;
+        const hasLoadedContent = Array.isArray(recipeForAi?.steps) && Array.isArray(recipeForAi?.ingredients);
+        if (!hasLoadedContent && recipe?.id) {
+            recipeForAi = await recipeService.getRecipe(recipe.id);
+            setFullRecipe(recipeForAi);
+        }
+        if (!aiIntake?.questions?.length) {
+            await loadAiImprovementIntake();
+            return;
+        }
+        if ((aiIntake.questions || []).some((questionItem) => questionItem?.required !== false && !String(questionItem?.answer || '').trim())) {
+            setAiError('AIの確認項目に回答してから改善を開始してください。');
+            return;
+        }
+
+        setAiProgressMode('improvement-generate');
+        setAiProgressStepIndex(0);
+        setIsAiGenerating(true);
+        setAiError('');
+        try {
+            const proposal = await generateRecipeImprovement({
+                recipe: recipeForAi,
+                notes: aiNotes,
+                provider: aiProvider,
+                directionContext: serializeRecipeAiDirectionContext(aiIntake),
+            });
+            setAiProposal(proposal);
+            setAiConversation([]);
+            setAiConversationInput('');
+            toast.success('AI改善案を作成しました。');
+        } catch (error) {
+            console.error('[RecipeDetail] AI improvement failed:', error);
+            setAiError(error?.message || 'AI改善案の作成に失敗しました。');
+        } finally {
+            setIsAiGenerating(false);
+            setAiProgressMode(null);
+            setAiProgressStepIndex(0);
+        }
+    };
+
+    const handleAskAiFollowUp = async () => {
+        const question = aiConversationInput.trim();
+        if (!question) {
+            setAiError('追加の質問または修正内容を入力してください。');
+            return;
+        }
+        if (!aiProposal) {
+            setAiError('先にAI改善案を作成してください。');
+            return;
+        }
+        if (!ensureSakanaUnlockedForProvider(aiProvider)) {
+            return;
+        }
+
+        setAiProgressMode('improvement-conversation');
+        setAiProgressStepIndex(0);
+        setIsAiConversing(true);
+        setAiError('');
+        const userMessage = { role: 'user', content: question };
+        const nextConversation = [...aiConversation, userMessage];
+        setAiConversation(nextConversation);
+        setAiConversationInput('');
+
+        try {
+            let recipeForAi = sourceRecipe || recipe;
+            const hasLoadedContent = Array.isArray(recipeForAi?.steps) && Array.isArray(recipeForAi?.ingredients);
+            if (!hasLoadedContent && recipe?.id) {
+                recipeForAi = await recipeService.getRecipe(recipe.id);
+                setFullRecipe(recipeForAi);
+            }
+
+            const response = await continueRecipeAiConversation({
+                recipe: recipeForAi,
+                proposal: aiProposal,
+                conversation: nextConversation,
+                question,
+                provider: aiProvider,
+                mode: 'improvement',
+                directionContext: serializeRecipeAiDirectionContext(aiIntake),
+            });
+
+            setAiProposal(response.proposal);
+            setAiConversation([
+                ...nextConversation,
+                { role: 'assistant', content: response.answer },
+            ]);
+            toast.success(response.forceReproposal ? '会話内容を踏まえて新しい改善案を作成しました。' : response.shouldUpdateProposal ? '会話内容を改善案に反映しました。' : 'AIが文脈を踏まえて回答しました。');
+        } catch (error) {
+            console.error('[RecipeDetail] AI conversation failed:', error);
+            setAiError(error?.message || 'AI会話の実行に失敗しました。');
+            setAiConversation(nextConversation);
+        } finally {
+            setIsAiConversing(false);
+            setAiProgressMode(null);
+            setAiProgressStepIndex(0);
+        }
+    };
+
+    const saveAiProposal = async ({ asNew }) => {
+        if (!aiProposal) return;
+        if (!asNew && !canOverwriteWithAi) {
+            toast.warning('このレシピは上書きできません。別レシピとして保存してください。');
+            return;
+        }
+
+        setIsSavingAiProposal(true);
+        setAiError('');
+        try {
+            const originalRecipe = sourceRecipe || recipe;
+            const shouldReplaceViaTrash = !asNew;
+            const payload = buildRecipePayloadFromAiProposal(originalRecipe, aiProposal, { asNew: true });
+            const savedRecipe = await recipeService.createRecipe(payload, user);
+            let replacedOriginal = false;
+            let trashMoveError = null;
+            if (shouldReplaceViaTrash) {
+                try {
+                    await recipeService.deleteRecipe(originalRecipe.id);
+                    replacedOriginal = true;
+                } catch (error) {
+                    trashMoveError = error;
+                    console.error('[RecipeDetail] Original recipe trash move failed after AI replacement save:', error);
+                }
+            }
+            setFullRecipe(savedRecipe);
+            await recordRecipeAiAdoption({
+                modeFamily: 'improvement',
+                proposal: aiProposal,
+                finalRecipe: savedRecipe,
+                baseRecipe: originalRecipe,
+                sourceRunId: aiProposal?.learningMeta?.runId || null,
+                adoptionType: asNew ? 'accepted_proposal' : (replacedOriginal ? 'replaced_original_via_trash' : 'accepted_proposal'),
+                feedbackNote: asNew
+                    ? 'AI改善案を別レシピとして保存'
+                    : (replacedOriginal
+                        ? 'AI改善案で既存レシピを置き換え。元レシピはゴミ箱へ移動'
+                        : 'AI改善案を新規保存。元レシピのゴミ箱移動は失敗したため元レシピも残存'),
+                question: [...aiConversation].reverse().find((item) => item?.role === 'user')?.content || '',
+                answer: [...aiConversation].reverse().find((item) => item?.role === 'assistant')?.content || '',
+                metadata: {
+                    asNew,
+                    replacedOriginal,
+                    originalRecipeId: originalRecipe?.id || null,
+                    trashMoveFailed: Boolean(trashMoveError),
+                    conversation: aiConversation.slice(-12),
+                },
+            });
+            onAiRecipeSaved?.(savedRecipe, {
+                asNew: asNew || !replacedOriginal,
+                replacedOriginal,
+                originalRecipeId: originalRecipe?.id || null,
+            });
+            if (asNew) {
+                toast.success('AI改善案を別レシピとして保存しました。');
+            } else if (replacedOriginal) {
+                toast.success('AI改善案で新規登録し、元レシピはゴミ箱へ移動しました。');
+            } else {
+                toast.warning('AI改善案は新規保存しましたが、元レシピのゴミ箱移動に失敗したため元レシピも残っています。');
+                setAiError('AI改善案は保存済みです。元レシピのゴミ箱移動だけ失敗したため、必要なら元レシピを通常の削除でゴミ箱へ移してください。');
+            }
+        } catch (error) {
+            console.error('[RecipeDetail] AI proposal save failed:', error);
+            setAiError(error?.message || 'AI改善案の保存に失敗しました。');
+        } finally {
+            setIsSavingAiProposal(false);
         }
     };
 
@@ -2171,7 +2765,36 @@ export const RecipeDetail = ({
                         )}
                     </div>
                     {!isDeleted && (
-                        <div className="recipe-detail__actions">
+                        <button
+                            type="button"
+                            className="recipe-detail__menu-toggle no-print"
+                            onClick={() => setIsActionMenuOpen(true)}
+                            aria-label="操作メニューを開く"
+                        >
+                            ☰ メニュー
+                        </button>
+                    )}
+                    {!isDeleted && isActionMenuOpen && (
+                        <div
+                            className="recipe-detail__menu-backdrop no-print"
+                            onClick={() => setIsActionMenuOpen(false)}
+                        />
+                    )}
+                    {!isDeleted && (
+                        <div
+                            className={\`recipe-detail__actions recipe-detail__actions--menu\${isActionMenuOpen ? ' is-open' : ''}\`}
+                            onClick={(e) => {
+                                // ドロワー内のボタン操作後は自動で閉じる（select・チェックボックスは開いたまま）
+                                if (e.target.closest('button')) setIsActionMenuOpen(false);
+                            }}
+                        >
+                            <button
+                                type="button"
+                                className="recipe-detail__menu-close"
+                                onClick={() => setIsActionMenuOpen(false)}
+                            >
+                                ✕ 閉じる
+                            </button>
 
                             {/* Public Toggle (Owner Only) */}
                             {canEdit && (user?.displayId === 'yoshito' || user?.role === 'admin') && (
@@ -2235,6 +2858,14 @@ export const RecipeDetail = ({
                                     onToggle={() => onToggleFavorite(recipe.id)}
                                 />
                             )}
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                isLoading={isAiGenerating}
+                                onClick={() => setIsAiModalOpen(true)}
+                            >
+                                🤖 AI改善{aiProposal ? '（作成済み）' : ''}
+                            </Button>
                             <Button variant="secondary" size="sm" onClick={() => setShowPrintModal(true)}>🖨️ プレビュー</Button>
                             <Button variant="secondary" size="sm" onClick={() => window.print()}>🖨️ 印刷</Button>
                             <Button variant="secondary" size="sm" onClick={handleDuplicateClick}>複製</Button>
@@ -2343,6 +2974,449 @@ export const RecipeDetail = ({
                     <span>📅 登録: {formatDate(recipe.created_at)}</span>
                     {recipe.updated_at && <span>🔄 更新: {formatDate(recipe.updated_at)}</span>}
                 </div>
+
+                {!isDeleted && (
+                    <Modal
+                        isOpen={isAiModalOpen}
+                        onClose={() => setIsAiModalOpen(false)}
+                        title="AI改善提案"
+                        size="large"
+                    >
+                        <div className="recipe-ai-modal">
+                        <p className="recipe-ai-modal__description">
+                            各AIエージェントが料理文化・技術・配合・食品科学・品質を個別に調査し、統括シェフが改善案に統合します。
+                            生成中にこのポップアップを閉じても処理は続行されます。
+                        </p>
+                        <div className="recipe-ai-form recipe-ai-form--detail">
+                            <div className="recipe-ai-form__controls">
+                                <label className="recipe-ai-form__label">
+                                    AIプロバイダー
+                                    <select
+                                        className="recipe-ai-form__select"
+                                        value={aiProvider}
+                                        onChange={(e) => handleAiProviderChange(e.target.value)}
+                                        disabled={isAiGenerating || isSavingAiProposal}
+                                    >
+                                        <option value="groq">Groq</option>
+                                        <option value="sakana-subscription">{sakanaUnlocked ? 'Sakana AI（サブスク）' : '🔒 Sakana AI（サブスク）'}</option>
+                                        <option value="sakana-payg">{sakanaUnlocked ? 'Sakana AI（従量課金）' : '🔒 Sakana AI（従量課金）'}</option>
+                                    </select>
+                                </label>
+                                <p className="recipe-ai-form__hint">
+                                    通常は、研究系は内容に応じて Perplexity、最終監査・統合・反証は OpenAI、それ以外は主に Groq を自動使用します。
+                                </p>
+                            </div>
+                            <label className="recipe-ai-form__label">
+                                改善指示
+                                <textarea
+                                    className="recipe-ai-form__textarea"
+                                    value={aiNotes}
+                                    onChange={(e) => setAiNotes(e.target.value)}
+                                    placeholder="例: 提供時間を短くしたい、仕込みで品質を安定させたい、原価は上げずに香りを強くしたい。"
+                                    disabled={isAiGenerating || isSavingAiProposal}
+                                />
+                            </label>
+                            <div className="recipe-ai-form__actions">
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    isLoading={isAiPreparingQuestions}
+                                    disabled={isAiGenerating || isAiConversing || isSavingAiProposal}
+                                    onClick={loadAiImprovementIntake}
+                                >
+                                    方向性の確認項目を出す
+                                </Button>
+                            </div>
+                            {aiIntake?.questions?.length > 0 && (
+                                <div className="recipe-ai-intake">
+                                    <div className="recipe-ai-intake__header">
+                                        <strong>改善前の確認項目</strong>
+                                        {aiIntake.summary && <p>{formatAiDisplayText(aiIntake.summary)}</p>}
+                                    </div>
+                                    <div className="recipe-ai-intake__list">
+                                        {aiIntake.questions.map((question, index) => (
+                                            <div className="recipe-ai-intake__item" key={question.id || index}>
+                                                <div className="recipe-ai-intake__title-row">
+                                                    <strong>{question.label || \`確認項目 \${index + 1}\`}</strong>
+                                                    {question.required !== false && <span>必須</span>}
+                                                </div>
+                                                <p className="recipe-ai-intake__question">{question.question}</p>
+                                                {question.rationale && (
+                                                    <p className="recipe-ai-intake__rationale">{question.rationale}</p>
+                                                )}
+                                                {question.options?.length > 0 && (
+                                                    <div className="recipe-ai-intake__options">
+                                                        {question.options.map((option) => (
+                                                            <button
+                                                                key={option}
+                                                                type="button"
+                                                                className={\`recipe-ai-intake__option\${String(question.answer || '').trim() === option ? ' is-active' : ''}\`}
+                                                                onClick={() => handleAiIntakeAnswerChange(question.id, option)}
+                                                            >
+                                                                {option}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <textarea
+                                                    className="recipe-ai-form__textarea recipe-ai-intake__answer"
+                                                    value={question.answer || ''}
+                                                    onChange={(e) => handleAiIntakeAnswerChange(question.id, e.target.value)}
+                                                    placeholder={question.placeholder || '回答を入力'}
+                                                    disabled={isAiGenerating || isAiConversing || isSavingAiProposal}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            <Button
+                                type="button"
+                                variant="primary"
+                                size="sm"
+                                isLoading={isAiGenerating}
+                                disabled={isAiGenerating || isSavingAiProposal}
+                                onClick={handleGenerateAiImprovement}
+                            >
+                                {aiIntake?.questions?.length ? '回答内容でエージェント改善を開始' : 'まず方向性を確認する'}
+                            </Button>
+                            {aiError && <div className="recipe-ai-form__error">{aiError}</div>}
+                        </div>
+
+                        {aiProposal && (
+                            <div className="recipe-ai-result">
+                                <div className="recipe-ai-result__summary">
+                                    <span>改善案プレビュー</span>
+                                    <h3>{aiProposal.title || 'AI改善レシピ'}</h3>
+                                    {(aiProposal.improvementSummary || aiProposal.description) && (
+                                        <p>{formatAiDisplayText(aiProposal.improvementSummary || aiProposal.description)}</p>
+                                    )}
+                                </div>
+
+                                {aiProposal.agentMessages?.length > 0 && (
+                                    <div className="recipe-ai-result__block recipe-ai-result__agents">
+                                        <h4>エージェント所見</h4>
+                                        {aiProposal.agentMessages.map((message, index) => (
+                                            <div className="recipe-ai-agent-line" key={\`\${message.agentId}-\${index}\`}>
+                                                <span>{message.avatar}</span>
+                                                <div>
+                                                    <b>{message.agentName}</b>
+                                                    <p>{formatAiDisplayText(message.content)}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {aiProposal.keyChanges?.length > 0 && (
+                                    <div className="recipe-ai-result__block">
+                                        <h4>主な変更点</h4>
+                                        <ul>
+                                            {aiProposal.keyChanges.map((item, index) => (
+                                                <li key={\`\${item}-\${index}\`}>{item}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+
+                                {aiProposalDiff.hasAnyChanges ? (
+                                    <div className="recipe-ai-result__block recipe-ai-result__diff">
+                                        <h4>元レシピとの差分</h4>
+                                        <p className="recipe-ai-result__diff-hint">
+                                            変更前の行の<del className="recipe-ai-diff-inline__legend-removed">赤い部分</del>が削られ、
+                                            変更後の行の<ins className="recipe-ai-diff-inline__legend-added">緑の部分</ins>に置き換わります。
+                                        </p>
+
+                                        {aiProposalDiff.titleChanged && (
+                                            <div className="recipe-ai-result__diff-section">
+                                                <h5>タイトルの変更</h5>
+                                                <p className="recipe-ai-result__diff-text">
+                                                    <DiffTextPair previousText={aiProposalDiff.previousTitle} nextText={aiProposalDiff.nextTitle} />
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {aiProposalDiff.ingredientChanges.length > 0 && (
+                                            <div className="recipe-ai-result__diff-section">
+                                                <h5>材料の変更</h5>
+                                                <ul>
+                                                    {aiProposalDiff.ingredientChanges.map((row) => (
+                                                        <li key={\`ingredient-change-\${row.index}-\${row.item.name}\`}>
+                                                            <strong>{row.item.name}</strong>
+                                                            {row.amountChanged && (
+                                                                <span>{row.previousAmountLabel || '未設定'} → {row.nextAmountLabel || '未設定'}</span>
+                                                            )}
+                                                            {row.noteChanged && (
+                                                                <em>
+                                                                    注記: {normalizeDiffText(row.previousItem?.note) || 'なし'} → {normalizeDiffText(row.item?.note) || 'なし'}
+                                                                </em>
+                                                            )}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        {aiProposalDiff.addedIngredients.length > 0 && (
+                                            <div className="recipe-ai-result__diff-section">
+                                                <h5>追加された材料</h5>
+                                                <ul>
+                                                    {aiProposalDiff.addedIngredients.map((row) => (
+                                                        <li key={\`ingredient-added-\${row.index}-\${row.item.name}\`}>
+                                                            <strong>{row.item.name}</strong>
+                                                            <span>{row.nextAmountLabel || '未設定'}</span>
+                                                            {row.item.note && <em>{row.item.note}</em>}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        {aiProposalDiff.removedIngredients.length > 0 && (
+                                            <div className="recipe-ai-result__diff-section">
+                                                <h5>削除された材料</h5>
+                                                <ul>
+                                                    {aiProposalDiff.removedIngredients.map(({ item, index }) => (
+                                                        <li key={\`ingredient-removed-\${index}-\${item?.name || 'unknown'}\`}>
+                                                            <strong>{item?.name || '名称未設定'}</strong>
+                                                            <span>{formatDiffAmount(item?.quantity, item?.unit) || '未設定'}</span>
+                                                            {item?.note && <em>{item.note}</em>}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        {aiProposalDiff.stepChanges.length > 0 && (
+                                            <div className="recipe-ai-result__diff-section">
+                                                <h5>手順の変更</h5>
+                                                <ul>
+                                                    {aiProposalDiff.stepChanges.map((change) => (
+                                                        <li key={\`step-change-\${change.type}-\${change.index}\`}>
+                                                            <strong>手順 {change.index + 1}</strong>
+                                                            {change.type === 'changed' && (
+                                                                <>
+                                                                    {change.previousText !== change.nextText && (
+                                                                        <DiffTextPair previousText={change.previousText} nextText={change.nextText} />
+                                                                    )}
+                                                                    {change.previousNote !== change.nextNote && (
+                                                                        <em>注記: {change.previousNote || 'なし'} → {change.nextNote || 'なし'}</em>
+                                                                    )}
+                                                                </>
+                                                            )}
+                                                            {change.type === 'added' && (
+                                                                <DiffTextSingle type="added" text={change.nextText} />
+                                                            )}
+                                                            {change.type === 'removed' && (
+                                                                <DiffTextSingle type="removed" text={change.previousText} />
+                                                            )}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="recipe-ai-result__block recipe-ai-result__diff">
+                                        <h4>元レシピとの差分</h4>
+                                        <p className="recipe-ai-result__diff-empty">材料・手順に変更はありません。</p>
+                                    </div>
+                                )}
+
+                                {aiProposal.warnings?.length > 0 && (
+                                    <div className="recipe-ai-result__block recipe-ai-result__block--warning">
+                                        <h4>注意点</h4>
+                                        <ul>
+                                            {aiProposal.warnings.map((item, index) => (
+                                                <li key={\`\${item}-\${index}\`}>{item}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+
+                                <div className="recipe-ai-result__preview-grid">
+                                    <div className="recipe-ai-result__block">
+                                        <h4>材料案</h4>
+                                        <ol>
+                                            {aiProposalDiff.ingredientRows.map((row, index) => (
+                                                <li key={\`\${row.item.name}-\${index}\`}>
+                                                    <strong>{row.item.name}</strong>
+                                                    <span>{[row.item.quantity, row.item.unit].filter(Boolean).join('')}</span>
+                                                    {row.status === 'changed' && row.amountChanged && (
+                                                        <small className="recipe-ai-result__delta">変更: {row.previousAmountLabel || '未設定'} → {row.nextAmountLabel || '未設定'}</small>
+                                                    )}
+                                                    {row.status === 'added' && (
+                                                        <small className="recipe-ai-result__delta recipe-ai-result__delta--added">新規追加</small>
+                                                    )}
+                                                    {row.item.note && <em>{row.item.note}</em>}
+                                                </li>
+                                            ))}
+                                        </ol>
+                                    </div>
+                                    <div className="recipe-ai-result__block">
+                                        <h4>手順案</h4>
+                                        <ol>
+                                            {aiProposal.steps.map((item, index) => {
+                                                const changeType = stepChangeTypeByIndex.get(index);
+                                                return (
+                                                    <li key={\`\${item.text}-\${index}\`}>
+                                                        {item.text}
+                                                        {changeType === 'changed' && (
+                                                            <small className="recipe-ai-result__delta">変更あり</small>
+                                                        )}
+                                                        {changeType === 'added' && (
+                                                            <small className="recipe-ai-result__delta recipe-ai-result__delta--added">新規追加</small>
+                                                        )}
+                                                        {item.note && <em>{item.note}</em>}
+                                                    </li>
+                                                );
+                                            })}
+                                        </ol>
+                                    </div>
+                                </div>
+
+                                {aiProposal.sources?.length > 0 && (
+                                    <div className="recipe-ai-result__block recipe-ai-result__sources">
+                                        <h4>参照ソース</h4>
+                                        <div>
+                                            {aiProposal.sources.slice(0, 8).map((source) => (
+                                                <a key={source.url} href={source.url} target="_blank" rel="noreferrer">
+                                                    {source.id ? \`[\${source.id}] \` : ''}{source.title || source.url}
+                                                </a>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="recipe-ai-result__block recipe-ai-conversation">
+                                    <h4>続けて相談・再改善</h4>
+                                    <p className="recipe-ai-conversation__hint">
+                                        元レシピ、改善案、エージェント所見、これまでの会話を踏まえて回答します。必要な場合はこの改善案自体も更新します。
+                                    </p>
+                                    {aiConversation.length > 0 && (
+                                        <div className="recipe-ai-conversation__messages">
+                                            {aiConversation.map((message, index) => (
+                                                <div
+                                                    className={\`recipe-ai-conversation__message recipe-ai-conversation__message--\${message.role === 'assistant' ? 'assistant' : 'user'}\`}
+                                                    key={\`\${message.role}-\${index}-\${message.content.slice(0, 16)}\`}
+                                                >
+                                                    <span>{message.role === 'assistant' ? 'AI' : '質問'}</span>
+                                                    <p>{formatAiDisplayText(message.content)}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <textarea
+                                        className="recipe-ai-conversation__input"
+                                        value={aiConversationInput}
+                                        onChange={(e) => setAiConversationInput(e.target.value)}
+                                        placeholder="例: もっと原価を下げたい。鶏肉を使わずに同じ満足感にできますか？ / この改善案の弱点は？"
+                                        disabled={isAiConversing || isAiGenerating || isSavingAiProposal}
+                                    />
+                                    <div className="recipe-ai-conversation__actions">
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            isLoading={isAiConversing}
+                                            disabled={isAiConversing || isAiGenerating || isSavingAiProposal || !aiConversationInput.trim()}
+                                            onClick={handleAskAiFollowUp}
+                                        >
+                                            文脈つきで質問・再改善
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                <div className="recipe-ai-result__actions">
+                                    {!canOverwriteWithAi && (
+                                        <span className="recipe-ai-result__readonly-note">
+                                            このレシピは閲覧専用のため、上書き保存はできません。
+                                        </span>
+                                    )}
+                                    {canOverwriteWithAi && (
+                                        <span className="recipe-ai-result__readonly-note">
+                                            上書き保存を選んでも、元レシピはゴミ箱へ移動し、改善案を新規登録します。
+                                        </span>
+                                    )}
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        size="sm"
+                                        isLoading={isSavingAiProposal}
+                                        disabled={isSavingAiProposal || isAiGenerating}
+                                        onClick={() => saveAiProposal({ asNew: true })}
+                                    >
+                                        別レシピとして保存
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="primary"
+                                        size="sm"
+                                        isLoading={isSavingAiProposal}
+                                        disabled={isSavingAiProposal || isAiGenerating || !canOverwriteWithAi}
+                                        onClick={() => saveAiProposal({ asNew: false })}
+                                    >
+                                        このレシピに上書き
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                        </div>
+                    </Modal>
+                )}
+
+                {!isDeleted && (
+                    <Modal
+                        isOpen={isAiProgressOpen}
+                        onClose={() => {}}
+                        title={aiProgressConfig?.title || 'AIエージェント進行中'}
+                        size="small"
+                        showCloseButton={false}
+                        maxWidth="520px"
+                    >
+                        <div className="recipe-ai-progress">
+                            <p className="recipe-ai-progress__description">
+                                {aiProgressConfig?.description}
+                            </p>
+                            <div className="recipe-ai-progress__status">
+                                <span className="recipe-ai-progress__pulse" />
+                                <div>
+                                    <strong>現在の工程</strong>
+                                    {aiProgressConfig?.steps?.[aiProgressStepIndex] ? (
+                                        <p>
+                                            {aiProgressConfig.steps[aiProgressStepIndex].label}
+                                            <span className="recipe-ai-progress__status-provider">{aiProgressConfig.steps[aiProgressStepIndex].provider}</span>
+                                        </p>
+                                    ) : <p>進行状況を確認中</p>}
+                                </div>
+                            </div>
+                            <div className="recipe-ai-progress__bar" aria-hidden="true">
+                                <span
+                                    className="recipe-ai-progress__bar-fill"
+                                    style={{
+                                        width: \`\${(((aiProgressStepIndex + 1) / Math.max(aiProgressConfig?.steps?.length || 1, 1)) * 100).toFixed(0)}%\`,
+                                    }}
+                                />
+                            </div>
+                            <div className="recipe-ai-progress__steps">
+                                {(aiProgressConfig?.steps || []).map((step, index) => (
+                                    <div
+                                        key={\`\${step.label}-\${index}\`}
+                                        className={\`recipe-ai-progress__step\${index < aiProgressStepIndex ? ' is-complete' : ''}\${index === aiProgressStepIndex ? ' is-active' : ''}\`}
+                                    >
+                                        <span className="recipe-ai-progress__step-index">{index + 1}</span>
+                                        <div className="recipe-ai-progress__step-content">
+                                            <span className="recipe-ai-progress__step-label">{step.label}</span>
+                                            <span className="recipe-ai-progress__step-provider">{step.provider}</span>
+                                            <span className="recipe-ai-progress__step-detail">{step.description}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </Modal>
+                )}
 
                 <div className="recipe-detail__content">
                     <div className="recipe-detail__main">
