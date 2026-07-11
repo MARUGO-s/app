@@ -303,6 +303,9 @@ const shouldUsePerplexityRoute = ({ agentId, routeContext = {} }) => {
 };
 
 const pickAgentPlan = ({ agentId, mainProvider, routeContext = {} }) => {
+    if (mainProvider === 'groq-express') {
+        return { provider: 'groq', model: GROQ_DEFAULT_TEXT_MODEL, label: \`Groq (\${GROQ_DEFAULT_TEXT_MODEL})\` };
+    }
     if (agentId === 'rebuttal') {
         return { provider: 'openai', model: OPENAI_REBUTTAL_MODEL, label: \`OpenAI \${OPENAI_REBUTTAL_MODEL}\` };
     }

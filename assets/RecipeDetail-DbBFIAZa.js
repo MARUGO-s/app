@@ -3083,6 +3083,7 @@ export const RecipeDetail = ({
                                         onChange={(e) => handleAiProviderChange(e.target.value)}
                                         disabled={isAiGenerating || isSavingAiProposal}
                                     >
+                                        <option value="groq-express">格安エクスプレス（Groq・高速/数銭）</option>
                                         <option value="groq">マルチエージェント（推奨・自動振分）</option>
                                         <option value="sakana-subscription">{sakanaUnlocked ? 'Sakana AI（サブスク）' : '🔒 Sakana AI（サブスク）'}</option>
                                         <option value="sakana-payg">{sakanaUnlocked ? 'Sakana AI（従量課金）' : '🔒 Sakana AI（従量課金）'}</option>
