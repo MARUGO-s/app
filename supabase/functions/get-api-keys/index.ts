@@ -8,7 +8,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const ALLOWED_KEYS = ['GROQ_API_KEY', 'CHATGPT_API_KEY', 'GOOGLE_API_KEY', 'VISION_API_KEY']
+const ALLOWED_KEYS = ['GROQ_API_KEY', 'CHATGPT_API_KEY', 'GOOGLE_API_KEY', 'VISION_API_KEY', 'PERPLEXITY_API_KEY']
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {

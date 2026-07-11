@@ -135,6 +135,14 @@
     font-size: 0.92rem;
 }
 
+.recipe-ai-progress__status-provider {
+    display: block;
+    margin-top: 3px;
+    color: #0369a1;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
 .recipe-ai-progress__pulse {
     width: 12px;
     height: 12px;
@@ -231,8 +239,30 @@
 }
 
 .recipe-ai-progress__step-label {
+    display: block;
     line-height: 1.45;
     font-size: 0.88rem;
+    font-weight: 700;
+}
+
+.recipe-ai-progress__step-content {
+    min-width: 0;
+}
+
+.recipe-ai-progress__step-provider {
+    display: block;
+    margin-top: 2px;
+    color: #0369a1;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.recipe-ai-progress__step-detail {
+    display: block;
+    margin-top: 3px;
+    color: #64748b;
+    font-size: 0.76rem;
+    line-height: 1.45;
 }
 
 /* モバイル対応 */

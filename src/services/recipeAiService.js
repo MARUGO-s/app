@@ -6,11 +6,15 @@ import {
 
 const SAKANA_PROVIDER_NAME = 'Sakana AI';
 const GROQ_PROVIDER_NAME = 'Groq';
+const OPENAI_PROVIDER_NAME = 'OpenAI';
+const PERPLEXITY_PROVIDER_NAME = 'Perplexity';
 
 const PROVIDER_DISPLAY_NAMES = {
     'sakana-subscription': 'Sakana AI（サブスク）',
     'sakana-payg': 'Sakana AI（従量課金）',
     groq: GROQ_PROVIDER_NAME,
+    openai: OPENAI_PROVIDER_NAME,
+    perplexity: PERPLEXITY_PROVIDER_NAME,
 };
 
 const AI_SETTINGS_PROVIDER_KEY = 'recipe_ai_provider';
@@ -24,9 +28,12 @@ const SAKANA_LOCK_PASSWORD = 'marugo';
 const DEFAULT_MODEL = 'fugu';
 const GROQ_DEFAULT_TEXT_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_COMPOUND_MODEL = 'groq/compound';
-// 反証エージェント用: 統括シェフと同じモデルだと自己肯定に流れやすいため、別系統のAIで批判させる。
-// メインがGroq(Llama系)の場合はGroq上のOpenAI系オープンモデルを使う（Sakanaは高コストのため自動起用しない）
-const GROQ_REBUTTAL_MODEL = 'openai/gpt-oss-120b';
+const OPENAI_REBUTTAL_MODEL = 'o4-mini';
+const OPENAI_AUDITOR_MODEL = 'o4-mini';
+// 統合・修正はコストと品質のバランスを優先し、軽量な汎用モデルを使う。
+// 深い推論が効く反証と最終監査だけは o4-mini に残す。
+const OPENAI_MASTER_MODEL = 'gpt-4.1-mini';
+const PERPLEXITY_DEFAULT_MODEL = 'sonar';
 const REQUEST_TIMEOUT_MS = 600000;
 
 const STRICT_JSON_OUTPUT_RULES = `
@@ -254,10 +261,73 @@ const getProviderDisplayName = (provider) => PROVIDER_DISPLAY_NAMES[normalizePro
 const normalizeProvider = (value) => {
     if (value === 'sakana' || value === 'sakana-subscription') return 'sakana-subscription';
     if (value === 'sakana-payg') return 'sakana-payg';
+    if (value === 'openai') return 'openai';
+    if (value === 'perplexity') return 'perplexity';
     return 'groq';
 };
 
-const isSakanaProvider = (provider) => normalizeProvider(provider) !== 'groq';
+const isSakanaProvider = (provider) => ['sakana-subscription', 'sakana-payg'].includes(normalizeProvider(provider));
+
+const PERPLEXITY_ROUTE_KEYWORDS = [
+    '本場', '現地', '郷土', '伝統', 'クラシック', '由来', '発祥', '歴史',
+    '海外', '外国', '地域差', '国別', '比較', ' authentic', ' authenticity',
+    'traditional', 'classic', 'regional', 'origin', 'heritage', 'global',
+    '最新', 'トレンド', '流行', 'いま', '202', '2026', '輸入', '現地語',
+    '発酵', '熟成', '生食', '保存', '衛生', '低温調理', '真空', 'スパイス',
+];
+
+const getBalancedBaseProvider = (provider) => {
+    const normalized = normalizeProvider(provider);
+    if (normalized === 'groq' || normalized === 'openai' || normalized === 'perplexity' || isSakanaProvider(normalized)) {
+        return normalized;
+    }
+    return 'groq';
+};
+
+const buildRoutingSignalText = (routeContext = {}) => normalizeText([
+    routeContext.mode,
+    routeContext.brief,
+    routeContext.recipeText,
+    routeContext.notes,
+    routeContext.question,
+    routeContext.directionContext,
+    routeContext.currentProposalText,
+].filter(Boolean).join('\n'));
+
+const shouldUsePerplexityRoute = ({ agentId, routeContext = {} }) => {
+    if (!['research', 'globalComparison', 'heritage'].includes(agentId)) return false;
+    const text = buildRoutingSignalText(routeContext).toLowerCase();
+    if (!text) return false;
+    if (agentId === 'globalComparison' || agentId === 'heritage') return true;
+    return PERPLEXITY_ROUTE_KEYWORDS.some((keyword) => text.includes(keyword.toLowerCase()));
+};
+
+const pickAgentPlan = ({ agentId, mainProvider, routeContext = {} }) => {
+    if (agentId === 'rebuttal') {
+        return { provider: 'openai', model: OPENAI_REBUTTAL_MODEL, label: `OpenAI ${OPENAI_REBUTTAL_MODEL}` };
+    }
+    if (agentId === 'auditor') {
+        return { provider: 'openai', model: OPENAI_AUDITOR_MODEL, label: `OpenAI ${OPENAI_AUDITOR_MODEL}` };
+    }
+    if (agentId === 'master') {
+        return { provider: 'openai', model: OPENAI_MASTER_MODEL, label: `OpenAI ${OPENAI_MASTER_MODEL}` };
+    }
+    if (shouldUsePerplexityRoute({ agentId, routeContext })) {
+        return { provider: 'perplexity', model: PERPLEXITY_DEFAULT_MODEL, label: `Perplexity ${PERPLEXITY_DEFAULT_MODEL}` };
+    }
+
+    const baseProvider = getBalancedBaseProvider(mainProvider);
+    if (baseProvider === 'openai') {
+        return { provider: 'openai', model: OPENAI_MASTER_MODEL, label: `OpenAI ${OPENAI_MASTER_MODEL}` };
+    }
+    if (baseProvider === 'perplexity' && ['research', 'globalComparison', 'heritage'].includes(agentId)) {
+        return { provider: 'perplexity', model: PERPLEXITY_DEFAULT_MODEL, label: `Perplexity ${PERPLEXITY_DEFAULT_MODEL}` };
+    }
+    if (isSakanaProvider(baseProvider)) {
+        return { provider: baseProvider, model: undefined, label: getProviderDisplayName(baseProvider) };
+    }
+    return { provider: 'groq', model: undefined, label: GROQ_PROVIDER_NAME };
+};
 
 const normalizeText = (value) => String(value ?? '')
     .replace(/\\r\\n|\\n|\\r/g, '\n')
@@ -519,11 +589,68 @@ const extractGroqSources = (payload, note, prefix) => {
     return normalizeSources(sources, prefix).slice(0, 8);
 };
 
-const extractSourcesFromProviderResponse = (payload, note, prefix, provider) => (
-    normalizeProvider(provider) === 'groq'
-        ? extractGroqSources(payload, note, prefix)
-        : extractSakanaSources(payload, note, prefix)
-);
+const extractOpenAiSources = (payload, note, prefix) => {
+    const sources = [];
+    for (const outputItem of normalizeArray(payload?.output)) {
+        normalizeArray(outputItem?.content).forEach((contentItem) => {
+            normalizeArray(contentItem?.annotations).forEach((annotation) => {
+                const url = normalizeText(annotation?.url);
+                if (!url) return;
+                sources.push({
+                    title: normalizeText(annotation?.title) || extractHostname(url),
+                    url,
+                    note,
+                });
+            });
+        });
+    }
+    const rawText = JSON.stringify(payload ?? '');
+    const matches = rawText.match(/https?:\/\/[^\s"')\]]+/g) ?? [];
+    matches.forEach((rawUrl) => {
+        const url = rawUrl.replace(/[.,)]+$/, '').trim();
+        if (!url) return;
+        sources.push({ title: extractHostname(url), url, note });
+    });
+    return normalizeSources(sources, prefix).slice(0, 8);
+};
+
+const extractPerplexitySources = (payload, note, prefix) => {
+    const sources = [];
+    normalizeArray(payload?.citations).forEach((url) => {
+        const normalizedUrl = normalizeText(url);
+        if (!normalizedUrl) return;
+        sources.push({
+            title: extractHostname(normalizedUrl),
+            url: normalizedUrl,
+            note,
+        });
+    });
+    normalizeArray(payload?.search_results).forEach((item) => {
+        const url = normalizeText(item?.url);
+        if (!url) return;
+        sources.push({
+            title: normalizeText(item?.title) || extractHostname(url),
+            url,
+            note,
+        });
+    });
+    const content = extractChatText(payload);
+    const matches = content.match(/https?:\/\/[^\s"')\]]+/g) ?? [];
+    matches.forEach((rawUrl) => {
+        const url = rawUrl.replace(/[.,)]+$/, '').trim();
+        if (!url) return;
+        sources.push({ title: extractHostname(url), url, note });
+    });
+    return normalizeSources(sources, prefix).slice(0, 8);
+};
+
+const extractSourcesFromProviderResponse = (payload, note, prefix, provider) => {
+    const normalized = normalizeProvider(provider);
+    if (normalized === 'groq') return extractGroqSources(payload, note, prefix);
+    if (normalized === 'openai') return extractOpenAiSources(payload, note, prefix);
+    if (normalized === 'perplexity') return extractPerplexitySources(payload, note, prefix);
+    return extractSakanaSources(payload, note, prefix);
+};
 
 const callSakanaChatJson = async ({ provider, prompt, instructions, maxOutputTokens = 5000, timeoutMs = REQUEST_TIMEOUT_MS }) => {
     const providerName = getProviderDisplayName(provider);
@@ -591,6 +718,80 @@ const callSakanaResponseJson = async ({
     const rawText = extractResponseText(payload);
     if (!rawText) throw new Error(`${providerName} から空の応答が返されました。`);
     return { parsed: parseJsonResponse(rawText, provider), payload, rawText };
+};
+
+const callOpenAiResponseJson = async ({
+    prompt,
+    instructions,
+    maxOutputTokens = 6000,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+    tools,
+    toolChoice,
+    reasoningEffort = 'medium',
+    model,
+}) => {
+    const selectedModel = model || OPENAI_REBUTTAL_MODEL;
+    const supportsReasoning = /^(o\d|gpt-5)/.test(selectedModel);
+    const payload = await withTimeout(async (signal) => {
+        const response = await callAiProxy({
+            provider: 'openai',
+            endpoint: 'responses',
+            body: {
+                model: selectedModel,
+                instructions: instructions || 'You are a senior culinary agent. Return strict JSON only.',
+                input: prompt,
+                ...(supportsReasoning ? { reasoning: { effort: reasoningEffort } } : {}),
+                text: { format: { type: 'json_object' } },
+                max_output_tokens: maxOutputTokens,
+                ...(Array.isArray(tools) && tools.length > 0 ? { tools } : {}),
+                ...(toolChoice ? { tool_choice: toolChoice } : {}),
+            },
+            signal,
+        });
+        if (!response.ok) {
+            const body = await response.text().catch(() => '');
+            throw new Error(`${OPENAI_PROVIDER_NAME} API error ${response.status}: ${body || response.statusText}`);
+        }
+        return response.json();
+    }, timeoutMs, OPENAI_PROVIDER_NAME);
+
+    const rawText = extractResponseText(payload);
+    if (!rawText) throw new Error(`${OPENAI_PROVIDER_NAME} から空の応答が返されました。`);
+    return { parsed: parseJsonResponse(rawText, 'openai'), payload, rawText };
+};
+
+const callPerplexityChatJson = async ({
+    prompt,
+    instructions,
+    maxOutputTokens = 5000,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+    model,
+}) => {
+    const payload = await withTimeout(async (signal) => {
+        const response = await callAiProxy({
+            provider: 'perplexity',
+            endpoint: 'chat',
+            body: {
+                model: model || PERPLEXITY_DEFAULT_MODEL,
+                messages: [
+                    { role: 'system', content: instructions || 'You are a senior culinary research agent. Return strict JSON only.' },
+                    { role: 'user', content: prompt },
+                ],
+                temperature: 0.2,
+                max_tokens: maxOutputTokens,
+            },
+            signal,
+        });
+        if (!response.ok) {
+            const body = await response.text().catch(() => '');
+            throw new Error(`${PERPLEXITY_PROVIDER_NAME} API error ${response.status}: ${body || response.statusText}`);
+        }
+        return response.json();
+    }, timeoutMs, PERPLEXITY_PROVIDER_NAME);
+
+    const rawText = extractChatText(payload);
+    if (!rawText) throw new Error(`${PERPLEXITY_PROVIDER_NAME} から空の応答が返されました。`);
+    return { parsed: parseJsonResponse(rawText, 'perplexity'), payload, rawText };
 };
 
 const postGroqChatCompletion = async (body, signal) => {
@@ -664,6 +865,14 @@ const callRecipeAiJson = async ({
     model,
 }) => {
     const normalizedProvider = normalizeProvider(provider);
+
+    if (normalizedProvider === 'openai') {
+        return callOpenAiResponseJson({ prompt, instructions, maxOutputTokens, timeoutMs, tools, toolChoice, reasoningEffort, model });
+    }
+
+    if (normalizedProvider === 'perplexity') {
+        return callPerplexityChatJson({ prompt, instructions, maxOutputTokens, timeoutMs, model });
+    }
 
     if (!isSakanaProvider(normalizedProvider)) {
         return callGroqChatJson({ prompt, instructions, maxOutputTokens, timeoutMs, tools, model });
@@ -1434,13 +1643,9 @@ ${PROPOSAL_OUTPUT_SCHEMA}
 `;
 
 // 反証は統括シェフと同じAIだと自己肯定に流れやすいため、別系統のAIに担当させる。
-// メインがGroq(Llama系) → Groq上のOpenAI系モデル / メインがSakana → Groq。
-// 高コストのSakanaは、ユーザーがメインとして選んだ場合以外は自動起用しない。
+// 反証専用に OpenAI o4-mini を優先し、失敗時のみメインAIへフォールバックする。
 const pickRebuttalPlan = (mainProvider) => {
-    if (normalizeProvider(mainProvider) === 'groq') {
-        return { provider: 'groq', model: GROQ_REBUTTAL_MODEL, label: 'GPT-OSS 120B' };
-    }
-    return { provider: 'groq', model: undefined, label: GROQ_PROVIDER_NAME };
+    return pickAgentPlan({ agentId: 'rebuttal', mainProvider });
 };
 
 const hasRebuttalCritique = (rebuttalOutput) => Boolean(
@@ -1478,8 +1683,17 @@ const runRebuttalAndRevise = async ({ provider, draftParsed, contextBlock, memor
     if (!hasRebuttalCritique(rebuttalOutput)) return { finalParsed: draftParsed, rebuttalOutput };
 
     try {
+        const revisionPlan = pickAgentPlan({
+            agentId: 'master',
+            mainProvider: provider,
+            routeContext: {
+                mode: 'revision',
+                recipeText: draftText,
+                directionContext,
+            },
+        });
         const { parsed } = await callRecipeAiJson({
-            provider,
+            provider: revisionPlan.provider,
             prompt: buildRevisionPrompt({
                 contextBlock,
                 draftText,
@@ -1491,6 +1705,7 @@ const runRebuttalAndRevise = async ({ provider, draftParsed, contextBlock, memor
             maxOutputTokens: 7000,
             timeoutMs: REQUEST_TIMEOUT_MS,
             reasoningEffort: 'high',
+            model: revisionPlan.model,
         });
         const revised = normalizeAiProposal(parsed);
         if (revised.ingredients.length === 0 || revised.steps.length === 0) {
@@ -1769,16 +1984,23 @@ export const generateProductRecipeDraft = async ({ brief, provider, directionCon
     });
 
     const agentOrder = ['research', 'globalComparison', 'synthesizer', 'science', 'validator'];
+    const routeContext = {
+        mode: 'product',
+        brief: cleanBrief,
+        question: cleanBrief,
+        directionContext,
+    };
     const agentOutputs = await Promise.all(agentOrder.map((agentId, index) => settleAgent({
         agent: AGENT_DEFINITIONS[agentId],
-        provider,
+        ...pickAgentPlan({ agentId, mainProvider: provider, routeContext }),
         prompt: buildProductAgentPrompt(agentId, cleanBrief, memoryContext, directionContext),
         note: `${AGENT_DEFINITIONS[agentId].agentName}の調査・判断に使用`,
     }, index)));
     const agentFindings = formatAgentFindings(agentOutputs);
+    const masterPlan = pickAgentPlan({ agentId: 'master', mainProvider: provider, routeContext });
 
     const { parsed, payload } = await callRecipeAiJson({
-        provider,
+        provider: masterPlan.provider,
         prompt: buildFinalProductPrompt({ brief: cleanBrief, agentFindings, memoryContext, directionContext }),
         instructions: 'You are the executive chef agent. Synthesize all specialist findings into one save-ready recipe. Return strict JSON only.',
         tools: [{ type: 'web_search' }],
@@ -1786,6 +2008,7 @@ export const generateProductRecipeDraft = async ({ brief, provider, directionCon
         maxOutputTokens: 7000,
         timeoutMs: REQUEST_TIMEOUT_MS,
         reasoningEffort: 'high',
+        model: masterPlan.model,
     });
 
     // 統括シェフのドラフトを反証エージェントに批判させ、指摘を反映した完成版に差し替える
@@ -1800,7 +2023,7 @@ export const generateProductRecipeDraft = async ({ brief, provider, directionCon
 
     const sources = mergeSources(
         ...agentOutputs.map(output => output.sources),
-        extractSourcesFromProviderResponse(payload, '統括シェフエージェントの最終判断に使用', 'M', provider)
+        extractSourcesFromProviderResponse(payload, '統括シェフエージェントの最終判断に使用', 'M', masterPlan.provider)
     );
 
     const proposal = completeProposalWithMeta({
@@ -1845,24 +2068,34 @@ export const generateRecipeImprovement = async ({ recipe, notes, provider, direc
         question: notes,
     });
     const agentOrder = ['heritage', 'research', 'globalComparison', 'synthesizer', 'science', 'validator'];
+    const routeContext = {
+        mode: 'improvement',
+        recipeText,
+        notes,
+        question: notes,
+        directionContext,
+    };
     const agentOutputs = await Promise.all(agentOrder.map((agentId, index) => settleAgent({
         agent: AGENT_DEFINITIONS[agentId],
-        provider,
+        ...pickAgentPlan({ agentId, mainProvider: provider, routeContext }),
         prompt: buildImprovementAgentPrompt(agentId, recipeText, notes, memoryContext, directionContext),
         note: `${AGENT_DEFINITIONS[agentId].agentName}の調査・判断に使用`,
     }, index)));
     const agentFindings = formatAgentFindings(agentOutputs);
+    const auditPlan = pickAgentPlan({ agentId: 'auditor', mainProvider: provider, routeContext });
 
     const auditOutput = await settleAgent({
         agent: AGENT_DEFINITIONS.auditor,
-        provider,
+        provider: auditPlan.provider,
+        model: auditPlan.model,
         prompt: buildCrossCheckPrompt({ recipeText, notes, agentFindings, memoryContext, directionContext }),
         note: '最終クロスチェックの裏取りに使用',
     }, agentOutputs.length);
 
     const auditFindings = formatAgentFindings([auditOutput]);
+    const masterPlan = pickAgentPlan({ agentId: 'master', mainProvider: provider, routeContext });
     const { parsed, payload } = await callRecipeAiJson({
-        provider,
+        provider: masterPlan.provider,
         prompt: buildFinalImprovementPrompt({ recipeText, notes, agentFindings, auditFindings, memoryContext, directionContext }),
         instructions: 'You are the executive chef agent. Synthesize all specialist findings and audit results into one save-ready improved recipe. Return strict JSON only.',
         tools: [{ type: 'web_search' }],
@@ -1870,6 +2103,7 @@ export const generateRecipeImprovement = async ({ recipe, notes, provider, direc
         maxOutputTokens: 7000,
         timeoutMs: REQUEST_TIMEOUT_MS,
         reasoningEffort: 'high',
+        model: masterPlan.model,
     });
 
     // 統括シェフのドラフトを反証エージェントに批判させ、指摘を反映した完成版に差し替える
@@ -1885,7 +2119,7 @@ export const generateRecipeImprovement = async ({ recipe, notes, provider, direc
     const sources = mergeSources(
         ...agentOutputs.map(output => output.sources),
         auditOutput.sources,
-        extractSourcesFromProviderResponse(payload, '統括シェフエージェントの最終判断に使用', 'M', provider)
+        extractSourcesFromProviderResponse(payload, '統括シェフエージェントの最終判断に使用', 'M', masterPlan.provider)
     );
 
     const proposal = completeProposalWithMeta({
@@ -1949,10 +2183,18 @@ export const continueRecipeAiConversation = async ({
     const agentOrder = isProductMode
         ? ['research', 'globalComparison', 'synthesizer', 'science', 'validator']
         : ['heritage', 'research', 'globalComparison', 'synthesizer', 'science', 'validator'];
+    const routeContext = {
+        mode,
+        recipeText,
+        notes: cleanQuestion,
+        question: cleanQuestion,
+        currentProposalText,
+        directionContext,
+    };
 
     const agentOutputs = await Promise.all(agentOrder.map((agentId, index) => settleAgent({
         agent: AGENT_DEFINITIONS[agentId],
-        provider,
+        ...pickAgentPlan({ agentId, mainProvider: provider, routeContext }),
         prompt: isProductMode
             ? buildProductConversationAgentPrompt(agentId, recipeText, currentProposalText, conversationText, cleanQuestion, memoryContext, directionContext)
             : buildImprovementConversationAgentPrompt(agentId, recipeText, currentProposalText, conversationText, cleanQuestion, memoryContext, directionContext),
@@ -1960,9 +2202,11 @@ export const continueRecipeAiConversation = async ({
     }, index)));
 
     const agentFindings = formatAgentFindings(agentOutputs);
+    const auditPlan = pickAgentPlan({ agentId: 'auditor', mainProvider: provider, routeContext });
     const auditOutput = await settleAgent({
         agent: AGENT_DEFINITIONS.auditor,
-        provider,
+        provider: auditPlan.provider,
+        model: auditPlan.model,
         prompt: buildConversationCrossCheckPrompt({
             mode,
             recipeText,
@@ -1978,8 +2222,9 @@ export const continueRecipeAiConversation = async ({
     }, agentOutputs.length);
 
     const auditFindings = formatAgentFindings([auditOutput]);
+    const masterPlan = pickAgentPlan({ agentId: 'master', mainProvider: provider, routeContext });
     const { parsed, payload } = await callRecipeAiJson({
-        provider,
+        provider: masterPlan.provider,
         prompt: buildFinalConversationPrompt({
             mode,
             recipeText,
@@ -1998,9 +2243,10 @@ export const continueRecipeAiConversation = async ({
         maxOutputTokens: 7000,
         timeoutMs: REQUEST_TIMEOUT_MS,
         reasoningEffort: 'high',
+        model: masterPlan.model,
     });
 
-    const sourceList = extractSourcesFromProviderResponse(payload, '会話回答・追加改善の参照に使用', 'C', provider);
+    const sourceList = extractSourcesFromProviderResponse(payload, '会話回答・追加改善の参照に使用', 'C', masterPlan.provider);
     const proposedUpdate = parsed?.proposal
         ? validateMetricUnitsInProposal(parsed.proposal)
         : proposal;

@@ -217,26 +217,32 @@ export function estimateGroqCost(
     return getGroqCostBreakdown(modelName, inputTokens, outputTokens).totalCostJpy
 }
 
-export type GroqRate = { input: number; output: number }
+export type TokenRate = { input: number; output: number }
+
+// API料金の円換算用レート。実際の請求額は各社のUSD請求額を基準にする。
+// 管理画面では、この固定換算レートを含む内訳をログごとに保存して表示する。
+const USD_TO_JPY = 150
+
+export type GroqRate = TokenRate
 
 const GROQ_RATES_JPY_PER_1M: Record<string, GroqRate> = {
     // 2026-03 時点の概算（USD -> JPY 換算の内部運用値）
     'meta-llama/llama-4-scout-17b-16e-instruct': { input: 16.5, output: 51 },
     'llama-3.3-70b-versatile': { input: 16.5, output: 51 },
-    'default': { input: 16.5, output: 51 },
 }
 
 function normalizeGroqModelName(modelName: string): string {
     const normalized = String(modelName || '').trim().toLowerCase()
-    if (!normalized) return 'default'
+    if (!normalized) return 'unknown'
     if (normalized.includes('llama-4-scout-17b-16e-instruct')) return 'meta-llama/llama-4-scout-17b-16e-instruct'
     if (normalized.includes('llama-3.3-70b-versatile')) return 'llama-3.3-70b-versatile'
-    return 'default'
+    if (normalized.includes('groq/compound')) return 'groq/compound'
+    return normalized
 }
 
-export function getGroqRatePerMillion(modelName: string): GroqRate {
+export function getGroqRatePerMillion(modelName: string): GroqRate | null {
     const key = normalizeGroqModelName(modelName)
-    return GROQ_RATES_JPY_PER_1M[key] || GROQ_RATES_JPY_PER_1M.default
+    return GROQ_RATES_JPY_PER_1M[key] || null
 }
 
 export function getGroqCostBreakdown(
@@ -249,17 +255,159 @@ export function getGroqCostBreakdown(
     const normalizedModel = normalizeGroqModelName(modelName)
     const rate = getGroqRatePerMillion(normalizedModel)
 
+    if (!rate) {
+        return {
+            normalizedModel,
+            knownPricing: false,
+            pricingNote: normalizedModel === 'groq/compound'
+                ? 'Groq Compoundは公開単価がないため、推定コスト合計から除外'
+                : 'モデルの公開単価が未登録のため、推定コスト合計から除外',
+            ratePer1M: null,
+            inputTokens: safeInputTokens,
+            outputTokens: safeOutputTokens,
+            inputCostJpy: 0,
+            outputCostJpy: 0,
+            totalCostJpy: 0,
+        }
+    }
+
     const inputCostRaw = (safeInputTokens / 1_000_000) * rate.input
     const outputCostRaw = (safeOutputTokens / 1_000_000) * rate.output
     const totalCostRaw = inputCostRaw + outputCostRaw
 
     return {
         normalizedModel,
+        knownPricing: true,
+        pricingNote: null,
         ratePer1M: rate,
         inputTokens: safeInputTokens,
         outputTokens: safeOutputTokens,
         inputCostJpy: Math.round(inputCostRaw * 10000) / 10000,
         outputCostJpy: Math.round(outputCostRaw * 10000) / 10000,
         totalCostJpy: Math.round(totalCostRaw * 1_000_000) / 1_000_000,
+    }
+}
+
+const OPENAI_RATES_USD_PER_1M: Record<string, TokenRate> = {
+    'o4-mini': { input: 1.10, output: 4.40 },
+    'gpt-4.1-mini': { input: 0.40, output: 1.60 },
+}
+
+function normalizeOpenAiModelName(modelName: string): string {
+    const normalized = String(modelName || '').trim().toLowerCase()
+    if (normalized.includes('o4-mini')) return 'o4-mini'
+    if (normalized.includes('gpt-4.1-mini')) return 'gpt-4.1-mini'
+    return normalized || 'unknown'
+}
+
+export function getOpenAiCostBreakdown(
+    modelName: string,
+    inputTokens: number,
+    outputTokens: number,
+    webSearchCalls = 0,
+) {
+    const safeInputTokens = Number.isFinite(Number(inputTokens)) ? Math.max(0, Number(inputTokens)) : 0
+    const safeOutputTokens = Number.isFinite(Number(outputTokens)) ? Math.max(0, Number(outputTokens)) : 0
+    const safeWebSearchCalls = Number.isFinite(Number(webSearchCalls)) ? Math.max(0, Math.round(Number(webSearchCalls))) : 0
+    const normalizedModel = normalizeOpenAiModelName(modelName)
+    const usdRate = OPENAI_RATES_USD_PER_1M[normalizedModel]
+
+    if (!usdRate) {
+        return {
+            normalizedModel,
+            knownPricing: false,
+            pricingNote: 'モデルの公開単価が未登録のため、推定コスト合計から除外',
+            ratePer1M: null,
+            inputTokens: safeInputTokens,
+            outputTokens: safeOutputTokens,
+            inputCostJpy: 0,
+            outputCostJpy: 0,
+            webSearchCalls: safeWebSearchCalls,
+            webSearchCostJpy: 0,
+            totalCostJpy: 0,
+            usdToJpy: USD_TO_JPY,
+        }
+    }
+
+    const ratePer1M = { input: usdRate.input * USD_TO_JPY, output: usdRate.output * USD_TO_JPY }
+    const inputCostJpy = (safeInputTokens / 1_000_000) * ratePer1M.input
+    const outputCostJpy = (safeOutputTokens / 1_000_000) * ratePer1M.output
+    // OpenAI Web Search: $10 / 1,000 calls = $0.01 / call
+    const webSearchCostJpy = safeWebSearchCalls * 0.01 * USD_TO_JPY
+
+    return {
+        normalizedModel,
+        knownPricing: true,
+        pricingNote: null,
+        ratePer1M,
+        inputTokens: safeInputTokens,
+        outputTokens: safeOutputTokens,
+        inputCostJpy: Math.round(inputCostJpy * 10000) / 10000,
+        outputCostJpy: Math.round(outputCostJpy * 10000) / 10000,
+        webSearchCalls: safeWebSearchCalls,
+        webSearchCostJpy: Math.round(webSearchCostJpy * 10000) / 10000,
+        totalCostJpy: Math.round((inputCostJpy + outputCostJpy + webSearchCostJpy) * 1_000_000) / 1_000_000,
+        usdToJpy: USD_TO_JPY,
+    }
+}
+
+const PERPLEXITY_RATES_USD_PER_1M: Record<string, TokenRate> = {
+    sonar: { input: 1, output: 1 },
+}
+
+function normalizePerplexityModelName(modelName: string): string {
+    const normalized = String(modelName || '').trim().toLowerCase()
+    if (normalized === 'sonar' || normalized.startsWith('sonar-')) return 'sonar'
+    return normalized || 'unknown'
+}
+
+export function getPerplexityCostBreakdown(
+    modelName: string,
+    inputTokens: number,
+    outputTokens: number,
+    searchContextSize = 'low',
+) {
+    const safeInputTokens = Number.isFinite(Number(inputTokens)) ? Math.max(0, Number(inputTokens)) : 0
+    const safeOutputTokens = Number.isFinite(Number(outputTokens)) ? Math.max(0, Number(outputTokens)) : 0
+    const normalizedModel = normalizePerplexityModelName(modelName)
+    const usdRate = PERPLEXITY_RATES_USD_PER_1M[normalizedModel]
+
+    if (!usdRate) {
+        return {
+            normalizedModel,
+            knownPricing: false,
+            pricingNote: 'モデルの公開単価が未登録のため、推定コスト合計から除外',
+            ratePer1M: null,
+            inputTokens: safeInputTokens,
+            outputTokens: safeOutputTokens,
+            inputCostJpy: 0,
+            outputCostJpy: 0,
+            requestFeeJpy: 0,
+            searchContextSize,
+            totalCostJpy: 0,
+            usdToJpy: USD_TO_JPY,
+        }
+    }
+
+    const ratePer1M = { input: usdRate.input * USD_TO_JPY, output: usdRate.output * USD_TO_JPY }
+    const inputCostJpy = (safeInputTokens / 1_000_000) * ratePer1M.input
+    const outputCostJpy = (safeOutputTokens / 1_000_000) * ratePer1M.output
+    // Sonar Low context（デフォルト）: $5 / 1,000 request = $0.005 / request
+    const requestFeeUsd = searchContextSize === 'high' ? 0.012 : searchContextSize === 'medium' ? 0.008 : 0.005
+    const requestFeeJpy = requestFeeUsd * USD_TO_JPY
+
+    return {
+        normalizedModel,
+        knownPricing: true,
+        pricingNote: null,
+        ratePer1M,
+        inputTokens: safeInputTokens,
+        outputTokens: safeOutputTokens,
+        inputCostJpy: Math.round(inputCostJpy * 10000) / 10000,
+        outputCostJpy: Math.round(outputCostJpy * 10000) / 10000,
+        requestFeeJpy: Math.round(requestFeeJpy * 10000) / 10000,
+        searchContextSize,
+        totalCostJpy: Math.round((inputCostJpy + outputCostJpy + requestFeeJpy) * 1_000_000) / 1_000_000,
+        usdToJpy: USD_TO_JPY,
     }
 }

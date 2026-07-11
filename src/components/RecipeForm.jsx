@@ -803,7 +803,12 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                         <span className="recipe-ai-progress__pulse" />
                         <div>
                             <strong>現在の工程</strong>
-                            <p>{aiProgressConfig?.steps?.[aiProgressStepIndex] || '進行状況を確認中'}</p>
+                            {aiProgressConfig?.steps?.[aiProgressStepIndex] ? (
+                                <p>
+                                    {aiProgressConfig.steps[aiProgressStepIndex].label}
+                                    <span className="recipe-ai-progress__status-provider">{aiProgressConfig.steps[aiProgressStepIndex].provider}</span>
+                                </p>
+                            ) : <p>進行状況を確認中</p>}
                         </div>
                     </div>
                     <div className="recipe-ai-progress__bar" aria-hidden="true">
@@ -817,11 +822,15 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                     <div className="recipe-ai-progress__steps">
                         {(aiProgressConfig?.steps || []).map((step, index) => (
                             <div
-                                key={`${step}-${index}`}
+                                key={`${step.label}-${index}`}
                                 className={`recipe-ai-progress__step${index < aiProgressStepIndex ? ' is-complete' : ''}${index === aiProgressStepIndex ? ' is-active' : ''}`}
                             >
                                 <span className="recipe-ai-progress__step-index">{index + 1}</span>
-                                <span className="recipe-ai-progress__step-label">{step}</span>
+                                <div className="recipe-ai-progress__step-content">
+                                    <span className="recipe-ai-progress__step-label">{step.label}</span>
+                                    <span className="recipe-ai-progress__step-provider">{step.provider}</span>
+                                    <span className="recipe-ai-progress__step-detail">{step.description}</span>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -947,6 +956,9 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                                 <option value="sakana-payg">{sakanaUnlocked ? 'Sakana AI（従量課金）' : '🔒 Sakana AI（従量課金）'}</option>
                                             </select>
                                         </label>
+                                        <p className="recipe-ai-form__hint">
+                                            通常は、研究系は内容に応じて Perplexity、最終監査・統合・反証は OpenAI、それ以外は主に Groq を自動使用します。
+                                        </p>
                                         <label className="recipe-ai-form__label">
                                             開発テーマ
                                             <textarea

@@ -2,7 +2,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts"
 import { RateLimiter } from "../_shared/rate-limiter.ts"
-import { APILogger, getGroqCostBreakdown } from "../_shared/api-logger.ts"
+import {
+  APILogger,
+  getGroqCostBreakdown,
+  getOpenAiCostBreakdown,
+  getPerplexityCostBreakdown,
+} from "../_shared/api-logger.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,6 +35,8 @@ const safeJsonParse = (value: string) => {
 
 const normalizeApiName = (provider: string) => {
   if (provider === 'groq') return 'groq'
+  if (provider === 'openai') return 'openai'
+  if (provider === 'perplexity') return 'perplexity'
   return 'sakana'
 }
 
@@ -57,6 +64,13 @@ const extractUsageFromPayload = (payload: Record<string, unknown> | null) => {
   }
 
   return { inputTokens: 0, outputTokens: 0 }
+}
+
+const extractOpenAiWebSearchCallCount = (payload: Record<string, unknown> | null) => {
+  if (!Array.isArray(payload?.output)) return 0
+  return payload.output.filter((item) => (
+    item && typeof item === 'object' && (item as Record<string, unknown>).type === 'web_search_call'
+  )).length
 }
 
 // provider/endpoint ごとの転送先。ここに無い組み合わせは拒否する。
@@ -94,6 +108,20 @@ const PROVIDER_ENDPOINTS: Record<string, Record<string, { url: string; keyEnvs: 
       url: 'https://api.groq.com/openai/v1/chat/completions',
       keyEnvs: ['GROQ_API_KEY'],
       providerName: 'Groq',
+    },
+  },
+  openai: {
+    responses: {
+      url: 'https://api.openai.com/v1/responses',
+      keyEnvs: ['OPENAI_API_KEY', 'chatgpt', 'CHATGPT_API_KEY'],
+      providerName: 'OpenAI',
+    },
+  },
+  perplexity: {
+    chat: {
+      url: 'https://api.perplexity.ai/chat/completions',
+      keyEnvs: ['PERPLEXITY_API_KEY'],
+      providerName: 'Perplexity',
     },
   },
 }
@@ -216,9 +244,17 @@ serve(async (req) => {
     const responseSizeBytes = responseText.length
     const parsedPayload = safeJsonParse(responseText)
     const usage = extractUsageFromPayload(parsedPayload)
+    const openAiWebSearchCalls = normalizedProvider === 'openai'
+      ? extractOpenAiWebSearchCallCount(parsedPayload)
+      : 0
+    const perplexitySearchContextSize = String(body?.web_search_options?.search_context_size || 'low').toLowerCase()
     const billing = normalizedProvider === 'groq'
       ? getGroqCostBreakdown(requestModel || '', usage.inputTokens, usage.outputTokens)
-      : null
+      : normalizedProvider === 'openai'
+        ? getOpenAiCostBreakdown(requestModel || '', usage.inputTokens, usage.outputTokens, openAiWebSearchCalls)
+        : normalizedProvider === 'perplexity'
+          ? getPerplexityCostBreakdown(requestModel || '', usage.inputTokens, usage.outputTokens, perplexitySearchContextSize)
+          : null
 
     if (apiLogger) {
       const metadata = {
@@ -227,14 +263,23 @@ serve(async (req) => {
         upstream_url: target.url,
         upstream_status: upstream.status,
         usage,
-        billing_type: normalizedProvider === 'groq' ? 'token_weighted' : null,
+        billing_type: billing
+          ? (normalizedProvider === 'perplexity' ? 'token_plus_request_fee' : 'token_weighted')
+          : null,
         billing_breakdown: billing ? {
           model: billing.normalizedModel,
+          pricing_status: billing.knownPricing ? 'priced' : 'unpriced',
+          pricing_note: billing.pricingNote,
           rate_per_1m_jpy: billing.ratePer1M,
           input_tokens: billing.inputTokens,
           output_tokens: billing.outputTokens,
           input_cost_jpy: billing.inputCostJpy,
           output_cost_jpy: billing.outputCostJpy,
+          web_search_calls: 'webSearchCalls' in billing ? billing.webSearchCalls : 0,
+          web_search_cost_jpy: 'webSearchCostJpy' in billing ? billing.webSearchCostJpy : 0,
+          request_fee_jpy: 'requestFeeJpy' in billing ? billing.requestFeeJpy : 0,
+          search_context_size: 'searchContextSize' in billing ? billing.searchContextSize : null,
+          usd_to_jpy: 'usdToJpy' in billing ? billing.usdToJpy : null,
           total_cost_jpy: billing.totalCostJpy,
         } : null,
       }
@@ -245,7 +290,7 @@ serve(async (req) => {
           responseSizeBytes,
           inputTokens: usage.inputTokens,
           outputTokens: usage.outputTokens,
-          estimatedCostJpy: billing?.totalCostJpy,
+          estimatedCostJpy: billing?.knownPricing ? billing.totalCostJpy : undefined,
           metadata,
         })
       } else if (upstream.status === 429) {
