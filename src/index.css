@@ -141,3 +141,181 @@ a {
     display: none !important;
   }
 }
+
+/* Final Integration Popup Styling */
+.final-integration-popup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--space-lg) var(--space-md);
+  color: hsl(var(--color-text-main));
+}
+
+.final-integration-popup__animation {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-xl);
+}
+
+/* 中央のシェフ絵文字とグロー効果 */
+.chef-hat-glow {
+  position: relative;
+  z-index: 10;
+  width: 80px;
+  height: 80px;
+  background: radial-gradient(circle, rgba(255,140,0,0.2) 0%, rgba(255,140,0,0) 70%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+.chef-emoji {
+  font-size: 3.5rem;
+  filter: drop-shadow(0 0 10px rgba(255, 140, 0, 0.6));
+}
+
+/* 統合をイメージした回転リング */
+.integration-ring {
+  position: absolute;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  animation: rotate-ring 6s linear infinite;
+}
+
+.integration-ring.ring-1 {
+  width: 110px;
+  height: 110px;
+  border-top-color: hsl(var(--color-primary));
+  border-bottom-color: rgba(255, 140, 0, 0.2);
+  animation-duration: 3s;
+}
+
+.integration-ring.ring-2 {
+  width: 130px;
+  height: 130px;
+  border-left-color: hsl(var(--color-accent));
+  border-right-color: rgba(0, 191, 255, 0.2);
+  animation-duration: 4.5s;
+  animation-direction: reverse;
+}
+
+.integration-ring.ring-3 {
+  width: 90px;
+  height: 90px;
+  border-top-color: #39ff14; /* 鮮やかなグリーン */
+  border-bottom-color: rgba(57, 255, 20, 0.2);
+  animation-duration: 2s;
+}
+
+/* 収束するパーティクル効果 */
+.integration-particles {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.integration-particles span {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background-color: hsl(var(--color-primary));
+  border-radius: 50%;
+  box-shadow: 0 0 8px hsl(var(--color-primary));
+}
+
+/* 各パーティクルの初期配置とアニメーション */
+.integration-particles span:nth-child(1) { top: 10%; left: 50%; animation: particle-in-1 2s infinite ease-in-out; }
+.integration-particles span:nth-child(2) { top: 50%; left: 90%; animation: particle-in-2 2s infinite ease-in-out; animation-delay: 0.2s; }
+.integration-particles span:nth-child(3) { top: 90%; left: 50%; animation: particle-in-3 2s infinite ease-in-out; animation-delay: 0.4s; }
+.integration-particles span:nth-child(4) { top: 50%; left: 10%; animation: particle-in-4 2s infinite ease-in-out; animation-delay: 0.6s; }
+.integration-particles span:nth-child(5) { top: 20%; left: 80%; animation: particle-in-5 2s infinite ease-in-out; animation-delay: 0.8s; }
+.integration-particles span:nth-child(6) { top: 80%; left: 80%; animation: particle-in-6 2s infinite ease-in-out; animation-delay: 1.0s; }
+.integration-particles span:nth-child(7) { top: 80%; left: 20%; animation: particle-in-7 2s infinite ease-in-out; animation-delay: 1.2s; }
+.integration-particles span:nth-child(8) { top: 20%; left: 20%; animation: particle-in-8 2s infinite ease-in-out; animation-delay: 1.4s; }
+
+.final-integration-popup__title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: var(--space-md);
+  color: #fff;
+}
+
+.final-integration-popup__description {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: hsl(var(--color-text-muted));
+  margin-bottom: var(--space-lg);
+  max-width: 400px;
+}
+
+.final-integration-popup__status-label {
+  font-size: 0.85rem;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-lg);
+}
+
+.highlight-step {
+  color: hsl(var(--color-primary));
+  font-weight: bold;
+}
+
+.final-integration-popup__warning {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 0.8rem;
+  color: #ffb74d;
+  background-color: rgba(255, 183, 77, 0.05);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  border: 1px dashed rgba(255, 183, 77, 0.2);
+}
+
+.spin-loader {
+  width: 14px;
+  height: 14px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* Animations */
+@keyframes pulse-glow {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.08); opacity: 1; }
+}
+
+@keyframes rotate-ring {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 各パーティクルの収束アニメーション定義（中央へ向かって飛んで消える） */
+@keyframes particle-in-1 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(0, 40px) scale(0.2); opacity: 0; } }
+@keyframes particle-in-2 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(-40px, 0) scale(0.2); opacity: 0; } }
+@keyframes particle-in-3 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(0, -40px) scale(0.2); opacity: 0; } }
+@keyframes particle-in-4 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(40px, 0) scale(0.2); opacity: 0; } }
+@keyframes particle-in-5 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(-30px, 30px) scale(0.2); opacity: 0; } }
+@keyframes particle-in-6 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(-30px, -30px) scale(0.2); opacity: 0; } }
+@keyframes particle-in-7 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(30px, -30px) scale(0.2); opacity: 0; } }
+@keyframes particle-in-8 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(30px, 30px) scale(0.2); opacity: 0; } }
