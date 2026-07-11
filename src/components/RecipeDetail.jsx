@@ -3,7 +3,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { Modal } from './Modal';
 import { translationService } from '../services/translationService';
-import { recipeService } from '../services/recipeService';
+import { recipeService, saveRecipeAiHtmlExport, fetchRecipeAiHtmlExports, deleteRecipeAiHtmlExport } from '../services/recipeService';
 import {
     buildRecipePayloadFromAiProposal,
     continueRecipeAiConversation,
@@ -870,6 +870,8 @@ export const RecipeDetail = ({
     const [aiConversation, setAiConversation] = React.useState([]);
     const [aiConversationInput, setAiConversationInput] = React.useState('');
     const [isAiConversing, setIsAiConversing] = React.useState(false);
+    const [htmlExports, setHtmlExports] = React.useState([]);
+    const [isSavingHtmlExport, setIsSavingHtmlExport] = React.useState(false);
     const [aiProgressMode, setAiProgressMode] = React.useState(null);
     const [aiProgressStepIndex, setAiProgressStepIndex] = React.useState(0);
     const aiProgressConfig = React.useMemo(
@@ -1051,6 +1053,17 @@ export const RecipeDetail = ({
                 });
         }
     }, [recipe, isDeleted]);
+
+    React.useEffect(() => {
+        if (!recipe?.id) return;
+        fetchRecipeAiHtmlExports(recipe.id)
+            .then(data => {
+                setHtmlExports(data);
+            })
+            .catch(err => {
+                console.error("Failed to load HTML exports", err);
+            });
+    }, [recipe?.id]);
 
     React.useEffect(() => {
         let cancelled = false;
@@ -1349,6 +1362,221 @@ export const RecipeDetail = ({
             setIsAiGenerating(false);
             setAiProgressMode(null);
             setAiProgressStepIndex(0);
+        }
+    };
+
+    const handleExportAnalysisToHtml = async () => {
+        if (!aiProposal) {
+            toast.warning('保存する分析結果がありません。');
+            return;
+        }
+
+        setIsSavingHtmlExport(true);
+        try {
+            const title = `${recipe.title} - AI分析・改善レポート (${new Date().toLocaleDateString()})`;
+
+            // Build HTML Content
+            let html = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <title>${title}</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
+            line-height: 1.6;
+            color: #334155;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+            background-color: #f8fafc;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            border: 1px solid #e2e8f0;
+        }
+        h1 {
+            color: #1e3a8a;
+            font-size: 1.8rem;
+            border-bottom: 3px solid #3b82f6;
+            padding-bottom: 0.75rem;
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+        }
+        h2 {
+            color: #0f172a;
+            font-size: 1.3rem;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            padding-left: 0.5rem;
+            border-left: 4px solid #3b82f6;
+        }
+        .meta-info {
+            font-size: 0.9rem;
+            color: #64748b;
+            margin-bottom: 2rem;
+        }
+        .agent-card {
+            background-color: #f1f5f9;
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin-bottom: 1.25rem;
+            border-left: 4px solid #64748b;
+        }
+        .agent-card.scientific { border-left-color: #10b981; }
+        .agent-card.historical { border-left-color: #f59e0b; }
+        .agent-card.recipe { border-left-color: #3b82f6; }
+        .agent-card.auditor { border-left-color: #ef4444; }
+        .agent-name {
+            font-weight: bold;
+            color: #1e293b;
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .agent-text {
+            font-size: 0.95rem;
+            white-space: pre-wrap;
+        }
+        .chat-section {
+            margin-top: 2rem;
+            background-color: #fafafa;
+            border: 1px solid #f0f0f0;
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+        .chat-bubble {
+            margin-bottom: 1rem;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            max-width: 85%;
+        }
+        .chat-bubble.user {
+            background-color: #e0f2fe;
+            color: #0369a1;
+            margin-left: auto;
+            border-bottom-right-radius: 0;
+        }
+        .chat-bubble.assistant {
+            background-color: #f3f4f6;
+            color: #374151;
+            margin-right: auto;
+            border-bottom-left-radius: 0;
+        }
+        .chat-role {
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-bottom: 0.25rem;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>${title}</h1>
+        <div class="meta-info">
+            元レシピ: ${recipe.title} | 保存日時: ${new Date().toLocaleString()}
+        </div>
+
+        <h2>エージェント所見</h2>
+`;
+
+            // Append Agent findings
+            const agentPlanList = aiProposal?.agentMessages || [];
+            if (agentPlanList.length === 0) {
+                html += `<p>所見データはありません。</p>`;
+            } else {
+                agentPlanList.forEach((msg) => {
+                    let agentClass = '';
+                    if (msg.agentName?.includes('科学')) agentClass = 'scientific';
+                    else if (msg.agentName?.includes('文化') || msg.agentName?.includes('比較')) agentClass = 'historical';
+                    else if (msg.agentName?.includes('統合') || msg.agentName?.includes('作成')) agentClass = 'recipe';
+                    else if (msg.agentName?.includes('監査') || msg.agentName?.includes('クロスチェック')) agentClass = 'auditor';
+
+                    html += `
+        <div class="agent-card ${agentClass}">
+            <div class="agent-name">🛡️ ${msg.agentName || 'AIエージェント'}</div>
+            <div class="agent-text">${msg.content || '所見なし'}</div>
+        </div>`;
+                });
+            }
+
+            // Append Chat history
+            if (aiConversation.length > 0) {
+                html += `
+        <h2>会話履歴 (Q&A)</h2>
+        <div class="chat-section">
+`;
+                aiConversation.forEach((chat) => {
+                    const isUser = chat.role === 'user';
+                    html += `
+            <div class="chat-bubble ${isUser ? 'user' : 'assistant'}">
+                <div class="chat-role">${isUser ? 'あなた' : 'AI'}</div>
+                <div class="agent-text">${chat.content}</div>
+            </div>`;
+                });
+                html += `        </div>`;
+            }
+
+            html += `
+    </div>
+</body>
+</html>`;
+
+            // 1. Save to DB
+            const savedRow = await saveRecipeAiHtmlExport(recipe.id, title, html, {
+                proposalTitle: aiProposal?.title,
+                agentCount: agentPlanList.length,
+                chatCount: aiConversation.length
+            });
+
+            // Update local state
+            setHtmlExports(prev => [savedRow, ...prev]);
+
+            // 2. Download File locally
+            const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `${recipe.title}_AI改善レポート_${new Date().toISOString().slice(0,10)}.html`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            toast.success('分析結果をHTMLとして保存・ダウンロードしました！');
+        } catch (error) {
+            console.error('[RecipeDetail] HTML export failed:', error);
+            toast.error('HTMLの保存に失敗しました。');
+        } finally {
+            setIsSavingHtmlExport(false);
+        }
+    };
+
+    const handleDeleteHtmlExport = async (exportId) => {
+        if (!window.confirm('この保存履歴を削除してもよろしいですか？')) return;
+        try {
+            await deleteRecipeAiHtmlExport(exportId);
+            setHtmlExports(prev => prev.filter(x => x.id !== exportId));
+            toast.success('保存履歴を削除しました。');
+        } catch (error) {
+            console.error('[RecipeDetail] Delete export failed:', error);
+            toast.error('履歴の削除に失敗しました。');
+        }
+    };
+
+    const handlePreviewHtmlExport = (exportRecord) => {
+        const previewWindow = window.open();
+        if (previewWindow) {
+            previewWindow.document.write(exportRecord.html_content);
+            previewWindow.document.close();
+        } else {
+            toast.error('ポップアップがブロックされました。');
         }
     };
 
@@ -3485,6 +3713,17 @@ export const RecipeDetail = ({
                                     )}
                                     <Button
                                         type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        isLoading={isSavingHtmlExport}
+                                        disabled={isSavingHtmlExport || isAiGenerating}
+                                        onClick={handleExportAnalysisToHtml}
+                                        style={{ borderColor: '#3b82f6', color: '#3b82f6' }}
+                                    >
+                                        💾 分析レポートを保存・HTML出力
+                                    </Button>
+                                    <Button
+                                        type="button"
                                         variant="secondary"
                                         size="sm"
                                         isLoading={isSavingAiProposal}
@@ -3504,6 +3743,58 @@ export const RecipeDetail = ({
                                         このレシピに上書き
                                     </Button>
                                 </div>
+                                {htmlExports.length > 0 && (
+                                    <div className="recipe-ai-html-exports" style={{ marginTop: '2rem', borderTop: '1px solid #e2e8f0', paddingTop: '1.5rem' }}>
+                                        <div style={{ fontWeight: 'bold', color: '#1e293b', marginBottom: '0.75rem', fontSize: '0.95rem' }}>
+                                            🗂️ 過去の分析レポート保存履歴 ({htmlExports.length}件)
+                                        </div>
+                                        <div className="recipe-ai-html-exports__list" style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                            {htmlExports.map((exp) => (
+                                                <div key={exp.id} className="recipe-ai-html-export-item" style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    padding: '0.5rem 0.75rem',
+                                                    backgroundColor: '#f8fafc',
+                                                    border: '1px solid #e2e8f0',
+                                                    borderRadius: '6px',
+                                                    fontSize: '0.85rem'
+                                                }}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', textAlign: 'left' }}>
+                                                        <span style={{ fontWeight: '500', color: '#334155' }}>{exp.title}</span>
+                                                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                                            {new Date(exp.created_at).toLocaleString()} | エージェント所見 {exp.metadata?.agentCount || 0}件 {exp.metadata?.chatCount > 0 ? `| 会話 ${exp.metadata.chatCount}回` : ''}
+                                                        </span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                        <button type="button" onClick={() => handlePreviewHtmlExport(exp)} style={{
+                                                            color: '#2563eb',
+                                                            background: 'none',
+                                                            border: 'none',
+                                                            cursor: 'pointer',
+                                                            fontSize: '0.8rem',
+                                                            padding: '2px 6px',
+                                                            fontWeight: '500'
+                                                        }}>
+                                                            表示
+                                                        </button>
+                                                        <button type="button" onClick={() => handleDeleteHtmlExport(exp.id)} style={{
+                                                            color: '#ef4444',
+                                                            background: 'none',
+                                                            border: 'none',
+                                                            cursor: 'pointer',
+                                                            fontSize: '0.8rem',
+                                                            padding: '2px 6px',
+                                                            fontWeight: '500'
+                                                        }}>
+                                                            削除
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                         </div>

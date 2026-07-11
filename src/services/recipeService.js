@@ -1720,3 +1720,68 @@ const fromDeletedDbFormat = (recipe) => ({
     deletedAt: recipe.deleted_at,
     originalId: recipe.original_id
 })
+
+export const saveRecipeAiHtmlExport = async (recipeId, title, htmlContent, metadata = {}) => {
+    try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const userId = sessionData?.session?.user?.id || null;
+        if (!userId) throw new Error('ユーザーセッションが見つかりません。ログインしてください。');
+
+        const { data, error } = await supabase
+            .from('recipe_ai_html_exports')
+            .insert({
+                user_id: userId,
+                recipe_id: recipeId ? Number(recipeId) : null,
+                title: String(title).trim(),
+                html_content: String(htmlContent),
+                metadata
+            })
+            .select('*')
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        console.error('[recipeService] saveRecipeAiHtmlExport failed:', error);
+        throw error;
+    }
+};
+
+export const fetchRecipeAiHtmlExports = async (recipeId) => {
+    try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const userId = sessionData?.session?.user?.id || null;
+        if (!userId) return [];
+
+        const query = supabase
+            .from('recipe_ai_html_exports')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
+
+        if (recipeId) {
+            query.eq('recipe_id', Number(recipeId));
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('[recipeService] fetchRecipeAiHtmlExports failed:', error);
+        return [];
+    }
+};
+
+export const deleteRecipeAiHtmlExport = async (exportId) => {
+    try {
+        const { error } = await supabase
+            .from('recipe_ai_html_exports')
+            .delete()
+            .eq('id', exportId);
+        if (error) throw error;
+        return true;
+    } catch (error) {
+        console.error('[recipeService] deleteRecipeAiHtmlExport failed:', error);
+        throw error;
+    }
+};
