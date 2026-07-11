@@ -433,6 +433,7 @@ export default function ApiUsageLogs() {
     const [userMap, setUserMap] = useState({})
     const [loading, setLoading] = useState(true)
     const [activeTab, setActiveTab] = useState('all') // 'all', 'voice', 'vision', 'operation'
+    const [expandedGroups, setExpandedGroups] = useState({})
 
     // API名フィルタは使わず、全件取得後にクライアントサイドでタブフィルタを行う
     const [filter, setFilter] = useState({
@@ -585,6 +586,107 @@ export default function ApiUsageLogs() {
         if (filter.status === 'all') return tabFiltered
         return tabFiltered.filter((log) => String(log?.status || '') === String(filter.status))
     }, [mergedLogs, activeTab, filter.status])
+
+    // 1回の解析（AIセッション）ごとにログを時間近接グルーピングする
+    const groupedLogs = useMemo(() => {
+        // 降順（新しい順）の displayedLogs を一旦昇順（古い順）にしてグループ化
+        const sortedLogs = [...displayedLogs].sort(
+            (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+        )
+
+        const groups = []
+        const GROUP_THRESHOLD_MS = 90 * 1000 // 90秒以内の差なら同一セッションと判定
+
+        sortedLogs.forEach((log) => {
+            const logTime = new Date(log.created_at || 0).getTime()
+            let matchedGroup = null
+
+            // 直近のグループで、同じユーザーかつ時間差が閾値内のものを探す
+            for (let i = groups.length - 1; i >= 0; i--) {
+                const grp = groups[i]
+                const lastLog = grp.logs[grp.logs.length - 1]
+                const lastLogTime = new Date(lastLog.created_at || 0).getTime()
+
+                if (lastLog.user_id === log.user_id && (logTime - lastLogTime) <= GROUP_THRESHOLD_MS) {
+                    matchedGroup = grp
+                    break
+                }
+            }
+
+            if (matchedGroup) {
+                matchedGroup.logs.push(log)
+            } else {
+                groups.push({
+                    id: \`group-\${log.id || Date.now()}-\${Math.random().toString(16).slice(2)}\`,
+                    user_id: log.user_id,
+                    user_email: log.user_email,
+                    logs: [log],
+                })
+            }
+        })
+
+        // 各グループのメタデータ（合計コスト、モデル要約など）を付与
+        const enrichedGroups = groups.map((group) => {
+            let totalCost = 0
+            let hasUnpriced = false
+            
+            group.logs.forEach((log) => {
+                const cost = Number(log.estimated_cost_jpy || 0)
+                totalCost += cost
+                const billing = getBillingBreakdown(log)
+                if (billing?.pricingStatus === 'unpriced') {
+                    hasUnpriced = true
+                }
+            })
+
+            const firstLog = group.logs[0]
+            const lastLog = group.logs[group.logs.length - 1]
+
+            // モデルごとの出現数をカウント
+            const modelCounts = {}
+            group.logs.forEach((log) => {
+                const model = log.model_name || '不明なモデル'
+                modelCounts[model] = (modelCounts[model] || 0) + 1
+            })
+            const modelSummary = Object.entries(modelCounts)
+                .map(([model, count]) => \`\${model} (\${count}回)\`)
+                .join(', ')
+
+            return {
+                ...group,
+                totalCost: Math.round(totalCost * 1000) / 1000,
+                hasUnpriced,
+                startTime: firstLog.created_at,
+                endTime: lastLog.created_at,
+                modelSummary,
+            }
+        })
+
+        // 新しいグループ（最新の解析）が先頭に来るようにソート
+        return enrichedGroups.sort(
+            (a, b) => new Date(b.startTime || 0).getTime() - new Date(a.startTime || 0).getTime()
+        )
+    }, [displayedLogs])
+
+    // 最新のグループを自動で開く初期化
+    useEffect(() => {
+        if (groupedLogs.length > 0) {
+            const firstId = groupedLogs[0].id
+            setExpandedGroups((prev) => {
+                if (Object.keys(prev).length === 0) {
+                    return { [firstId]: true }
+                }
+                return prev
+            })
+        }
+    }, [groupedLogs])
+
+    const toggleGroup = (groupId) => {
+        setExpandedGroups((prev) => ({
+            ...prev,
+            [groupId]: !prev[groupId],
+        }))
+    }
 
     // 統計再計算
     useEffect(() => {
@@ -927,100 +1029,133 @@ export default function ApiUsageLogs() {
             {loading ? (
                 <div className="loading">読み込み中...</div>
             ) : (
-                <div className="logs-table-container">
-                    <table className="logs-table">
-                        <thead>
-                            <tr>
-                                <th>日時</th>
-                                <th>API</th>
-                                <th>エンドポイント</th>
-                                <th>モデル</th>
-                                <th>ユーザー</th>
-                                <th>ステータス</th>
-                                <th>処理時間</th>
-                                <th>詳細 (秒数/トークン)</th>
-                                <th>推定コスト</th>
-                                <th>従量課金内訳</th>
-                                <th>エラー</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {displayedLogs.map((log) => (
-                                <tr key={log.id} className={\`status-\${log.status}\`}>
-                                    <td>{formatDate(log.created_at)}</td>
-                                    <td><span className={\`api-badge api-\${log.api_name}\`}>{log.api_name}</span></td>
-                                    <td>{log.endpoint}</td>
-                                    <td><code>{log.model_name || '-'}</code></td>
-                                    <td>
-                                        {log.user_email ||
-                                            (userMap[log.user_id]?.email) ||
-                                            (userMap[log.user_id]?.display_id) ||
-                                            (log.user_id ? log.user_id.substring(0, 8) : '-')}
-                                    </td>
-                                    <td>{getStatusBadge(log.status)}</td>
-                                    <td>{log.duration_ms ? \`\${log.duration_ms}ms\` : '-'}</td>
-                                    <td>
-                                        {/* 詳細カラム：音声なら秒数、テキストならトークン */}
-                                        {log.metadata && log.metadata.audio_duration_sec ? (
-                                            <span className="audio-sec">
-                                                🎤 {Number(log.metadata.audio_duration_sec).toFixed(2)}s
+                <div className="logs-groups-container">
+                    {groupedLogs.map((group) => {
+                        const isExpanded = !!expandedGroups[group.id]
+                        return (
+                            <div key={group.id} className={\`log-group-accordion \${isExpanded ? 'is-expanded' : ''}\`}>
+                                <div className="log-group-header" onClick={() => toggleGroup(group.id)}>
+                                    <span className="log-group-header__toggle-icon">{isExpanded ? '▼' : '▶'}</span>
+                                    <div className="log-group-header__info">
+                                        <span className="log-group-header__time">
+                                            📅 {formatDate(group.startTime)}
+                                        </span>
+                                        <span className="log-group-header__user">
+                                            👤 {group.user_email || 
+                                                (userMap[group.user_id]?.email) || 
+                                                (userMap[group.user_id]?.display_id) || 
+                                                (group.user_id ? group.user_id.substring(0, 8) : '-')}
+                                        </span>
+                                        <span className="log-group-header__models" title={group.modelSummary}>
+                                            🧠 {group.modelSummary}
+                                        </span>
+                                    </div>
+                                    <div className="log-group-header__cost-area">
+                                        <span className="log-group-header__cost-label">合計推定コスト:</span>
+                                        <span className="log-group-header__cost-value">
+                                            ¥{formatCostJpy(group.totalCost)}
+                                        </span>
+                                        {group.hasUnpriced && (
+                                            <span className="log-group-header__unpriced-badge" title="料金未公開のモデル（Groq Compound等）が含まれています。">
+                                                *未公表込
                                             </span>
-                                        ) : (
-                                            log.input_tokens || log.output_tokens ? (
-                                                <span className="tokens">
-                                                    {log.input_tokens ? \`↓\${log.input_tokens}\` : ''}
-                                                    {log.output_tokens ? \` ↑\${log.output_tokens}\` : ''}
-                                                </span>
-                                            ) : '-'
                                         )}
-                                    </td>
-                                    <td>
-                                        {(() => {
-                                            const billing = getBillingBreakdown(log)
-                                            if (billing?.pricingStatus === 'unpriced') {
-                                                return <span className="cost cost--unpriced" title={billing.pricingNote}>未公表</span>
-                                            }
-                                            return <span className="cost">¥{formatCostJpy(resolveEstimatedCostJpy(log, billing))}</span>
-                                        })()}
-                                    </td>
-                                    <td>
-                                        {(() => {
-                                            const billing = getBillingBreakdown(log)
-                                            if (!billing) return '-'
-                                            if (billing.pricingStatus === 'unpriced') {
-                                                return <div className="cost-breakdown cost-breakdown--unpriced">{billing.pricingNote}</div>
-                                            }
-                                            if (billing.billingUnit === 'audio_second') {
-                                                return (
-                                                    <div className="cost-breakdown" title={formatBillingBreakdownText(log)}>
-                                                        <div>音声: {Number(billing.audioDurationSec || 0).toFixed(2)}秒 × ¥{formatCostJpy(billing.ratePerSecondJpy, 4)}/秒</div>
-                                                        <div className="cost-breakdown-total">合計: ¥{formatCostJpy(billing.totalCostJpy)}</div>
-                                                    </div>
-                                                )
-                                            }
-                                            return (
-                                                <div className="cost-breakdown" title={formatBillingBreakdownText(log)}>
-                                                    <div>入力: {billing.inputTokens.toLocaleString()}tok × ¥{billing.inputRatePer1M}/100万 = ¥{formatCostJpy(billing.inputCostJpy)}</div>
-                                                    <div>出力: {billing.outputTokens.toLocaleString()}tok × ¥{billing.outputRatePer1M}/100万 = ¥{formatCostJpy(billing.outputCostJpy)}</div>
-                                                    {billing.webSearchCalls > 0 && <div>Web検索: {billing.webSearchCalls}回 = ¥{formatCostJpy(billing.webSearchCostJpy)}</div>}
-                                                    {billing.requestFeeJpy > 0 && <div>検索リクエスト（{billing.searchContextSize || 'low'}）: ¥{formatCostJpy(billing.requestFeeJpy)}</div>}
-                                                    <div className="cost-breakdown-total">合計: ¥{formatCostJpy(billing.totalCostJpy)}</div>
-                                                </div>
-                                            )
-                                        })()}
-                                    </td>
-                                    <td className="error-cell">
-                                        {log.error_message ? (
-                                            <span className="error-msg" title={log.error_message}>
-                                                {log.error_message}
-                                            </span>
-                                        ) : '-'}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    {displayedLogs.length === 0 && (
+                                    </div>
+                                </div>
+
+                                {isExpanded && (
+                                    <div className="log-group-content">
+                                        <table className="logs-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>日時</th>
+                                                    <th>API</th>
+                                                    <th>エンドポイント</th>
+                                                    <th>モデル</th>
+                                                    <th>ステータス</th>
+                                                    <th>処理時間</th>
+                                                    <th>詳細 (秒数/トークン)</th>
+                                                    <th>推定コスト</th>
+                                                    <th>従量課金内訳</th>
+                                                    <th>エラー</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {group.logs.map((log) => (
+                                                    <tr key={log.id} className={\`status-\${log.status}\`}>
+                                                        <td>{formatDate(log.created_at)}</td>
+                                                        <td><span className={\`api-badge api-\${log.api_name}\`}>{log.api_name}</span></td>
+                                                        <td>{log.endpoint}</td>
+                                                        <td><code>{log.model_name || '-'}</code></td>
+                                                        <td>{getStatusBadge(log.status)}</td>
+                                                        <td>{log.duration_ms ? \`\${log.duration_ms}ms\` : '-'}</td>
+                                                        <td>
+                                                            {/* 詳細カラム：音声なら秒数、テキストならトークン */}
+                                                            {log.metadata && log.metadata.audio_duration_sec ? (
+                                                                <span className="audio-sec">
+                                                                    🎤 {Number(log.metadata.audio_duration_sec).toFixed(2)}s
+                                                                </span>
+                                                            ) : (
+                                                                log.input_tokens || log.output_tokens ? (
+                                                                    <span className="tokens">
+                                                                        {log.input_tokens ? \`↓\${log.input_tokens}\` : ''}
+                                                                        {log.output_tokens ? \` ↑\${log.output_tokens}\` : ''}
+                                                                    </span>
+                                                                ) : '-'
+                                                            )}
+                                                        </td>
+                                                        <td>
+                                                            {(() => {
+                                                                const billing = getBillingBreakdown(log)
+                                                                if (billing?.pricingStatus === 'unpriced') {
+                                                                    return <span className="cost cost--unpriced" title={billing.pricingNote}>未公表</span>
+                                                                }
+                                                                return <span className="cost">¥{formatCostJpy(resolveEstimatedCostJpy(log, billing))}</span>
+                                                            })()}
+                                                        </td>
+                                                        <td>
+                                                            {(() => {
+                                                                const billing = getBillingBreakdown(log)
+                                                                if (!billing) return '-'
+                                                                if (billing.pricingStatus === 'unpriced') {
+                                                                    return <div className="cost-breakdown cost-breakdown--unpriced">{billing.pricingNote}</div>
+                                                                }
+                                                                if (billing.billingUnit === 'audio_second') {
+                                                                    return (
+                                                                        <div className="cost-breakdown" title={formatBillingBreakdownText(log)}>
+                                                                            <div>音声: {Number(billing.audioDurationSec || 0).toFixed(2)}秒 × ¥{formatCostJpy(billing.ratePerSecondJpy, 4)}/秒</div>
+                                                                            <div className="cost-breakdown-total">合計: ¥{formatCostJpy(billing.totalCostJpy)}</div>
+                                                                        </div>
+                                                                    )
+                                                                }
+                                                                return (
+                                                                    <div className="cost-breakdown" title={formatBillingBreakdownText(log)}>
+                                                                        <div>入力: {billing.inputTokens.toLocaleString()}tok × ¥{billing.inputRatePer1M}/100万 = ¥{formatCostJpy(billing.inputCostJpy)}</div>
+                                                                        <div>出力: {billing.outputTokens.toLocaleString()}tok × ¥{billing.outputRatePer1M}/100万 = ¥{formatCostJpy(billing.outputCostJpy)}</div>
+                                                                        {billing.webSearchCalls > 0 && <div>Web検索: {billing.webSearchCalls}回 = ¥{formatCostJpy(billing.webSearchCostJpy)}</div>}
+                                                                        {billing.requestFeeJpy > 0 && <div>検索リクエスト（{billing.searchContextSize || 'low'}）: ¥{formatCostJpy(billing.requestFeeJpy)}</div>}
+                                                                        <div className="cost-breakdown-total">合計: ¥{formatCostJpy(billing.totalCostJpy)}</div>
+                                                                    </div>
+                                                                )
+                                                            })()}
+                                                        </td>
+                                                        <td className="error-cell">
+                                                            {log.error_message ? (
+                                                                <span className="error-msg" title={log.error_message}>
+                                                                    {log.error_message}
+                                                                </span>
+                                                            ) : '-'}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    })}
+                    {groupedLogs.length === 0 && (
                         <div className="no-logs">ログがありません</div>
                     )}
                 </div>
