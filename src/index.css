@@ -319,3 +319,93 @@ a {
 @keyframes particle-in-6 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(-30px, -30px) scale(0.2); opacity: 0; } }
 @keyframes particle-in-7 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(30px, -30px) scale(0.2); opacity: 0; } }
 @keyframes particle-in-8 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(30px, 30px) scale(0.2); opacity: 0; } }
+
+/* AI Progress Providers Status Badges */
+.recipe-ai-progress__providers-status {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  justify-content: space-between;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  flex-wrap: wrap;
+}
+
+.provider-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.35);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  flex: 1;
+  min-width: 130px;
+  justify-content: center;
+  user-select: none;
+}
+
+.provider-status-badge__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+/* Perplexity Active State */
+.provider-status-badge--perplexity.is-active {
+  background: rgba(45, 212, 191, 0.08);
+  border-color: rgba(45, 212, 191, 0.35);
+  color: #2dd4bf;
+  box-shadow: 0 0 10px rgba(45, 212, 191, 0.15);
+}
+.provider-status-badge--perplexity.is-active .provider-status-badge__dot {
+  background: #2dd4bf;
+  animation: provider-pulse-perplexity 1.4s infinite alternate;
+}
+
+/* Groq Active State */
+.provider-status-badge--groq.is-active {
+  background: rgba(251, 146, 60, 0.08);
+  border-color: rgba(251, 146, 60, 0.35);
+  color: #fb923c;
+  box-shadow: 0 0 10px rgba(251, 146, 60, 0.15);
+}
+.provider-status-badge--groq.is-active .provider-status-badge__dot {
+  background: #fb923c;
+  animation: provider-pulse-groq 1.4s infinite alternate;
+}
+
+/* OpenAI Active State */
+.provider-status-badge--openai.is-active {
+  background: rgba(167, 139, 250, 0.08);
+  border-color: rgba(167, 139, 250, 0.35);
+  color: #a78bfa;
+  box-shadow: 0 0 10px rgba(167, 139, 250, 0.15);
+}
+.provider-status-badge--openai.is-active .provider-status-badge__dot {
+  background: #a78bfa;
+  animation: provider-pulse-openai 1.4s infinite alternate;
+}
+
+@keyframes provider-pulse-perplexity {
+  0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.7); }
+  100% { transform: scale(1.35); box-shadow: 0 0 0 6px rgba(45, 212, 191, 0); }
+}
+@keyframes provider-pulse-groq {
+  0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(251, 146, 60, 0.7); }
+  100% { transform: scale(1.35); box-shadow: 0 0 0 6px rgba(251, 146, 60, 0); }
+}
+@keyframes provider-pulse-openai {
+  0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.7); }
+  100% { transform: scale(1.35); box-shadow: 0 0 0 6px rgba(167, 139, 250, 0); }
+}

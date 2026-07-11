@@ -3458,6 +3458,30 @@ export const RecipeDetail = ({
                         maxWidth="520px"
                     >
                         <div className="recipe-ai-progress">
+                            {(() => {
+                                const currentStep = aiProgressConfig?.steps?.[aiProgressStepIndex];
+                                const activeProvider = currentStep?.provider || '';
+                                const isPerplexityActive = activeProvider.includes('Perplexity');
+                                const isGroqActive = activeProvider.includes('Groq');
+                                const isOpenAiActive = activeProvider.includes('OpenAI') || activeProvider.includes('gpt-') || activeProvider.includes('o4-');
+
+                                return (
+                                    <div className="recipe-ai-progress__providers-status">
+                                        <div className={`provider-status-badge provider-status-badge--perplexity ${isPerplexityActive ? 'is-active' : ''}`}>
+                                            <span className="provider-status-badge__dot" />
+                                            <span className="provider-status-badge__name">Perplexity (Web調査)</span>
+                                        </div>
+                                        <div className={`provider-status-badge provider-status-badge--groq ${isGroqActive ? 'is-active' : ''}`}>
+                                            <span className="provider-status-badge__dot" />
+                                            <span className="provider-status-badge__name">Groq (高速論理)</span>
+                                        </div>
+                                        <div className={`provider-status-badge provider-status-badge--openai ${isOpenAiActive ? 'is-active' : ''}`}>
+                                            <span className="provider-status-badge__dot" />
+                                            <span className="provider-status-badge__name">OpenAI (監査・統合)</span>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                             <p className="recipe-ai-progress__description">
                                 {aiProgressConfig?.description}
                             </p>
