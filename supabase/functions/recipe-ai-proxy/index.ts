@@ -231,13 +231,27 @@ serve(async (req) => {
       return jsonResponse({ success: false, error: `${target.providerName} のAPIキーがサーバーに設定されていません。管理者に連絡してください。` }, 500)
     }
 
+    // OpenAI Responses API does not support Web Search when JSON mode is active.
+    // If we detect both, we strip the web_search tool to prevent API errors.
+    const upstreamBody = { ...body }
+    if (normalizedProvider === 'openai') {
+      const hasJsonFormat = upstreamBody.response_format?.type === 'json_object' || upstreamBody.text?.format?.type === 'json_object'
+      if (hasJsonFormat && Array.isArray(upstreamBody.tools)) {
+        upstreamBody.tools = upstreamBody.tools.filter((t: any) => t.type !== 'web_search')
+        if (upstreamBody.tools.length === 0) {
+          delete upstreamBody.tools
+          delete upstreamBody.tool_choice
+        }
+      }
+    }
+
     const upstream = await fetch(target.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(upstreamBody),
     })
 
     const responseText = await upstream.text()
