@@ -460,14 +460,33 @@ const cleanJsonText = (rawText) => {
     return text.trim();
 };
 
+const repairBadJson = (text) => {
+    let repaired = text;
+    
+    // 1. 不適切なバックスラッシュ（\ の後に有効なJSONエスケープ文字 [" \ / b f n r t u] が続かないもの）を除去
+    // 例: 単独の \ や、 [1]。\ など、Unrecognized token '\' の最大の原因を解決する
+    repaired = repaired.replace(/\\(?!["\\/bfnrtu])/g, '');
+
+    // 2. 末尾の不要なカンマ (Trailing Comma) を削除
+    repaired = repaired.replace(/,\s*([\]}])/g, '$1');
+
+    return repaired;
+};
+
 const parseJsonResponse = (rawText, provider) => {
     const cleaned = cleanJsonText(rawText);
     try {
         return JSON.parse(cleaned);
-    } catch (error) {
-        const preview = cleaned.slice(0, 220).replace(/\s+/g, ' ');
-        const suffix = cleaned.slice(-220).replace(/\s+/g, ' ');
-        throw new Error(`${getProviderDisplayName(provider)} のJSON解析に失敗しました: ${error?.message || error} / head="${preview}" / tail="${suffix}"`);
+    } catch (firstError) {
+        // パース失敗時、自動修復を試みる
+        try {
+            const repaired = repairBadJson(cleaned);
+            return JSON.parse(repaired);
+        } catch (secondError) {
+            const preview = cleaned.slice(0, 220).replace(/\s+/g, ' ');
+            const suffix = cleaned.slice(-220).replace(/\s+/g, ' ');
+            throw new Error(`${getProviderDisplayName(provider)} のJSON解析に失敗しました: ${firstError?.message || firstError} / head="${preview}" / tail="${suffix}"`);
+        }
     }
 };
 
