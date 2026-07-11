@@ -14,6 +14,7 @@ import { mapImportedRecipeToSavePayload } from '../utils/importedRecipeMapper';
 import { recipeService } from '../services/recipeService';
 import {
     continueRecipeAiConversation,
+    askRecipeAiQuestion,
     generateRecipeAiIntake,
     generateProductRecipeDraft,
     isSakanaUnlocked,
@@ -601,7 +602,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
     const handleAskAiDraftFollowUp = async () => {
         const question = aiConversationInput.trim();
         if (!question) {
-            setAiError('追加の質問または修正内容を入力してください。');
+            setAiError('質問内容を入力してください。');
             return;
         }
         if (!aiDraft) {
@@ -612,8 +613,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
             return;
         }
 
-        setAiProgressMode('product-conversation');
-        setAiProgressStepIndex(0);
+        // Q&Aのみのチャットでは、進捗ダイアログ（Modal）は表示しない
         setIsAiConversing(true);
         setAiError('');
         const userMessage = { role: 'user', content: question };
@@ -622,11 +622,49 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         setAiConversationInput('');
 
         try {
-            const response = await continueRecipeAiConversation({
+            const answer = await askRecipeAiQuestion({
                 recipe: formData,
                 proposal: aiDraft,
                 conversation: nextConversation,
                 question,
+                provider: aiProvider,
+                mode: 'product',
+            });
+            setAiConversation([
+                ...nextConversation,
+                { role: 'assistant', content: answer },
+            ]);
+            toast.success('AIが質問に回答しました。');
+        } catch (error) {
+            console.error('[RecipeForm] AI Q&A failed:', error);
+            setAiError(error?.message || 'AI回答の生成に失敗しました。');
+            setAiConversation(nextConversation);
+        } finally {
+            setIsAiConversing(false);
+        }
+    };
+
+    const handleApplyConversationToDraft = async () => {
+        if (!aiDraft) return;
+        if (aiConversation.length === 0) {
+            setAiError('先にAIと会話で相談を行ってください。');
+            return;
+        }
+
+        // ドラフト再作成の時は、進捗ダイアログ（Modal）を表示する
+        setAiProgressMode('product-conversation');
+        setAiProgressStepIndex(0);
+        setIsAiGenerating(true);
+        setAiError('');
+
+        try {
+            const lastUserQuestion = [...aiConversation].reverse().find(m => m.role === 'user')?.content || 'これまでの会話内容を踏まえてドラフトを再作成してください。';
+
+            const response = await continueRecipeAiConversation({
+                recipe: formData,
+                proposal: aiDraft,
+                conversation: aiConversation,
+                question: lastUserQuestion,
                 provider: aiProvider,
                 mode: 'product',
                 directionContext: serializeRecipeAiDirectionContext(aiIntake),
@@ -634,16 +672,15 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
             setAiDraft(response.proposal);
             applyAiDraftToForm(response.proposal);
             setAiConversation([
-                ...nextConversation,
-                { role: 'assistant', content: response.answer },
+                ...aiConversation,
+                { role: 'assistant', content: 'これまでの相談内容を反映して、新しいドラフトレシピを作成・反映しました！' },
             ]);
-            toast.success(response.forceReproposal ? '会話内容を踏まえて新しいドラフトを作成しました。' : response.shouldUpdateProposal ? '会話内容をドラフトに反映しました。' : 'AIが文脈を踏まえて回答しました。');
+            toast.success('新しいドラフトを作成しました。');
         } catch (error) {
-            console.error('[RecipeForm] AI draft conversation failed:', error);
-            setAiError(error?.message || 'AI会話の実行に失敗しました。');
-            setAiConversation(nextConversation);
+            console.error('[RecipeForm] Apply conversation failed:', error);
+            setAiError(error?.message || 'ドラフトの更新に失敗しました。');
         } finally {
-            setIsAiConversing(false);
+            setIsAiGenerating(false);
             setAiProgressMode(null);
             setAiProgressStepIndex(0);
         }
@@ -1238,6 +1275,20 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                                     placeholder="例: もっと原価を下げたい / 仕込みを前日に寄せたい / 肉を使わない案に変えて"
                                                     disabled={isAiConversing || isAiGenerating}
                                                 />
+                                                {aiConversation.length > 0 && (
+                                                    <Button
+                                                        type="button"
+                                                        variant="primary"
+                                                        size="sm"
+                                                        block
+                                                        isLoading={isAiGenerating}
+                                                        disabled={isAiConversing || isAiGenerating}
+                                                        onClick={handleApplyConversationToDraft}
+                                                        style={{ marginBottom: '0.5rem' }}
+                                                    >
+                                                        ✨ この合意内容でドラフトを再作成（AI解析）
+                                                    </Button>
+                                                )}
                                                 <Button
                                                     type="button"
                                                     variant="secondary"
@@ -1247,7 +1298,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                                     disabled={isAiConversing || isAiGenerating || !aiConversationInput.trim()}
                                                     onClick={handleAskAiDraftFollowUp}
                                                 >
-                                                    文脈つきで質問・再開発
+                                                    相談・Q&Aを送信
                                                 </Button>
                                             </div>
                                         )}

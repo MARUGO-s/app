@@ -7,6 +7,7 @@ import { recipeService } from '../services/recipeService';
 import {
     buildRecipePayloadFromAiProposal,
     continueRecipeAiConversation,
+    askRecipeAiQuestion,
     generateRecipeAiIntake,
     generateRecipeImprovement,
     isSakanaUnlocked,
@@ -1250,7 +1251,7 @@ export const RecipeDetail = ({
     const handleAskAiFollowUp = async () => {
         const question = aiConversationInput.trim();
         if (!question) {
-            setAiError('追加の質問または修正内容を入力してください。');
+            setAiError('質問内容を入力してください。');
             return;
         }
         if (!aiProposal) {
@@ -1261,8 +1262,7 @@ export const RecipeDetail = ({
             return;
         }
 
-        setAiProgressMode('improvement-conversation');
-        setAiProgressStepIndex(0);
+        // Q&Aのみのチャットでは、進捗ダイアログ（Modal）は表示しない
         setIsAiConversing(true);
         setAiError('');
         const userMessage = { role: 'user', content: question };
@@ -1278,11 +1278,57 @@ export const RecipeDetail = ({
                 setFullRecipe(recipeForAi);
             }
 
-            const response = await continueRecipeAiConversation({
+            const answer = await askRecipeAiQuestion({
                 recipe: recipeForAi,
                 proposal: aiProposal,
                 conversation: nextConversation,
                 question,
+                provider: aiProvider,
+                mode: 'improvement',
+            });
+
+            setAiConversation([
+                ...nextConversation,
+                { role: 'assistant', content: answer },
+            ]);
+            toast.success('AIが質問に回答しました。');
+        } catch (error) {
+            console.error('[RecipeDetail] AI Q&A failed:', error);
+            setAiError(error?.message || 'AI回答の生成に失敗しました。');
+            setAiConversation(nextConversation);
+        } finally {
+            setIsAiConversing(false);
+        }
+    };
+
+    const handleApplyConversationToProposal = async () => {
+        if (!aiProposal) return;
+        if (aiConversation.length === 0) {
+            setAiError('先にAIと会話で相談を行ってください。');
+            return;
+        }
+
+        // 改善案再作成の時は、進捗ダイアログ（Modal）を表示する
+        setAiProgressMode('improvement-conversation');
+        setAiProgressStepIndex(0);
+        setIsAiGenerating(true);
+        setAiError('');
+
+        try {
+            let recipeForAi = sourceRecipe || recipe;
+            const hasLoadedContent = Array.isArray(recipeForAi?.steps) && Array.isArray(recipeForAi?.ingredients);
+            if (!hasLoadedContent && recipe?.id) {
+                recipeForAi = await recipeService.getRecipe(recipe.id);
+                setFullRecipe(recipeForAi);
+            }
+
+            const lastUserQuestion = [...aiConversation].reverse().find(m => m.role === 'user')?.content || 'これまでの会話内容を踏まえて改善案を再作成してください。';
+
+            const response = await continueRecipeAiConversation({
+                recipe: recipeForAi,
+                proposal: aiProposal,
+                conversation: aiConversation,
+                question: lastUserQuestion,
                 provider: aiProvider,
                 mode: 'improvement',
                 directionContext: serializeRecipeAiDirectionContext(aiIntake),
@@ -1290,16 +1336,15 @@ export const RecipeDetail = ({
 
             setAiProposal(response.proposal);
             setAiConversation([
-                ...nextConversation,
-                { role: 'assistant', content: response.answer },
+                ...aiConversation,
+                { role: 'assistant', content: 'これまでの相談内容を反映して、新しい改善案のレシピを作成しました！' },
             ]);
-            toast.success(response.forceReproposal ? '会話内容を踏まえて新しい改善案を作成しました。' : response.shouldUpdateProposal ? '会話内容を改善案に反映しました。' : 'AIが文脈を踏まえて回答しました。');
+            toast.success('新しい改善案レシピを作成しました。');
         } catch (error) {
-            console.error('[RecipeDetail] AI conversation failed:', error);
-            setAiError(error?.message || 'AI会話の実行に失敗しました。');
-            setAiConversation(nextConversation);
+            console.error('[RecipeDetail] Apply conversation failed:', error);
+            setAiError(error?.message || '改善案の更新に失敗しました。');
         } finally {
-            setIsAiConversing(false);
+            setIsAiGenerating(false);
             setAiProgressMode(null);
             setAiProgressStepIndex(0);
         }
@@ -3374,7 +3419,7 @@ export const RecipeDetail = ({
                                 <div className="recipe-ai-result__block recipe-ai-conversation">
                                     <h4>続けて相談・再改善</h4>
                                     <p className="recipe-ai-conversation__hint">
-                                        元レシピ、改善案、エージェント所見、これまでの会話を踏まえて回答します。必要な場合はこの改善案自体も更新します。
+                                        元レシピ、改善案、これまでの会話を踏まえてチャットで相談します。合意できた段階で改善案を再作成してください。
                                     </p>
                                     {aiConversation.length > 0 && (
                                         <div className="recipe-ai-conversation__messages">
@@ -3396,6 +3441,19 @@ export const RecipeDetail = ({
                                         placeholder="例: もっと原価を下げたい。鶏肉を使わずに同じ満足感にできますか？ / この改善案の弱点は？"
                                         disabled={isAiConversing || isAiGenerating || isSavingAiProposal}
                                     />
+                                    {aiConversation.length > 0 && (
+                                        <Button
+                                            type="button"
+                                            variant="primary"
+                                            size="sm"
+                                            isLoading={isAiGenerating}
+                                            disabled={isAiConversing || isAiGenerating || isSavingAiProposal}
+                                            onClick={handleApplyConversationToProposal}
+                                            style={{ marginBottom: '1rem', width: '100%' }}
+                                        >
+                                            ✨ この合意内容で改善案を再作成（AI解析）
+                                        </Button>
+                                    )}
                                     <div className="recipe-ai-conversation__actions">
                                         <Button
                                             type="button"
@@ -3405,7 +3463,7 @@ export const RecipeDetail = ({
                                             disabled={isAiConversing || isAiGenerating || isSavingAiProposal || !aiConversationInput.trim()}
                                             onClick={handleAskAiFollowUp}
                                         >
-                                            文脈つきで質問・再改善
+                                            相談・Q&Aを送信
                                         </Button>
                                     </div>
                                 </div>
