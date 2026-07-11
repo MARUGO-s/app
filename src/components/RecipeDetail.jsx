@@ -960,8 +960,9 @@ export const RecipeDetail = ({
             return undefined;
         }
         
-        // 通常時はゆっくり2.2秒間隔、通信完了後の駆け抜け演出中は250ms間隔
-        const intervalTime = isAiFinishingProgress ? 250 : 2200;
+        // 通常時はゆっくり5秒間隔（10ステップ×5秒=50秒）、
+        // 通信完了後の駆け抜け演出中は400ms間隔
+        const intervalTime = isAiFinishingProgress ? 400 : 5000;
         
         const intervalId = window.setInterval(() => {
             setAiProgressStepIndex((current) => {
@@ -1270,12 +1271,14 @@ export const RecipeDetail = ({
             // 2. 進行インジケータが最終ステップに達するまで待機する
             const stepsCount = getRecipeAiProgressConfig('improvement-generate')?.steps?.length || 10;
             await new Promise((resolve) => {
+                let resolved = false;
                 const checkTimer = window.setInterval(() => {
                     setAiProgressStepIndex((current) => {
-                        if (current >= stepsCount - 1) {
+                        if (!resolved && current >= stepsCount - 1) {
+                            resolved = true;
                             window.clearInterval(checkTimer);
-                            // 3. 最終ステップに到達したら、1.2秒間待ってユーザーに完了状態を見せる
-                            window.setTimeout(resolve, 1200);
+                            // 3. 最終ステップに到達したら、1.5秒間待ってユーザーに完了状態を見せる
+                            window.setTimeout(resolve, 1500);
                         }
                         return current;
                     });
@@ -1394,12 +1397,14 @@ export const RecipeDetail = ({
             // 2. 進行インジケータが最終ステップに達するまで待機する
             const stepsCount = getRecipeAiProgressConfig('improvement-conversation')?.steps?.length || 10;
             await new Promise((resolve) => {
+                let resolved = false;
                 const checkTimer = window.setInterval(() => {
                     setAiProgressStepIndex((current) => {
-                        if (current >= stepsCount - 1) {
+                        if (!resolved && current >= stepsCount - 1) {
+                            resolved = true;
                             window.clearInterval(checkTimer);
-                            // 3. 最終ステップに到達したら、1.2秒間待ってユーザーに完了状態を見せる
-                            window.setTimeout(resolve, 1200);
+                            // 3. 最終ステップに到達したら、1.5秒間待ってユーザーに完了状態を見せる
+                            window.setTimeout(resolve, 1500);
                         }
                         return current;
                     });
