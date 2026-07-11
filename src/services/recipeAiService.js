@@ -732,6 +732,19 @@ const callOpenAiResponseJson = async ({
 }) => {
     const selectedModel = model || OPENAI_REBUTTAL_MODEL;
     const supportsReasoning = /^(o\d|gpt-5)/.test(selectedModel);
+
+    // OpenAI Responses API does not support Web Search when JSON mode is active.
+    // We filter out 'web_search' tools to prevent "Web Search cannot be used with JSON mode" error.
+    let filteredTools = tools;
+    let filteredToolChoice = toolChoice;
+    if (Array.isArray(tools)) {
+        filteredTools = tools.filter(t => t.type !== 'web_search');
+        if (filteredTools.length === 0) {
+            filteredTools = undefined;
+            filteredToolChoice = undefined;
+        }
+    }
+
     const payload = await withTimeout(async (signal) => {
         const response = await callAiProxy({
             provider: 'openai',
@@ -743,8 +756,8 @@ const callOpenAiResponseJson = async ({
                 ...(supportsReasoning ? { reasoning: { effort: reasoningEffort } } : {}),
                 text: { format: { type: 'json_object' } },
                 max_output_tokens: maxOutputTokens,
-                ...(Array.isArray(tools) && tools.length > 0 ? { tools } : {}),
-                ...(toolChoice ? { tool_choice: toolChoice } : {}),
+                ...(Array.isArray(filteredTools) && filteredTools.length > 0 ? { tools: filteredTools } : {}),
+                ...(filteredToolChoice ? { tool_choice: filteredToolChoice } : {}),
             },
             signal,
         });
