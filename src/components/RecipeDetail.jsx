@@ -1285,6 +1285,8 @@ export const RecipeDetail = ({
             setAiProposal(proposal);
             setAiConversation([]);
             setAiConversationInput('');
+            // 分析完了後に自動でDBへ保存
+            await autoSaveAnalysisHtml(proposal, []);
             toast.success('AI改善案を作成しました。');
         } catch (error) {
             console.error('[RecipeDetail] AI improvement failed:', error);
@@ -1404,11 +1406,14 @@ export const RecipeDetail = ({
                 }, 100);
             });
 
-            setAiProposal(response.proposal);
-            setAiConversation([
+            const updatedConversation = [
                 ...aiConversation,
                 { role: 'assistant', content: 'これまでの相談内容を反映して、新しい改善案のレシピを作成しました！' },
-            ]);
+            ];
+            setAiProposal(response.proposal);
+            setAiConversation(updatedConversation);
+            // 改善案更新後も自動でDBへ保存
+            await autoSaveAnalysisHtml(response.proposal, updatedConversation);
             toast.success('新しい改善案レシピを作成しました。');
         } catch (error) {
             console.error('[RecipeDetail] Apply conversation failed:', error);
@@ -1421,129 +1426,44 @@ export const RecipeDetail = ({
         }
     };
 
-    const handleExportAnalysisToHtml = async () => {
-        if (!aiProposal) {
-            toast.warning('保存する分析結果がありません。');
-            return;
-        }
-
-        setIsSavingHtmlExport(true);
+    // AI分析レポートをDBに自動保存する内部関数（引数でproposalとconversationを受け取る）
+    const autoSaveAnalysisHtml = React.useCallback(async (proposalData, conversationData = []) => {
+        if (!proposalData || !recipe?.id) return;
         try {
             const title = `${recipe.title} - AI分析・改善レポート (${new Date().toLocaleDateString()})`;
+            const agentPlanList = proposalData?.agentMessages || [];
 
-            // Build HTML Content
             let html = `<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="utf-8">
     <title>${title}</title>
     <style>
-        body {
-            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
-            line-height: 1.6;
-            color: #334155;
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 2rem 1.5rem;
-            background-color: #f8fafc;
-        }
-        .container {
-            background-color: #ffffff;
-            padding: 2.5rem;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-            border: 1px solid #e2e8f0;
-        }
-        h1 {
-            color: #1e3a8a;
-            font-size: 1.8rem;
-            border-bottom: 3px solid #3b82f6;
-            padding-bottom: 0.75rem;
-            margin-top: 0;
-            margin-bottom: 1.5rem;
-        }
-        h2 {
-            color: #0f172a;
-            font-size: 1.3rem;
-            margin-top: 2rem;
-            margin-bottom: 1rem;
-            padding-left: 0.5rem;
-            border-left: 4px solid #3b82f6;
-        }
-        .meta-info {
-            font-size: 0.9rem;
-            color: #64748b;
-            margin-bottom: 2rem;
-        }
-        .agent-card {
-            background-color: #f1f5f9;
-            border-radius: 8px;
-            padding: 1.25rem;
-            margin-bottom: 1.25rem;
-            border-left: 4px solid #64748b;
-        }
+        body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif; line-height: 1.6; color: #334155; max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem; background-color: #f8fafc; }
+        .container { background-color: #ffffff; padding: 2.5rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border: 1px solid #e2e8f0; }
+        h1 { color: #1e3a8a; font-size: 1.8rem; border-bottom: 3px solid #3b82f6; padding-bottom: 0.75rem; margin-top: 0; margin-bottom: 1.5rem; }
+        h2 { color: #0f172a; font-size: 1.3rem; margin-top: 2rem; margin-bottom: 1rem; padding-left: 0.5rem; border-left: 4px solid #3b82f6; }
+        .meta-info { font-size: 0.9rem; color: #64748b; margin-bottom: 2rem; }
+        .agent-card { background-color: #f1f5f9; border-radius: 8px; padding: 1.25rem; margin-bottom: 1.25rem; border-left: 4px solid #64748b; }
         .agent-card.scientific { border-left-color: #10b981; }
         .agent-card.historical { border-left-color: #f59e0b; }
         .agent-card.recipe { border-left-color: #3b82f6; }
         .agent-card.auditor { border-left-color: #ef4444; }
-        .agent-name {
-            font-weight: bold;
-            color: #1e293b;
-            margin-bottom: 0.5rem;
-            font-size: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .agent-text {
-            font-size: 0.95rem;
-            white-space: pre-wrap;
-        }
-        .chat-section {
-            margin-top: 2rem;
-            background-color: #fafafa;
-            border: 1px solid #f0f0f0;
-            border-radius: 8px;
-            padding: 1.5rem;
-        }
-        .chat-bubble {
-            margin-bottom: 1rem;
-            padding: 0.75rem 1rem;
-            border-radius: 8px;
-            max-width: 85%;
-        }
-        .chat-bubble.user {
-            background-color: #e0f2fe;
-            color: #0369a1;
-            margin-left: auto;
-            border-bottom-right-radius: 0;
-        }
-        .chat-bubble.assistant {
-            background-color: #f3f4f6;
-            color: #374151;
-            margin-right: auto;
-            border-bottom-left-radius: 0;
-        }
-        .chat-role {
-            font-size: 0.75rem;
-            font-weight: bold;
-            margin-bottom: 0.25rem;
-            color: #6b7280;
-        }
+        .agent-name { font-weight: bold; color: #1e293b; margin-bottom: 0.5rem; font-size: 1rem; }
+        .agent-text { font-size: 0.95rem; white-space: pre-wrap; }
+        .chat-section { margin-top: 2rem; background-color: #fafafa; border: 1px solid #f0f0f0; border-radius: 8px; padding: 1.5rem; }
+        .chat-bubble { margin-bottom: 1rem; padding: 0.75rem 1rem; border-radius: 8px; max-width: 85%; }
+        .chat-bubble.user { background-color: #e0f2fe; color: #0369a1; margin-left: auto; border-bottom-right-radius: 0; }
+        .chat-bubble.assistant { background-color: #f3f4f6; color: #374151; margin-right: auto; border-bottom-left-radius: 0; }
+        .chat-role { font-size: 0.75rem; font-weight: bold; margin-bottom: 0.25rem; color: #6b7280; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>${title}</h1>
-        <div class="meta-info">
-            元レシピ: ${recipe.title} | 保存日時: ${new Date().toLocaleString()}
-        </div>
-
+        <div class="meta-info">元レシピ: ${recipe.title} | 保存日時: ${new Date().toLocaleString()}</div>
         <h2>エージェント所見</h2>
 `;
-
-            // Append Agent findings
-            const agentPlanList = aiProposal?.agentMessages || [];
             if (agentPlanList.length === 0) {
                 html += `<p>所見データはありません。</p>`;
             } else {
@@ -1553,67 +1473,44 @@ export const RecipeDetail = ({
                     else if (msg.agentName?.includes('文化') || msg.agentName?.includes('比較')) agentClass = 'historical';
                     else if (msg.agentName?.includes('統合') || msg.agentName?.includes('作成')) agentClass = 'recipe';
                     else if (msg.agentName?.includes('監査') || msg.agentName?.includes('クロスチェック')) agentClass = 'auditor';
-
-                    html += `
-        <div class="agent-card ${agentClass}">
-            <div class="agent-name">🛡️ ${msg.agentName || 'AIエージェント'}</div>
-            <div class="agent-text">${msg.content || '所見なし'}</div>
-        </div>`;
+                    html += `\n        <div class="agent-card ${agentClass}"><div class="agent-name">🛡️ ${msg.agentName || 'AIエージェント'}</div><div class="agent-text">${msg.content || '所見なし'}</div></div>`;
                 });
             }
-
-            // Append Chat history
-            if (aiConversation.length > 0) {
-                html += `
-        <h2>会話履歴 (Q&A)</h2>
-        <div class="chat-section">
-`;
-                aiConversation.forEach((chat) => {
+            if (conversationData.length > 0) {
+                html += `\n        <h2>会話履歴 (Q&A)</h2>\n        <div class="chat-section">\n`;
+                conversationData.forEach((chat) => {
                     const isUser = chat.role === 'user';
-                    html += `
-            <div class="chat-bubble ${isUser ? 'user' : 'assistant'}">
-                <div class="chat-role">${isUser ? 'あなた' : 'AI'}</div>
-                <div class="agent-text">${chat.content}</div>
-            </div>`;
+                    html += `\n            <div class="chat-bubble ${isUser ? 'user' : 'assistant'}"><div class="chat-role">${isUser ? 'あなた' : 'AI'}</div><div class="agent-text">${chat.content}</div></div>`;
                 });
-                html += `        </div>`;
+                html += `\n        </div>`;
             }
+            html += `\n    </div>\n</body>\n</html>`;
 
-            html += `
-    </div>
-</body>
-</html>`;
-
-            // 1. Save to DB (現在のレシピIDに保存)
-            const exportMeta = {
-                proposalTitle: aiProposal?.title,
-                agentCount: agentPlanList.length,
-                chatCount: aiConversation.length
-            };
+            const exportMeta = { proposalTitle: proposalData?.title, agentCount: agentPlanList.length, chatCount: conversationData.length };
             const savedRow = await saveRecipeAiHtmlExport(recipe.id, title, html, exportMeta);
 
-            // 元レシピ（AI改善前の別レシピ）にも同時に紐付けて保存する
+            // 元レシピにもクロスリンク保存
             const originalRecipeForExport = sourceRecipe || recipe;
             if (originalRecipeForExport?.id && originalRecipeForExport.id !== recipe.id) {
                 await saveRecipeAiHtmlExport(originalRecipeForExport.id, title, html, exportMeta)
-                    .catch(err => console.warn('[RecipeDetail] HTML export cross-link to original recipe failed:', err));
+                    .catch(err => console.warn('[RecipeDetail] HTML export cross-link failed:', err));
             }
 
-            // Update local state
             setHtmlExports(prev => [savedRow, ...prev]);
+        } catch (err) {
+            console.warn('[RecipeDetail] Auto HTML export failed (non-critical):', err);
+        }
+    }, [recipe, sourceRecipe]);
 
-            // 2. Download File locally
-            const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `${recipe.title}_AI改善レポート_${new Date().toISOString().slice(0,10)}.html`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-
-            toast.success('分析結果をHTMLとして保存・ダウンロードしました！');
+    const handleExportAnalysisToHtml = async () => {
+        if (!aiProposal) {
+            toast.warning('保存する分析結果がありません。');
+            return;
+        }
+        setIsSavingHtmlExport(true);
+        try {
+            await autoSaveAnalysisHtml(aiProposal, aiConversation);
+            toast.success('分析レポートを保存しました！');
         } catch (error) {
             console.error('[RecipeDetail] HTML export failed:', error);
             toast.error('HTMLの保存に失敗しました。');
@@ -3791,17 +3688,7 @@ export const RecipeDetail = ({
                                             上書き保存を選んでも、元レシピはゴミ箱へ移動し、改善案を新規登録します。
                                         </span>
                                     )}
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        isLoading={isSavingHtmlExport}
-                                        disabled={isSavingHtmlExport || isAiGenerating}
-                                        onClick={handleExportAnalysisToHtml}
-                                        style={{ borderColor: '#3b82f6', color: '#3b82f6' }}
-                                    >
-                                        💾 分析レポートを保存・HTML出力
-                                    </Button>
+
                                     <Button
                                         type="button"
                                         variant="secondary"
