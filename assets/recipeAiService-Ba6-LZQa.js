@@ -747,14 +747,24 @@ const callOpenAiResponseJson = async ({
         }
     }
 
+    // OpenAI Responses API JSON validation workaround
+    let finalPrompt = prompt;
+    if (typeof finalPrompt === 'string' && !finalPrompt.toLowerCase().includes('json')) {
+        finalPrompt = \`\${finalPrompt}\\n\\n[System Format Directive: output in json]\`;
+    }
+    let finalInstructions = instructions || 'You are a senior culinary agent. Return strict JSON only.';
+    if (typeof finalInstructions === 'string' && !finalInstructions.toLowerCase().includes('json')) {
+        finalInstructions = \`\${finalInstructions}\\n\\nReturn strict json.\`;
+    }
+
     const payload = await withTimeout(async (signal) => {
         const response = await callAiProxy({
             provider: 'openai',
             endpoint: 'responses',
             body: {
                 model: selectedModel,
-                instructions: instructions || 'You are a senior culinary agent. Return strict JSON only.',
-                input: prompt,
+                instructions: finalInstructions,
+                input: finalPrompt,
                 ...(supportsReasoning ? { reasoning: { effort: reasoningEffort } } : {}),
                 text: { format: { type: 'json_object' } },
                 max_output_tokens: maxOutputTokens,
