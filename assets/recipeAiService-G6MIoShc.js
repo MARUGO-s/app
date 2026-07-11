@@ -29,8 +29,8 @@ const DEFAULT_MODEL = 'fugu';
 const GROQ_DEFAULT_TEXT_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_COMPOUND_MODEL = 'groq/compound';
 const OPENAI_REBUTTAL_MODEL = 'gpt-4.1-mini';
-const OPENAI_AUDITOR_MODEL = 'gpt-4.1-mini';
-// コスト削減のため、反証・監査・最終統合のすべての OpenAI タスクを gpt-4.1-mini に統一する。
+const OPENAI_AUDITOR_MODEL = 'o4-mini';
+// コストと品質のバランスを優先し、重要な監査のみ o4-mini を残し、反証と統合は gpt-4.1-mini を使用する。
 const OPENAI_MASTER_MODEL = 'gpt-4.1-mini';
 const PERPLEXITY_DEFAULT_MODEL = 'sonar';
 const REQUEST_TIMEOUT_MS = 600000;
