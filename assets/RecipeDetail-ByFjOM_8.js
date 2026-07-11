@@ -876,6 +876,8 @@ export const RecipeDetail = ({
         [aiProgressMode]
     );
     const isAiProgressOpen = Boolean(aiProgressConfig) && (isAiGenerating || isAiConversing);
+    const currentProgressStep = aiProgressConfig?.steps?.[aiProgressStepIndex];
+    const isFinalIntegrating = isAiProgressOpen && Boolean(currentProgressStep?.provider?.includes('OpenAI'));
 
     // Scaling State
     const [baseItem, setBaseItem] = React.useState('total'); // 'total', 'flourTotal', 'flour-0', 'other-1', etc.
@@ -3368,7 +3370,7 @@ export const RecipeDetail = ({
 
                 {!isDeleted && (
                     <Modal
-                        isOpen={isAiProgressOpen}
+                        isOpen={isAiProgressOpen && !isFinalIntegrating}
                         onClose={() => {}}
                         title={aiProgressConfig?.title || 'AIエージェント進行中'}
                         size="small"
@@ -3413,6 +3415,45 @@ export const RecipeDetail = ({
                                         </div>
                                     </div>
                                 ))}
+                            </div>
+                        </div>
+                    </Modal>
+                )}
+
+                {!isDeleted && isFinalIntegrating && (
+                    <Modal
+                        isOpen={true}
+                        onClose={() => {}}
+                        title="👨‍🍳 最終統合・クオリティ監査を実行中"
+                        size="small"
+                        showCloseButton={false}
+                        maxWidth="500px"
+                    >
+                        <div className="final-integration-popup">
+                            <div className="final-integration-popup__animation">
+                                <div className="chef-hat-glow">
+                                    <span className="chef-emoji" role="img" aria-label="chef">👨‍🍳</span>
+                                </div>
+                                <div className="integration-ring ring-1"></div>
+                                <div className="integration-ring ring-2"></div>
+                                <div className="integration-ring ring-3"></div>
+                                <div className="integration-particles">
+                                    <span></span><span></span><span></span><span></span>
+                                    <span></span><span></span><span></span><span></span>
+                                </div>
+                            </div>
+                            <h3 className="final-integration-popup__title">
+                                レシピの最終統合と監査を行っています
+                            </h3>
+                            <p className="final-integration-popup__description">
+                                複数の専門家AI（食品科学、安全性、本場比較）の所見をすり合わせ、矛盾のない黄金比率のレシピ構成へ統合・レビューを行っています。
+                            </p>
+                            <div className="final-integration-popup__status-label">
+                                現在のプロセス: <span className="highlight-step">{currentProgressStep?.label}</span> ({currentProgressStep?.provider})
+                            </div>
+                            <div className="final-integration-popup__warning">
+                                <span className="spin-loader"></span>
+                                <span>これには30秒〜60秒ほどかかります。画面を閉じずにお待ちください。</span>
                             </div>
                         </div>
                     </Modal>
