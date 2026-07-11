@@ -486,6 +486,45 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         });
     };
 
+    const handleFillIntakeWithOmasake = (questionId) => {
+        setAiIntake((current) => {
+            if (!current?.questions) return current;
+            return {
+                ...current,
+                questions: current.questions.map((q) => {
+                    if (q.id !== questionId) return q;
+                    let answer = '';
+                    if (q.options?.length > 0) {
+                        const omasakeOpt = q.options.find(o => o.includes('おまかせ') || o.includes('推奨') || o.includes('AI'));
+                        answer = omasakeOpt || q.options[0];
+                    } else {
+                        answer = 'AIにおまかせ';
+                    }
+                    return { ...q, answer };
+                }),
+            };
+        });
+    };
+
+    const handleFillAllAiIntakeWithOmasake = () => {
+        setAiIntake((current) => {
+            if (!current?.questions) return current;
+            return {
+                ...current,
+                questions: current.questions.map((q) => {
+                    let answer = '';
+                    if (q.options?.length > 0) {
+                        const omasakeOpt = q.options.find(o => o.includes('おまかせ') || o.includes('推奨') || o.includes('AI'));
+                        answer = omasakeOpt || q.options[0];
+                    } else {
+                        answer = 'AIにおまかせ';
+                    }
+                    return { ...q, answer };
+                }),
+            };
+        });
+    };
+
     const loadAiDraftIntake = async () => {
         const brief = [aiBrief, formData.title, formData.description].map(v => String(v || '').trim()).filter(Boolean).join('\\n');
         if (!brief) {
@@ -1026,7 +1065,29 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                         {aiIntake?.questions?.length > 0 && (
                                             <div className="recipe-ai-intake">
                                                 <div className="recipe-ai-intake__header">
-                                                    <strong>開発前の確認項目</strong>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                                                        <strong>開発前の確認項目</strong>
+                                                        <button
+                                                            type="button"
+                                                            className="recipe-ai-intake__all-omasake-btn"
+                                                            onClick={handleFillAllAiIntakeWithOmasake}
+                                                            disabled={isAiGenerating || isAiConversing}
+                                                            style={{
+                                                                background: 'linear-gradient(135deg, #ff8c00 0%, #ff5e00 100%)',
+                                                                border: 'none',
+                                                                color: '#fff',
+                                                                borderRadius: '4px',
+                                                                padding: '4px 10px',
+                                                                fontSize: '12px',
+                                                                fontWeight: 'bold',
+                                                                cursor: 'pointer',
+                                                                boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                                                                transition: 'opacity 0.2s',
+                                                            }}
+                                                        >
+                                                            🪄 全ておまかせで埋める
+                                                        </button>
+                                                    </div>
                                                     {aiIntake.summary && <p>{formatAiDisplayText(aiIntake.summary)}</p>}
                                                 </div>
                                                 <div className="recipe-ai-intake__list">
@@ -1034,7 +1095,26 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                                         <div className="recipe-ai-intake__item" key={question.id || index}>
                                                             <div className="recipe-ai-intake__title-row">
                                                                 <strong>{question.label || \`確認項目 \${index + 1}\`}</strong>
-                                                                {question.required !== false && <span>必須</span>}
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                    <button
+                                                                        type="button"
+                                                                        className="recipe-ai-intake__omasake-btn"
+                                                                        onClick={() => handleFillIntakeWithOmasake(question.id)}
+                                                                        disabled={isAiGenerating || isAiConversing}
+                                                                        style={{
+                                                                            background: 'rgba(255, 255, 255, 0.08)',
+                                                                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                                                                            color: 'hsl(var(--color-text-main))',
+                                                                            borderRadius: '4px',
+                                                                            padding: '2px 8px',
+                                                                            fontSize: '11px',
+                                                                            cursor: 'pointer',
+                                                                        }}
+                                                                    >
+                                                                        🪄 おまかせ
+                                                                    </button>
+                                                                    {question.required !== false && <span>必須</span>}
+                                                                </div>
                                                             </div>
                                                             <p className="recipe-ai-intake__question">{question.question}</p>
                                                             {question.rationale && (
