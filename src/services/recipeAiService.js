@@ -24,6 +24,9 @@ const SAKANA_LOCK_PASSWORD = 'marugo';
 const DEFAULT_MODEL = 'fugu';
 const GROQ_DEFAULT_TEXT_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_COMPOUND_MODEL = 'groq/compound';
+// 反証エージェント用: 統括シェフと同じモデルだと自己肯定に流れやすいため、別系統のAIで批判させる。
+// メインがGroq(Llama系)の場合はGroq上のOpenAI系オープンモデルを使う（Sakanaは高コストのため自動起用しない）
+const GROQ_REBUTTAL_MODEL = 'openai/gpt-oss-120b';
 const REQUEST_TIMEOUT_MS = 600000;
 
 const STRICT_JSON_OUTPUT_RULES = `
@@ -622,6 +625,7 @@ const callGroqChatJson = async ({
     maxOutputTokens = 5000,
     timeoutMs = REQUEST_TIMEOUT_MS,
     tools,
+    model,
 }) => {
     const wantsWebSearch = Array.isArray(tools) && tools.some(tool => tool?.type === 'web_search');
     const messages = [];
@@ -635,7 +639,7 @@ const callGroqChatJson = async ({
     messages.push({ role: 'user', content: prompt });
 
     const payload = await withTimeout(async (signal) => postGroqChatCompletion({
-        model: wantsWebSearch ? GROQ_COMPOUND_MODEL : GROQ_DEFAULT_TEXT_MODEL,
+        model: model || (wantsWebSearch ? GROQ_COMPOUND_MODEL : GROQ_DEFAULT_TEXT_MODEL),
         messages,
         max_completion_tokens: maxOutputTokens,
         temperature: wantsWebSearch ? 0.3 : 0.2,
@@ -657,11 +661,12 @@ const callRecipeAiJson = async ({
     tools,
     toolChoice,
     reasoningEffort,
+    model,
 }) => {
     const normalizedProvider = normalizeProvider(provider);
 
     if (!isSakanaProvider(normalizedProvider)) {
-        return callGroqChatJson({ prompt, instructions, maxOutputTokens, timeoutMs, tools });
+        return callGroqChatJson({ prompt, instructions, maxOutputTokens, timeoutMs, tools, model });
     }
 
     if (Array.isArray(tools) && tools.length > 0) {
@@ -1120,7 +1125,7 @@ const formatAgentFindings = (agentOutputs) => agentOutputs.map(({ agent, result 
     ].filter(Boolean).join('\n');
 }).join('\n\n');
 
-const runAgent = async ({ agent, provider, prompt, note }) => {
+const runAgent = async ({ agent, provider, prompt, note, model }) => {
     const { parsed, payload } = await callRecipeAiJson({
         provider,
         prompt,
@@ -1130,6 +1135,7 @@ const runAgent = async ({ agent, provider, prompt, note }) => {
         maxOutputTokens: agent.usesWeb ? 5000 : 3600,
         timeoutMs: REQUEST_TIMEOUT_MS,
         reasoningEffort: 'high',
+        model,
     });
     return {
         agent,
@@ -1427,23 +1433,49 @@ ${STRICT_JSON_OUTPUT_RULES}
 ${PROPOSAL_OUTPUT_SCHEMA}
 `;
 
-// ドラフト配合を反証エージェントに批判させ、統括シェフが指摘を反映した完成版を返す。
+// 反証は統括シェフと同じAIだと自己肯定に流れやすいため、別系統のAIに担当させる。
+// メインがGroq(Llama系) → Groq上のOpenAI系モデル / メインがSakana → Groq。
+// 高コストのSakanaは、ユーザーがメインとして選んだ場合以外は自動起用しない。
+const pickRebuttalPlan = (mainProvider) => {
+    if (normalizeProvider(mainProvider) === 'groq') {
+        return { provider: 'groq', model: GROQ_REBUTTAL_MODEL, label: 'GPT-OSS 120B' };
+    }
+    return { provider: 'groq', model: undefined, label: GROQ_PROVIDER_NAME };
+};
+
+const hasRebuttalCritique = (rebuttalOutput) => Boolean(
+    rebuttalOutput.result.content
+    || rebuttalOutput.result.findings.length > 0
+    || rebuttalOutput.result.recommendations.length > 0
+);
+
+// ドラフト配合を反証エージェント（別AI）に批判させ、統括シェフが指摘を反映した完成版を返す。
 // 反証・修正のどちらで失敗してもドラフトを失わない（フォールバック優先）。
 const runRebuttalAndRevise = async ({ provider, draftParsed, contextBlock, memoryContext, directionContext, rebuttalIndex }) => {
     const draftText = serializeProposalForAi(draftParsed);
-    const rebuttalOutput = await settleAgent({
-        agent: AGENT_DEFINITIONS.rebuttal,
-        provider,
-        prompt: buildRebuttalPrompt({ contextBlock, draftText, memoryContext, directionContext }),
-        note: '反証エージェントのドラフト批判に使用',
+    const rebuttalPrompt = buildRebuttalPrompt({ contextBlock, draftText, memoryContext, directionContext });
+    const plan = pickRebuttalPlan(provider);
+
+    let rebuttalOutput = await settleAgent({
+        agent: { ...AGENT_DEFINITIONS.rebuttal, agentName: `反証エージェント（${plan.label}）` },
+        provider: plan.provider,
+        model: plan.model,
+        prompt: rebuttalPrompt,
+        note: `反証エージェント（${plan.label}）のドラフト批判に使用`,
     }, rebuttalIndex);
 
-    const hasCritique = Boolean(
-        rebuttalOutput.result.content
-        || rebuttalOutput.result.findings.length > 0
-        || rebuttalOutput.result.recommendations.length > 0
-    );
-    if (!hasCritique) return { finalParsed: draftParsed, rebuttalOutput };
+    // 別AIが使えない環境では、メインAIによる反証で継続する（反証なしよりまし）
+    if (!hasRebuttalCritique(rebuttalOutput)) {
+        console.warn('[recipeAiService] 別AIでの反証に失敗したため、メインAIで反証を再試行します');
+        rebuttalOutput = await settleAgent({
+            agent: { ...AGENT_DEFINITIONS.rebuttal, agentName: `反証エージェント（${getProviderDisplayName(provider)}）` },
+            provider,
+            prompt: rebuttalPrompt,
+            note: '反証エージェント（メインAI代替）のドラフト批判に使用',
+        }, rebuttalIndex);
+    }
+
+    if (!hasRebuttalCritique(rebuttalOutput)) return { finalParsed: draftParsed, rebuttalOutput };
 
     try {
         const { parsed } = await callRecipeAiJson({
