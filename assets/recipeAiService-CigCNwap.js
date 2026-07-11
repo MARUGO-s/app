@@ -2167,6 +2167,49 @@ export const generateRecipeImprovement = async ({ recipe, notes, provider, direc
     });
 };
 
+export const askRecipeAiQuestion = async ({
+    recipe,
+    proposal,
+    conversation,
+    question,
+    provider,
+    mode = 'improvement',
+}) => {
+    const cleanQuestion = normalizeText(question);
+    if (!cleanQuestion) {
+        throw new Error('質問を入力してください。');
+    }
+
+    const recipeText = serializeRecipeForAi(recipe);
+    const currentProposalText = serializeProposalForAi(proposal);
+    const conversationText = formatConversationForPrompt(conversation);
+
+    const systemInstruction = \`あなたはレシピ開発の相談役（エージェント）です。
+改善対象の元レシピ、現在の改善提案、およびこれまでの会話履歴を踏まえ、ユーザーからの質問や指摘に対して「回答・アドバイス」をテキストで返してください。
+
+指示：
+- 今回のステップでは新しいレシピのJSONデータを作る必要はありません。純粋なテキストアドバイスのみを行ってください。
+- 返却フォーマット: 以下の構造の JSON のみ。余計な説明文やコードブロックは一切含めず、純粋なJSON文字列としてのみ出力してください。
+{
+  "response": "（ここに回答・アドバイスの文章が入ります）"
+}\`;
+
+    const promptText = \`【改善対象レシピ】\\n\${recipeText}\\n\\n【現在の改善提案】\\n\${currentProposalText}\\n\\n【これまでの会話履歴】\\n\${conversationText}\\n\\n【今回の質問・修正指示】\\n\${cleanQuestion}\`;
+
+    const plan = pickAgentPlan({ agentId: 'master', mainProvider: provider, routeContext: { mode } });
+
+    const { parsed } = await callRecipeAiJson({
+        provider: plan.provider,
+        model: plan.model,
+        prompt: promptText,
+        instructions: systemInstruction,
+        maxOutputTokens: 1000,
+        timeoutMs: 15000,
+    });
+
+    return parsed?.response || '回答を生成できませんでした。';
+};
+
 const analyzeConversationQuestionRelevance = async ({ question, recipeText, currentProposalText }) => {
     const systemInstruction = \`あなたはAIルーティングエージェントです。
 ユーザーからの「改善提案に対する追加質問・修正指示」を分析し、以下の専門家エージェントのうち、この質問に回答するため、あるいはレシピを再検討するために「新しくWeb調査や専門検証を実行する必要があるエージェントのID」を配列で返してください。
