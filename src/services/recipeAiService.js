@@ -28,10 +28,9 @@ const SAKANA_LOCK_PASSWORD = 'marugo';
 const DEFAULT_MODEL = 'fugu';
 const GROQ_DEFAULT_TEXT_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_COMPOUND_MODEL = 'groq/compound';
-const OPENAI_REBUTTAL_MODEL = 'o4-mini';
-const OPENAI_AUDITOR_MODEL = 'o4-mini';
-// 統合・修正はコストと品質のバランスを優先し、軽量な汎用モデルを使う。
-// 深い推論が効く反証と最終監査だけは o4-mini に残す。
+const OPENAI_REBUTTAL_MODEL = 'gpt-4.1-mini';
+const OPENAI_AUDITOR_MODEL = 'gpt-4.1-mini';
+// コスト削減のため、反証・監査・最終統合のすべての OpenAI タスクを gpt-4.1-mini に統一する。
 const OPENAI_MASTER_MODEL = 'gpt-4.1-mini';
 const PERPLEXITY_DEFAULT_MODEL = 'sonar';
 const REQUEST_TIMEOUT_MS = 600000;
