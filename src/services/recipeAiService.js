@@ -1893,8 +1893,18 @@ export const continueRecipeAiConversation = async ({
     };
 };
 
-// パンレシピの粉振り分け用: 元レシピの粉リストに名前一致しない新規材料でも、粉系の名称なら粉欄に入れる
-const BREAD_FLOUR_NAME_PATTERN = /(?:強力|薄力|中力|準強力|全粒|ライ麦|米|そば|大麦|玄米)粉|小麦粉|セモリナ|デュラム|flour/i;
+// パンレシピの粉振り分け用: 元レシピの粉リストに名前一致しない新規材料でも、粉系の名称なら粉欄に入れる。
+// 粉グループが空だとベーカーズ%の基準が0gになり全材料が0%表示になるため、銘柄粉も確実に拾う。
+const BREAD_FLOUR_NAME_PATTERN = /(?:強力|薄力|中力|準強力|全粒|ライ麦|米|そば|大麦|玄米)粉|小麦粉|セモリナ|デュラム|グラハム|マニトバ|リスドォル|カメリヤ|スーパーキング|ゆめちから|キタノカオリ|春よ恋|はるゆたか|flour/i;
+// 「〜粉」で終わっても基準粉として扱わないもの（衣・打ち粉・和粉・「粉◯◯」系の粉末材料）
+const BREAD_NON_FLOUR_NAME_PATTERN = /パン粉|打ち粉|きな粉|片栗粉|浮き粉|葛粉|くず粉|わらび粉|抹茶粉|ココア粉|粉糖|粉砂糖|粉乳|粉チーズ|粉ゼラチン|粉寒天|粉山椒/;
+const isBreadFlourName = (name) => {
+    const text = normalizeText(name);
+    if (!text || BREAD_NON_FLOUR_NAME_PATTERN.test(text)) return false;
+    if (BREAD_FLOUR_NAME_PATTERN.test(text)) return true;
+    // 「マニトバ粉」「◯◯粉（銘柄補足）」など「粉」で終わる名称は基準粉とみなす
+    return /粉\s*(?:[（(【[].*)?$/.test(text);
+};
 
 const generateIngredientId = () => (
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -1946,7 +1956,7 @@ export const buildRecipePayloadFromAiProposal = (baseRecipe, proposal, { asNew =
                 isAlcohol: matchedBaseItem?.isAlcohol ?? false,
                 itemCategory: matchedBaseItem?.itemCategory ?? null,
             };
-            const isFlour = baseFlourNameKeys.has(nameKey) || BREAD_FLOUR_NAME_PATTERN.test(item.name);
+            const isFlour = baseFlourNameKeys.has(nameKey) || isBreadFlourName(item.name);
             if (isFlour) {
                 flours.push(built);
             } else {
