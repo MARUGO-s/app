@@ -106,6 +106,27 @@ const normalizeMemoryRow = (row) => ({
     metadata: row?.metadata || {},
 });
 
+export const fetchRecipeAiMemoryForRecipe = async (recipeId, modeFamily = 'product') => {
+    const safeId = safeRecipeId(recipeId);
+    if (!safeId) return null;
+
+    try {
+        const { data, error } = await supabase
+            .from('recipe_ai_memories')
+            .select('id, created_at, updated_at, title, summary, retrieval_text, mode_family, memory_type, tags, proposal_snapshot, final_recipe_snapshot, feedback_snapshot, metadata')
+            .eq('recipe_id', safeId)
+            .eq('mode_family', modeFamily)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (error) throw error;
+        return data ? normalizeMemoryRow(data) : null;
+    } catch (error) {
+        console.warn('[recipeAiLearningService] recipe memory fetch failed:', error);
+        return null;
+    }
+};
+
 const fallbackRecentMemories = async (modeFamily, limit) => {
     const { data, error } = await supabase
         .from('recipe_ai_memories')

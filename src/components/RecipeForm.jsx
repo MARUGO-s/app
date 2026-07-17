@@ -11,7 +11,7 @@ import { featureFlagService } from '../services/featureFlagService';
 import { VoiceInputButton } from './VoiceInputButton';
 import { applyImportedRecipeType } from '../utils/importRecipeType';
 import { mapImportedRecipeToSavePayload } from '../utils/importedRecipeMapper';
-import { recipeService } from '../services/recipeService';
+import { recipeService, saveRecipeAiHtmlExport } from '../services/recipeService';
 import {
     continueRecipeAiConversation,
     askRecipeAiQuestion,
@@ -41,6 +41,41 @@ const formatAiDisplayText = (value) => String(value ?? '')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+
+const escapeHtml = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+
+const buildProductAiAnalysisHtml = ({ recipe, proposal, conversation = [] }) => {
+    const title = `${recipe.title || proposal?.title || 'レシピ'} - AI分析・開発レポート`;
+    const agentMessages = Array.isArray(proposal?.agentMessages) ? proposal.agentMessages : [];
+    const keyChanges = Array.isArray(proposal?.keyChanges) ? proposal.keyChanges : [];
+    const warnings = Array.isArray(proposal?.warnings) ? proposal.warnings : [];
+    const agentHtml = agentMessages.length
+        ? agentMessages.map((message) => `
+            <section class="agent-card">
+                <h2>${escapeHtml(message?.agentName || 'AIエージェント')}</h2>
+                <p>${escapeHtml(message?.content || '所見なし').replace(/\n/g, '<br>')}</p>
+            </section>`).join('')
+        : '<p>エージェント所見はありません。</p>';
+    const list = (items) => items.length
+        ? `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
+        : '<p>なし</p>';
+    const conversationHtml = conversation.length
+        ? `<section><h2>会話履歴</h2>${conversation.map((item) => `<p><strong>${item?.role === 'user' ? 'あなた' : 'AI'}:</strong> ${escapeHtml(item?.content).replace(/\n/g, '<br>')}</p>`).join('')}</section>`
+        : '';
+
+    return `<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+<style>body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif;line-height:1.65;color:#1e293b;max-width:900px;margin:0 auto;padding:32px;background:#f8fafc}.report{background:#fff;padding:32px;border-radius:12px;box-shadow:0 1px 4px #cbd5e1}h1{color:#1d4ed8}h2{font-size:1.05rem;color:#0f172a}.agent-card{border-left:4px solid #3b82f6;background:#f8fafc;padding:16px;margin:14px 0;border-radius:6px}li{margin:6px 0}</style>
+</head><body><main class="report"><h1>${escapeHtml(title)}</h1><p>保存日時: ${escapeHtml(new Date().toLocaleString())}</p>
+<section><h2>開発・改善の要約</h2><p>${escapeHtml(proposal?.improvementSummary || proposal?.description || '要約なし').replace(/\n/g, '<br>')}</p></section>
+<section><h2>主な改善点</h2>${list(keyChanges)}</section><section><h2>注意点</h2>${list(warnings)}</section>
+<section><h2>AIエージェント所見</h2>${agentHtml}</section>${conversationHtml}</main></body></html>`;
+};
 
 export const RecipeForm = ({ onSave, onCancel, initialData }) => {
     const safeInitialData = initialData || {};
@@ -840,6 +875,23 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
 
         const savedRecipe = await onSave(payload);
         if (savedRecipe && aiDraft) {
+            try {
+                const reportTitle = `${savedRecipe.title || payload.title || aiDraft.title || 'レシピ'} - AI分析・開発レポート (${new Date().toLocaleDateString()})`;
+                await saveRecipeAiHtmlExport(
+                    savedRecipe.id,
+                    reportTitle,
+                    buildProductAiAnalysisHtml({ recipe: savedRecipe, proposal: aiDraft, conversation: aiConversation }),
+                    {
+                        mode: 'product',
+                        proposalTitle: aiDraft?.title || '',
+                        agentCount: Array.isArray(aiDraft?.agentMessages) ? aiDraft.agentMessages.length : 0,
+                        chatCount: aiConversation.length,
+                    }
+                );
+            } catch (error) {
+                console.warn('[RecipeForm] AI analysis report save failed:', error);
+                toast.warning('レシピは保存しましたが、AI分析レポートは保存できませんでした。');
+            }
             await recordRecipeAiAdoption({
                 modeFamily: 'product',
                 proposal: aiDraft,
