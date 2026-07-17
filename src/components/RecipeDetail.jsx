@@ -896,6 +896,7 @@ export const RecipeDetail = ({
     const [isAiConversing, setIsAiConversing] = React.useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = React.useState(false);
     const [htmlExports, setHtmlExports] = React.useState([]);
+    const [htmlExportsError, setHtmlExportsError] = React.useState('');
     const [isSavingHtmlExport, setIsSavingHtmlExport] = React.useState(false);
     const [aiProgressMode, setAiProgressMode] = React.useState(null);
     const [aiProgressStepIndex, setAiProgressStepIndex] = React.useState(0);
@@ -1099,6 +1100,7 @@ export const RecipeDetail = ({
         const recipeForReport = { id: recipe.id, title: recipe.title };
         const loadHtmlExports = async () => {
             try {
+                setHtmlExportsError('');
                 const exports = await fetchRecipeAiHtmlExports(recipeForReport.id);
                 if (cancelled) return;
                 if (exports.length > 0) {
@@ -1126,6 +1128,7 @@ export const RecipeDetail = ({
                 if (!cancelled) setHtmlExports([restored]);
             } catch (err) {
                 if (!cancelled) setHtmlExports([]);
+                if (!cancelled) setHtmlExportsError('AI分析レポートの読み込みに失敗しました。時間をおいて再度お試しください。');
                 console.error('Failed to load or restore AI HTML exports', err);
             }
         };
@@ -1490,13 +1493,15 @@ export const RecipeDetail = ({
         if (!proposalData || !targetRecipe?.id) return;
         try {
             const title = `${targetRecipe.title} - AI分析・改善レポート (${new Date().toLocaleDateString()})`;
+            const safeTitle = escapeHtml(title);
+            const safeRecipeTitle = escapeHtml(targetRecipe.title);
             const agentPlanList = proposalData?.agentMessages || [];
 
             let html = `<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="utf-8">
-    <title>${title}</title>
+    <title>${safeTitle}</title>
     <style>
         body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif; line-height: 1.6; color: #334155; max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem; background-color: #f8fafc; }
         .container { background-color: #ffffff; padding: 2.5rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border: 1px solid #e2e8f0; }
@@ -1519,8 +1524,8 @@ export const RecipeDetail = ({
 </head>
 <body>
     <div class="container">
-        <h1>${title}</h1>
-        <div class="meta-info">レシピ: ${targetRecipe.title} | 保存日時: ${new Date().toLocaleString()}</div>
+        <h1>${safeTitle}</h1>
+        <div class="meta-info">レシピ: ${safeRecipeTitle} | 保存日時: ${escapeHtml(new Date().toLocaleString())}</div>
         <h2>エージェント所見</h2>
 `;
             if (agentPlanList.length === 0) {
@@ -1532,14 +1537,14 @@ export const RecipeDetail = ({
                     else if (msg.agentName?.includes('文化') || msg.agentName?.includes('比較')) agentClass = 'historical';
                     else if (msg.agentName?.includes('統合') || msg.agentName?.includes('作成')) agentClass = 'recipe';
                     else if (msg.agentName?.includes('監査') || msg.agentName?.includes('クロスチェック')) agentClass = 'auditor';
-                    html += `\n        <div class="agent-card ${agentClass}"><div class="agent-name">🛡️ ${msg.agentName || 'AIエージェント'}</div><div class="agent-text">${msg.content || '所見なし'}</div></div>`;
+                    html += `\n        <div class="agent-card ${agentClass}"><div class="agent-name">🛡️ ${escapeHtml(msg.agentName || 'AIエージェント')}</div><div class="agent-text">${escapeHtml(msg.content || '所見なし')}</div></div>`;
                 });
             }
             if (conversationData.length > 0) {
                 html += `\n        <h2>会話履歴 (Q&A)</h2>\n        <div class="chat-section">\n`;
                 conversationData.forEach((chat) => {
                     const isUser = chat.role === 'user';
-                    html += `\n            <div class="chat-bubble ${isUser ? 'user' : 'assistant'}"><div class="chat-role">${isUser ? 'あなた' : 'AI'}</div><div class="agent-text">${chat.content}</div></div>`;
+                    html += `\n            <div class="chat-bubble ${isUser ? 'user' : 'assistant'}"><div class="chat-role">${isUser ? 'あなた' : 'AI'}</div><div class="agent-text">${escapeHtml(chat.content)}</div></div>`;
                 });
                 html += `\n        </div>`;
             }
@@ -4847,7 +4852,11 @@ export const RecipeDetail = ({
                         <p style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '1.5rem' }}>
                             このレシピに紐づいてデータベースに保存された、過去のAI分析・エージェント所見レポートの一覧です。
                         </p>
-                        {htmlExports.length === 0 ? (
+                        {htmlExportsError ? (
+                            <p style={{ textAlign: 'center', color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '1rem' }}>
+                                {htmlExportsError}
+                            </p>
+                        ) : htmlExports.length === 0 ? (
                             <p style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem 0' }}>保存されたレポートはありません。</p>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '450px', overflowY: 'auto' }}>
