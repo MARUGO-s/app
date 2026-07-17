@@ -14,7 +14,7 @@ import {
     serializeRecipeAiDirectionContext,
     unlockSakana,
 } from '../services/recipeAiService';
-import { recordRecipeAiAdoption } from '../services/recipeAiLearningService';
+import { fetchRecipeAiMemoryForRecipe, recordRecipeAiAdoption } from '../services/recipeAiLearningService';
 import {
     categoryCostOverrideService,
     getRecipeCostCategories,
@@ -44,6 +44,29 @@ const formatAiDisplayText = (value) => String(value ?? '')
     .replace(/\\*\\*([^*]+)\\*\\*/g, '$1')
     .replace(/\\n{3,}/g, '\\n\\n')
     .trim();
+
+const escapeHtml = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+
+const buildRestoredAiAnalysisHtml = ({ recipe, memory }) => {
+    const proposal = memory?.proposalSnapshot || {};
+    const title = \`\${recipe?.title || proposal?.title || memory?.title || 'レシピ'} - AI分析・開発レポート\`;
+    const agentMessages = Array.isArray(proposal?.agentMessages) ? proposal.agentMessages : [];
+    const keyChanges = Array.isArray(proposal?.keyChanges) ? proposal.keyChanges : [];
+    const warnings = Array.isArray(proposal?.warnings) ? proposal.warnings : [];
+    const list = (items) => items.length
+        ? \`<ul>\${items.map((item) => \`<li>\${escapeHtml(item)}</li>\`).join('')}</ul>\`
+        : '<p>なし</p>';
+    const agentHtml = agentMessages.length
+        ? agentMessages.map((message) => \`<section class="agent-card"><h2>\${escapeHtml(message?.agentName || 'AIエージェント')}</h2><p>\${escapeHtml(message?.content || '所見なし').replace(/\\n/g, '<br>')}</p></section>\`).join('')
+        : '<p>エージェント所見は保存されていません。</p>';
+
+    return \`<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>\${escapeHtml(title)}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif;line-height:1.65;color:#1e293b;max-width:900px;margin:0 auto;padding:32px;background:#f8fafc}.report{background:#fff;padding:32px;border-radius:12px;box-shadow:0 1px 4px #cbd5e1}h1{color:#1d4ed8}h2{font-size:1.05rem}.agent-card{border-left:4px solid #3b82f6;background:#f8fafc;padding:16px;margin:14px 0;border-radius:6px}</style></head><body><main class="report"><h1>\${escapeHtml(title)}</h1><p>過去のAI作成履歴から復元したレポートです。</p><section><h2>開発・改善の要約</h2><p>\${escapeHtml(proposal?.improvementSummary || proposal?.description || memory?.summary || '要約なし').replace(/\\n/g, '<br>')}</p></section><section><h2>主な改善点</h2>\${list(keyChanges)}</section><section><h2>注意点</h2>\${list(warnings)}</section><section><h2>AIエージェント所見</h2>\${agentHtml}</section></main></body></html>\`;
+};
 
 const toFiniteCurrencyNumber = (value) => {
     if (value == null) return NaN;
@@ -1072,14 +1095,40 @@ export const RecipeDetail = ({
 
     React.useEffect(() => {
         if (!recipe?.id) return;
-        fetchRecipeAiHtmlExports(recipe.id)
-            .then(data => {
-                setHtmlExports(data);
-            })
-            .catch(err => {
-                console.error("Failed to load HTML exports", err);
-            });
-    }, [recipe?.id]);
+        let cancelled = false;
+        const recipeForReport = { id: recipe.id, title: recipe.title };
+        const loadHtmlExports = async () => {
+            try {
+                const exports = await fetchRecipeAiHtmlExports(recipeForReport.id);
+                if (cancelled) return;
+                if (exports.length > 0) {
+                    setHtmlExports(exports);
+                    return;
+                }
+
+                const memory = await fetchRecipeAiMemoryForRecipe(recipeForReport.id);
+                if (cancelled || !memory) {
+                    setHtmlExports([]);
+                    return;
+                }
+
+                const restored = await saveRecipeAiHtmlExport(
+                    recipeForReport.id,
+                    \`\${recipeForReport.title || memory.title || 'レシピ'} - AI分析・開発レポート（履歴から復元）\`,
+                    buildRestoredAiAnalysisHtml({ recipe: recipeForReport, memory }),
+                    { mode: 'product', restoredFromAiMemoryId: memory.id }
+                );
+                if (!cancelled) setHtmlExports([restored]);
+            } catch (err) {
+                if (!cancelled) setHtmlExports([]);
+                console.error('Failed to load or restore AI HTML exports', err);
+            }
+        };
+        loadHtmlExports();
+        return () => {
+            cancelled = true;
+        };
+    }, [recipe?.id, recipe?.title]);
 
     React.useEffect(() => {
         let cancelled = false;
@@ -3140,22 +3189,20 @@ export const RecipeDetail = ({
                                     onToggle={() => onToggleFavorite(recipe.id)}
                                 />
                             )}
-                            {htmlExports.length > 0 && (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={() => setIsHistoryModalOpen(true)}
-                                    style={{
-                                        background: 'linear-gradient(135deg, #0284c7, #3b82f6)',
-                                        color: '#ffffff',
-                                        fontWeight: 'bold',
-                                        boxShadow: '0 2px 4px rgba(37, 99, 235, 0.25)',
-                                        border: 'none',
-                                    }}
-                                >
-                                    🗂️ AI分析レポート ({htmlExports.length})
-                                </Button>
-                            )}
+                            <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => setIsHistoryModalOpen(true)}
+                                style={{
+                                    background: 'linear-gradient(135deg, #0284c7, #3b82f6)',
+                                    color: '#ffffff',
+                                    fontWeight: 'bold',
+                                    boxShadow: '0 2px 4px rgba(37, 99, 235, 0.25)',
+                                    border: 'none',
+                                }}
+                            >
+                                🗂️ AI分析レポート{htmlExports.length > 0 ? \` (\${htmlExports.length})\` : ''}
+                            </Button>
                             <Button
                                 variant="secondary"
                                 size="sm"
