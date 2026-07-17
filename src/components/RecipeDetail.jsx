@@ -1486,10 +1486,10 @@ export const RecipeDetail = ({
     };
 
     // AI分析レポートをDBに自動保存する内部関数（引数でproposalとconversationを受け取る）
-    const autoSaveAnalysisHtml = React.useCallback(async (proposalData, conversationData = []) => {
-        if (!proposalData || !recipe?.id) return;
+    const autoSaveAnalysisHtml = React.useCallback(async (proposalData, conversationData = [], targetRecipe = recipe, { crossLink = true } = {}) => {
+        if (!proposalData || !targetRecipe?.id) return;
         try {
-            const title = `${recipe.title} - AI分析・改善レポート (${new Date().toLocaleDateString()})`;
+            const title = `${targetRecipe.title} - AI分析・改善レポート (${new Date().toLocaleDateString()})`;
             const agentPlanList = proposalData?.agentMessages || [];
 
             let html = `<!DOCTYPE html>
@@ -1520,7 +1520,7 @@ export const RecipeDetail = ({
 <body>
     <div class="container">
         <h1>${title}</h1>
-        <div class="meta-info">元レシピ: ${recipe.title} | 保存日時: ${new Date().toLocaleString()}</div>
+        <div class="meta-info">レシピ: ${targetRecipe.title} | 保存日時: ${new Date().toLocaleString()}</div>
         <h2>エージェント所見</h2>
 `;
             if (agentPlanList.length === 0) {
@@ -1546,11 +1546,11 @@ export const RecipeDetail = ({
             html += `\n    </div>\n</body>\n</html>`;
 
             const exportMeta = { proposalTitle: proposalData?.title, agentCount: agentPlanList.length, chatCount: conversationData.length };
-            const savedRow = await saveRecipeAiHtmlExport(recipe.id, title, html, exportMeta);
+            const savedRow = await saveRecipeAiHtmlExport(targetRecipe.id, title, html, exportMeta);
 
             // 元レシピにもクロスリンク保存
             const originalRecipeForExport = sourceRecipe || recipe;
-            if (originalRecipeForExport?.id && originalRecipeForExport.id !== recipe.id) {
+            if (crossLink && originalRecipeForExport?.id && originalRecipeForExport.id !== targetRecipe.id) {
                 await saveRecipeAiHtmlExport(originalRecipeForExport.id, title, html, exportMeta)
                     .catch(err => console.warn('[RecipeDetail] HTML export cross-link failed:', err));
             }
@@ -1626,6 +1626,8 @@ export const RecipeDetail = ({
                 }
             }
             setFullRecipe(savedRecipe);
+            // 改善案を別レシピとして保存した場合も、保存先レシピIDにレポートを紐付ける。
+            await autoSaveAnalysisHtml(aiProposal, aiConversation, savedRecipe, { crossLink: false });
             await recordRecipeAiAdoption({
                 modeFamily: 'improvement',
                 proposal: aiProposal,
