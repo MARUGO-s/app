@@ -14,7 +14,7 @@ import {
     serializeRecipeAiDirectionContext,
     unlockSakana,
 } from '../services/recipeAiService';
-import { fetchRecipeAiMemoryForRecipe, recordRecipeAiAdoption } from '../services/recipeAiLearningService';
+import { fetchRecipeAiMemoryForRecipe, fetchRecipeAiRunForRecipeTitle, recordRecipeAiAdoption } from '../services/recipeAiLearningService';
 import {
     categoryCostOverrideService,
     getRecipeCostCategories,
@@ -1106,7 +1106,8 @@ export const RecipeDetail = ({
                     return;
                 }
 
-                const memory = await fetchRecipeAiMemoryForRecipe(recipeForReport.id);
+                const memory = await fetchRecipeAiMemoryForRecipe(recipeForReport.id)
+                    || await fetchRecipeAiRunForRecipeTitle(recipeForReport.title);
                 if (cancelled || !memory) {
                     setHtmlExports([]);
                     return;
@@ -1116,7 +1117,11 @@ export const RecipeDetail = ({
                     recipeForReport.id,
                     \`\${recipeForReport.title || memory.title || 'レシピ'} - AI分析・開発レポート（履歴から復元）\`,
                     buildRestoredAiAnalysisHtml({ recipe: recipeForReport, memory }),
-                    { mode: 'product', restoredFromAiMemoryId: memory.id }
+                    {
+                        mode: 'product',
+                        restoredFrom: memory.restoredFrom || 'ai_memory',
+                        restoredFromId: memory.id,
+                    }
                 );
                 if (!cancelled) setHtmlExports([restored]);
             } catch (err) {

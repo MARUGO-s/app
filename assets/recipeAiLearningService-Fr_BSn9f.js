@@ -127,6 +127,44 @@ export const fetchRecipeAiMemoryForRecipe = async (recipeId, modeFamily = 'produ
     }
 };
 
+export const fetchRecipeAiRunForRecipeTitle = async (recipeTitle, modeFamily = 'product') => {
+    const title = normalizeText(recipeTitle);
+    if (!title) return null;
+
+    try {
+        const { data, error } = await supabase
+            .from('recipe_ai_runs')
+            .select('id, created_at, title, answer, proposal_snapshot, agent_messages, sources, metadata')
+            .eq('mode_family', modeFamily)
+            .eq('title', title)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (error) throw error;
+        if (!data) return null;
+
+        const proposalSnapshot = {
+            ...(data.proposal_snapshot || {}),
+            agentMessages: Array.isArray(data.proposal_snapshot?.agentMessages) && data.proposal_snapshot.agentMessages.length > 0
+                ? data.proposal_snapshot.agentMessages
+                : (data.agent_messages || []),
+            sources: Array.isArray(data.proposal_snapshot?.sources) && data.proposal_snapshot.sources.length > 0
+                ? data.proposal_snapshot.sources
+                : (data.sources || []),
+        };
+        return {
+            id: data.id,
+            title: normalizeText(data.title),
+            summary: normalizeText(data.answer),
+            proposalSnapshot,
+            restoredFrom: 'ai_run',
+        };
+    } catch (error) {
+        console.warn('[recipeAiLearningService] recipe run fetch failed:', error);
+        return null;
+    }
+};
+
 const fallbackRecentMemories = async (modeFamily, limit) => {
     const { data, error } = await supabase
         .from('recipe_ai_memories')
