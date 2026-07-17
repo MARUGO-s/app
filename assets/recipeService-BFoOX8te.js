@@ -1768,7 +1768,7 @@ export const fetchRecipeAiHtmlExports = async (recipeId) => {
         return data || [];
     } catch (error) {
         console.error('[recipeService] fetchRecipeAiHtmlExports failed:', error);
-        return [];
+        throw error;
     }
 };
 
