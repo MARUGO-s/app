@@ -149,7 +149,7 @@ a {
   align-items: center;
   text-align: center;
   padding: var(--space-lg) var(--space-md);
-  color: hsl(var(--color-text-main));
+  color: #1e293b;
 }
 
 .final-integration-popup__animation {
@@ -247,21 +247,22 @@ a {
   font-size: 1.25rem;
   font-weight: 600;
   margin-bottom: var(--space-md);
-  color: #fff;
+  color: #0f172a;
 }
 
 .final-integration-popup__description {
   font-size: 0.9rem;
   line-height: 1.6;
-  color: hsl(var(--color-text-muted));
+  color: #475569;
   margin-bottom: var(--space-lg);
   max-width: 400px;
 }
 
 .final-integration-popup__status-label {
   font-size: 0.85rem;
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #334155;
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
   padding: 6px 12px;
   border-radius: var(--radius-md);
   margin-bottom: var(--space-lg);
@@ -277,11 +278,11 @@ a {
   align-items: center;
   gap: var(--space-sm);
   font-size: 0.8rem;
-  color: #ffb74d;
-  background-color: rgba(255, 183, 77, 0.05);
+  color: #b45309;
+  background-color: rgba(245, 158, 11, 0.08);
   padding: var(--space-sm) var(--space-md);
   border-radius: var(--radius-sm);
-  border: 1px dashed rgba(255, 183, 77, 0.2);
+  border: 1px dashed rgba(245, 158, 11, 0.3);
 }
 
 .spin-loader {
@@ -326,10 +327,10 @@ a {
   gap: 12px;
   margin-bottom: 20px;
   justify-content: space-between;
-  background: rgba(0, 0, 0, 0.2);
+  background: #f8fafc;
   padding: 10px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid #e2e8f0;
   flex-wrap: wrap;
 }
 
@@ -341,9 +342,9 @@ a {
   border-radius: 6px;
   font-size: 11px;
   font-weight: 600;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.35);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   flex: 1;
@@ -356,7 +357,7 @@ a {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
+  background: #cbd5e1;
   transition: all 0.3s ease;
   flex-shrink: 0;
 }
