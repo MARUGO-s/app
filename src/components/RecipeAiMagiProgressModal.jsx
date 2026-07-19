@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Modal } from './Modal';
 import './RecipeAiMagiProgressModal.css';
 
-const BOOT_DURATION_MS = 900;
+// AI request starts before this modal is rendered. Keep the boot sequence visible
+// long enough to establish the transition without delaying that request.
+const BOOT_DURATION_MS = 2400;
 
 const getStageKey = (step) => {
     const label = String(step?.label || '');
@@ -120,6 +122,7 @@ export const RecipeAiMagiProgressModal = ({
                             return (
                                 <article key={panel.id} className={`recipe-ai-magi__panel recipe-ai-magi__panel--${panel.id} is-${state}`}>
                                     <div className="recipe-ai-magi__panel-inner">
+                                        {isActive && <span className="recipe-ai-magi__panel-live" aria-hidden="true">ACTIVE</span>}
                                         <span className="recipe-ai-magi__panel-icon" aria-hidden="true">
                                             {panel.id === 'research' ? '⌕' : panel.id === 'analysis' ? '⌬' : '◇'}
                                         </span>
