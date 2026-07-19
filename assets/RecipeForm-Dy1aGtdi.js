@@ -287,7 +287,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         setAiProgressStepIndex(0);
         const intervalId = window.setInterval(() => {
             setAiProgressStepIndex((current) => Math.min(current + 1, aiProgressConfig.steps.length - 1));
-        }, 2200);
+        }, 4400);
         return () => window.clearInterval(intervalId);
     }, [isAiProgressOpen, aiProgressConfig]);
 

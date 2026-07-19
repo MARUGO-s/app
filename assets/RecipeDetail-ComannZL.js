@@ -1044,9 +1044,9 @@ export const RecipeDetail = ({
             return undefined;
         }
         
-        // 通常時はゆっくり5秒間隔（10ステップ×5秒=50秒）、
+        // 通常時はゆっくり10秒間隔（10ステップ×10秒=100秒）、
         // 通信完了後の駆け抜け演出中は400ms間隔
-        const intervalTime = isAiFinishingProgress ? 400 : 5000;
+        const intervalTime = isAiFinishingProgress ? 400 : 10000;
         
         const intervalId = window.setInterval(() => {
             setAiProgressStepIndex((current) => {
