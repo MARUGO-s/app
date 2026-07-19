@@ -45,6 +45,7 @@ import { LoginPage } from './components/LoginPage';
 import { PasswordResetPage } from './components/PasswordResetPage';
 import { MaintenancePage } from './components/MaintenancePage';
 import { Modal } from './components/Modal';
+import { PullToRefresh } from './components/PullToRefresh';
 import './App.css';
 
 const LoadingScreen = ({
@@ -2192,6 +2193,7 @@ function App() {
   return (
     <ToastProvider>
       <AuthProvider>
+        <PullToRefresh />
         <AppContent />
       </AuthProvider>
     </ToastProvider>
