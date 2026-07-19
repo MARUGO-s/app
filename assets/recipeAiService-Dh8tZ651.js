@@ -26,12 +26,14 @@ const SAKANA_UNLOCK_KEY = 'recipe_ai_sakana_unlocked';
 const SAKANA_LOCK_PASSWORD = 'marugo';
 
 const DEFAULT_MODEL = 'fugu';
-const GROQ_DEFAULT_TEXT_MODEL = 'llama-3.3-70b-versatile';
+// llama-3.3-70b-versatile は Groq 側で 2026-08-16 廃止のため gpt-oss-120b へ移行（性能同等以上・単価は半額以下）
+const GROQ_DEFAULT_TEXT_MODEL = 'openai/gpt-oss-120b';
 const GROQ_COMPOUND_MODEL = 'groq/compound';
-const OPENAI_REBUTTAL_MODEL = 'gpt-4.1-mini';
-const OPENAI_AUDITOR_MODEL = 'o4-mini';
-// コストと品質のバランスを優先し、重要な監査のみ o4-mini を残し、反証と統合は gpt-4.1-mini を使用する。
-const OPENAI_MASTER_MODEL = 'gpt-4.1-mini';
+// o4-mini / gpt-4.1 系は OpenAI 側で 2026-10-23 廃止予定のため gpt-5.4 系へ移行。
+// コストと品質のバランスを優先し、批判系（監査・反証）は gpt-5.4-mini、統合・修正は gpt-5.4-nano を使用する。
+const OPENAI_REBUTTAL_MODEL = 'gpt-5.4-mini';
+const OPENAI_AUDITOR_MODEL = 'gpt-5.4-mini';
+const OPENAI_MASTER_MODEL = 'gpt-5.4-nano';
 const PERPLEXITY_DEFAULT_MODEL = 'sonar';
 const REQUEST_TIMEOUT_MS = 600000;
 
@@ -1687,7 +1689,7 @@ const buildRevisionPrompt = ({ contextBlock, draftText, rebuttalFindings, memory
 \`;
 
 // 反証は統括シェフと同じAIだと自己肯定に流れやすいため、別系統のAIに担当させる。
-// 反証専用に OpenAI o4-mini を優先し、失敗時のみメインAIへフォールバックする。
+// 反証専用に OpenAI gpt-5.4-mini を優先し、失敗時のみメインAIへフォールバックする。
 const pickRebuttalPlan = (mainProvider) => {
     return pickAgentPlan({ agentId: 'rebuttal', mainProvider });
 };

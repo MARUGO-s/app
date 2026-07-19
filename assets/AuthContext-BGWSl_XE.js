@@ -330,6 +330,8 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         let unsub = null;
         let loadingCleared = false;
+        let disposed = false;
+        const pendingProfileLoadTimers = new Set();
 
         const clearLoading = () => {
             if (!loadingCleared) {
@@ -345,21 +347,32 @@ export const AuthProvider = ({ children }) => {
 
         // Supabase v2 fires INITIAL_SESSION on mount with the current session state,
         // so a separate getSession() call is redundant and causes a double profile fetch.
-        const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        //
+        // Keep this callback synchronous. Calling any async Supabase API while the
+        // auth event lock is held can deadlock the next auth call (notably on Safari).
+        // Defer profile work until the event callback has completely returned.
+        const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
             if (_event === 'PASSWORD_RECOVERY') {
                 setIsPasswordRecovery(true);
             }
-            try {
-                await loadProfileAndSetUser(session?.user || null);
-            } catch (e) {
-                console.error('Auth state change handler failed:', e);
-            } finally {
-                // INITIAL_SESSION is emitted on mount; use it to clear the loading state
-                // so the app renders only after the first profile fetch is complete.
-                if (_event === 'INITIAL_SESSION') {
-                    clearLoading();
-                }
-            }
+
+            const timerId = window.setTimeout(() => {
+                pendingProfileLoadTimers.delete(timerId);
+                if (disposed) return;
+
+                void loadProfileAndSetUser(session?.user || null)
+                    .catch((e) => {
+                        console.error('Auth state change handler failed:', e);
+                    })
+                    .finally(() => {
+                        // INITIAL_SESSION is emitted on mount; use it to clear the loading state
+                        // so the app renders only after the first profile fetch is complete.
+                        if (_event === 'INITIAL_SESSION') {
+                            clearLoading();
+                        }
+                    });
+            }, 0);
+            pendingProfileLoadTimers.add(timerId);
         });
         unsub = sub?.subscription;
 
@@ -367,6 +380,9 @@ export const AuthProvider = ({ children }) => {
         const fallbackTimer = setTimeout(clearLoading, 10000);
 
         return () => {
+            disposed = true;
+            pendingProfileLoadTimers.forEach((timerId) => clearTimeout(timerId));
+            pendingProfileLoadTimers.clear();
             clearTimeout(fallbackTimer);
             try {
                 unsub?.unsubscribe?.();
