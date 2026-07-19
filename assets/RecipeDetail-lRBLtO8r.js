@@ -1044,11 +1044,16 @@ export const RecipeDetail = ({
             return undefined;
         }
         
-        // 通常時はゆっくり10秒間隔（10ステップ×10秒=100秒）、
-        // 通信完了後の駆け抜け演出中は400ms間隔
-        const intervalTime = isAiFinishingProgress ? 400 : 10000;
-        
-        const intervalId = window.setInterval(() => {
+        // 前半5工程は10秒、統合決裁に入る後半は20秒ごとに更新する。
+        // 通信完了後のみ400msで完走し、完了演出へ移る。
+        const halfwayIndex = Math.ceil(aiProgressConfig.steps.length / 2) - 1;
+        const intervalTime = isAiFinishingProgress
+            ? 400
+            : aiProgressStepIndex <= halfwayIndex
+                ? 10000
+                : 20000;
+
+        const timerId = window.setTimeout(() => {
             setAiProgressStepIndex((current) => {
                 if (current < aiProgressConfig.steps.length - 1) {
                     return current + 1;
@@ -1057,8 +1062,8 @@ export const RecipeDetail = ({
             });
         }, intervalTime);
 
-        return () => window.clearInterval(intervalId);
-    }, [isAiProgressOpen, aiProgressConfig, isAiFinishingProgress]);
+        return () => window.clearTimeout(timerId);
+    }, [isAiProgressOpen, aiProgressConfig, isAiFinishingProgress, aiProgressStepIndex]);
 
     const costAdjustedRecipe = React.useMemo(() => {
         const adjustItem = (item, options = {}) => {

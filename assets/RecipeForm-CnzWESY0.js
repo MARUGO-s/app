@@ -283,13 +283,19 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
     }, []);
 
     useEffect(() => {
-        if (!isAiProgressOpen || !aiProgressConfig) return undefined;
+        if (!isAiProgressOpen || !aiProgressConfig) return;
         setAiProgressStepIndex(0);
-        const intervalId = window.setInterval(() => {
-            setAiProgressStepIndex((current) => Math.min(current + 1, aiProgressConfig.steps.length - 1));
-        }, 4400);
-        return () => window.clearInterval(intervalId);
     }, [isAiProgressOpen, aiProgressConfig]);
+
+    useEffect(() => {
+        if (!isAiProgressOpen || !aiProgressConfig) return undefined;
+        const halfwayIndex = Math.ceil(aiProgressConfig.steps.length / 2) - 1;
+        const intervalTime = aiProgressStepIndex <= halfwayIndex ? 4400 : 8800;
+        const timerId = window.setTimeout(() => {
+            setAiProgressStepIndex((current) => Math.min(current + 1, aiProgressConfig.steps.length - 1));
+        }, intervalTime);
+        return () => window.clearTimeout(timerId);
+    }, [isAiProgressOpen, aiProgressConfig, aiProgressStepIndex]);
 
     const handleImportedRecipe = (importedData, sourceUrl = '', importOptions = {}) => {
         const importTypeMode = importOptions?.mode === 'image'
