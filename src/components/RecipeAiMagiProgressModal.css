@@ -292,6 +292,7 @@
 @keyframes recipeAiMagiConflictAlert { 50% { border-color: #ff7562; background: rgba(104, 23, 27, 0.9); transform: scale(1.025); } }
 
 .recipe-ai-magi__final {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -301,6 +302,20 @@
     border: 1px solid rgba(241, 94, 72, 0.74);
     clip-path: polygon(4% 0, 96% 0, 100% 50%, 96% 100%, 4% 100%, 0 50%);
     background: linear-gradient(100deg, rgba(51, 23, 25, 0.95), rgba(14, 22, 31, 0.95), rgba(51, 23, 25, 0.95));
+    overflow: hidden;
+}
+
+.recipe-ai-magi__final::after {
+    content: '';
+    position: absolute;
+    top: 12%;
+    right: 0;
+    width: 24%;
+    height: 76%;
+    pointer-events: none;
+    opacity: 0;
+    background: linear-gradient(180deg, transparent, rgba(255, 235, 189, 0.86) 50%, transparent);
+    filter: blur(2px);
 }
 
 .recipe-ai-magi__final-label {
@@ -325,11 +340,13 @@
 }
 
 .recipe-ai-magi__final.is-active { box-shadow: 0 0 22px rgba(246, 92, 68, 0.23); animation: recipeAiMagiFinalFlow 1.1s linear infinite; }
+.recipe-ai-magi__final.is-active::after { opacity: 0.34; animation: recipeAiMagiFinalScan 1.7s ease-in-out infinite; }
 .recipe-ai-magi__final.is-active .recipe-ai-magi__final-status { border-color: #ff7a67; color: #ffb5a7; animation: recipeAiMagiFlicker 1.3s ease-in-out infinite; }
 .recipe-ai-magi__final.is-complete .recipe-ai-magi__final-status { border-color: #f0c764; color: #ffdf85; }
 
 @keyframes recipeAiMagiFlicker { 50% { opacity: 0.58; } }
 @keyframes recipeAiMagiFinalFlow { 50% { box-shadow: 0 0 32px rgba(246, 92, 68, 0.48), inset 0 0 20px rgba(246, 92, 68, 0.16); } }
+@keyframes recipeAiMagiFinalScan { from { transform: translateX(125%); } to { transform: translateX(-430%); } }
 
 .recipe-ai-magi__current {
     display: grid;

@@ -484,10 +484,10 @@ const parseJsonResponse = (rawText, provider) => {
         try {
             const repaired = repairBadJson(cleaned);
             return JSON.parse(repaired);
-        } catch (secondError) {
+        } catch (repairError) {
             const preview = cleaned.slice(0, 220).replace(/\s+/g, ' ');
             const suffix = cleaned.slice(-220).replace(/\s+/g, ' ');
-            throw new Error(`${getProviderDisplayName(provider)} のJSON解析に失敗しました: ${firstError?.message || firstError} / head="${preview}" / tail="${suffix}"`);
+            throw new Error(`${getProviderDisplayName(provider)} のJSON解析に失敗しました: ${firstError?.message || firstError}（修復後: ${repairError?.message || repairError}） / head="${preview}" / tail="${suffix}"`);
         }
     }
 };
@@ -778,7 +778,7 @@ const callOpenAiResponseJson = async ({
         finalInstructions = `${finalInstructions}\n\nReturn strict json.`;
     }
 
-    const payload = await withTimeout(async (signal) => {
+    const requestResponse = async (signal, outputTokenLimit) => {
         const response = await callAiProxy({
             provider: 'openai',
             endpoint: 'responses',
@@ -788,7 +788,7 @@ const callOpenAiResponseJson = async ({
                 input: finalPrompt,
                 ...(supportsReasoning ? { reasoning: { effort: reasoningEffort } } : {}),
                 text: { format: { type: 'json_object' } },
-                max_output_tokens: maxOutputTokens,
+                max_output_tokens: outputTokenLimit,
                 ...(Array.isArray(filteredTools) && filteredTools.length > 0 ? { tools: filteredTools } : {}),
                 ...(filteredToolChoice ? { tool_choice: filteredToolChoice } : {}),
             },
@@ -799,7 +799,25 @@ const callOpenAiResponseJson = async ({
             throw new Error(`${OPENAI_PROVIDER_NAME} API error ${response.status}: ${body || response.statusText}`);
         }
         return response.json();
-    }, timeoutMs, OPENAI_PROVIDER_NAME);
+    };
+
+    let payload = await withTimeout(
+        (signal) => requestResponse(signal, maxOutputTokens),
+        timeoutMs,
+        OPENAI_PROVIDER_NAME,
+    );
+
+    // A partial JSON response is otherwise surfaced to the user as a parser
+    // error. Retry once with a larger output window when Responses explicitly
+    // reports that it stopped at the configured output limit.
+    if (payload?.status === 'incomplete' && payload?.incomplete_details?.reason === 'max_output_tokens') {
+        const retryTokenLimit = Math.max(maxOutputTokens * 2, 12000);
+        payload = await withTimeout(
+            (signal) => requestResponse(signal, retryTokenLimit),
+            timeoutMs,
+            OPENAI_PROVIDER_NAME,
+        );
+    }
 
     const rawText = extractResponseText(payload);
     if (!rawText) throw new Error(`${OPENAI_PROVIDER_NAME} から空の応答が返されました。`);
