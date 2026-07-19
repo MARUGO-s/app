@@ -217,10 +217,10 @@
     left: 14%;
     width: 72%;
     height: 16%;
-    opacity: 0.9;
-    background: linear-gradient(90deg, transparent, currentColor 45%, #fff7d5 50%, currentColor 55%, transparent);
+    opacity: 0.38;
+    background: linear-gradient(90deg, transparent, currentColor 42%, #fff7d5 50%, currentColor 58%, transparent);
     filter: blur(1px);
-    animation: recipeAiMagiActiveScan 1.25s linear infinite;
+    animation: recipeAiMagiActiveScan 1.6s ease-in-out infinite alternate;
 }
 
 .recipe-ai-magi__panel--research.is-active {
