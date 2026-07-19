@@ -23,16 +23,14 @@
     <div id="root"></div>
     <script>
       window.addEventListener('error', function(e) {
-        document.body.style.background = '#fff';
-        document.body.style.color = '#000';
-        document.body.style.padding = '20px';
-        document.body.innerHTML = '<h2>エラーが発生しました</h2><pre style="white-space:pre-wrap;font-size:12px">' + (e.message || '') + '\n' + (e.filename || '') + ':' + (e.lineno || '') + '\n' + (e.error && e.error.stack ? e.error.stack : '') + '</pre>';
+        // Keep the app mounted. React's error boundary can show a recoverable UI,
+        // whereas replacing document.body makes the login page unusable.
+        console.error('[Unhandled window error]', e.error || e.message);
       });
       window.addEventListener('unhandledrejection', function(e) {
-        document.body.style.background = '#fff';
-        document.body.style.color = '#000';
-        document.body.style.padding = '20px';
-        document.body.innerHTML = '<h2>非同期エラー</h2><pre style="white-space:pre-wrap;font-size:12px">' + (e.reason && e.reason.stack ? e.reason.stack : String(e.reason)) + '</pre>';
+        // Do not overwrite the whole document for an async error. The originating
+        // component keeps control of its own error UI and retry behavior.
+        console.error('[Unhandled async error]', e.reason);
       });
     </script>
     <script type="module" src="/src/main.jsx"></script>
