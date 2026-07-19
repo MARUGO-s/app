@@ -8,7 +8,9 @@ export const Modal = ({
     children,
     size = 'medium',
     showCloseButton = true,
+    showHeader = true,
     maxWidth,
+    className = '',
 }) => {
     useEffect(() => {
         if (isOpen) {
@@ -44,21 +46,23 @@ export const Modal = ({
     return (
         <div className="modal-overlay" onClick={handleBackdropClick}>
             <div
-                className={\`modal-content modal-\${size}\`}
+                className={\`modal-content modal-\${size} \${className}\`.trim()}
                 style={maxWidth ? { maxWidth } : undefined}
             >
-                <div className="modal-header">
-                    <h3 className="modal-title">{title}</h3>
-                    {showCloseButton && (
-                        <button
-                            className="modal-close-btn"
-                            onClick={onClose}
-                            aria-label="閉じる"
-                        >
-                            ✕
-                        </button>
-                    )}
-                </div>
+                {showHeader && (
+                    <div className="modal-header">
+                        <h3 className="modal-title">{title}</h3>
+                        {showCloseButton && (
+                            <button
+                                className="modal-close-btn"
+                                onClick={onClose}
+                                aria-label="閉じる"
+                            >
+                                ✕
+                            </button>
+                        )}
+                    </div>
+                )}
                 <div className="modal-body">
                     {children}
                 </div>

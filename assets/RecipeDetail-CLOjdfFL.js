@@ -2,6 +2,7 @@ const e=`import React from 'react';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Modal } from './Modal';
+import { RecipeAiMagiProgressModal } from './RecipeAiMagiProgressModal';
 import { translationService } from '../services/translationService';
 import { recipeService, saveRecipeAiHtmlExport, fetchRecipeAiHtmlExports, deleteRecipeAiHtmlExport } from '../services/recipeService';
 import {
@@ -906,8 +907,6 @@ export const RecipeDetail = ({
         [aiProgressMode]
     );
     const isAiProgressOpen = Boolean(aiProgressConfig) && (isAiGenerating || isAiConversing);
-    const currentProgressStep = aiProgressConfig?.steps?.[aiProgressStepIndex];
-    const isFinalIntegrating = isAiProgressOpen && Boolean(currentProgressStep?.provider?.includes('OpenAI'));
 
     // Scaling State
     const [baseItem, setBaseItem] = React.useState('total'); // 'total', 'flourTotal', 'flour-0', 'other-1', etc.
@@ -3832,119 +3831,12 @@ export const RecipeDetail = ({
                     </Modal>
                 )}
 
-                {!isDeleted && (
-                    <Modal
-                        isOpen={isAiProgressOpen && !isFinalIntegrating}
-                        onClose={() => {}}
-                        title={aiProgressConfig?.title || 'AIエージェント進行中'}
-                        size="small"
-                        showCloseButton={false}
-                        maxWidth="520px"
-                    >
-                        <div className="recipe-ai-progress">
-                            {(() => {
-                                const currentStep = aiProgressConfig?.steps?.[aiProgressStepIndex];
-                                const activeProvider = currentStep?.provider || '';
-                                const isPerplexityActive = activeProvider.includes('Perplexity');
-                                const isGroqActive = activeProvider.includes('Groq');
-                                const isOpenAiActive = activeProvider.includes('OpenAI') || activeProvider.includes('gpt-') || activeProvider.includes('o4-');
-
-                                return (
-                                    <div className="recipe-ai-progress__providers-status">
-                                        <div className={\`provider-status-badge provider-status-badge--perplexity \${isPerplexityActive ? 'is-active' : ''}\`}>
-                                            <span className="provider-status-badge__dot" />
-                                            <span className="provider-status-badge__name">Perplexity (Web調査)</span>
-                                        </div>
-                                        <div className={\`provider-status-badge provider-status-badge--groq \${isGroqActive ? 'is-active' : ''}\`}>
-                                            <span className="provider-status-badge__dot" />
-                                            <span className="provider-status-badge__name">Groq (高速論理)</span>
-                                        </div>
-                                        <div className={\`provider-status-badge provider-status-badge--openai \${isOpenAiActive ? 'is-active' : ''}\`}>
-                                            <span className="provider-status-badge__dot" />
-                                            <span className="provider-status-badge__name">OpenAI (監査・統合)</span>
-                                        </div>
-                                    </div>
-                                );
-                            })()}
-                            <p className="recipe-ai-progress__description">
-                                {aiProgressConfig?.description}
-                            </p>
-                            <div className="recipe-ai-progress__status">
-                                <span className="recipe-ai-progress__pulse" />
-                                <div>
-                                    <strong>現在の工程</strong>
-                                    {aiProgressConfig?.steps?.[aiProgressStepIndex] ? (
-                                        <p>
-                                            {aiProgressConfig.steps[aiProgressStepIndex].label}
-                                            <span className="recipe-ai-progress__status-provider">{aiProgressConfig.steps[aiProgressStepIndex].provider}</span>
-                                        </p>
-                                    ) : <p>進行状況を確認中</p>}
-                                </div>
-                            </div>
-                            <div className="recipe-ai-progress__bar" aria-hidden="true">
-                                <span
-                                    className="recipe-ai-progress__bar-fill"
-                                    style={{
-                                        width: \`\${(((aiProgressStepIndex + 1) / Math.max(aiProgressConfig?.steps?.length || 1, 1)) * 100).toFixed(0)}%\`,
-                                    }}
-                                />
-                            </div>
-                            <div className="recipe-ai-progress__steps">
-                                {(aiProgressConfig?.steps || []).map((step, index) => (
-                                    <div
-                                        key={\`\${step.label}-\${index}\`}
-                                        className={\`recipe-ai-progress__step\${index < aiProgressStepIndex ? ' is-complete' : ''}\${index === aiProgressStepIndex ? ' is-active' : ''}\`}
-                                    >
-                                        <span className="recipe-ai-progress__step-index">{index + 1}</span>
-                                        <div className="recipe-ai-progress__step-content">
-                                            <span className="recipe-ai-progress__step-label">{step.label}</span>
-                                            <span className="recipe-ai-progress__step-provider">{step.provider}</span>
-                                            <span className="recipe-ai-progress__step-detail">{step.description}</span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </Modal>
-                )}
-
-                {!isDeleted && isFinalIntegrating && (
-                    <Modal
+                {!isDeleted && isAiProgressOpen && (
+                    <RecipeAiMagiProgressModal
                         isOpen={true}
-                        onClose={() => {}}
-                        title="👨‍🍳 最終統合・クオリティ監査を実行中"
-                        size="small"
-                        showCloseButton={false}
-                        maxWidth="500px"
-                    >
-                        <div className="final-integration-popup">
-                            <div className="final-integration-popup__animation">
-                                <div className="chef-hat-glow">
-                                    <span className="chef-emoji" role="img" aria-label="chef">👨‍🍳</span>
-                                </div>
-                                <div className="integration-ring ring-1"></div>
-                                <div className="integration-ring ring-2"></div>
-                                <div className="integration-ring ring-3"></div>
-                                <div className="integration-particles">
-                                    <span></span><span></span><span></span><span></span>
-                                    <span></span><span></span><span></span><span></span>
-                                </div>
-                            </div>
-                            <h3 className="final-integration-popup__title">
-                                レシピの最終統合と監査を行っています
-                            </h3>
-                            <p className="final-integration-popup__description">
-                                複数の専門家AI（食品科学、安全性、本場比較）の所見をすり合わせ、矛盾のない黄金比率のレシピ構成へ統合・レビューを行っています。
-                            </p>
-                            <div className="final-integration-popup__status-label">
-                                現在のプロセス: <span className="highlight-step">{currentProgressStep?.label}</span> ({currentProgressStep?.provider})
-                            </div>
-                            <div className="final-integration-popup__warning">
-                                <span className="spin-loader"></span>
-                                <span>これには30秒〜60秒ほどかかります。画面を閉じずにお待ちください。</span>
-                            </div>
-                        </div>
-                    </Modal>
+                        config={aiProgressConfig}
+                        stepIndex={aiProgressStepIndex}
+                    />
                 )}
 
                 <div className="recipe-detail__content">
