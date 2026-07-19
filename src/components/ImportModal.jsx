@@ -29,10 +29,11 @@ export const ImportModal = ({ onClose, onImport, onImportBatch, initialMode = 'u
     const [importAsBreadPdf, setImportAsBreadPdf] = useState(false);
     const [importAsBread, setImportAsBread] = useState(false);
     // Image analysis engine preference. This is only a hint; the server may still fall back.
-    // - groq: Groq (Vision) first. If it fails and Azure OCR is configured, do OCR -> Groq (Text).
-    // - auto: best-effort. Groq -> (Azure OCR -> Groq) -> Gemini last.
+    // engine値は互換維持のため旧名のまま（groq系の名前でも Vision は OpenAI gpt-5.4-nano を使う）。
+    // - groq: OpenAI (Vision) first. If it fails and Azure OCR is configured, do OCR -> Groq (Text).
+    // - auto: best-effort. OpenAI Vision -> (Azure OCR -> Groq) -> Gemini last.
     // - gemini: Gemini only (better for handwriting, higher cost).
-    // - groq_vision: Groq (Vision) only (no OCR). Fast/cheap, but handwriting may be weaker.
+    // - groq_vision: OpenAI (Vision) only (no OCR). Fast/cheap, but handwriting may be weaker.
     const DEFAULT_IMAGE_ENGINE = 'groq';
     const [imageEngine, setImageEngine] = useState(() => {
         try {
@@ -1344,14 +1345,14 @@ export const ImportModal = ({ onClose, onImport, onImportBatch, initialMode = 'u
                                             onChange={(e) => setImageEngine(e.target.value)}
                                             disabled={isLoading || isImagePreparing}
                                         >
-                                            <option value="groq">Groq優先（おすすめ）</option>
-                                            <option value="auto">Best Effort（Groq→Azure OCR→Groq→Gemini）</option>
+                                            <option value="groq">標準（OpenAI Vision優先・おすすめ）</option>
+                                            <option value="auto">Best Effort（OpenAI Vision→Azure OCR→Groq→Gemini）</option>
                                             <option value="gemini">手書き（Gemini）</option>
-                                            <option value="groq_vision">Groqのみ（画像）</option>
+                                            <option value="groq_vision">Visionのみ（OpenAI）</option>
                                         </select>
                                     </label>
                                     <div className="image-engine-help">
-                                        基本はここで使うAIを選んでください。おすすめは「Groq優先」です。うまくいかない場合は「Best Effort」か「手書き（Gemini）」を試してください（Geminiは高コストになりやすいので必要な時だけ）。
+                                        基本はここで使うAIを選んでください。おすすめは「標準」です。うまくいかない場合は「Best Effort」か「手書き（Gemini）」を試してください（Geminiは高コストになりやすいので必要な時だけ）。
                                     </div>
                                 </div>
                                 <div className="image-target-panel">

@@ -38,11 +38,17 @@ const GEMINI_RATES_JPY_PER_1M = {
 }
 
 const GROQ_RATES_JPY_PER_1M = {
+    'openai/gpt-oss-120b': { input: 22.5, output: 90 },
+    'openai/gpt-oss-20b': { input: 11.25, output: 45 },
+    // 以下は廃止済みモデル（過去ログの表示互換のため残す）
     'meta-llama/llama-4-scout-17b-16e-instruct': { input: 16.5, output: 51 },
-    'llama-3.3-70b-versatile': { input: 16.5, output: 51 },
+    'llama-3.3-70b-versatile': { input: 88.5, output: 118.5 },
 }
 
 const OPENAI_RATES_JPY_PER_1M = {
+    'gpt-5.4-mini': { input: 112.5, output: 675 },
+    'gpt-5.4-nano': { input: 30, output: 187.5 },
+    // 以下は廃止予定モデル（過去ログの表示互換のため残す）
     'o4-mini': { input: 165, output: 660 },
     'gpt-4.1-mini': { input: 60, output: 240 },
 }
@@ -92,6 +98,8 @@ const buildGeminiBillingBreakdown = ({ modelName, inputTokens, outputTokens, est
 const normalizeGroqModelNameForCost = (modelName) => {
     const normalized = String(modelName || '').trim().toLowerCase()
     if (!normalized) return 'unknown'
+    if (normalized.includes('gpt-oss-120b')) return 'openai/gpt-oss-120b'
+    if (normalized.includes('gpt-oss-20b')) return 'openai/gpt-oss-20b'
     if (normalized.includes('llama-4-scout-17b-16e-instruct')) return 'meta-llama/llama-4-scout-17b-16e-instruct'
     if (normalized.includes('llama-3.3-70b-versatile')) return 'llama-3.3-70b-versatile'
     if (normalized.includes('groq/compound')) return 'groq/compound'
@@ -141,6 +149,8 @@ const buildGroqBillingBreakdown = ({ modelName, inputTokens, outputTokens, estim
 
 const normalizeOpenAiModelNameForCost = (modelName) => {
     const normalized = String(modelName || '').trim().toLowerCase()
+    if (normalized.includes('gpt-5.4-mini')) return 'gpt-5.4-mini'
+    if (normalized.includes('gpt-5.4-nano')) return 'gpt-5.4-nano'
     if (normalized.includes('o4-mini')) return 'o4-mini'
     if (normalized.includes('gpt-4.1-mini')) return 'gpt-4.1-mini'
     return normalized || 'unknown'

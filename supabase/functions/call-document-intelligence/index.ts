@@ -268,7 +268,8 @@ async function callAIForTextAnalysis(text: string, aiProvider: string, apiKey: s
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        // llama-4-scout は 2026-07-17 廃止。テキスト解析用途のため gpt-oss-120b へ移行。
+        model: 'openai/gpt-oss-120b',
         messages: [
           {
             role: 'user',
@@ -276,7 +277,7 @@ async function callAIForTextAnalysis(text: string, aiProvider: string, apiKey: s
           }
         ],
         temperature: 0.1,
-        max_tokens: 2000
+        max_completion_tokens: 2000
       })
     });
 

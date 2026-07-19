@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { encode } from "https://deno.land/std@0.168.0/encoding/base64.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { RateLimiter } from "../_shared/rate-limiter.ts";
-import { estimateGeminiCost, estimateGroqCost, getGeminiCostBreakdown, getGroqCostBreakdown } from "../_shared/api-logger.ts";
+import { estimateGeminiCost, estimateGroqCost, getGeminiCostBreakdown, getGroqCostBreakdown, getOpenAiCostBreakdown } from "../_shared/api-logger.ts";
 import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts";
 import { resolveGeminiModelCandidates } from "../_shared/gemini-model.ts";
 
@@ -481,30 +481,31 @@ async function analyzeImageWithAzure(file: File) {
 }
 
 // --------------------------------------------------------------------------
-// Groq (Vision): Image -> recipe JSON (no OCR dependency)
+// OpenAI (Vision): Image -> recipe JSON (no OCR dependency)
 // --------------------------------------------------------------------------
-async function analyzeImageWithGroqVision(file: File, supabaseClient: any, ctx: RequestLogContext) {
-    const apiKey = Deno.env.get('GROQ_API_KEY');
+// Groq の Vision モデル (llama-4-scout) が 2026-07-17 に廃止されたため、OpenAI gpt-5.4-nano へ移行。
+async function analyzeImageWithOpenAiVision(file: File, supabaseClient: any, ctx: RequestLogContext) {
+    const apiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('chatgpt') || Deno.env.get('CHATGPT_API_KEY');
     if (!apiKey) {
-        console.warn("Skipping Groq Vision: No GROQ_API_KEY found");
+        console.warn("Skipping OpenAI Vision: No OPENAI_API_KEY found");
         return null;
     }
 
-    const overrideModel = String(Deno.env.get('GROQ_VISION_MODEL') || '').trim();
-    const modelId = overrideModel || 'meta-llama/llama-4-scout-17b-16e-instruct';
+    const overrideModel = String(Deno.env.get('OPENAI_VISION_MODEL') || '').trim();
+    const modelId = overrideModel || 'gpt-5.4-nano';
 
     try {
-        // Groqのbase64画像は 4MB (base64文字列) 制限があるため、元画像は余裕を持って抑える。
-        const MAX_GROQ_IMAGE_BYTES = 3_000_000;
-        if (file.size > MAX_GROQ_IMAGE_BYTES) {
-            return { error: `画像サイズが大きすぎるためGroq(Vision)をスキップします (${Math.round(file.size / 1_000_000)}MB)` };
+        // base64ペイロードが巨大になるとタイムアウトしやすいため、元画像は余裕を持って抑える。
+        const MAX_VISION_IMAGE_BYTES = 3_000_000;
+        if (file.size > MAX_VISION_IMAGE_BYTES) {
+            return { error: `画像サイズが大きすぎるためOpenAI(Vision)をスキップします (${Math.round(file.size / 1_000_000)}MB)` };
         }
 
         const arrayBuffer = await file.arrayBuffer();
         const base64Image = encode(arrayBuffer);
-        const MAX_GROQ_BASE64_CHARS = 4_000_000;
-        if (base64Image.length > MAX_GROQ_BASE64_CHARS) {
-            return { error: `画像が大きすぎるためGroq(Vision)をスキップします (base64=${Math.round(base64Image.length / 1_000_000)}MB)` };
+        const MAX_VISION_BASE64_CHARS = 4_000_000;
+        if (base64Image.length > MAX_VISION_BASE64_CHARS) {
+            return { error: `画像が大きすぎるためOpenAI(Vision)をスキップします (base64=${Math.round(base64Image.length / 1_000_000)}MB)` };
         }
         const mimeType = normalizeImageMimeType(file);
 
@@ -548,7 +549,8 @@ async function analyzeImageWithGroqVision(file: File, supabaseClient: any, ctx: 
 4. 画像から読み取れる情報のみを使用してください。存在しない情報を捏造しないでください。
 `;
 
-        const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+        const endpoint = 'https://api.openai.com/v1/chat/completions';
+        // gpt-5.4系は reasoningモデルのため temperature / top_p の指定は不可（デフォルトのみ）。
         const requestPayload = {
             model: modelId,
             messages: [
@@ -560,9 +562,8 @@ async function analyzeImageWithGroqVision(file: File, supabaseClient: any, ctx: 
                     ]
                 }
             ],
-            temperature: 0.1,
+            reasoning_effort: 'low',
             max_completion_tokens: 4000,
-            top_p: 1,
             response_format: { type: "json_object" },
         };
 
@@ -581,43 +582,43 @@ async function analyzeImageWithGroqVision(file: File, supabaseClient: any, ctx: 
 	            const errText = await response.text();
 	            if (supabaseClient) {
 	                logApiUsage(supabaseClient, {
-	                    apiName: 'groq',
+	                    apiName: 'openai',
 	                    endpoint: 'analyze-image',
 	                    modelName: modelId,
 	                    userId: ctx.userId,
 	                    userEmail: ctx.userEmail,
 	                    requestSizeBytes: file.size,
 	                    status: 'error',
-	                    errorMessage: `Groq(Vision) API Error: ${response.status} ${errText}`,
+	                    errorMessage: `OpenAI(Vision) API Error: ${response.status} ${errText}`,
 	                    durationMs,
 	                    metadata: { requestId: ctx.requestId, engine: ctx.engine, clientIp: ctx.clientIp },
 	                }).catch(console.error);
 	            }
-	            return { error: `Groq(Vision) API Error: ${response.status} ${errText}` };
+	            return { error: `OpenAI(Vision) API Error: ${response.status} ${errText}` };
 	        }
 
         const data = await response.json();
         const content = data?.choices?.[0]?.message?.content || '';
-        if (!content) return { error: 'Groq(Vision)の応答が空でした' };
+        if (!content) return { error: 'OpenAI(Vision)の応答が空でした' };
 
         try {
             const parsed = parseJsonFromLLM(content);
             const normalized = normalizeRecipeFromLLM(parsed);
             const { recipe, hasContent } = ensureRecipeTitle(normalized);
             if (!hasContent) {
-                return { error: 'Groq(Vision)のJSONにレシピ内容（材料・手順）がありませんでした', rawText: String(content).slice(0, 20_000) };
+                return { error: 'OpenAI(Vision)のJSONにレシピ内容（材料・手順）がありませんでした', rawText: String(content).slice(0, 20_000) };
             }
 
-            // Log success with Groq cost estimate
+            // Log success with OpenAI cost estimate
             try {
 	                const usage = data?.usage || {};
 	                const tokensIn = usage?.prompt_tokens || 0;
 	                const tokensOut = usage?.completion_tokens || 0;
-	                const billing = getGroqCostBreakdown(modelId, tokensIn, tokensOut);
-	                const estimatedCostJpy = estimateGroqCost(modelId, tokensIn, tokensOut);
+	                const billing = getOpenAiCostBreakdown(modelId, tokensIn, tokensOut);
+	                const estimatedCostJpy = billing.totalCostJpy;
 	                if (supabaseClient) {
 	                    logApiUsage(supabaseClient, {
-	                        apiName: 'groq',
+	                        apiName: 'openai',
 	                        endpoint: 'analyze-image',
 	                        modelName: modelId,
 	                        userId: ctx.userId,
@@ -657,7 +658,7 @@ async function analyzeImageWithGroqVision(file: File, supabaseClient: any, ctx: 
 	        } catch (e) {
 	            if (supabaseClient) {
 	                logApiUsage(supabaseClient, {
-	                    apiName: 'groq',
+	                    apiName: 'openai',
 	                    endpoint: 'analyze-image',
 	                    modelName: modelId,
 	                    userId: ctx.userId,
@@ -669,10 +670,10 @@ async function analyzeImageWithGroqVision(file: File, supabaseClient: any, ctx: 
 	                    metadata: { requestId: ctx.requestId, engine: ctx.engine, clientIp: ctx.clientIp, stage: 'parse_json' },
 	                }).catch(console.error);
 	            }
-	            return { error: `Groq(Vision)のJSON解析に失敗しました: ${e?.message || String(e)}`, rawText: String(content).slice(0, 20_000) };
+	            return { error: `OpenAI(Vision)のJSON解析に失敗しました: ${e?.message || String(e)}`, rawText: String(content).slice(0, 20_000) };
 	        }
     } catch (e) {
-        console.error("Groq(Vision) Analysis Failed:", e);
+        console.error("OpenAI(Vision) Analysis Failed:", e);
         return { error: e?.message || String(e) };
     }
 }
@@ -805,7 +806,7 @@ async function analyzeRecipeTextWithGroq(ocrText: string, supabaseClient: any, c
     const apiKey = Deno.env.get('GROQ_API_KEY');
     if (!apiKey) return { error: 'GROQ_API_KEY が設定されていません' };
 
-    const modelId = String(Deno.env.get('GROQ_RECIPE_MODEL') || '').trim() || 'llama-3.3-70b-versatile';
+    const modelId = String(Deno.env.get('GROQ_RECIPE_MODEL') || '').trim() || 'openai/gpt-oss-120b';
 
     // Guard: avoid sending extremely large OCR blobs (413 / token blowups).
     const MAX_OCR_CHARS = 20_000;
@@ -1053,7 +1054,7 @@ serve(async (req) => {
             return new Response(events, { headers: sseHeaders });
         };
 
-	        // Default to Groq-first to minimize Gemini usage/cost unless the client explicitly opts in.
+	        // Default to Vision-first to minimize Gemini usage/cost unless the client explicitly opts in. (engine値は旧名のまま互換維持)
 	        const engineRaw = String(formData.get('engine') || 'groq').trim().toLowerCase();
 	        const engine = (engineRaw === 'gemini' || engineRaw === 'groq' || engineRaw === 'groq_vision' || engineRaw === 'auto')
 	            ? engineRaw
@@ -1070,9 +1071,9 @@ serve(async (req) => {
 	        logs.push(`⚙️ 解析エンジン: ${engine === 'gemini'
 	            ? '手書き (Gemini)'
 	            : engine === 'groq'
-	                ? '印刷/スクショ (Groq)'
+	                ? '印刷/スクショ (OpenAI Vision)'
                 : engine === 'groq_vision'
-                    ? 'Groqのみ (画像)'
+                    ? '画像のみ (OpenAI Vision)'
                     : '自動'
             }`);
 
@@ -1126,15 +1127,11 @@ serve(async (req) => {
         }
 
         // --------------------------------------------------------------------------
-        // Engine: Groq preferred (best for printed/screenshot)
+        // Engine: OpenAI Vision preferred (best for printed/screenshot)
         // --------------------------------------------------------------------------
         if (engine === 'groq') {
+            const visionKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('chatgpt') || Deno.env.get('CHATGPT_API_KEY');
             const groqKey = Deno.env.get('GROQ_API_KEY');
-            if (!groqKey) {
-                const msg = 'GROQ_API_KEY が設定されていません';
-                logs.push(`⚠️ ${msg}`);
-                return sendError(`画像の解析に失敗しました: ${msg}`);
-            }
 
             const hasAzure = !!(
                 (Deno.env.get('AZURE_DI_KEY') || Deno.env.get('AZURE_DOCUMENT_INTELLIGENCE_KEY')) &&
@@ -1143,18 +1140,22 @@ serve(async (req) => {
             let visionReason: string | null = null;
             let azureReason: string | null = null;
 
-            logs.push('🤖 Groq(Vision) で解析中...');
-            const groqVisionResult = await analyzeImageWithGroqVision(imageFile, supabaseClient, ctx);
-            if (groqVisionResult?.recipe?.title) {
-                logs.push('✅ Groq(Vision)による解析に成功しました！');
-                return sendResult(groqVisionResult.recipe, groqVisionResult.rawText || '', 'groq');
+            if (visionKey) {
+                logs.push('🤖 OpenAI(Vision) で解析中...');
+                const visionResult = await analyzeImageWithOpenAiVision(imageFile, supabaseClient, ctx);
+                if (visionResult?.recipe?.title) {
+                    logs.push('✅ OpenAI(Vision)による解析に成功しました！');
+                    return sendResult(visionResult.recipe, visionResult.rawText || '', 'openai');
+                }
+                visionReason = visionResult?.error || 'JSONの抽出に失敗';
+                logs.push(`⚠️ OpenAI(Vision)解析失敗: ${visionReason}`);
+            } else {
+                visionReason = 'OPENAI_API_KEY が設定されていません';
+                logs.push(`⚠️ ${visionReason}。Visionをスキップします。`);
             }
 
-            visionReason = groqVisionResult?.error || 'JSONの抽出に失敗';
-            logs.push(`⚠️ Groq(Vision)解析失敗: ${visionReason}`);
-
             // Fallback: Azure OCR -> Groq (Text)
-            if (hasAzure) {
+            if (hasAzure && groqKey) {
                 logs.push('📄 Azure OCRでテキスト抽出中...');
                 const azureResult = await analyzeImageWithAzure(imageFile);
                 const ocrText = String((azureResult as any)?.fullText || (azureResult as any)?.rawText || '').trim();
@@ -1176,7 +1177,7 @@ serve(async (req) => {
                     logs.push(`⚠️ ${azureReason}`);
                 }
             } else {
-                azureReason = 'Azure OCR未設定';
+                azureReason = !hasAzure ? 'Azure OCR未設定' : 'GROQ_API_KEY が設定されていません';
             }
 
             const reasons = [visionReason, azureReason].filter(Boolean).join(' / ');
@@ -1184,53 +1185,54 @@ serve(async (req) => {
         }
 
         // --------------------------------------------------------------------------
-        // Engine: Groq vision only (no OCR)
+        // Engine: OpenAI Vision only (no OCR)
         // --------------------------------------------------------------------------
         if (engine === 'groq_vision') {
-            const groqKey = Deno.env.get('GROQ_API_KEY');
-            if (!groqKey) {
-                const msg = 'GROQ_API_KEY が設定されていません';
+            const visionKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('chatgpt') || Deno.env.get('CHATGPT_API_KEY');
+            if (!visionKey) {
+                const msg = 'OPENAI_API_KEY が設定されていません';
                 logs.push(`⚠️ ${msg}`);
                 return sendError(`画像の解析に失敗しました: ${msg}`);
             }
 
-            logs.push('🤖 Groq(Vision) で解析中...');
-            const groqVisionResult = await analyzeImageWithGroqVision(imageFile, supabaseClient, ctx);
-            if (groqVisionResult?.recipe?.title) {
-                logs.push('✅ Groq(Vision)による解析に成功しました！');
-                return sendResult(groqVisionResult.recipe, groqVisionResult.rawText || '', 'groq');
+            logs.push('🤖 OpenAI(Vision) で解析中...');
+            const visionResult = await analyzeImageWithOpenAiVision(imageFile, supabaseClient, ctx);
+            if (visionResult?.recipe?.title) {
+                logs.push('✅ OpenAI(Vision)による解析に成功しました！');
+                return sendResult(visionResult.recipe, visionResult.rawText || '', 'openai');
             }
 
-            const visionReason = groqVisionResult?.error || 'JSONの抽出に失敗';
-            logs.push(`⚠️ Groq(Vision)解析失敗: ${visionReason}`);
+            const visionReason = visionResult?.error || 'JSONの抽出に失敗';
+            logs.push(`⚠️ OpenAI(Vision)解析失敗: ${visionReason}`);
             return sendError(`画像の解析に失敗しました: ${visionReason}`);
         }
 
         // --------------------------------------------------------------------------
-        // Engine: Auto (Groq preferred -> Azure OCR -> OCR→Groq -> Gemini last)
+        // Engine: Auto (OpenAI Vision preferred -> Azure OCR -> OCR→Groq -> Gemini last)
         // --------------------------------------------------------------------------
         const geminiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY') || Deno.env.get('VISION_API_KEY');
         const groqKey = Deno.env.get('GROQ_API_KEY');
+        const visionKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('chatgpt') || Deno.env.get('CHATGPT_API_KEY');
         const hasAzure = !!(
             (Deno.env.get('AZURE_DI_KEY') || Deno.env.get('AZURE_DOCUMENT_INTELLIGENCE_KEY')) &&
             (Deno.env.get('AZURE_DI_ENDPOINT') || Deno.env.get('AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT'))
         );
 
-        // 1) Groq(Vision) first (cheap, good for printed)
-        let groqVisionFailureReason: string | null = null;
-        if (groqKey) {
-            logs.push('🤖 Groq(Vision) で解析中...');
-            const groqVisionResult = await analyzeImageWithGroqVision(imageFile, supabaseClient, ctx);
-            if (groqVisionResult?.recipe?.title) {
-                logs.push('✅ Groq(Vision)による解析に成功しました！');
-                return sendResult(groqVisionResult.recipe, groqVisionResult.rawText || '', 'groq');
+        // 1) OpenAI(Vision) first (cheap, good for printed)
+        let visionFailureReason: string | null = null;
+        if (visionKey) {
+            logs.push('🤖 OpenAI(Vision) で解析中...');
+            const visionResult = await analyzeImageWithOpenAiVision(imageFile, supabaseClient, ctx);
+            if (visionResult?.recipe?.title) {
+                logs.push('✅ OpenAI(Vision)による解析に成功しました！');
+                return sendResult(visionResult.recipe, visionResult.rawText || '', 'openai');
             }
-            const reason = groqVisionResult?.error || 'JSONの抽出に失敗';
-            groqVisionFailureReason = reason;
-            logs.push(`⚠️ Groq(Vision)解析失敗: ${reason}`);
+            const reason = visionResult?.error || 'JSONの抽出に失敗';
+            visionFailureReason = reason;
+            logs.push(`⚠️ OpenAI(Vision)解析失敗: ${reason}`);
         } else {
-            groqVisionFailureReason = 'GROQ_API_KEY が設定されていません';
-            logs.push('⚠️ GROQ_API_KEY が見つかりません。Groqをスキップします。');
+            visionFailureReason = 'OPENAI_API_KEY が設定されていません';
+            logs.push('⚠️ OPENAI_API_KEY が見つかりません。Visionをスキップします。');
         }
 
         // 2) Azure OCR (+ OCR -> Groq) fallback
@@ -1311,7 +1313,7 @@ serve(async (req) => {
             logs.push('⚠️ Gemini API Keyが見つかりません。Geminiをスキップします。');
         }
 
-        const reasons = [groqVisionFailureReason, groqTextFailureReason, azureFailureReason, geminiFailureReason].filter(Boolean).join(' / ');
+        const reasons = [visionFailureReason, groqTextFailureReason, azureFailureReason, geminiFailureReason].filter(Boolean).join(' / ');
         return sendError(`画像の解析に失敗しました: ${reasons}`);
     } catch (error) {
         console.error(error);

@@ -29,7 +29,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const DEFAULT_MODEL = "llama-3.3-70b-versatile"; // 最新の70bモデル
+const DEFAULT_MODEL = "openai/gpt-oss-120b"; // llama-3.3-70b-versatile は 2026-08-16 廃止のため移行
 
 function buildMessagesFromPayload(payload: RequestPayload): ChatMessage[] {
   if (payload.messages && payload.messages.length > 0) {

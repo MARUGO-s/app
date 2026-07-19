@@ -207,7 +207,7 @@ export function estimateGeminiCost(
 
 /**
  * Groq APIのコスト推定（1Mトークンあたり円、USD×150で概算）
- * llama-4-scout 等: input $0.11/1M, output $0.34/1M
+ * gpt-oss-120b: input $0.15/1M, output $0.60/1M
  */
 export function estimateGroqCost(
     modelName: string,
@@ -226,14 +226,19 @@ const USD_TO_JPY = 150
 export type GroqRate = TokenRate
 
 const GROQ_RATES_JPY_PER_1M: Record<string, GroqRate> = {
-    // 2026-03 時点の概算（USD -> JPY 換算の内部運用値）
+    // 2026-07 時点の概算（USD -> JPY 換算の内部運用値）
+    'openai/gpt-oss-120b': { input: 22.5, output: 90 },
+    'openai/gpt-oss-20b': { input: 11.25, output: 45 },
+    // 以下は廃止済みモデル（過去ログの表示互換のため残す）
     'meta-llama/llama-4-scout-17b-16e-instruct': { input: 16.5, output: 51 },
-    'llama-3.3-70b-versatile': { input: 16.5, output: 51 },
+    'llama-3.3-70b-versatile': { input: 88.5, output: 118.5 },
 }
 
 function normalizeGroqModelName(modelName: string): string {
     const normalized = String(modelName || '').trim().toLowerCase()
     if (!normalized) return 'unknown'
+    if (normalized.includes('gpt-oss-120b')) return 'openai/gpt-oss-120b'
+    if (normalized.includes('gpt-oss-20b')) return 'openai/gpt-oss-20b'
     if (normalized.includes('llama-4-scout-17b-16e-instruct')) return 'meta-llama/llama-4-scout-17b-16e-instruct'
     if (normalized.includes('llama-3.3-70b-versatile')) return 'llama-3.3-70b-versatile'
     if (normalized.includes('groq/compound')) return 'groq/compound'
@@ -289,12 +294,17 @@ export function getGroqCostBreakdown(
 }
 
 const OPENAI_RATES_USD_PER_1M: Record<string, TokenRate> = {
+    'gpt-5.4-mini': { input: 0.75, output: 4.50 },
+    'gpt-5.4-nano': { input: 0.20, output: 1.25 },
+    // 以下は廃止予定モデル（過去ログの表示互換のため残す）
     'o4-mini': { input: 1.10, output: 4.40 },
     'gpt-4.1-mini': { input: 0.40, output: 1.60 },
 }
 
 function normalizeOpenAiModelName(modelName: string): string {
     const normalized = String(modelName || '').trim().toLowerCase()
+    if (normalized.includes('gpt-5.4-mini')) return 'gpt-5.4-mini'
+    if (normalized.includes('gpt-5.4-nano')) return 'gpt-5.4-nano'
     if (normalized.includes('o4-mini')) return 'o4-mini'
     if (normalized.includes('gpt-4.1-mini')) return 'gpt-4.1-mini'
     return normalized || 'unknown'
