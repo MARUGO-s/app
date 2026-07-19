@@ -53,6 +53,67 @@ const escapeHtml = (value) => String(value ?? '')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 
+// 保存済みを含むAI分析レポートは別ウィンドウで開くため、モバイルでも必ず戻れる導線をHTMLへ追加する。
+const addReportReturnNavigation = (htmlContent) => {
+    const html = String(htmlContent || '');
+    if (!html || html.includes('data-report-return')) return html;
+
+    const navigationStyles = \`<style>
+        .report-return-nav { position: sticky; top: max(8px, env(safe-area-inset-top)); z-index: 1000; display: flex; justify-content: flex-start; margin: 0 0 12px; }
+        .report-return-button { display: inline-flex; align-items: center; gap: 7px; min-height: 42px; padding: 9px 14px; border: 1px solid #bfdbfe; border-radius: 999px; background: rgba(255, 255, 255, .96); box-shadow: 0 5px 16px rgba(15, 23, 42, .13); color: #1d4ed8; font: 700 14px -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; cursor: pointer; }
+        .report-return-button:active { transform: scale(.98); background: #eff6ff; }
+        @media (max-width: 640px) { .report-return-nav { margin-bottom: 14px; } .report-return-button { min-height: 46px; padding: 10px 16px; font-size: 15px; } }
+    </style>\`;
+    const navigationMarkup = \`<nav class="report-return-nav" aria-label="レポート操作"><button type="button" class="report-return-button" data-report-return>← 元の画面に戻る</button></nav>\`;
+    const navigationScript = \`<script>
+        (function () {
+            var button = document.querySelector('[data-report-return]');
+            var returnToRecipe = function () {
+                if (window.opener && !window.opener.closed) {
+                    window.close();
+                    window.setTimeout(function () { if (!window.closed) window.opener.focus(); }, 80);
+                    return;
+                }
+                if (window.history.length > 1) {
+                    window.history.back();
+                    return;
+                }
+                window.location.assign('/app/');
+            };
+            if (button) button.addEventListener('click', returnToRecipe);
+            window.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') returnToRecipe();
+            });
+            var startX = 0;
+            var startY = 0;
+            document.addEventListener('touchstart', function (event) {
+                var touch = event.touches && event.touches[0];
+                if (!touch) return;
+                startX = touch.clientX;
+                startY = touch.clientY;
+            }, { passive: true });
+            document.addEventListener('touchend', function (event) {
+                var touch = event.changedTouches && event.changedTouches[0];
+                if (!touch || startX > 36) return;
+                var deltaX = touch.clientX - startX;
+                var deltaY = Math.abs(touch.clientY - startY);
+                if (deltaX > 76 && deltaY < 60) returnToRecipe();
+            }, { passive: true });
+        }());
+    <\/script>\`;
+
+    const withStyles = /<\\/head>/i.test(html)
+        ? html.replace(/<\\/head>/i, \`\${navigationStyles}</head>\`)
+        : \`\${navigationStyles}\${html}\`;
+    const withNavigation = /<body[^>]*>/i.test(withStyles)
+        ? withStyles.replace(/<body[^>]*>/i, (bodyTag) => \`\${bodyTag}\${navigationMarkup}\`)
+        : \`\${navigationMarkup}\${withStyles}\`;
+
+    return /<\\/body>/i.test(withNavigation)
+        ? withNavigation.replace(/<\\/body>/i, \`\${navigationScript}</body>\`)
+        : \`\${withNavigation}\${navigationScript}\`;
+};
+
 const buildRestoredAiAnalysisHtml = ({ recipe, memory }) => {
     const proposal = memory?.proposalSnapshot || {};
     const title = \`\${recipe?.title || proposal?.title || memory?.title || 'レシピ'} - AI分析・開発レポート\`;
@@ -1597,7 +1658,7 @@ export const RecipeDetail = ({
     const handlePreviewHtmlExport = (exportRecord) => {
         const previewWindow = window.open();
         if (previewWindow) {
-            previewWindow.document.write(exportRecord.html_content);
+            previewWindow.document.write(addReportReturnNavigation(exportRecord.html_content));
             previewWindow.document.close();
         } else {
             toast.error('ポップアップがブロックされました。');
