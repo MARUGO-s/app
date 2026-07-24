@@ -1661,12 +1661,31 @@ export const RecipeDetail = ({
     };
 
     const handlePreviewHtmlExport = (exportRecord) => {
-        const previewWindow = window.open();
-        if (previewWindow) {
-            previewWindow.document.write(addReportReturnNavigation(exportRecord.html_content));
-            previewWindow.document.close();
+        const html = addReportReturnNavigation(exportRecord.html_content);
+
+        // まず Blob URL 方式で開く。iOS/iPadOS Safari では window.open()+document.write が
+        // 白紙になりやすいため、実体URLを直接開く方が確実。
+        let objectUrl = '';
+        try {
+            objectUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+            const previewWindow = window.open(objectUrl, '_blank');
+            if (previewWindow) {
+                // 開いた後にURLを解放（早すぎるとロード前に無効化されるため遅延）
+                window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+                return;
+            }
+        } catch (err) {
+            console.warn('[RecipeDetail] Blob preview failed, falling back to document.write:', err);
+        }
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+
+        // フォールバック: 従来の document.write 方式
+        const fallbackWindow = window.open();
+        if (fallbackWindow) {
+            fallbackWindow.document.write(html);
+            fallbackWindow.document.close();
         } else {
-            toast.error('ポップアップがブロックされました。');
+            toast.error('ポップアップがブロックされました。ブラウザのポップアップ許可設定をご確認ください。');
         }
     };
 
