@@ -1,0 +1,3 @@
+-- Historical no-op.
+-- Administrator bootstrap must be an explicit trusted service-role operation,
+-- never an email-address allowlist embedded in source control.

@@ -1,0 +1,5 @@
+-- Historical no-op.
+--
+-- Account deletion must be an explicit administrator action against a UUID.
+-- A migration must not identify or delete an account by a source-controlled
+-- email address or display name.

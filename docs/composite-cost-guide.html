@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>合成原価ガイド</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    :root {
+      --bg: #f7f2e7;
+      --paper: #fffdf8;
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --line: #e5d8bf;
+      --accent: #b7791f;
+      --accent-soft: #f7e7c6;
+      --green: #0f766e;
+      --green-soft: #dff6f2;
+      --blue: #1d4ed8;
+      --blue-soft: #dbeafe;
+      --red: #b91c1c;
+      --red-soft: #fee2e2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.5;
+    }
+    .page {
+      min-height: 268mm;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      padding: 14mm 14mm 12mm;
+      page-break-after: always;
+      position: relative;
+      overflow: hidden;
+    }
+    .page:last-child { page-break-after: auto; }
+    .cover {
+      background: linear-gradient(180deg, #fffaf0 0%, #fff6e9 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .eyebrow {
+      display: inline-block;
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 800;
+    }
+    h1 {
+      font-size: 34px;
+      line-height: 1.15;
+      margin: 10mm 0 4mm;
+      letter-spacing: -.02em;
+    }
+    h2 {
+      font-size: 21px;
+      margin: 0 0 5mm;
+      line-height: 1.25;
+    }
+    h3 {
+      font-size: 15px;
+      margin: 4mm 0 2mm;
+    }
+    p, li, td, th, div, span {
+      font-size: 11.4px;
+    }
+    .lede {
+      font-size: 16px;
+      color: #374151;
+      max-width: 150mm;
+    }
+    .muted { color: var(--muted); }
+    .small { font-size: 10px; color: var(--muted); }
+    .chapter {
+      color: var(--accent);
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-bottom: 2mm;
+    }
+    .footer {
+      position: absolute;
+      left: 14mm;
+      right: 14mm;
+      bottom: 8mm;
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 9.5px;
+      border-top: 1px solid var(--line);
+      padding-top: 2.5mm;
+    }
+    .toc li { margin: 1.4mm 0; }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4mm;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4mm;
+    }
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 3mm;
+    }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 4mm;
+      background: #fff;
+    }
+    .card.soft { background: #fffaf0; }
+    .card.accent { background: var(--accent-soft); border-color: #e9c986; }
+    .card.green { background: var(--green-soft); border-color: #99e0d6; }
+    .card.blue { background: var(--blue-soft); border-color: #9cc0ff; }
+    .card.red { background: var(--red-soft); border-color: #f3a8a8; }
+    .pill {
+      display: inline-block;
+      padding: 1mm 2.6mm;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fff;
+      margin-right: 1.6mm;
+      margin-bottom: 1.6mm;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .step {
+      display: grid;
+      grid-template-columns: 8mm 1fr;
+      gap: 3mm;
+      align-items: start;
+      margin-bottom: 2.6mm;
+    }
+    .step-no {
+      width: 8mm;
+      height: 8mm;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 10px;
+      margin-top: .2mm;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 2mm;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      padding: 2mm 1.6mm;
+      vertical-align: top;
+    }
+    th {
+      background: #fff8ec;
+      font-weight: 800;
+    }
+    .formula {
+      padding: 3mm 4mm;
+      border-left: 4px solid var(--accent);
+      background: #fff8ec;
+      font-weight: 700;
+      margin: 3mm 0;
+    }
+    .notice {
+      border: 1px solid #eed4a8;
+      border-radius: 10px;
+      background: #fff8ec;
+      padding: 3mm 4mm;
+      margin-top: 3mm;
+    }
+    .checklist li { margin: 2mm 0; }
+    .hero-box {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 6mm;
+      background: rgba(255,255,255,.72);
+    }
+  </style>
+</head>
+<body>
+  <section class="page cover">
+    <div>
+      <span class="eyebrow">Recipe Cost · Operations Guide</span>
+      <h1>合成原価機能 完全ガイド</h1>
+      <p class="lede">レシピを組み合わせて「一皿の本当の原価」を可視化する。惣菜パン、コース料理、アミューズ、セット販売まで対応。</p>
+      <div class="hero-box" style="margin-top: 12mm;">
+        <div class="grid-3">
+          <div class="card soft"><strong>対象</strong><br>厨房スタッフ / 新人シェフ / 店長 / 経営者</div>
+          <div class="card soft"><strong>対応内容</strong><br>保存、共有、版管理、比較、読み取り専用確認</div>
+          <div class="card soft"><strong>版</strong><br>2026年5月 改訂版</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="small">レシピ管理アプリ ユーザーガイド / Composite Cost Manual</p>
+    </div>
+    <div class="footer"><span>RECIPE APP · COMPOSITE COST</span><span>P.01</span></div>
+  </section>
+
+  <section class="page">
+    <div class="chapter">Contents</div>
+    <h2>目次</h2>
+    <ol class="toc">
+      <li>合成原価とは何か</li>
+      <li>どんな場面で使うのか</li>
+      <li>画面の入口とレイアウト</li>
+      <li>Step 1 — ベースレシピを選ぶ</li>
+      <li>Step 2 — 組み合わせを追加する</li>
+      <li>Step 3 — 使用量を入力する</li>
+      <li>計算ロジック（数式と税率）</li>
+      <li>販売価格・原価インパクト・使用量逆算</li>
+      <li>合成レシピを保存する</li>
+      <li>保存済み合成レシピの再利用・共有</li>
+      <li>バージョン確認・比較・復元</li>
+      <li>カテゴリ別原価との連携</li>
+      <li>実例：バゲットポテサラパン</li>
+      <li>経営活用：粗利率の読み方</li>
+      <li>運用チェックリスト</li>
+    </ol>
+    <div class="notice">
+      この改訂版では、<strong>原価インパクト分析</strong>、<strong>目標原価率からの使用量逆算</strong>、<strong>保存済み一覧の原価変動バッジ</strong>、<strong>版管理</strong> を追加で説明しています。
+    </div>
+    <div class="footer"><span>RECIPE APP · COMPOSITE COST</span><span>P.02</span></div>
+  </section>
+
+  <section class="page">
+    <div class="chapter">Chapter 1 · Concept</div>
+    <h2>1. 合成原価とは何か</h2>
+    <p>複数のレシピや仕入材料を組み合わせた一皿、1個、1セットの原価を、<strong>使用量ベース</strong>で即座に算出する機能です。</p>
+    <div class="grid-2">
+      <div class="card"><h3>従来の限界</h3><p>単体レシピの原価は分かっても、「パン生地80g + ポテサラ60g + 生ハム15g」のような複合商品の原価は毎回手計算が必要でした。</p></div>
+      <div class="card"><h3>合成原価で解決</h3><p>各レシピの税込総原価と総出来上がり量から 1g / 1ml あたり原価を出し、使用量を掛けて正味原価を算出します。</p></div>
+    </div>
+    <div class="formula">1g当たり単価 = 税込総原価 ÷ 総出来上がり量 / 使用原価 = 1g当たり単価 × 使用量</div>
+    <div class="notice"><strong>POINT</strong> 重量(g)と液量(ml)が混在する仕込みでも、内部で <strong>1ml ≒ 1g</strong> の概算を使用します。フランス料理のソース、パン生地、ムース類の概算用途では実務上かなり扱いやすい近似です。</div>
+    <div class="footer"><span>CHAPTER 1 · CONCEPT</span><span>P.03</span></div>
+  </section>
+
+  <section class="page">
+    <div class="chapter">Chapter 2 · Use Cases</div>
+    <h2>2. どんな場面で使うのか</h2>
+    <div class="grid-2">
+      <div class="card"><h3>惣菜パン・サンドイッチ</h3><p>バゲット生地 + ポテサラ + ハム + ピクルスのように、パン本体とフィリングを分けて管理している商品。</p></div>
+      <div class="card"><h3>コース料理 / アミューズ</h3><p>ソース、ガルニチュール、メイン、ムースなど複数仕込みを1皿で合算するケース。</p></div>
+      <div class="card"><h3>セット販売</h3><p>パン詰め合わせ、前菜盛り合わせ、コーヒーと焼菓子のセットなどの合計原価。</p></div>
+      <div class="card"><h3>新メニュー試作</h3><p>本登録前に「この組み合わせで原価率はいくらか」を即試算し、値付けの判断に使います。</p></div>
+    </div>
+    <div class="notice"><strong>実務上の価値</strong> 単体レシピの更新やカテゴリ原価の再設定が、そのまま合成原価に反映されるため、月初の価格改定や仕入変動確認が速くなります。</div>
+    <div class="footer"><span>CHAPTER 2 · USE CASES</span><span>P.04</span></div>
+  </section>
+
+  <section class="page">
+    <div class="chapter">Chapter 3 · Layout</div>
+    <h2>3. 画面の入口とレイアウト</h2>
+    <div class="step"><div class="step-no">1</div><div>トップメニューの <strong>🥪 合成原価</strong> から直接開く、またはレシピ詳細右上の <strong>🥪 合成原価</strong> ボタンから開きます。</div></div>
+    <div class="step"><div class="step-no">2</div><div>上部に <strong>レシピ検索</strong> があり、レシピ名 / カテゴリ / コース / 店舗で絞り込みできます。</div></div>
+    <div class="step"><div class="step-no">3</div><div>候補はカード表示され、押すとベースまたは組み合わせとして追加されます。</div></div>
+    <div class="step"><div class="step-no">4</div><div>中央のシミュレーターで各行の使用量を入力し、下部で合成原価、売上、粗利益、原価率を確認します。</div></div>
+    <div class="step"><div class="step-no">5</div><div>右上の <strong>保存済み合成レシピ</strong> から、過去に保存した構成・共有状態・バージョン履歴を確認できます。</div></div>
+    <div class="grid-4" style="margin-top:4mm;">
+      <div class="card accent"><strong>検索</strong><br>候補カード表示</div>
+      <div class="card blue"><strong>追加</strong><br>レシピ / 材料</div>
+      <div class="card green"><strong>試算</strong><br>使用量入力</div>
+      <div class="card soft"><strong>保存</strong><br>共有 / 版管理</div>
+    </div>
+    <div class="footer"><span>CHAPTER 3 · LAYOUT</span><span>P.05</span></div>
+  </section>
+
+  <section class="page">
+    <div class="chapter">Chapter 4 · Step 1</div>
+    <h2>4. Step 1 — ベースレシピを選ぶ</h2>
+    <div class="step"><div class="step-no">1</div><div>検索欄に料理名、カテゴリ、コース、店舗の一部を入力します。</div></div>
+    <div class="step"><div class="step-no">2</div><div>表示された候補カードから、最初にベースにしたいレシピを押します。</div></div>
+    <div class="step"><div class="step-no">3</div><div>そのレシピが先頭行に入り、総出来上がり量と税込原価を基準に計算が始まります。</div></div>
+    <div class="step"><div class="step-no">4</div><div>後から別のカードを押すと、追加行として組み合わせに積み上がります。</div></div>
+    <div class="notice"><strong>NOTE</strong> ベース行も入れ替え・削除できます。固定ベース前提ではなく、構成を柔軟に変えられる設計です。</div>
+    <div class="footer"><span>CHAPTER 4 · STEP 1</span><span>P.06</span></div>
+  </section>
+
+  <section class="page">
+    <div class="chapter">Chapter 5 · Step 2</div>
+    <h2>5. Step 2 — 組み合わせを追加する</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>A. レシピを追加</h3>
+        <ul>
+          <li>シミュレーター内のレシピ検索に名前を入力</li>
+          <li>候補から選ぶと新しい行として追加</li>
+          <li>総量、使用量、使用原価が表示</li>
+          <li>同じレシピを複数行入れることも可能</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>B. 材料を直接追加</h3>
+        <ul>
+          <li>材料検索から仕入マスタを検索</li>
+          <li>税込単価 / 1kg, 1L, 1個 などを基準に行追加</li>
+          <li>g / kg / ml / cc / cl / L など使用単位を選択</li>
+          <li>調味料、酒類、包材、トッピングに向く</li>
+        </ul>
+      </div>
+    </div>
+    <div class="notice"><strong>TIP</strong> レシピ化していない単体素材も一緒に加算できるので、包装紙や酒類のような「一皿に乗るが仕込みレシピではない」要素も漏れません。</div>
+    <div class="footer"><span>CHAPTER 5 · STEP 2</span><span>P.07</span></div>
+  </section>
+
+  <section class="page">
+    <div class="chapter">Chapter 6 · Step 3</div>
+    <h2>6. Step 3 — 使用量を入力する</h2>
+    <table>
+      <thead>
+        <tr><th>行の種類</th><th>基準量</th><th>入力する単位</th><th>計算根拠</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>レシピ行</td><td>総出来上がり量（g または ml）</td><td>基準量と同じ単位</td><td>税込総原価 ÷ 総量 × 使用量</td></tr>
+        <tr><td>材料行（重量）</td><td>1kgあたり税込単価</td><td>g / kg</td><td>単価 × 使用量換算 × 税率</td></tr>
+        <tr><td>材料行（液量）</td><td>1Lあたり税込単価</td><td>ml / cc / cl / L</td><td>単価 × 使用量換算 × 税率</td></tr>
+        <tr><td>材料行（個数）</td><td>1個あたり税込単価</td><td>個 / 本 など</td><td>単価 × 使用量 × 税率</td></tr>
+      </tbody>
+    </table>
+    <div class="notice"><strong>運用のコツ</strong> 使用量は仕上がり後の実際に使う量で入れます。パン生地なら成形・焼成前後の運用ルールを店内で統一してください。</div>
+    <div class="footer"><span>CHAPTER 6 · STEP 3</span><span>P.08</span></div>
+  </section>
+
+  <section class="page">
+    <div class="chapter">Chapter 7 · Logic</div>
+    <h2>7. 計算ロジック（数式と税率）</h2>
+    <h3>各行の使用原価</h3>
+    <div class="formula">レシピ行: 使用原価 = 総原価(税込) ÷ 総出来上がり量 × 使用量</div>
+    <div class="formula">材料行: 使用原価 = 単価(税抜) × 使用量(基準単位換算) × 税率</div>
+    <h3>合成原価合計</h3>
+    <div class="formula">合成原価合計（税込） = Σ(各行の使用原価)</div>
+    <h3>税率の自動判定</h3>
+    <table>
+      <thead><tr><th>カテゴリ</th><th>税率</th></tr></thead>
+      <tbody>
+        <tr><td>食材一般</td><td>8%</td></tr>
+        <tr><td>酒類（alcohol）</td><td>10%</td></tr>
+        <tr><td>備品・包材（supplies）</td><td>10%</td></tr>
+      </tbody>
+    </table>
+    <div class="notice"><strong>NOTE</strong> レシピ側の税込総原価には、カテゴリ別原価の再設定値があればそれが優先されます。未設定カテゴリは元データ計算値をそのまま使います。</div>
+    <div class="footer"><span>CHAPTER 7 · LOGIC</span><span>P.09</span></div>
+  </section>
+
+  <section class="page">
+    <div class="chapter">Chapter 8 · Profit</div>
+    <h2>8. 販売価格・原価インパクト・使用量逆算</h2>
+    <p>合成原価合計の下に、販売価格と販売数を入力するパネルがあります。</p>
+    <div class="grid-4">
+      <div class="card"><strong>1個あたり原価</strong><br>合成原価合計（税込）</div>
+      <div class="card"><strong>予想売上</strong><br>販売価格 × 販売数</div>
+      <div class="card"><strong>粗利益</strong><br>予想売上 − 原価合計</div>
+      <div class="card"><strong>合成原価率</strong><br>1個あたり原価 ÷ 販売価格</div>
+    </div>
+    <h3>原価インパクト分析</h3>
+    <p>合成原価合計の下に、使用原価が高い順の分析リストが表示されます。各行にはレシピ/材料名、使用量、使用原価、合成原価に占める割合、割合バーが出ます。</p>
+    <div class="notice"><strong>改善の見方</strong> 上位に出る行ほど、使用量変更・材料差し替え・カテゴリ別原価の見直しによる効果が大きくなります。</div>
+    <h3>目標原価率から使用量を逆算</h3>
+    <p>販売価格と目標原価率を入力し、逆算したいレシピ行または材料行を選ぶと、対象行以外の原価を固定したまま、目標内に収まる上限使用量を確認できます。</p>
+    <div class="grid-2" style="margin-top:4mm;">
+      <div class="card soft"><h3>表示される値</h3><ul><li>許容原価</li><li>対象外の原価</li><li>対象行に使える原価</li><li>上限使用量</li><li>現在との差</li></ul></div>
+      <div class="card soft"><h3>反映操作</h3><p><strong>この使用量を反映</strong> を押すと、逆算された上限使用量が対象行の使用量欄に入ります。</p></div>
+    </div>
+    <div class="notice"><strong>仕様の重要点</strong> 原価率は 1個ベースで計算されるため、販売数を変えても原価率自体は変わりません。変わるのは粗利の絶対額だけです。対象行を0にしても他の行だけで目標原価率を超える場合は、売価や構成自体を見直してください。</div>
+    <div class="footer"><span>CHAPTER 8 · PROFIT</span><span>P.10</span></div>
+  </section>
+
+  <section class="page">
+    <div class="chapter">Chapter 9 · Save</div>
+    <h2>9. 合成レシピを保存する</h2>
+    <p>シミュレーター上部に料理名を入力し、保存すると構成全体をあとで再利用できます。</p>
+    <div class="step"><div class="step-no">1</div><div>料理名を入力する（例: バゲットポテサラパン、夏のアミューズ3種）</div></div>
+    <div class="step"><div class="step-no">2</div><div>必要なら共有状態と共有権限を設定する</div></div>
+    <div class="step"><div class="step-no">3</div><div>「この組み合わせを保存」または更新系ボタンを押す</div></div>
+    <div class="grid-2" style="margin-top:4mm;">
+      <div class="card soft"><h3>保存される主な情報</h3><ul><li>料理名</li><li>ベースレシピID</li><li>各行のレシピ / 材料 / 使用量 / 使用単位</li><li>販売価格・販売数</li><li>原価・粗利・原価率のスナップショット</li></ul></div>
+      <div class="card soft"><h3>命名のおすすめ</h3><ul><li>料理ジャンル + 主材料</li><li>季節やコース番号を末尾に入れる</li><li>試作用は「(試作)」を付ける</li></ul></div>
+    </div>
+    <div class="footer"><span>CHAPTER 9 · SAVE</span><span>P.11</span></div>
+  </section>
+
+  <section class="page">
+    <div class="chapter">Chapter 10 · Library</div>
+    <h2>10. 保存済み合成レシピの再利用・共有</h2>
+    <p>保存済み合成レシピ一覧では、料理名、合成原価、原価変動、更新日時、共有状態、版番号を確認できます。</p>
+    <div class="grid-2">
+      <div class="card">
+        <h3>一覧で見えるもの</h3>
+        <ul>
+          <li>料理名</li>
+          <li>合成原価（税込）</li>
+          <li>原価変動（保存時との差額・変動率）</li>
+          <li>更新日時</li>
+          <li>共有 ON / OFF</li>
+          <li>共有権限（閲覧のみ / 複製保存可 / 直接編集可）</li>
+          <li>現在の版番号（v1, v2, v3 ...）</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>共有権限の意味</h3>
+        <ul>
+          <li><strong>閲覧のみ</strong>: 中身確認のみ</li>
+          <li><strong>複製保存可</strong>: 元レシピは変えず、自分の別保存として編集</li>
+          <li><strong>直接編集可</strong>: 共有元をそのまま更新可能</li>
+        </ul>
+      </div>
+    </div>
+    <h3>原価変動バッジ</h3>
+    <p>保存時の合成原価と、現在の材料単価・カテゴリ別原価で再計算した原価との差をカード上で確認できます。</p>
+    <div class="grid-2" style="margin-top:4mm;">
+      <div class="card soft"><h3>主な表示</h3><ul><li><strong>差分なし</strong>: 保存時とほぼ同じ</li><li><strong>+¥ / +%</strong>: 現在原価が上昇</li><li><strong>-¥ / -%</strong>: 現在原価が低下</li></ul></div>
+      <div class="card soft"><h3>確認が必要な表示</h3><ul><li><strong>確認中</strong>: 再計算中</li><li><strong>取得不可</strong>: 再計算に失敗</li><li><strong>一部取得不可</strong>: 参照レシピの一部を読み込めない</li></ul></div>
+    </div>
+    <div class="notice"><strong>削除について</strong> 一覧の削除は保存データそのものを消します。削除後の復元はできません。</div>
+    <div class="footer"><span>CHAPTER 10 · LIBRARY</span><span>P.12</span></div>
+  </section>
+
+  <section class="page">
+    <div class="chapter">Chapter 11 · Versioning</div>
+    <h2>11. バージョン確認・比較・復元</h2>
+    <p>保存済み合成レシピ編集ページでは、各保存内容が <strong>版 (v1 / v2 / v3 ...)</strong> として管理されます。復元前に内容確認できるのがこの版管理の重要点です。</p>
+    <div class="grid-2">
+      <div class="card blue">
+        <h3>復元前にできること</h3>
+        <ul>
+          <li>版を選んで保存日時を確認</li>
+          <li>その版の料理名、ベースレシピ、合成原価、共有状態を見る</li>
+          <li>組み合わせ内容一覧を確認する</li>
+          <li>現在編集中の内容と差分比較する</li>
+        </ul>
+      </div>
+      <div class="card green">
+        <h3>読み取り専用表示</h3>
+        <ul>
+          <li>「この版を読み取り専用で表示」で復元せずに開ける</li>
+          <li>保存されていた使用量・構成をそのまま確認できる</li>
+          <li>戻したくない場合でも、中身を事前チェックできる</li>
+        </ul>
+      </div>
+    </div>
+    <div class="step" style="margin-top:4mm;"><div class="step-no">1</div><div>保存済み合成レシピ一覧から <strong>編集を開く</strong> を押す</div></div>
+    <div class="step"><div class="step-no">2</div><div><strong>現在の版: vN</strong> を確認し、プルダウンで比較したい版を選ぶ</div></div>
+    <div class="step"><div class="step-no">3</div><div>下の比較カードで、料理名 / ベースレシピ / ベース使用量 / 販売価格 / 販売数 / 合成原価 / 共有 / 共有権限 / 項目数 を確認する</div></div>
+    <div class="step"><div class="step-no">4</div><div>問題なければ <strong>この版を復元</strong>、確認だけなら <strong>この版を読み取り専用で表示</strong> を使う</div></div>
+    <div class="notice"><strong>重要</strong> 復元前に差分確認できるので、「どの版へ戻すか分からない」状態でも安全に判断できます。</div>
+    <div class="footer"><span>CHAPTER 11 · VERSIONING</span><span>P.13</span></div>
+  </section>
+
+  <section class="page">
+    <div class="chapter">Chapter 12 · Category Override</div>
+    <h2>12. カテゴリ別原価との連携</h2>
+    <p>レシピ詳細でカテゴリ（ソース、生地、ガルニ、ムースなど）ごとの原価を確認し、必要に応じて再設定できます。その再設定値は合成原価にも反映されます。</p>
+    <div class="step"><div class="step-no">1</div><div>レシピ詳細でカテゴリ見出しの <strong>集計を見る</strong> を開く</div></div>
+    <div class="step"><div class="step-no">2</div><div>カテゴリ単位の原価、総重量、総液量、原価率を確認する</div></div>
+    <div class="step"><div class="step-no">3</div><div>必要ならカテゴリ再設定原価を保存する</div></div>
+    <div class="step"><div class="step-no">4</div><div>合成原価ページでは、そのカテゴリ再設定値を優先して原価に反映する</div></div>
+    <div class="grid-2" style="margin-top:4mm;">
+      <div class="card"><h3>未設定カテゴリ</h3><p>元データの計算原価をそのまま使用</p></div>
+      <div class="card"><h3>再設定済みカテゴリ</h3><p>再設定原価を優先して、レシピ単位の税込総原価へ反映</p></div>
+    </div>
+    <div class="footer"><span>CHAPTER 12 · CATEGORY OVERRIDE</span><span>P.14</span></div>
+  </section>
+
+  <section class="page">
+    <div class="chapter">Chapter 13 · Example</div>
+    <h2>13. 実例 — バゲットポテサラパン</h2>
+    <table>
+      <thead><tr><th>項目</th><th>種別</th><th>総量 / 単価基準</th><th>使用量</th><th>使用原価(税込)</th></tr></thead>
+      <tbody>
+        <tr><td>バゲット生地</td><td>レシピ</td><td>1,800g / 総原価 ¥1,440</td><td>80g</td><td>¥64.00</td></tr>
+        <tr><td>ポテサラ（自家製）</td><td>レシピ</td><td>2,400g / 総原価 ¥2,160</td><td>60g</td><td>¥54.00</td></tr>
+        <tr><td>マスタードソース</td><td>レシピ</td><td>500g / 総原価 ¥1,200</td><td>5g</td><td>¥12.00</td></tr>
+        <tr><td>生ハム</td><td>材料</td><td>¥6,480 / 1kg</td><td>15g</td><td>¥97.20</td></tr>
+      </tbody>
+    </table>
+    <div class="formula">合成原価合計（税込） = ¥227.20 / 販売価格 ¥520 / 原価率 43.7%</div>
+    <div class="notice">例えば生ハムを 12g に減らす、ポテサラを 55g に見直す、ソースカテゴリ原価を再設定する、といった調整をその場で比較できます。</div>
+    <div class="footer"><span>CHAPTER 13 · EXAMPLE</span><span>P.15</span></div>
+  </section>
+
+  <section class="page">
+    <div class="chapter">Chapter 14 · Management</div>
+    <h2>14. 経営活用 — 粗利率の読み方</h2>
+    <table>
+      <thead><tr><th>業態</th><th>目安原価率</th><th>合成原価機能の使い方</th></tr></thead>
+      <tbody>
+        <tr><td>ベーカリー</td><td>28〜35%</td><td>パン + 具材の実態把握</td></tr>
+        <tr><td>ビストロ</td><td>30〜38%</td><td>ソース + メイン + 付け合わせ</td></tr>
+        <tr><td>テイクアウト惣菜</td><td>35〜42%</td><td>容器・包材も材料行で加算</td></tr>
+        <tr><td>カフェ</td><td>25〜32%</td><td>ドリンク + 菓子の組み合わせ</td></tr>
+      </tbody>
+    </table>
+    <div class="grid-2" style="margin-top:4mm;">
+      <div class="card"><strong>50%超</strong><br>値上げ / 量目見直し / 差し替えを即検討</div>
+      <div class="card"><strong>40〜50%</strong><br>看板商品なら許容、サイドなら見直し候補</div>
+      <div class="card"><strong>30〜40%</strong><br>標準ゾーン</div>
+      <div class="card"><strong>30%未満</strong><br>価値訴求・品質とのバランス確認</div>
+    </div>
+    <div class="notice"><strong>運用提案</strong> 月初には保存済み合成レシピ一覧を見直し、版比較を使って前月との差分や価格改定影響を確認すると効率的です。</div>
+    <div class="footer"><span>CHAPTER 14 · MANAGEMENT</span><span>P.16</span></div>
+  </section>
+
+  <section class="page">
+    <div class="chapter">Chapter 15 · Checklist</div>
+    <h2>15. 運用チェックリスト</h2>
+    <div class="grid-2">
+      <div class="card soft">
+        <h3>はじめる前の準備</h3>
+        <ul class="checklist">
+          <li>☑ 主要レシピに材料・分量・単位を登録した</li>
+          <li>☑ 仕入マスタに価格と容量を入力した</li>
+          <li>☑ 酒類・包材のカテゴリを正しく設定した</li>
+          <li>☑ 必要に応じてカテゴリ別原価を再設定した</li>
+        </ul>
+      </div>
+      <div class="card soft">
+        <h3>日々の運用</h3>
+        <ul class="checklist">
+          <li>☑ 新メニューは試作段階で合成原価を試算した</li>
+          <li>☑ 販売価格が目安原価率に収まるか確認した</li>
+          <li>☑ 名前を付けて保存し、再現性を担保した</li>
+          <li>☑ 共有時は権限を適切に設定した</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card accent" style="margin-top:4mm;">
+      <h3>版管理の確認ポイント</h3>
+      <ul class="checklist">
+        <li>☑ 更新前に現在の版番号を確認した</li>
+        <li>☑ 過去版を戻す前に差分比較を見た</li>
+        <li>☑ 必要なら読み取り専用表示で中身を確認した</li>
+        <li>☑ 不要な試作データは削除して整理した</li>
+      </ul>
+    </div>
+    <div class="notice"><strong>本機能の本質</strong> 「仕込みの単価を一度作っておけば、組み合わせは何通りでも試算できる」。厨房と経営が同じ数字で判断するための共通言語です。</div>
+    <div class="footer"><span>CHAPTER 15 · CHECKLIST / FIN</span><span>P.17</span></div>
+  </section>
+</body>
+</html>

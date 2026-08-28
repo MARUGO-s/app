@@ -1,0 +1,423 @@
+import { createClient } from 'jsr:@supabase/supabase-js@2'
+
+/**
+ * API使用ログを記録するヘルパークラス
+ */
+export class APILogger {
+    private supabase: any
+    private startTime: number
+    private apiName: string
+    private endpoint: string
+    private userId: string | null
+    private userEmail: string | null
+    private modelName: string | null
+
+    constructor(
+        apiName: string,
+        endpoint: string,
+        modelName: string | null = null
+    ) {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+        this.supabase = createClient(supabaseUrl, supabaseServiceKey)
+        this.startTime = Date.now()
+        this.apiName = apiName
+        this.endpoint = endpoint
+        this.modelName = modelName
+        this.userId = null
+        this.userEmail = null
+    }
+
+    /**
+     * ユーザー情報を設定
+     */
+    setUser(userId: string | null, userEmail: string | null = null) {
+        this.userId = userId
+        this.userEmail = userEmail
+    }
+
+    /**
+     * モデル名を設定
+     */
+    setModel(modelName: string) {
+        this.modelName = modelName
+    }
+
+    /**
+     * 成功ログを記録
+     */
+    async logSuccess(options: {
+        requestSizeBytes?: number
+        responseSizeBytes?: number
+        inputTokens?: number
+        outputTokens?: number
+        estimatedCostJpy?: number
+        metadata?: any
+    } = {}) {
+        const durationMs = Date.now() - this.startTime
+
+        try {
+            const { error } = await this.supabase
+                .from('api_usage_logs')
+                .insert({
+                    api_name: this.apiName,
+                    endpoint: this.endpoint,
+                    model_name: this.modelName,
+                    user_id: this.userId,
+                    user_email: this.userEmail,
+                    request_size_bytes: options.requestSizeBytes,
+                    response_size_bytes: options.responseSizeBytes,
+                    input_tokens: options.inputTokens,
+                    output_tokens: options.outputTokens,
+                    status: 'success',
+                    duration_ms: durationMs,
+                    estimated_cost_jpy: options.estimatedCostJpy,
+                    metadata: options.metadata
+                })
+            if (error) {
+                console.error('Failed to log API usage (insert error):', error)
+            }
+        } catch (error) {
+            console.error('Failed to log API usage:', error)
+        }
+    }
+
+    /**
+     * エラーログを記録
+     */
+    async logError(errorMessage: string, metadata?: any) {
+        const durationMs = Date.now() - this.startTime
+
+        try {
+            const { error } = await this.supabase
+                .from('api_usage_logs')
+                .insert({
+                    api_name: this.apiName,
+                    endpoint: this.endpoint,
+                    model_name: this.modelName,
+                    user_id: this.userId,
+                    user_email: this.userEmail,
+                    status: 'error',
+                    error_message: errorMessage,
+                    duration_ms: durationMs,
+                    metadata
+                })
+            if (error) {
+                console.error('Failed to log API error (insert error):', error)
+            }
+        } catch (error) {
+            console.error('Failed to log API error:', error)
+        }
+    }
+
+    /**
+     * レート制限エラーを記録
+     */
+    async logRateLimit(metadata?: any) {
+        const durationMs = Date.now() - this.startTime
+
+        try {
+            const { error } = await this.supabase
+                .from('api_usage_logs')
+                .insert({
+                    api_name: this.apiName,
+                    endpoint: this.endpoint,
+                    model_name: this.modelName,
+                    user_id: this.userId,
+                    user_email: this.userEmail,
+                    status: 'rate_limited',
+                    duration_ms: durationMs,
+                    metadata
+                })
+            if (error) {
+                console.error('Failed to log rate limit (insert error):', error)
+            }
+        } catch (error) {
+            console.error('Failed to log rate limit:', error)
+        }
+    }
+}
+
+/**
+ * Gemini APIのコスト推定
+ */
+export type GeminiRate = { input: number; output: number }
+
+const GEMINI_RATES_JPY_PER_1M: Record<string, GeminiRate> = {
+    // 料金（1Mトークンあたりの円、2026年3月時点の概算）
+    'gemini-3.1-flash-lite': { input: 37.5, output: 225 }, // $0.25 / $1.50 @ 150JPY
+    'gemini-3-flash': { input: 75, output: 450 }, // $0.50 / $3.00 @ 150JPY
+    'gemini-2.5-flash-lite': { input: 2, output: 6 },
+    'gemini-1.5-flash': { input: 5, output: 15 },
+    'gemini-2.0-flash': { input: 10, output: 30 },
+    'gemini-2.5-pro': { input: 150, output: 400 },
+    'gemini-pro': { input: 75, output: 200 },
+}
+
+function normalizeGeminiModelName(modelName: string): string {
+    const normalized = String(modelName || '').trim().toLowerCase()
+    if (!normalized) return 'gemini-3.1-flash-lite'
+    if (normalized.includes('3.1-flash-lite')) return 'gemini-3.1-flash-lite'
+    if (normalized.includes('3-flash')) return 'gemini-3-flash'
+    if (normalized.includes('flash-lite')) return 'gemini-2.5-flash-lite'
+    if (normalized.includes('2.5-pro') || normalized.includes('pro')) return 'gemini-2.5-pro'
+    if (normalized.includes('2.0-flash')) return 'gemini-2.0-flash'
+    if (normalized.includes('1.5-flash') || normalized.includes('flash')) return 'gemini-1.5-flash'
+    return 'gemini-3.1-flash-lite'
+}
+
+export function getGeminiRatePerMillion(modelName: string): GeminiRate {
+    const key = normalizeGeminiModelName(modelName)
+    return GEMINI_RATES_JPY_PER_1M[key] || GEMINI_RATES_JPY_PER_1M['gemini-3.1-flash-lite']
+}
+
+export function getGeminiCostBreakdown(
+    modelName: string,
+    inputTokens: number,
+    outputTokens: number
+) {
+    const safeInputTokens = Number.isFinite(Number(inputTokens)) ? Math.max(0, Number(inputTokens)) : 0
+    const safeOutputTokens = Number.isFinite(Number(outputTokens)) ? Math.max(0, Number(outputTokens)) : 0
+    const normalizedModel = normalizeGeminiModelName(modelName)
+    const rate = getGeminiRatePerMillion(normalizedModel)
+
+    const inputCostRaw = (safeInputTokens / 1_000_000) * rate.input
+    const outputCostRaw = (safeOutputTokens / 1_000_000) * rate.output
+    const totalCostRaw = inputCostRaw + outputCostRaw
+
+    return {
+        normalizedModel,
+        ratePer1M: rate,
+        inputTokens: safeInputTokens,
+        outputTokens: safeOutputTokens,
+        inputCostJpy: Math.round(inputCostRaw * 10000) / 10000,
+        outputCostJpy: Math.round(outputCostRaw * 10000) / 10000,
+        totalCostJpy: Math.round(totalCostRaw * 1_000_000) / 1_000_000,
+    }
+}
+
+export function estimateGeminiCost(
+    modelName: string,
+    inputTokens: number,
+    outputTokens: number
+): number {
+    return getGeminiCostBreakdown(modelName, inputTokens, outputTokens).totalCostJpy
+}
+
+/**
+ * Groq APIのコスト推定（1Mトークンあたり円、USD×150で概算）
+ * gpt-oss-120b: input $0.15/1M, output $0.60/1M
+ */
+export function estimateGroqCost(
+    modelName: string,
+    inputTokens: number,
+    outputTokens: number
+): number {
+    return getGroqCostBreakdown(modelName, inputTokens, outputTokens).totalCostJpy
+}
+
+export type TokenRate = { input: number; output: number }
+
+// API料金の円換算用レート。実際の請求額は各社のUSD請求額を基準にする。
+// 管理画面では、この固定換算レートを含む内訳をログごとに保存して表示する。
+const USD_TO_JPY = 150
+
+export type GroqRate = TokenRate
+
+const GROQ_RATES_JPY_PER_1M: Record<string, GroqRate> = {
+    // 2026-07 時点の概算（USD -> JPY 換算の内部運用値）
+    'openai/gpt-oss-120b': { input: 22.5, output: 90 },
+    'openai/gpt-oss-20b': { input: 11.25, output: 45 },
+    // 以下は廃止済みモデル（過去ログの表示互換のため残す）
+    'meta-llama/llama-4-scout-17b-16e-instruct': { input: 16.5, output: 51 },
+    'llama-3.3-70b-versatile': { input: 88.5, output: 118.5 },
+}
+
+function normalizeGroqModelName(modelName: string): string {
+    const normalized = String(modelName || '').trim().toLowerCase()
+    if (!normalized) return 'unknown'
+    if (normalized.includes('gpt-oss-120b')) return 'openai/gpt-oss-120b'
+    if (normalized.includes('gpt-oss-20b')) return 'openai/gpt-oss-20b'
+    if (normalized.includes('llama-4-scout-17b-16e-instruct')) return 'meta-llama/llama-4-scout-17b-16e-instruct'
+    if (normalized.includes('llama-3.3-70b-versatile')) return 'llama-3.3-70b-versatile'
+    if (normalized.includes('groq/compound')) return 'groq/compound'
+    return normalized
+}
+
+export function getGroqRatePerMillion(modelName: string): GroqRate | null {
+    const key = normalizeGroqModelName(modelName)
+    return GROQ_RATES_JPY_PER_1M[key] || null
+}
+
+export function getGroqCostBreakdown(
+    modelName: string,
+    inputTokens: number,
+    outputTokens: number,
+) {
+    const safeInputTokens = Number.isFinite(Number(inputTokens)) ? Math.max(0, Number(inputTokens)) : 0
+    const safeOutputTokens = Number.isFinite(Number(outputTokens)) ? Math.max(0, Number(outputTokens)) : 0
+    const normalizedModel = normalizeGroqModelName(modelName)
+    const rate = getGroqRatePerMillion(normalizedModel)
+
+    if (!rate) {
+        return {
+            normalizedModel,
+            knownPricing: false,
+            pricingNote: normalizedModel === 'groq/compound'
+                ? 'Groq Compoundは公開単価がないため、推定コスト合計から除外'
+                : 'モデルの公開単価が未登録のため、推定コスト合計から除外',
+            ratePer1M: null,
+            inputTokens: safeInputTokens,
+            outputTokens: safeOutputTokens,
+            inputCostJpy: 0,
+            outputCostJpy: 0,
+            totalCostJpy: 0,
+        }
+    }
+
+    const inputCostRaw = (safeInputTokens / 1_000_000) * rate.input
+    const outputCostRaw = (safeOutputTokens / 1_000_000) * rate.output
+    const totalCostRaw = inputCostRaw + outputCostRaw
+
+    return {
+        normalizedModel,
+        knownPricing: true,
+        pricingNote: null,
+        ratePer1M: rate,
+        inputTokens: safeInputTokens,
+        outputTokens: safeOutputTokens,
+        inputCostJpy: Math.round(inputCostRaw * 10000) / 10000,
+        outputCostJpy: Math.round(outputCostRaw * 10000) / 10000,
+        totalCostJpy: Math.round(totalCostRaw * 1_000_000) / 1_000_000,
+    }
+}
+
+const OPENAI_RATES_USD_PER_1M: Record<string, TokenRate> = {
+    'gpt-5.4-mini': { input: 0.75, output: 4.50 },
+    'gpt-5.4-nano': { input: 0.20, output: 1.25 },
+    // 以下は廃止予定モデル（過去ログの表示互換のため残す）
+    'o4-mini': { input: 1.10, output: 4.40 },
+    'gpt-4.1-mini': { input: 0.40, output: 1.60 },
+}
+
+function normalizeOpenAiModelName(modelName: string): string {
+    const normalized = String(modelName || '').trim().toLowerCase()
+    if (normalized.includes('gpt-5.4-mini')) return 'gpt-5.4-mini'
+    if (normalized.includes('gpt-5.4-nano')) return 'gpt-5.4-nano'
+    if (normalized.includes('o4-mini')) return 'o4-mini'
+    if (normalized.includes('gpt-4.1-mini')) return 'gpt-4.1-mini'
+    return normalized || 'unknown'
+}
+
+export function getOpenAiCostBreakdown(
+    modelName: string,
+    inputTokens: number,
+    outputTokens: number,
+    webSearchCalls = 0,
+) {
+    const safeInputTokens = Number.isFinite(Number(inputTokens)) ? Math.max(0, Number(inputTokens)) : 0
+    const safeOutputTokens = Number.isFinite(Number(outputTokens)) ? Math.max(0, Number(outputTokens)) : 0
+    const safeWebSearchCalls = Number.isFinite(Number(webSearchCalls)) ? Math.max(0, Math.round(Number(webSearchCalls))) : 0
+    const normalizedModel = normalizeOpenAiModelName(modelName)
+    const usdRate = OPENAI_RATES_USD_PER_1M[normalizedModel]
+
+    if (!usdRate) {
+        return {
+            normalizedModel,
+            knownPricing: false,
+            pricingNote: 'モデルの公開単価が未登録のため、推定コスト合計から除外',
+            ratePer1M: null,
+            inputTokens: safeInputTokens,
+            outputTokens: safeOutputTokens,
+            inputCostJpy: 0,
+            outputCostJpy: 0,
+            webSearchCalls: safeWebSearchCalls,
+            webSearchCostJpy: 0,
+            totalCostJpy: 0,
+            usdToJpy: USD_TO_JPY,
+        }
+    }
+
+    const ratePer1M = { input: usdRate.input * USD_TO_JPY, output: usdRate.output * USD_TO_JPY }
+    const inputCostJpy = (safeInputTokens / 1_000_000) * ratePer1M.input
+    const outputCostJpy = (safeOutputTokens / 1_000_000) * ratePer1M.output
+    // OpenAI Web Search: $10 / 1,000 calls = $0.01 / call
+    const webSearchCostJpy = safeWebSearchCalls * 0.01 * USD_TO_JPY
+
+    return {
+        normalizedModel,
+        knownPricing: true,
+        pricingNote: null,
+        ratePer1M,
+        inputTokens: safeInputTokens,
+        outputTokens: safeOutputTokens,
+        inputCostJpy: Math.round(inputCostJpy * 10000) / 10000,
+        outputCostJpy: Math.round(outputCostJpy * 10000) / 10000,
+        webSearchCalls: safeWebSearchCalls,
+        webSearchCostJpy: Math.round(webSearchCostJpy * 10000) / 10000,
+        totalCostJpy: Math.round((inputCostJpy + outputCostJpy + webSearchCostJpy) * 1_000_000) / 1_000_000,
+        usdToJpy: USD_TO_JPY,
+    }
+}
+
+const PERPLEXITY_RATES_USD_PER_1M: Record<string, TokenRate> = {
+    sonar: { input: 1, output: 1 },
+}
+
+function normalizePerplexityModelName(modelName: string): string {
+    const normalized = String(modelName || '').trim().toLowerCase()
+    if (normalized === 'sonar' || normalized.startsWith('sonar-')) return 'sonar'
+    return normalized || 'unknown'
+}
+
+export function getPerplexityCostBreakdown(
+    modelName: string,
+    inputTokens: number,
+    outputTokens: number,
+    searchContextSize = 'low',
+) {
+    const safeInputTokens = Number.isFinite(Number(inputTokens)) ? Math.max(0, Number(inputTokens)) : 0
+    const safeOutputTokens = Number.isFinite(Number(outputTokens)) ? Math.max(0, Number(outputTokens)) : 0
+    const normalizedModel = normalizePerplexityModelName(modelName)
+    const usdRate = PERPLEXITY_RATES_USD_PER_1M[normalizedModel]
+
+    if (!usdRate) {
+        return {
+            normalizedModel,
+            knownPricing: false,
+            pricingNote: 'モデルの公開単価が未登録のため、推定コスト合計から除外',
+            ratePer1M: null,
+            inputTokens: safeInputTokens,
+            outputTokens: safeOutputTokens,
+            inputCostJpy: 0,
+            outputCostJpy: 0,
+            requestFeeJpy: 0,
+            searchContextSize,
+            totalCostJpy: 0,
+            usdToJpy: USD_TO_JPY,
+        }
+    }
+
+    const ratePer1M = { input: usdRate.input * USD_TO_JPY, output: usdRate.output * USD_TO_JPY }
+    const inputCostJpy = (safeInputTokens / 1_000_000) * ratePer1M.input
+    const outputCostJpy = (safeOutputTokens / 1_000_000) * ratePer1M.output
+    // Sonar Low context（デフォルト）: $5 / 1,000 request = $0.005 / request
+    const requestFeeUsd = searchContextSize === 'high' ? 0.012 : searchContextSize === 'medium' ? 0.008 : 0.005
+    const requestFeeJpy = requestFeeUsd * USD_TO_JPY
+
+    return {
+        normalizedModel,
+        knownPricing: true,
+        pricingNote: null,
+        ratePer1M,
+        inputTokens: safeInputTokens,
+        outputTokens: safeOutputTokens,
+        inputCostJpy: Math.round(inputCostJpy * 10000) / 10000,
+        outputCostJpy: Math.round(outputCostJpy * 10000) / 10000,
+        requestFeeJpy: Math.round(requestFeeJpy * 10000) / 10000,
+        searchContextSize,
+        totalCostJpy: Math.round((inputCostJpy + outputCostJpy + requestFeeJpy) * 1_000_000) / 1_000_000,
+        usdToJpy: USD_TO_JPY,
+    }
+}

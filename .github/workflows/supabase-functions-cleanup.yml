@@ -1,0 +1,45 @@
+name: Delete Retired Supabase Edge Functions
+
+on:
+  workflow_dispatch:
+
+jobs:
+  delete-retired:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Validate required secrets
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          test -n "${SUPABASE_ACCESS_TOKEN}" || (echo "Missing secret: SUPABASE_ACCESS_TOKEN" && exit 1)
+          test -n "${SUPABASE_PROJECT_REF}" || (echo "Missing secret: SUPABASE_PROJECT_REF" && exit 1)
+
+      - name: Delete retired diagnostic functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          for function_name in db_tester debug-env get-api-keys; do
+            supabase functions delete "${function_name}" \
+              --project-ref "${SUPABASE_PROJECT_REF}" \
+              --yes
+          done
+
+      - name: Install dependencies
+        run: npm install @supabase/supabase-js
+
+      - name: Record deployment to Supabase
+        continue-on-error: true
+        run: node scripts/record_deploy.js backend deploy "廃止Edge Function (db_tester/debug-env/get-api-keys) を削除" "${{ github.actor }}"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

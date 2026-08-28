@@ -1,0 +1,5 @@
+-- Historical no-op.
+--
+-- Profiles must be created by the Auth trigger with role='user'. Initial
+-- administrators are promoted explicitly through a trusted service-role
+-- operation; source-controlled UUID/email allowlists must never grant roles.

@@ -1,0 +1,24 @@
+node_modules/
+dist/
+dist-ssr/
+.DS_Store
+.env
+.env.local
+supabase/functions/.env
+.vscode/
+.idea/
+supabase/.temp/
+supabase/functions/*/deno.lock
+supabase/functions/*/.npmrc
+recipe.pdf
+bread_recipe.html
+
+# Local sample artifacts (not committed)
+samples/*
+!samples/README.md
+
+# One-off debug outputs
+curl_output*.txt
+verify_price_service.txt
+status.txt
+debug_serve.log

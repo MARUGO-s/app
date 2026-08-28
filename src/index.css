@@ -1,0 +1,412 @@
+:root {
+  /* Professional Business Palette (Light Mode) */
+  --color-bg-base: 240 5% 96%;
+  /* Light Gray Background */
+  --color-bg-surface: 0 0% 100%;
+  /* White for panels/cards */
+  --color-bg-hover: 0 0% 96%;
+
+  /* Orange Theme for Buttons/Actions */
+  --color-primary: 25 95% 55%;
+  /* Vibrant Orange */
+  --color-primary-hover: 25 100% 45%;
+  /* Darker Orange for hover */
+  --color-secondary: 220 10% 90%;
+  /* Light Gray for secondary actions */
+  --color-accent: 210 100% 50%;
+  /* Subtle Blue for links/highlights */
+  --color-danger: 354 70% 54%;
+  /* Red */
+
+  /* Dark Mode Text Colors */
+  --color-text-main: 0 0% 95%;
+  /* Near White */
+  --color-text-muted: 0 0% 70%;
+  /* Light Gray */
+
+  --color-border: 0 0% 30%;
+  /* Dark Gray Border */
+  --color-border-dark: 0 0% 40%;
+
+  /* Typography */
+  --font-family-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-family-header: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Spacing - Compact Business */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+
+  /* Radius - Minimal */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* Shadows - Minimal/Flat */
+  --shadow-sm: none;
+  /* Flat design often eschews shadows */
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.05);
+  /* Very subtle for floating elements */
+
+  /* Transitions */
+  --transition-fast: 0.1s ease;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family-main);
+  background-color: #353535;
+  color: hsl(0, 0%, 95%);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-family-header);
+  font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: var(--space-md);
+  color: hsl(var(--color-text-main));
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Utility layout */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--space-md);
+}
+
+@media (min-width: 1201px) {
+  .container {
+    max-width: 1600px;
+  }
+}
+
+/* Remove glassmorphism, replace with solid border utility */
+.glass-panel {
+  background: hsl(var(--color-bg-base));
+  border: 1px solid hsl(var(--color-border-dark));
+}
+
+.text-gradient {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: hsl(var(--color-text-main));
+}
+
+/* Scrollbar - Standard */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--color-bg-surface));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--color-border));
+  border-radius: var(--radius-full);
+}
+
+
+/* Print Utilities */
+@media print {
+  .screen-only {
+    display: none !important;
+  }
+}
+
+@media screen {
+  .print-only {
+    display: none !important;
+  }
+}
+
+/* Final Integration Popup Styling */
+.final-integration-popup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--space-lg) var(--space-md);
+  color: #1e293b;
+}
+
+.final-integration-popup__animation {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-xl);
+}
+
+/* 中央のシェフ絵文字とグロー効果 */
+.chef-hat-glow {
+  position: relative;
+  z-index: 10;
+  width: 80px;
+  height: 80px;
+  background: radial-gradient(circle, rgba(255,140,0,0.2) 0%, rgba(255,140,0,0) 70%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+.chef-emoji {
+  font-size: 3.5rem;
+  filter: drop-shadow(0 0 10px rgba(255, 140, 0, 0.6));
+}
+
+/* 統合をイメージした回転リング */
+.integration-ring {
+  position: absolute;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  animation: rotate-ring 6s linear infinite;
+}
+
+.integration-ring.ring-1 {
+  width: 110px;
+  height: 110px;
+  border-top-color: hsl(var(--color-primary));
+  border-bottom-color: rgba(255, 140, 0, 0.2);
+  animation-duration: 3s;
+}
+
+.integration-ring.ring-2 {
+  width: 130px;
+  height: 130px;
+  border-left-color: hsl(var(--color-accent));
+  border-right-color: rgba(0, 191, 255, 0.2);
+  animation-duration: 4.5s;
+  animation-direction: reverse;
+}
+
+.integration-ring.ring-3 {
+  width: 90px;
+  height: 90px;
+  border-top-color: #39ff14; /* 鮮やかなグリーン */
+  border-bottom-color: rgba(57, 255, 20, 0.2);
+  animation-duration: 2s;
+}
+
+/* 収束するパーティクル効果 */
+.integration-particles {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.integration-particles span {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background-color: hsl(var(--color-primary));
+  border-radius: 50%;
+  box-shadow: 0 0 8px hsl(var(--color-primary));
+}
+
+/* 各パーティクルの初期配置とアニメーション */
+.integration-particles span:nth-child(1) { top: 10%; left: 50%; animation: particle-in-1 2s infinite ease-in-out; }
+.integration-particles span:nth-child(2) { top: 50%; left: 90%; animation: particle-in-2 2s infinite ease-in-out; animation-delay: 0.2s; }
+.integration-particles span:nth-child(3) { top: 90%; left: 50%; animation: particle-in-3 2s infinite ease-in-out; animation-delay: 0.4s; }
+.integration-particles span:nth-child(4) { top: 50%; left: 10%; animation: particle-in-4 2s infinite ease-in-out; animation-delay: 0.6s; }
+.integration-particles span:nth-child(5) { top: 20%; left: 80%; animation: particle-in-5 2s infinite ease-in-out; animation-delay: 0.8s; }
+.integration-particles span:nth-child(6) { top: 80%; left: 80%; animation: particle-in-6 2s infinite ease-in-out; animation-delay: 1.0s; }
+.integration-particles span:nth-child(7) { top: 80%; left: 20%; animation: particle-in-7 2s infinite ease-in-out; animation-delay: 1.2s; }
+.integration-particles span:nth-child(8) { top: 20%; left: 20%; animation: particle-in-8 2s infinite ease-in-out; animation-delay: 1.4s; }
+
+.final-integration-popup__title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: var(--space-md);
+  color: #0f172a;
+}
+
+.final-integration-popup__description {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #475569;
+  margin-bottom: var(--space-lg);
+  max-width: 400px;
+}
+
+.final-integration-popup__status-label {
+  font-size: 0.85rem;
+  color: #334155;
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-lg);
+}
+
+.highlight-step {
+  color: hsl(var(--color-primary));
+  font-weight: bold;
+}
+
+.final-integration-popup__warning {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 0.8rem;
+  color: #b45309;
+  background-color: rgba(245, 158, 11, 0.08);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  border: 1px dashed rgba(245, 158, 11, 0.3);
+}
+
+.spin-loader {
+  width: 14px;
+  height: 14px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* Animations */
+@keyframes pulse-glow {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.08); opacity: 1; }
+}
+
+@keyframes rotate-ring {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 各パーティクルの収束アニメーション定義（中央へ向かって飛んで消える） */
+@keyframes particle-in-1 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(0, 40px) scale(0.2); opacity: 0; } }
+@keyframes particle-in-2 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(-40px, 0) scale(0.2); opacity: 0; } }
+@keyframes particle-in-3 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(0, -40px) scale(0.2); opacity: 0; } }
+@keyframes particle-in-4 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(40px, 0) scale(0.2); opacity: 0; } }
+@keyframes particle-in-5 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(-30px, 30px) scale(0.2); opacity: 0; } }
+@keyframes particle-in-6 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(-30px, -30px) scale(0.2); opacity: 0; } }
+@keyframes particle-in-7 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(30px, -30px) scale(0.2); opacity: 0; } }
+@keyframes particle-in-8 { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(30px, 30px) scale(0.2); opacity: 0; } }
+
+/* AI Progress Providers Status Badges */
+.recipe-ai-progress__providers-status {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  justify-content: space-between;
+  background: #f8fafc;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+}
+
+.provider-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  flex: 1;
+  min-width: 130px;
+  justify-content: center;
+  user-select: none;
+}
+
+.provider-status-badge__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+/* Perplexity Active State */
+.provider-status-badge--perplexity.is-active {
+  background: rgba(45, 212, 191, 0.08);
+  border-color: rgba(45, 212, 191, 0.35);
+  color: #2dd4bf;
+  box-shadow: 0 0 10px rgba(45, 212, 191, 0.15);
+}
+.provider-status-badge--perplexity.is-active .provider-status-badge__dot {
+  background: #2dd4bf;
+  animation: provider-pulse-perplexity 1.4s infinite alternate;
+}
+
+/* Groq Active State */
+.provider-status-badge--groq.is-active {
+  background: rgba(251, 146, 60, 0.08);
+  border-color: rgba(251, 146, 60, 0.35);
+  color: #fb923c;
+  box-shadow: 0 0 10px rgba(251, 146, 60, 0.15);
+}
+.provider-status-badge--groq.is-active .provider-status-badge__dot {
+  background: #fb923c;
+  animation: provider-pulse-groq 1.4s infinite alternate;
+}
+
+/* OpenAI Active State */
+.provider-status-badge--openai.is-active {
+  background: rgba(167, 139, 250, 0.08);
+  border-color: rgba(167, 139, 250, 0.35);
+  color: #a78bfa;
+  box-shadow: 0 0 10px rgba(167, 139, 250, 0.15);
+}
+.provider-status-badge--openai.is-active .provider-status-badge__dot {
+  background: #a78bfa;
+  animation: provider-pulse-openai 1.4s infinite alternate;
+}
+
+@keyframes provider-pulse-perplexity {
+  0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.7); }
+  100% { transform: scale(1.35); box-shadow: 0 0 0 6px rgba(45, 212, 191, 0); }
+}
+@keyframes provider-pulse-groq {
+  0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(251, 146, 60, 0.7); }
+  100% { transform: scale(1.35); box-shadow: 0 0 0 6px rgba(251, 146, 60, 0); }
+}
+@keyframes provider-pulse-openai {
+  0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.7); }
+  100% { transform: scale(1.35); box-shadow: 0 0 0 6px rgba(167, 139, 250, 0); }
+}

@@ -1,0 +1,5 @@
+-- Intentionally empty.
+--
+-- Never commit production Auth rows, password hashes, sessions, refresh tokens,
+-- one-time tokens, or customer data to a local-development seed file.
+-- Create local test accounts through Supabase Auth when fixtures are needed.

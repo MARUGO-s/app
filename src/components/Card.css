@@ -1,0 +1,15 @@
+.glass-card {
+    background: hsl(var(--color-bg-base));
+    border: 1px solid hsl(var(--color-border));
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    box-shadow: none;
+    transition: border-color var(--transition-fast);
+}
+
+.glass-card--hoverable:hover {
+    border-color: hsl(var(--color-primary));
+    transform: none;
+    /* No movement for professional feel */
+    box-shadow: none;
+}
