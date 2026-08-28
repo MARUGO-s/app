@@ -101,6 +101,7 @@
 - 旧 `app_users` は本番で0行だったため、password／秘密の質問データの残存がないことを確認した。
 - 履歴監査では、現Recipe-Managementプロジェクトのservice-role keyやsecret keyの固定値は検出されなかった。無関係な本番キー交換による停止を避け、露出が確認された認証データを直接失効した。
 - 秘密情報検査0件の現在ツリーを新しいGit履歴の起点とし、公開mainを置換した。旧履歴へ到達する非main branchも削除した。
+- GitHub内部のpull request参照4件、cached view、server-side objectの削除をSupport ticket `#4706662` で申請した。GitHub側の処理完了まではticketを継続監視する。
 
 ## 運用上の残件
 
