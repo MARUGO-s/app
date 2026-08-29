@@ -124,25 +124,6 @@ export const LoginPage = () => {
                     </p>
                 </div>
 
-                {isLoginMode && !isResetMode && (
-                    <div
-                        role="note"
-                        style={{
-                            backgroundColor: '#fff8e1',
-                            color: '#6d4c00',
-                            border: '1px solid #f0d58a',
-                            padding: '10px 12px',
-                            borderRadius: '6px',
-                            marginBottom: '1rem',
-                            fontSize: '0.9rem',
-                            lineHeight: 1.5
-                        }}
-                    >
-                        セキュリティ保護のため、以前のパスワードを一度クリアしています。<br />
-                        「パスワードを忘れた場合」から、再度パスワードを設定してください。
-                    </div>
-                )}
-
                 {error && (
                     <div style={{ backgroundColor: '#ffebee', color: '#c62828', padding: '10px', borderRadius: '4px', marginBottom: '1rem', fontSize: '0.9rem' }}>
                         {error}
