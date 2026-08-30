@@ -479,12 +479,13 @@ export const DataManagement = ({ onBack }) => {
         setIsUploading(false);
     };
 
-    const handleDeleteFile = (fileName) => {
+    const handleDeleteFile = (file) => {
+        const fileName = file?.name || '';
         setConfirmModal({
             message: `「${fileName}」を本当に削除しますか？\nこの操作は取り消せません。`,
             onConfirm: async () => {
                 setIsUploading(true);
-                const result = await purchasePriceService.deletePriceFile(fileName);
+                const result = await purchasePriceService.deletePriceFile(fileName, null, file?.storageName);
                 setIsUploading(false);
 
                 if (result.success) {
@@ -1398,12 +1399,12 @@ export const DataManagement = ({ onBack }) => {
                             ) : (
                                 <div className="file-list">
                                     {uploadedFiles.map(f => (
-                                        <div key={f.name} className="file-list-item">
+                                        <div key={f.storageName || f.name} className="file-list-item">
                                             <span className="file-name" title={f.name}>{f.name}</span>
                                             <Button
                                                 variant="danger"
                                                 size="sm"
-                                                onClick={() => handleDeleteFile(f.name)}
+                                                onClick={() => handleDeleteFile(f)}
                                                 disabled={isUploading}
                                                 style={{ padding: '2px 8px', fontSize: '0.75rem', minWidth: 'auto' }}
                                             >

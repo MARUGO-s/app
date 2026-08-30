@@ -2,6 +2,54 @@ import { supabase } from '../supabase.js';
 import { normalizeIngredientKey } from '../utils/normalizeIngredientKey.js';
 
 const BUCKET_NAME = 'app-data';
+const ENCODED_PRICE_FILE_PREFIX = 'pricecsv--';
+
+const isStorageSafeFileName = (name) => /^[A-Za-z0-9._-]+$/.test(name);
+
+const bytesToBase64Url = (bytes) => {
+    let binary = '';
+    bytes.forEach((byte) => {
+        binary += String.fromCharCode(byte);
+    });
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+};
+
+const base64UrlToText = (value) => {
+    const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((value.length + 3) % 4);
+    const binary = atob(padded);
+    return new TextDecoder('utf-8', { fatal: true }).decode(
+        Uint8Array.from(binary, (char) => char.charCodeAt(0))
+    );
+};
+
+// Supabase Storage rejects some combining Unicode characters in object keys.
+// Keep ordinary ASCII names readable, and encode all other names reversibly.
+const toStorageFileName = (name) => {
+    const normalized = String(name || '').normalize('NFC');
+    if (isStorageSafeFileName(normalized)) return normalized;
+
+    const extension = normalized.toLowerCase().endsWith('.csv') ? '.csv' : '';
+    return `${ENCODED_PRICE_FILE_PREFIX}${bytesToBase64Url(new TextEncoder().encode(normalized))}${extension}`;
+};
+
+const toDisplayFileName = (name) => {
+    const raw = String(name || '');
+    if (!raw.startsWith(ENCODED_PRICE_FILE_PREFIX) || !raw.toLowerCase().endsWith('.csv')) return raw;
+
+    try {
+        return base64UrlToText(raw.slice(ENCODED_PRICE_FILE_PREFIX.length, -4));
+    } catch {
+        return raw;
+    }
+};
+
+const decodeCsvBuffer = (buffer) => {
+    try {
+        return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+    } catch {
+        return new TextDecoder('shift-jis').decode(buffer);
+    }
+};
 // No fixed FILE_PATH anymore
 
 export const purchasePriceService = {
@@ -63,19 +111,11 @@ export const purchasePriceService = {
                 }
 
                 const buffer = await data.arrayBuffer();
-                // Some Android/WebView environments don't support Shift-JIS in TextDecoder.
-                // Fallback to UTF-8 to avoid "Loading..." deadlocks on mobile.
                 try {
-                    const decoder = new TextDecoder('shift-jis');
-                    return { fileName: file.name, text: decoder.decode(buffer) };
+                    return { fileName: file.name, text: decodeCsvBuffer(buffer) };
                 } catch (e) {
-                    try {
-                        const decoder = new TextDecoder('utf-8');
-                        return { fileName: file.name, text: decoder.decode(buffer) };
-                    } catch {
-                        console.warn('TextDecoder failed (shift-jis/utf-8). Skipping file:', file.name, e);
-                        return null;
-                    }
+                    console.warn('TextDecoder failed (utf-8/shift-jis). Skipping file:', file.name, e);
+                    return null;
                 }
             });
 
@@ -139,7 +179,9 @@ export const purchasePriceService = {
                 .list(effectiveUserId);
 
             if (error) throw error;
-            return data.filter(f => String(f?.name || '').toLowerCase().endsWith('.csv')) || [];
+            return (data || [])
+                .filter(f => String(f?.name || '').toLowerCase().endsWith('.csv'))
+                .map((file) => ({ ...file, storageName: file.name, name: toDisplayFileName(file.name) }));
         } catch (err) {
             console.error('Error fetching file list:', err);
             return [];
@@ -154,8 +196,7 @@ export const purchasePriceService = {
         try {
             const effectiveUserId = userId || await this._getCurrentUserId();
             if (!effectiveUserId) throw new Error('ログインが必要です');
-            // Use original filename, ensuring it's a CSV
-            const fileName = file.name; // User wants to save multiples, so we trust reasonable unique names
+            const fileName = toStorageFileName(file.name);
 
             this.clearCache(effectiveUserId);
             const path = this._getUserScopedPath(effectiveUserId, fileName);
@@ -178,12 +219,12 @@ export const purchasePriceService = {
     /**
      * Deletes the CSV file from Supabase Storage.
      */
-    async deletePriceFile(fileName, userId = null) {
+    async deletePriceFile(fileName, userId = null, storageFileName = null) {
         try {
             const effectiveUserId = userId || await this._getCurrentUserId();
             if (!effectiveUserId) throw new Error('ログインが必要です');
             this.clearCache(effectiveUserId);
-            const path = this._getUserScopedPath(effectiveUserId, fileName);
+            const path = this._getUserScopedPath(effectiveUserId, storageFileName || toStorageFileName(fileName));
             const { data, error } = await supabase.storage
                 .from(BUCKET_NAME)
                 .remove([path]);
@@ -236,14 +277,8 @@ export const purchasePriceService = {
                     .download(path);
                 if (dlErr) throw dlErr;
 
-                // Try to read as Shift-JIS, fallback to UTF-8
                 const buffer = await blob.arrayBuffer();
-                let csvContent = '';
-                try {
-                    csvContent = new TextDecoder('shift-jis').decode(buffer);
-                } catch {
-                    csvContent = new TextDecoder('utf-8').decode(buffer);
-                }
+                const csvContent = decodeCsvBuffer(buffer);
 
                 trashRows.push({
                     user_id: userId,
