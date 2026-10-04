@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase';
 import { AuthContext } from './authContext';
 import { getAuthRedirectUrl, warnIfUsingLocalAuthRedirect } from '../utils/authRedirect';
+import { hasGoogleIdentity, verifiedGoogleProfile, googleLoginOptions } from '../utils/googleAuth';
 
 const PRESENCE_HEARTBEAT_MS = 60_000;
 
@@ -156,6 +157,7 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null); // { id, email, displayId, storeName, role, showMasterRecipes }
     const [loading, setLoading] = useState(true);
     const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+    const [authError, setAuthError] = useState('');
 
     const upsertPresence = useCallback(async ({ userId, isOnline }) => {
         const uid = String(userId || '').trim();
@@ -179,6 +181,7 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const loadProfileAndSetUser = useCallback(async (sessionUser) => {
+        setAuthError('');
         if (!sessionUser) {
             setUser(null);
             try { localStorage.removeItem('auth_user_cache'); } catch { /* ignore */ }
@@ -186,13 +189,15 @@ export const AuthProvider = ({ children }) => {
         }
 
         const uid = sessionUser.id;
+        const googleIdentity = hasGoogleIdentity(sessionUser);
+        if (googleIdentity) setUser(previous => previous?.id === uid && previous.profileVerified ? previous : null); // Never authorize from cached profile fields; preserve the same live verified user during token refresh.
         const email = sessionUser.email || '';
         let cachedUser = null;
 
         // 1. Optimistic Cache Load
         try {
             const cached = localStorage.getItem('auth_user_cache');
-            if (cached) {
+            if (cached && !googleIdentity) {
                 const parsed = JSON.parse(cached);
                 // Verify it belongs to current user
                 if (parsed && parsed.id === uid) {
@@ -218,6 +223,7 @@ export const AuthProvider = ({ children }) => {
                         profile = await selectOwnProfileWithFallback(uid, profileSelectTimeoutMs);
                     } catch (error) {
                         if (error.code === 'PGRST116') {
+                            if (googleIdentity) throw error;
                             const fallbackDisplayId = (sessionUser.user_metadata?.display_id)
                                 ? String(sessionUser.user_metadata.display_id)
                                 : getEmailLocalPart(email) || uid.slice(0, 8);
@@ -236,7 +242,7 @@ export const AuthProvider = ({ children }) => {
                     if (profile && Object.prototype.hasOwnProperty.call(profile, 'email') && email && !profile.email) {
                         backfillPatch.email = email;
                     }
-                    if (metaStoreName && !normalizeStoreName(profile?.store_name)) {
+                    if (!googleIdentity && metaStoreName && !normalizeStoreName(profile?.store_name)) {
                         backfillPatch.store_name = metaStoreName;
                     }
 
@@ -284,6 +290,13 @@ export const AuthProvider = ({ children }) => {
         }
 
         profile = await tryLoadProfile();
+
+        if (googleIdentity && (!verifiedGoogleProfile(profile) || profile.id !== uid)) {
+            setUser(null);
+            try { localStorage.removeItem('auth_user_cache'); } catch { /* ignore */ }
+            setAuthError('Google認証後の利用登録を確認できませんでした。既存登録と同じGoogleアカウントを選ぶか、管理者へ表示ID・所属店舗の設定を依頼してください。');
+            return;
+        }
 
         const metaDisplayId = (sessionUser?.user_metadata?.display_id || '').toString().trim();
         const resolvedStoreName = normalizeStoreName(profile?.store_name)
@@ -423,6 +436,13 @@ export const AuthProvider = ({ children }) => {
         }
     }, []);
 
+    const loginWithGoogle = useCallback(async () => {
+        if (import.meta.env.VITE_GOOGLE_AUTH_ENABLED !== 'true') throw new Error('Google認証は設定準備中です。');
+        const { data, error } = await supabase.auth.signInWithOAuth(googleLoginOptions(import.meta.env.BASE_URL, window.location.origin));
+        if (error || !data.url) throw new Error('Googleログインを開始できませんでした。時間をおいてお試しください。');
+        window.location.assign(data.url);
+    }, []);
+
     const register = useCallback(async (email, password, displayId, storeName) => {
         const normalizedStoreName = normalizeStoreName(storeName);
         warnIfUsingLocalAuthRedirect('signup email');
@@ -535,6 +555,8 @@ export const AuthProvider = ({ children }) => {
         user,
         loading,
         login,
+        loginWithGoogle,
+        authError,
         register,
         logout,
         patchCurrentUserProfile,
@@ -542,7 +564,7 @@ export const AuthProvider = ({ children }) => {
         isPasswordRecovery,
         updatePassword,
         finishPasswordRecovery
-    }), [user, loading, login, register, logout, patchCurrentUserProfile, sendPasswordResetEmail, isPasswordRecovery, updatePassword, finishPasswordRecovery]);
+    }), [user, loading, login, loginWithGoogle, authError, register, logout, patchCurrentUserProfile, sendPasswordResetEmail, isPasswordRecovery, updatePassword, finishPasswordRecovery]);
 
     return (
         <AuthContext.Provider value={value}>
