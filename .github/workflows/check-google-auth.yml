@@ -1,0 +1,21 @@
+name: Check Google auth
+on: [pull_request]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node --test tests/google-auth.test.mjs
+      - run: npx eslint src/utils/googleAuth.js src/contexts/AuthContext.jsx src/components/LoginPage.jsx
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://test-project.supabase.co
+          VITE_SUPABASE_ANON_KEY: public-build-test-placeholder
+          VITE_GOOGLE_AUTH_ENABLED: 'true'

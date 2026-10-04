@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/useAuth';
 import { Card } from './Card';
 import { Button } from './Button';
 import { STORE_LIST } from '../constants';
+import { googleCallbackError } from '../utils/googleAuth';
 
 export const LoginPage = () => {
     const [isLoginMode, setIsLoginMode] = useState(true);
@@ -31,7 +32,21 @@ export const LoginPage = () => {
         }
     }, []);
 
-    const { login, register, sendPasswordResetEmail } = useAuth();
+    const { login, loginWithGoogle, authError, register, sendPasswordResetEmail } = useAuth();
+    const googleEnabled = import.meta.env.VITE_GOOGLE_AUTH_ENABLED === 'true';
+    React.useEffect(() => {
+        const callback = googleCallbackError(window.location.href);
+        if (callback) {
+            window.history.replaceState(null, '', callback.cleanUrl);
+            setError(callback.message);
+        }
+    }, []);
+    const handleGoogleLogin = async () => {
+        if (isSubmitting) return;
+        setError(''); setSuccessMsg(''); setIsSubmitting(true);
+        try { await loginWithGoogle(); }
+        catch { setError('Googleログインを開始できませんでした。設定と接続を確認してお試しください。'); setIsSubmitting(false); }
+    };
 
     const handleLoginSubmit = async (e) => {
         e.preventDefault();
@@ -143,9 +158,9 @@ export const LoginPage = () => {
                     </div>
                 )}
 
-                {error && (
+                {(error || authError) && (
                     <div style={{ backgroundColor: '#ffebee', color: '#c62828', padding: '10px', borderRadius: '4px', marginBottom: '1rem', fontSize: '0.9rem' }}>
-                        {error}
+                        {error || authError}
                     </div>
                 )}
 
@@ -155,6 +170,10 @@ export const LoginPage = () => {
                     </div>
                 )}
 
+                {googleEnabled && isLoginMode && !isResetMode && <div style={{ marginBottom: '1rem' }}>
+                    <Button type="button" variant="secondary" block disabled={isSubmitting} onClick={handleGoogleLogin}>Googleで続ける</Button>
+                    <p style={{ textAlign: 'center', fontSize: '0.85rem', color: '#666' }}>またはメールアドレスでログイン</p>
+                </div>}
                 <form onSubmit={isResetMode ? handleReset : (isLoginMode ? handleLoginSubmit : handleRegisterSubmit)}>
                     <div style={{ marginBottom: '1rem' }}>
                         <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', color: '#333' }}>メールアドレス</label>
