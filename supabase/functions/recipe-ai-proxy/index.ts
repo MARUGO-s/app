@@ -198,14 +198,14 @@ const PROVIDER_ENDPOINTS: Record<
   anthropic: {
     messages: {
       url: "https://api.anthropic.com/v1/messages",
-      keyEnvs: ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY"],
+      keyEnvs: ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY", "claude"],
       providerName: "Anthropic",
     },
   },
   xai: {
     responses: {
       url: "https://api.x.ai/v1/responses",
-      keyEnvs: ["XAI_API_KEY", "GROK_API_KEY"],
+      keyEnvs: ["XAI_API_KEY", "GROK_API_KEY", "grok"],
       providerName: "xAI",
     },
   },
