@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal } from './Modal';
+import { RECIPE_AI_MODEL_LABELS } from '../constants/recipeAiProgress';
 import './RecipeAiMagiProgressModal.css';
 
 // AI request starts before this modal is rendered. Keep the boot sequence visible
@@ -28,7 +29,7 @@ const PANEL_DEFINITIONS = [
         magi: 'MELCHIOR',
         kanji: '情報照合',
         english: 'RESEARCH',
-        model: 'Groq / Perplexity Sonar',
+        model: `${RECIPE_AI_MODEL_LABELS.perplexity} / Groq`,
         idleLabel: '照会待機',
         completeLabel: '照合済',
     },
@@ -37,7 +38,7 @@ const PANEL_DEFINITIONS = [
         magi: 'BALTHASAR',
         kanji: '構成検算',
         english: 'ANALYSIS',
-        model: 'Groq GPT-OSS 120B · Compound',
+        model: RECIPE_AI_MODEL_LABELS.groq,
         idleLabel: '検算待機',
         completeLabel: '検算済',
     },
@@ -46,7 +47,7 @@ const PANEL_DEFINITIONS = [
         magi: 'CASPER',
         kanji: '反証監査',
         english: 'AUDIT + REBUTTAL',
-        model: 'OpenAI GPT-5.4-mini',
+        model: `${RECIPE_AI_MODEL_LABELS.auditor} · ${RECIPE_AI_MODEL_LABELS.rebuttal}`,
         idleLabel: '監査待機',
         completeLabel: '監査済',
     },
@@ -181,7 +182,7 @@ export const RecipeAiMagiProgressModal = ({
                     <div className={`recipe-ai-magi__final is-${finalState}`}>
                         <div>
                             <span className="recipe-ai-magi__final-label">統合決裁</span>
-                            <small>FINAL SYNTHESIS · OpenAI GPT-5.4-nano</small>
+                            <small>FINAL SYNTHESIS · {RECIPE_AI_MODEL_LABELS.master}</small>
                         </div>
                         <span className="recipe-ai-magi__final-status">
                             {finalState === 'active' ? '決裁中' : finalState === 'complete' ? '可決' : '待機'}
