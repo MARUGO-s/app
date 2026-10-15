@@ -649,7 +649,9 @@ export default function ApiUsageLogs() {
         const GROUP_THRESHOLD_MS = 90 * 1000 // 90秒以内の差なら同一セッションと判定
 
         sortedLogs.forEach((log) => {
-            const logTime = new Date(log.created_at || 0).getTime()
+            // created_at は呼び出しの終了時刻。Grok や最終修正のように1回が長い呼び出しは
+            // 終了時刻同士だと間が空いて別セッション扱いになるため、開始時刻（終了 − 処理時間）で判定する
+            const logStartTime = new Date(log.created_at || 0).getTime() - Math.max(0, toSafeNumber(log.duration_ms, 0))
             let matchedGroup = null
 
             // 直近のグループで、同じユーザーかつ時間差が閾値内のものを探す
@@ -658,7 +660,7 @@ export default function ApiUsageLogs() {
                 const lastLog = grp.logs[grp.logs.length - 1]
                 const lastLogTime = new Date(lastLog.created_at || 0).getTime()
 
-                if (lastLog.user_id === log.user_id && (logTime - lastLogTime) <= GROUP_THRESHOLD_MS) {
+                if (lastLog.user_id === log.user_id && (logStartTime - lastLogTime) <= GROUP_THRESHOLD_MS) {
                     matchedGroup = grp
                     break
                 }
