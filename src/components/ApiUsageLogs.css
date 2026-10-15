@@ -451,3 +451,13 @@
   padding: 10px 14px;
   font-size: 13px;
 }
+
+.api-anthropic {
+  background: #fdebe1;
+  color: #c2410c;
+}
+
+.api-xai {
+  background: #e9ecef;
+  color: #212529;
+}

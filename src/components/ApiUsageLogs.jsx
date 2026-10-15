@@ -46,6 +46,7 @@ const GROQ_RATES_JPY_PER_1M = {
 }
 
 const OPENAI_RATES_JPY_PER_1M = {
+    'gpt-6-luna': { input: 15, output: 75 },
     'gpt-5.4-mini': { input: 112.5, output: 675 },
     'gpt-5.4-nano': { input: 30, output: 187.5 },
     // 以下は廃止予定モデル（過去ログの表示互換のため残す）
@@ -56,6 +57,22 @@ const OPENAI_RATES_JPY_PER_1M = {
 const PERPLEXITY_RATES_JPY_PER_1M = {
     sonar: { input: 150, output: 150 },
 }
+
+// 長い入力では上位単価になるが、ログには実際に使った単価が保存されるため、ここは通常単価だけ持つ
+const ANTHROPIC_RATES_JPY_PER_1M = {
+    'claude-haiku-5-5': { input: 15, output: 75 },
+}
+
+const XAI_RATES_JPY_PER_1M = {
+    'grok-4.7': { input: 300, output: 900 },
+}
+
+// エラーやレート制限で弾かれ、トークンも発生していない呼び出しは各社とも課金されない
+const isRejectedWithoutUsage = (log) => String(log?.status || 'success') !== 'success'
+    && toSafeNumber(log?.input_tokens, 0) === 0
+    && toSafeNumber(log?.output_tokens, 0) === 0
+
+const isZeroCostBilling = (billing) => billing?.pricingStatus === 'unpriced' || billing?.pricingStatus === 'not_billed'
 
 const normalizeGeminiModelNameForCost = (modelName) => {
     const normalized = String(modelName || '').trim().toLowerCase()
@@ -149,6 +166,7 @@ const buildGroqBillingBreakdown = ({ modelName, inputTokens, outputTokens, estim
 
 const normalizeOpenAiModelNameForCost = (modelName) => {
     const normalized = String(modelName || '').trim().toLowerCase()
+    if (normalized.includes('gpt-6-luna')) return 'gpt-6-luna'
     if (normalized.includes('gpt-5.4-mini')) return 'gpt-5.4-mini'
     if (normalized.includes('gpt-5.4-nano')) return 'gpt-5.4-nano'
     if (normalized.includes('o4-mini')) return 'o4-mini'
@@ -258,6 +276,18 @@ const isOperationQaLog = (log) => {
 }
 
 const getBillingBreakdown = (log) => {
+    if (isRejectedWithoutUsage(log)) {
+        return {
+            model: String(log?.model_name || ''),
+            pricingStatus: 'not_billed',
+            pricingNote: 'エラー・制限で処理されなかったため課金なし',
+            inputTokens: 0,
+            outputTokens: 0,
+            inputCostJpy: 0,
+            outputCostJpy: 0,
+            totalCostJpy: 0,
+        }
+    }
     const metadata = log?.metadata
     if (metadata && typeof metadata === 'object') {
         const breakdown = metadata.billing_breakdown
@@ -308,7 +338,11 @@ const getBillingBreakdown = (log) => {
                     ? OPENAI_RATES_JPY_PER_1M[normalizeOpenAiModelNameForCost(model)]
                     : apiName === 'perplexity'
                         ? PERPLEXITY_RATES_JPY_PER_1M[normalizePerplexityModelNameForCost(model)]
-                        : (GEMINI_RATES_JPY_PER_1M[normalizeGeminiModelNameForCost(model)] || GEMINI_RATES_JPY_PER_1M['gemini-2.5-flash-lite'])
+                        : apiName === 'anthropic'
+                            ? ANTHROPIC_RATES_JPY_PER_1M[String(model).trim().toLowerCase()]
+                            : apiName === 'xai'
+                                ? XAI_RATES_JPY_PER_1M[String(model).trim().toLowerCase()]
+                                : (GEMINI_RATES_JPY_PER_1M[normalizeGeminiModelNameForCost(model)] || GEMINI_RATES_JPY_PER_1M['gemini-2.5-flash-lite'])
             if (!fallbackRate) {
                 return {
                     model,
@@ -407,6 +441,7 @@ const getBillingBreakdown = (log) => {
 const formatBillingBreakdownText = (log) => {
     const b = getBillingBreakdown(log)
     if (!b) return '-'
+    if (b.pricingStatus === 'not_billed') return b.pricingNote
     if (b.pricingStatus === 'unpriced') return b.pricingNote || '公開単価が未登録のため、推定コスト合計から除外'
     if (b.billingUnit === 'audio_second') {
         return `音声${Number(b.audioDurationSec || 0).toFixed(2)}秒 × ¥${formatCostJpy(b.ratePerSecondJpy, 4)}/秒 = ¥${formatCostJpy(b.totalCostJpy)}`
@@ -419,7 +454,7 @@ const formatBillingBreakdownText = (log) => {
 
 const resolveEstimatedCostJpy = (log, precomputedBilling = null) => {
     const billing = precomputedBilling || getBillingBreakdown(log)
-    if (billing?.pricingStatus === 'unpriced') return 0
+    if (isZeroCostBilling(billing)) return 0
     if (hasPositiveCost(log?.estimated_cost_jpy)) {
         return toSafeNumber(log?.estimated_cost_jpy, 0)
     }
@@ -433,6 +468,8 @@ const AI_PROVIDER_SUMMARIES = [
     { id: 'groq', label: 'Groq' },
     { id: 'openai', label: 'OpenAI' },
     { id: 'perplexity', label: 'Perplexity' },
+    { id: 'anthropic', label: 'Claude' },
+    { id: 'xai', label: 'Grok' },
     { id: 'gemini', label: 'Gemini' },
     { id: 'sakana', label: 'Sakana AI' },
 ]
@@ -1127,7 +1164,7 @@ export default function ApiUsageLogs() {
                                                             {(() => {
                                                                 const billing = getBillingBreakdown(log)
                                                                 if (!billing) return '-'
-                                                                if (billing.pricingStatus === 'unpriced') {
+                                                                if (isZeroCostBilling(billing)) {
                                                                     return <div className="cost-breakdown cost-breakdown--unpriced">{billing.pricingNote}</div>
                                                                 }
                                                                 if (billing.billingUnit === 'audio_second') {

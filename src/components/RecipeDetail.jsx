@@ -11,9 +11,8 @@ import {
     askRecipeAiQuestion,
     generateRecipeAiIntake,
     generateRecipeImprovement,
-    isSakanaUnlocked,
+    RECIPE_AI_PROVIDER,
     serializeRecipeAiDirectionContext,
-    unlockSakana,
 } from '../services/recipeAiService';
 import { fetchRecipeAiMemoryForRecipe, fetchRecipeAiRunForRecipeTitle, recordRecipeAiAdoption } from '../services/recipeAiLearningService';
 import {
@@ -924,28 +923,9 @@ export const RecipeDetail = ({
     const [uiTextCache, setUiTextCache] = React.useState({});
     const [isAiModalOpen, setIsAiModalOpen] = React.useState(false);
     const [isActionMenuOpen, setIsActionMenuOpen] = React.useState(false);
-    const [aiProvider, setAiProvider] = React.useState('groq');
-    const [sakanaUnlocked, setSakanaUnlocked] = React.useState(() => isSakanaUnlocked());
+    const aiProvider = RECIPE_AI_PROVIDER;
 
-    const ensureSakanaUnlockedForProvider = (provider) => {
-        if (!String(provider || '').startsWith('sakana') || sakanaUnlocked) return true;
-        const input = window.prompt('Sakana AIはロックされています。解除パスワードを入力してください。');
-        if (input === null) return false;
-        if (!unlockSakana(input)) {
-            toast.error('パスワードが違います。');
-            return false;
-        }
-        setSakanaUnlocked(true);
-        toast.success('Sakana AIのロックを解除しました。');
-        return true;
-    };
 
-    const handleAiProviderChange = (value) => {
-        if (!ensureSakanaUnlockedForProvider(value)) {
-            return;
-        }
-        setAiProvider(value);
-    };
     const [aiNotes, setAiNotes] = React.useState('');
     const [aiIntake, setAiIntake] = React.useState(null);
     const [aiProposal, setAiProposal] = React.useState(null);
@@ -1325,9 +1305,6 @@ export const RecipeDetail = ({
     };
 
     const loadAiImprovementIntake = async () => {
-        if (!ensureSakanaUnlockedForProvider(aiProvider)) {
-            return null;
-        }
         let recipeForAi = sourceRecipe || recipe;
         const hasLoadedContent = Array.isArray(recipeForAi?.steps) && Array.isArray(recipeForAi?.ingredients);
         if (!hasLoadedContent && recipe?.id) {
@@ -1357,9 +1334,6 @@ export const RecipeDetail = ({
     };
 
     const handleGenerateAiImprovement = async () => {
-        if (!ensureSakanaUnlockedForProvider(aiProvider)) {
-            return;
-        }
         let recipeForAi = sourceRecipe || recipe;
         const hasLoadedContent = Array.isArray(recipeForAi?.steps) && Array.isArray(recipeForAi?.ingredients);
         if (!hasLoadedContent && recipe?.id) {
@@ -1437,9 +1411,6 @@ export const RecipeDetail = ({
         }
         if (!aiProposal) {
             setAiError('先にAI改善案を作成してください。');
-            return;
-        }
-        if (!ensureSakanaUnlockedForProvider(aiProvider)) {
             return;
         }
 
@@ -3422,22 +3393,8 @@ export const RecipeDetail = ({
                         </p>
                         <div className="recipe-ai-form recipe-ai-form--detail">
                             <div className="recipe-ai-form__controls">
-                                <label className="recipe-ai-form__label">
-                                    AIプロバイダー
-                                    <select
-                                        className="recipe-ai-form__select"
-                                        value={aiProvider}
-                                        onChange={(e) => handleAiProviderChange(e.target.value)}
-                                        disabled={isAiGenerating || isSavingAiProposal}
-                                    >
-                                        <option value="groq-express">格安エクスプレス（Groq・高速/数銭）</option>
-                                        <option value="groq">マルチエージェント（推奨・自動振分）</option>
-                                        <option value="sakana-subscription">{sakanaUnlocked ? 'Sakana AI（サブスク）' : '🔒 Sakana AI（サブスク）'}</option>
-                                        <option value="sakana-payg">{sakanaUnlocked ? 'Sakana AI（従量課金）' : '🔒 Sakana AI（従量課金）'}</option>
-                                    </select>
-                                </label>
                                 <p className="recipe-ai-form__hint">
-                                    通常は、研究系は内容に応じて Perplexity、最終監査・統合・反証は OpenAI、それ以外は主に Groq を自動使用します。
+                                    調査は内容に応じて Perplexity と Groq、最終クロスチェックは Grok、統合は OpenAI、反証は Claude を自動で使い分けます。
                                 </p>
                             </div>
                             <label className="recipe-ai-form__label">

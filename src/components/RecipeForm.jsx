@@ -17,9 +17,8 @@ import {
     askRecipeAiQuestion,
     generateRecipeAiIntake,
     generateProductRecipeDraft,
-    isSakanaUnlocked,
+    RECIPE_AI_PROVIDER,
     serializeRecipeAiDirectionContext,
-    unlockSakana,
 } from '../services/recipeAiService';
 import { recordRecipeAiAdoption } from '../services/recipeAiLearningService';
 import {
@@ -222,8 +221,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
     const [aiIntake, setAiIntake] = useState(null);
     const [isAiConversing, setIsAiConversing] = useState(false);
     const [isAiPreparingQuestions, setIsAiPreparingQuestions] = useState(false);
-    const [aiProvider, setAiProvider] = useState('groq');
-    const [sakanaUnlocked, setSakanaUnlocked] = useState(() => isSakanaUnlocked());
+    const aiProvider = RECIPE_AI_PROVIDER;
     const [aiProgressMode, setAiProgressMode] = useState(null);
     const [aiProgressStepIndex, setAiProgressStepIndex] = useState(0);
     // 検証AI（反証）の実際の合否。'approve'（可決）/ 'reject'（否決＝差し戻し）/ null（未判定）
@@ -234,25 +232,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
     );
     const isAiProgressOpen = Boolean(aiProgressConfig) && (isAiGenerating || isAiConversing);
 
-    const ensureSakanaUnlockedForProvider = (provider) => {
-        if (!String(provider || '').startsWith('sakana') || sakanaUnlocked) return true;
-        const input = window.prompt('Sakana AIはロックされています。解除パスワードを入力してください。');
-        if (input === null) return false;
-        if (!unlockSakana(input)) {
-            toast.error('パスワードが違います。');
-            return false;
-        }
-        setSakanaUnlocked(true);
-        toast.success('Sakana AIのロックを解除しました。');
-        return true;
-    };
 
-    const handleAiProviderChange = (value) => {
-        if (!ensureSakanaUnlockedForProvider(value)) {
-            return;
-        }
-        setAiProvider(value);
-    };
 
     useEffect(() => {
         if (!user?.id) return undefined;
@@ -582,9 +562,6 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
             setAiError('開発テーマかレシピ名を入力してください。');
             return null;
         }
-        if (!ensureSakanaUnlockedForProvider(aiProvider)) {
-            return null;
-        }
 
         setIsAiPreparingQuestions(true);
         setAiError('');
@@ -610,9 +587,6 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         const brief = [aiBrief, formData.title, formData.description].map(v => String(v || '').trim()).filter(Boolean).join('\n');
         if (!brief) {
             setAiError('開発テーマかレシピ名を入力してください。');
-            return;
-        }
-        if (!ensureSakanaUnlockedForProvider(aiProvider)) {
             return;
         }
         if (!aiIntake?.questions?.length) {
@@ -663,9 +637,6 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         }
         if (!aiDraft) {
             setAiError('先にAIドラフトを作成してください。');
-            return;
-        }
-        if (!ensureSakanaUnlockedForProvider(aiProvider)) {
             return;
         }
 
@@ -1060,22 +1031,8 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                 <Card className="recipe-form-mock__card recipe-form-mock__card--ai">
                                     <div className="recipe-form-mock__card-title">マルチAI商品開発</div>
                                     <div className="recipe-ai-form">
-                                        <label className="recipe-ai-form__label">
-                                            AIプロバイダー
-                                            <select
-                                                className="recipe-ai-form__select"
-                                                value={aiProvider}
-                                                onChange={(e) => handleAiProviderChange(e.target.value)}
-                                                disabled={isAiGenerating}
-                                            >
-                                                <option value="groq-express">格安エクスプレス（Groq・高速/数銭）</option>
-                                                <option value="groq">マルチエージェント（推奨・自動振分）</option>
-                                                <option value="sakana-subscription">{sakanaUnlocked ? 'Sakana AI（サブスク）' : '🔒 Sakana AI（サブスク）'}</option>
-                                                <option value="sakana-payg">{sakanaUnlocked ? 'Sakana AI（従量課金）' : '🔒 Sakana AI（従量課金）'}</option>
-                                            </select>
-                                        </label>
                                         <p className="recipe-ai-form__hint">
-                                            通常は、研究系は内容に応じて Perplexity、最終監査・統合・反証は OpenAI、それ以外は主に Groq を自動使用します。
+                                            調査は内容に応じて Perplexity と Groq、最終クロスチェックは Grok、統合は OpenAI、反証は Claude を自動で使い分けます。
                                         </p>
                                         <label className="recipe-ai-form__label">
                                             開発テーマ

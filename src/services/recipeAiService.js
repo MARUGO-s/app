@@ -8,6 +8,8 @@ const SAKANA_PROVIDER_NAME = 'Sakana AI';
 const GROQ_PROVIDER_NAME = 'Groq';
 const OPENAI_PROVIDER_NAME = 'OpenAI';
 const PERPLEXITY_PROVIDER_NAME = 'Perplexity';
+const ANTHROPIC_PROVIDER_NAME = 'Claude';
+const XAI_PROVIDER_NAME = 'Grok';
 
 const PROVIDER_DISPLAY_NAMES = {
     'sakana-subscription': 'Sakana AI（サブスク）',
@@ -15,7 +17,12 @@ const PROVIDER_DISPLAY_NAMES = {
     groq: GROQ_PROVIDER_NAME,
     openai: OPENAI_PROVIDER_NAME,
     perplexity: PERPLEXITY_PROVIDER_NAME,
+    anthropic: ANTHROPIC_PROVIDER_NAME,
+    xai: XAI_PROVIDER_NAME,
 };
+
+// 画面からのAI選択は廃止し、担当ごとに自動で振り分けるマルチエージェント構成に固定する
+export const RECIPE_AI_PROVIDER = 'groq';
 
 const AI_SETTINGS_PROVIDER_KEY = 'recipe_ai_provider';
 const LEGACY_PROVIDER_KEY = 'api_provider';
@@ -28,11 +35,18 @@ const SAKANA_LOCK_PASSWORD = 'marugo';
 const DEFAULT_MODEL = 'fugu';
 // llama-3.3-70b-versatile は Groq 側で 2026-08-16 廃止のため gpt-oss-120b へ移行（性能同等以上・単価は半額以下）
 const GROQ_DEFAULT_TEXT_MODEL = 'openai/gpt-oss-120b';
-// o4-mini / gpt-4.1 系は OpenAI 側で 2026-10-23 廃止予定のため gpt-5.4 系へ移行。
-// コストと品質のバランスを優先し、批判系（監査・反証）は gpt-5.4-mini、統合・修正は gpt-5.4-nano を使用する。
-const OPENAI_REBUTTAL_MODEL = 'gpt-5.4-mini';
-const OPENAI_AUDITOR_MODEL = 'gpt-5.4-mini';
-const OPENAI_MASTER_MODEL = 'gpt-5.4-nano';
+// 統合・修正（統括シェフ）とクロスチェックの代替は OpenAI gpt-6-luna。
+// クロスチェックは Grok、反証は Claude と、統括シェフとは別系統のAIに批判させる。
+const OPENAI_MASTER_MODEL = 'gpt-6-luna';
+const XAI_AUDITOR_MODEL = 'grok-4.7';
+const ANTHROPIC_REBUTTAL_MODEL = 'claude-haiku-5-5';
+// gpt-6 / gpt-5 系・Claude・Groq の gpt-oss は推論（思考）トークンも出力上限に数えられ、
+// 低い上限だと書き終える前に打ち切られる。料金は実際の出力分だけなので、上限は広めに取る。
+// （プロキシ側の上限 MAX_OUTPUT_TOKENS = 64000 を超えないこと）
+const REASONING_OUTPUT_TOKEN_FLOOR = 32000;
+const REASONING_OUTPUT_TOKEN_MAX = 64000;
+// Groq は要求した上限もレート制限（TPM）の計算に含めるため、他より控えめにする
+const GROQ_REASONING_OUTPUT_TOKEN_FLOOR = 16000;
 const PERPLEXITY_DEFAULT_MODEL = 'sonar';
 const REQUEST_TIMEOUT_MS = 600000;
 
@@ -263,6 +277,8 @@ const normalizeProvider = (value) => {
     if (value === 'sakana-payg') return 'sakana-payg';
     if (value === 'openai') return 'openai';
     if (value === 'perplexity') return 'perplexity';
+    if (value === 'anthropic') return 'anthropic';
+    if (value === 'xai') return 'xai';
     return 'groq';
 };
 
@@ -307,10 +323,10 @@ const pickAgentPlan = ({ agentId, mainProvider, routeContext = {} }) => {
         return { provider: 'groq', model: GROQ_DEFAULT_TEXT_MODEL, label: `Groq (${GROQ_DEFAULT_TEXT_MODEL})` };
     }
     if (agentId === 'rebuttal') {
-        return { provider: 'openai', model: OPENAI_REBUTTAL_MODEL, label: `OpenAI ${OPENAI_REBUTTAL_MODEL}` };
+        return { provider: 'anthropic', model: ANTHROPIC_REBUTTAL_MODEL, label: 'Claude Haiku 5.5' };
     }
     if (agentId === 'auditor') {
-        return { provider: 'openai', model: OPENAI_AUDITOR_MODEL, label: `OpenAI ${OPENAI_AUDITOR_MODEL}` };
+        return { provider: 'xai', model: XAI_AUDITOR_MODEL, label: 'Grok 4.7' };
     }
     if (agentId === 'master') {
         return { provider: 'openai', model: OPENAI_MASTER_MODEL, label: `OpenAI ${OPENAI_MASTER_MODEL}` };
@@ -727,6 +743,8 @@ const extractSourcesFromProviderResponse = (payload, note, prefix, provider) => 
     if (normalized === 'groq') return extractGroqSources(payload, note, prefix);
     if (normalized === 'openai') return extractOpenAiSources(payload, note, prefix);
     if (normalized === 'perplexity') return extractPerplexitySources(payload, note, prefix);
+    // 反証（Claude）とクロスチェック（Grok）はWeb検索を使わないため参照ソースは無い
+    if (normalized === 'anthropic' || normalized === 'xai') return [];
     return extractSakanaSources(payload, note, prefix);
 };
 
@@ -808,8 +826,9 @@ const callOpenAiResponseJson = async ({
     reasoningEffort = 'medium',
     model,
 }) => {
-    const selectedModel = model || OPENAI_REBUTTAL_MODEL;
-    const supportsReasoning = /^(o\d|gpt-5)/.test(selectedModel);
+    const selectedModel = model || OPENAI_MASTER_MODEL;
+    const supportsReasoning = /^(o\d|gpt-[5-9])/.test(selectedModel);
+    const outputTokenLimit = Math.max(maxOutputTokens, REASONING_OUTPUT_TOKEN_FLOOR);
 
     // OpenAI Responses API does not support Web Search when JSON mode is active.
     // We filter out 'web_search' tools to prevent "Web Search cannot be used with JSON mode" error.
@@ -833,7 +852,7 @@ const callOpenAiResponseJson = async ({
         finalInstructions = `${finalInstructions}\n\nReturn strict json.`;
     }
 
-    const requestResponse = async (signal, outputTokenLimit) => {
+    const requestResponse = async (signal, effort, tokenLimit) => {
         const response = await callAiProxy({
             provider: 'openai',
             endpoint: 'responses',
@@ -841,9 +860,9 @@ const callOpenAiResponseJson = async ({
                 model: selectedModel,
                 instructions: finalInstructions,
                 input: finalPrompt,
-                ...(supportsReasoning ? { reasoning: { effort: reasoningEffort } } : {}),
+                ...(supportsReasoning ? { reasoning: { effort } } : {}),
                 text: { format: { type: 'json_object' } },
-                max_output_tokens: outputTokenLimit,
+                max_output_tokens: tokenLimit,
                 ...(Array.isArray(filteredTools) && filteredTools.length > 0 ? { tools: filteredTools } : {}),
                 ...(filteredToolChoice ? { tool_choice: filteredToolChoice } : {}),
             },
@@ -857,18 +876,17 @@ const callOpenAiResponseJson = async ({
     };
 
     let payload = await withTimeout(
-        (signal) => requestResponse(signal, maxOutputTokens),
+        (signal) => requestResponse(signal, reasoningEffort, outputTokenLimit),
         timeoutMs,
         OPENAI_PROVIDER_NAME,
     );
 
-    // A partial JSON response is otherwise surfaced to the user as a parser
-    // error. Retry once with a larger output window when Responses explicitly
-    // reports that it stopped at the configured output limit.
+    // それでも打ち切られた場合は、上限をプロキシの最大値まで広げ、推論も一段軽くして1回だけ再試行する
     if (payload?.status === 'incomplete' && payload?.incomplete_details?.reason === 'max_output_tokens') {
-        const retryTokenLimit = Math.max(maxOutputTokens * 2, 12000);
+        const lowerEffort = { max: 'xhigh', xhigh: 'high', high: 'medium', medium: 'low' }[reasoningEffort] || reasoningEffort;
+        console.warn(`[recipeAiService] OpenAI の出力が上限で打ち切られたため、上限 ${REASONING_OUTPUT_TOKEN_MAX}・推論 ${lowerEffort} で再試行します`);
         payload = await withTimeout(
-            (signal) => requestResponse(signal, retryTokenLimit),
+            (signal) => requestResponse(signal, lowerEffort, REASONING_OUTPUT_TOKEN_MAX),
             timeoutMs,
             OPENAI_PROVIDER_NAME,
         );
@@ -882,7 +900,8 @@ const callOpenAiResponseJson = async ({
 // Perplexity の Tier 0 は直近1秒あたり1リクエストまで。複数エージェントが同時に送ると
 // 429 で弾かれるため、このブラウザから送る開始間隔を空け、上流の 429 は待ってから再試行する。
 // APIキーは全ユーザー共通なので、他ユーザーとの衝突は再試行側で吸収する。
-const PERPLEXITY_MIN_REQUEST_INTERVAL_MS = 1100;
+// 中継サーバーの起動待ちで1件目の到着が遅れると間隔が縮まるため、1秒より広めに空ける
+const PERPLEXITY_MIN_REQUEST_INTERVAL_MS = 2000;
 const PERPLEXITY_RATE_LIMIT_RETRY_DELAYS_MS = [2000, 4000, 8000];
 let perplexityNextRequestAt = 0;
 
@@ -962,6 +981,105 @@ const callPerplexityChatJson = async ({
     return { parsed: parseJsonResponse(rawText, 'perplexity'), payload, rawText };
 };
 
+// エージェント出力（AGENT_OUTPUT_SCHEMA）の形。構造化出力に対応したAIではこれで形を保証する
+const AGENT_RESULT_JSON_SCHEMA = {
+    type: 'object',
+    properties: {
+        content: { type: 'string' },
+        findings: { type: 'array', items: { type: 'string' } },
+        risks: { type: 'array', items: { type: 'string' } },
+        recommendations: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['content', 'findings', 'risks', 'recommendations'],
+    additionalProperties: false,
+};
+
+const callAnthropicMessagesJson = async ({
+    prompt,
+    instructions,
+    maxOutputTokens = 0,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+    reasoningEffort = 'high',
+    model,
+    jsonSchema,
+}) => {
+    const payload = await withTimeout(async (signal) => {
+        const response = await callAiProxy({
+            provider: 'anthropic',
+            endpoint: 'messages',
+            body: {
+                model: model || ANTHROPIC_REBUTTAL_MODEL,
+                max_tokens: Math.max(maxOutputTokens, REASONING_OUTPUT_TOKEN_FLOOR),
+                ...(instructions ? { system: instructions } : {}),
+                messages: [{ role: 'user', content: prompt }],
+                output_config: {
+                    effort: reasoningEffort,
+                    ...(jsonSchema ? { format: { type: 'json_schema', schema: jsonSchema } } : {}),
+                },
+            },
+            signal,
+        });
+        if (!response.ok) {
+            const body = await response.text().catch(() => '');
+            throw new Error(`${ANTHROPIC_PROVIDER_NAME} API error ${response.status}: ${body || response.statusText}`);
+        }
+        return response.json();
+    }, timeoutMs, ANTHROPIC_PROVIDER_NAME);
+
+    if (payload?.stop_reason === 'refusal') {
+        throw new Error(`${ANTHROPIC_PROVIDER_NAME} が安全上の理由で応答を見送りました。`);
+    }
+    if (payload?.stop_reason === 'max_tokens') {
+        throw new Error(`${ANTHROPIC_PROVIDER_NAME} の出力が上限で打ち切られました。`);
+    }
+    // 思考ブロックが先頭に来ることがあるため、位置ではなく type で本文を拾う
+    const rawText = normalizeArray(payload?.content)
+        .filter((block) => block?.type === 'text')
+        .map((block) => String(block.text || ''))
+        .join('')
+        .trim();
+    if (!rawText) throw new Error(`${ANTHROPIC_PROVIDER_NAME} から空の応答が返されました。`);
+    return { parsed: parseJsonResponse(rawText, 'anthropic'), payload, rawText };
+};
+
+const callXaiResponseJson = async ({
+    prompt,
+    instructions,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+    reasoningEffort = 'high',
+    model,
+    jsonSchema,
+}) => {
+    const effort = ['low', 'medium', 'high', 'xhigh'].includes(reasoningEffort) ? reasoningEffort : 'high';
+    const payload = await withTimeout(async (signal) => {
+        const response = await callAiProxy({
+            provider: 'xai',
+            endpoint: 'responses',
+            body: {
+                model: model || XAI_AUDITOR_MODEL,
+                input: [
+                    ...(instructions ? [{ role: 'system', content: instructions }] : []),
+                    { role: 'user', content: prompt },
+                ],
+                reasoning: { effort },
+                ...(jsonSchema
+                    ? { text: { format: { type: 'json_schema', name: 'agent_result', schema: jsonSchema, strict: true } } }
+                    : {}),
+            },
+            signal,
+        });
+        if (!response.ok) {
+            const body = await response.text().catch(() => '');
+            throw new Error(`${XAI_PROVIDER_NAME} API error ${response.status}: ${body || response.statusText}`);
+        }
+        return response.json();
+    }, timeoutMs, XAI_PROVIDER_NAME);
+
+    const rawText = extractResponseText(payload);
+    if (!rawText) throw new Error(`${XAI_PROVIDER_NAME} から空の応答が返されました。`);
+    return { parsed: parseJsonResponse(rawText, 'xai'), payload, rawText };
+};
+
 const postGroqChatCompletion = async (body, signal) => {
     const response = await callAiProxy({
         provider: 'groq',
@@ -1007,10 +1125,13 @@ const callGroqChatJson = async ({
     }
     messages.push({ role: 'user', content: prompt });
 
+    const selectedModel = model || GROQ_DEFAULT_TEXT_MODEL;
     const payload = await withTimeout(async (signal) => postGroqChatCompletion({
-        model: model || GROQ_DEFAULT_TEXT_MODEL,
+        model: selectedModel,
         messages,
-        max_completion_tokens: maxOutputTokens,
+        max_completion_tokens: selectedModel.includes('gpt-oss')
+            ? Math.max(maxOutputTokens, GROQ_REASONING_OUTPUT_TOKEN_FLOOR)
+            : maxOutputTokens,
         temperature: wantsWebSearch ? 0.3 : 0.2,
         top_p: 0.95,
         service_tier: 'auto',
@@ -1035,6 +1156,7 @@ const callRecipeAiJson = async ({
     toolChoice,
     reasoningEffort,
     model,
+    jsonSchema,
 }) => {
     const normalizedProvider = normalizeProvider(provider);
 
@@ -1044,6 +1166,14 @@ const callRecipeAiJson = async ({
 
     if (normalizedProvider === 'perplexity') {
         return callPerplexityChatJson({ prompt, instructions, maxOutputTokens, timeoutMs, model });
+    }
+
+    if (normalizedProvider === 'anthropic') {
+        return callAnthropicMessagesJson({ prompt, instructions, maxOutputTokens, timeoutMs, reasoningEffort, model, jsonSchema });
+    }
+
+    if (normalizedProvider === 'xai') {
+        return callXaiResponseJson({ prompt, instructions, timeoutMs, reasoningEffort, model, jsonSchema });
     }
 
     if (!isSakanaProvider(normalizedProvider)) {
@@ -1517,6 +1647,7 @@ const runAgent = async ({ agent, provider, prompt, note, model }) => {
         timeoutMs: REQUEST_TIMEOUT_MS,
         reasoningEffort: 'high',
         model,
+        jsonSchema: AGENT_RESULT_JSON_SCHEMA,
     });
     return {
         agent,
@@ -1540,6 +1671,7 @@ const settleAgent = async (args, index) => {
     } catch (error) {
         console.warn(`[recipeAiService] ${args.agent.agentId} failed`, error);
         return {
+            failed: true,
             agent: args.agent,
             result: {
                 content: '',
@@ -1815,9 +1947,31 @@ ${PROPOSAL_OUTPUT_SCHEMA}
 `;
 
 // 反証は統括シェフと同じAIだと自己肯定に流れやすいため、別系統のAIに担当させる。
-// 反証専用に OpenAI gpt-5.4-mini を優先し、失敗時のみメインAIへフォールバックする。
+// 反証専用に Claude Haiku 5.5 を優先し、失敗時のみメインAIへフォールバックする。
 const pickRebuttalPlan = (mainProvider) => {
     return pickAgentPlan({ agentId: 'rebuttal', mainProvider });
+};
+
+// クロスチェックは Grok を優先し、Grok が使えない場合は統括シェフと同じ OpenAI で代替する（クロスチェックなしよりまし）
+const runAuditorAgent = async ({ mainProvider, routeContext, prompt, note, index }) => {
+    const plan = pickAgentPlan({ agentId: 'auditor', mainProvider, routeContext });
+    const output = await settleAgent({
+        agent: AGENT_DEFINITIONS.auditor,
+        provider: plan.provider,
+        model: plan.model,
+        prompt,
+        note,
+    }, index);
+    if (!output.failed || plan.provider !== 'xai') return output;
+
+    console.warn('[recipeAiService] Grok でのクロスチェックに失敗したため OpenAI で再試行します');
+    return settleAgent({
+        agent: AGENT_DEFINITIONS.auditor,
+        provider: 'openai',
+        model: OPENAI_MASTER_MODEL,
+        prompt,
+        note,
+    }, index);
 };
 
 const hasRebuttalCritique = (rebuttalOutput) => Boolean(
@@ -2272,15 +2426,14 @@ export const generateRecipeImprovement = async ({ recipe, notes, provider, direc
         note: `${AGENT_DEFINITIONS[agentId].agentName}の調査・判断に使用`,
     }, index)));
     const agentFindings = formatAgentFindings(agentOutputs);
-    const auditPlan = pickAgentPlan({ agentId: 'auditor', mainProvider: provider, routeContext });
 
-    const auditOutput = await settleAgent({
-        agent: AGENT_DEFINITIONS.auditor,
-        provider: auditPlan.provider,
-        model: auditPlan.model,
+    const auditOutput = await runAuditorAgent({
+        mainProvider: provider,
+        routeContext,
         prompt: buildCrossCheckPrompt({ recipeText, notes, agentFindings, memoryContext, directionContext }),
         note: '最終クロスチェックの裏取りに使用',
-    }, agentOutputs.length);
+        index: agentOutputs.length,
+    });
 
     const auditFindings = formatAgentFindings([auditOutput]);
     const masterPlan = pickAgentPlan({ agentId: 'master', mainProvider: provider, routeContext });
@@ -2515,11 +2668,9 @@ export const continueRecipeAiConversation = async ({
     }));
 
     const agentFindings = formatAgentFindings(agentOutputs);
-    const auditPlan = pickAgentPlan({ agentId: 'auditor', mainProvider: provider, routeContext });
-    const auditOutput = await settleAgent({
-        agent: AGENT_DEFINITIONS.auditor,
-        provider: auditPlan.provider,
-        model: auditPlan.model,
+    const auditOutput = await runAuditorAgent({
+        mainProvider: provider,
+        routeContext,
         prompt: buildConversationCrossCheckPrompt({
             mode,
             recipeText,
@@ -2532,7 +2683,8 @@ export const continueRecipeAiConversation = async ({
             directionContext,
         }),
         note: '会話回答・再評価の最終クロスチェックに使用',
-    }, agentOutputs.length);
+        index: agentOutputs.length,
+    });
 
     // クロスチェック（検証AI）が指摘を出したか＝差し戻し（否決）が発生したかを判定する。
     // 指摘あり＝否決を見せて審議画面に戻し、最終統合（再修正）後に可決へ。
