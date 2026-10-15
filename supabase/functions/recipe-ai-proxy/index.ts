@@ -137,6 +137,15 @@ const extractUsageFromPayload = (payload: Record<string, unknown> | null) => {
   return { inputTokens: 0, outputTokens: 0 };
 };
 
+// OpenAI・Anthropic・xAI などは { error: { message } }、一部は { error: "..." } や { message } で返す
+const extractUpstreamErrorMessage = (payload: Record<string, any> | null) => {
+  const error = payload?.error;
+  const message = typeof error === "string"
+    ? error
+    : (error?.message ?? payload?.message);
+  return typeof message === "string" ? message.slice(0, 300) : "";
+};
+
 const extractOpenAiWebSearchCallCount = (
   payload: Record<string, unknown> | null,
 ) => {
@@ -564,11 +573,19 @@ serve(async (req) => {
           metadata,
         });
       } else if (upstreamStatus === 429) {
-        await apiLogger.logRateLimit(metadata);
-      } else {
-        await apiLogger.logError(`upstream ${upstreamStatus}`, {
+        await apiLogger.logRateLimit({
           ...metadata,
+          upstream_error: extractUpstreamErrorMessage(parsedPayload),
         });
+      } else {
+        // 「upstream 400」だけでは原因（残高不足・パラメータ不正など）がわからないため、各社のエラー文も残す
+        const upstreamError = extractUpstreamErrorMessage(parsedPayload);
+        await apiLogger.logError(
+          upstreamError
+            ? `upstream ${upstreamStatus}: ${upstreamError}`
+            : `upstream ${upstreamStatus}`,
+          { ...metadata },
+        );
       }
     }
 
