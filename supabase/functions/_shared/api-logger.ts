@@ -296,6 +296,8 @@ export function getGroqCostBreakdown(
 const OPENAI_RATES_USD_PER_1M: Record<string, TokenRate> = {
     // gpt-6-luna は入力272Kトークン超で単価が上がるが、レシピAIの入力はその規模に届かないため通常単価のみ扱う
     'gpt-6-luna': { input: 0.10, output: 0.50 },
+    'gpt-6.1-sol': { input: 2.00, output: 10.00 },
+    'gpt-6-astra': { input: 10.00, output: 50.00 },
     'gpt-5.4-mini': { input: 0.75, output: 4.50 },
     'gpt-5.4-nano': { input: 0.20, output: 1.25 },
     // 以下は廃止予定モデル（過去ログの表示互換のため残す）
@@ -306,6 +308,8 @@ const OPENAI_RATES_USD_PER_1M: Record<string, TokenRate> = {
 function normalizeOpenAiModelName(modelName: string): string {
     const normalized = String(modelName || '').trim().toLowerCase()
     if (normalized.includes('gpt-6-luna')) return 'gpt-6-luna'
+    if (normalized.includes('gpt-6.1-sol')) return 'gpt-6.1-sol'
+    if (normalized.includes('gpt-6-astra')) return 'gpt-6-astra'
     if (normalized.includes('gpt-5.4-mini')) return 'gpt-5.4-mini'
     if (normalized.includes('gpt-5.4-nano')) return 'gpt-5.4-nano'
     if (normalized.includes('o4-mini')) return 'o4-mini'
