@@ -294,6 +294,8 @@ export function getGroqCostBreakdown(
 }
 
 const OPENAI_RATES_USD_PER_1M: Record<string, TokenRate> = {
+    // gpt-6-luna は入力272Kトークン超で単価が上がるが、レシピAIの入力はその規模に届かないため通常単価のみ扱う
+    'gpt-6-luna': { input: 0.10, output: 0.50 },
     'gpt-5.4-mini': { input: 0.75, output: 4.50 },
     'gpt-5.4-nano': { input: 0.20, output: 1.25 },
     // 以下は廃止予定モデル（過去ログの表示互換のため残す）
@@ -303,6 +305,7 @@ const OPENAI_RATES_USD_PER_1M: Record<string, TokenRate> = {
 
 function normalizeOpenAiModelName(modelName: string): string {
     const normalized = String(modelName || '').trim().toLowerCase()
+    if (normalized.includes('gpt-6-luna')) return 'gpt-6-luna'
     if (normalized.includes('gpt-5.4-mini')) return 'gpt-5.4-mini'
     if (normalized.includes('gpt-5.4-nano')) return 'gpt-5.4-nano'
     if (normalized.includes('o4-mini')) return 'o4-mini'
@@ -420,4 +423,77 @@ export function getPerplexityCostBreakdown(
         totalCostJpy: Math.round((inputCostJpy + outputCostJpy + requestFeeJpy) * 1_000_000) / 1_000_000,
         usdToJpy: USD_TO_JPY,
     }
+}
+
+// 入力トークン数が閾値を超えるとリクエスト全体が上位単価になるモデル用（閾値以下は standard を使う）
+type TieredTokenRate = { thresholdInputTokens: number; standard: TokenRate; long: TokenRate }
+
+const buildTieredTokenCostBreakdown = (
+    normalizedModel: string,
+    tieredRate: TieredTokenRate | undefined,
+    inputTokens: number,
+    outputTokens: number,
+) => {
+    const safeInputTokens = Number.isFinite(Number(inputTokens)) ? Math.max(0, Number(inputTokens)) : 0
+    const safeOutputTokens = Number.isFinite(Number(outputTokens)) ? Math.max(0, Number(outputTokens)) : 0
+
+    if (!tieredRate) {
+        return {
+            normalizedModel,
+            knownPricing: false,
+            pricingNote: 'モデルの公開単価が未登録のため、推定コスト合計から除外',
+            ratePer1M: null,
+            inputTokens: safeInputTokens,
+            outputTokens: safeOutputTokens,
+            inputCostJpy: 0,
+            outputCostJpy: 0,
+            totalCostJpy: 0,
+            usdToJpy: USD_TO_JPY,
+        }
+    }
+
+    const usdRate = safeInputTokens > tieredRate.thresholdInputTokens ? tieredRate.long : tieredRate.standard
+    const ratePer1M = { input: usdRate.input * USD_TO_JPY, output: usdRate.output * USD_TO_JPY }
+    const inputCostJpy = (safeInputTokens / 1_000_000) * ratePer1M.input
+    const outputCostJpy = (safeOutputTokens / 1_000_000) * ratePer1M.output
+
+    return {
+        normalizedModel,
+        knownPricing: true,
+        pricingNote: null,
+        ratePer1M,
+        inputTokens: safeInputTokens,
+        outputTokens: safeOutputTokens,
+        inputCostJpy: Math.round(inputCostJpy * 10000) / 10000,
+        outputCostJpy: Math.round(outputCostJpy * 10000) / 10000,
+        totalCostJpy: Math.round((inputCostJpy + outputCostJpy) * 1_000_000) / 1_000_000,
+        usdToJpy: USD_TO_JPY,
+    }
+}
+
+const ANTHROPIC_RATES_USD_PER_1M: Record<string, TieredTokenRate> = {
+    'claude-haiku-5-5': {
+        thresholdInputTokens: 100_000,
+        standard: { input: 0.10, output: 0.50 },
+        long: { input: 0.50, output: 2.50 },
+    },
+}
+
+export function getAnthropicCostBreakdown(modelName: string, inputTokens: number, outputTokens: number) {
+    const normalizedModel = String(modelName || '').trim().toLowerCase() || 'unknown'
+    return buildTieredTokenCostBreakdown(normalizedModel, ANTHROPIC_RATES_USD_PER_1M[normalizedModel], inputTokens, outputTokens)
+}
+
+const XAI_RATES_USD_PER_1M: Record<string, TieredTokenRate> = {
+    // 200K トークン「以上」で上位単価のため、閾値は 200K - 1
+    'grok-4.7': {
+        thresholdInputTokens: 199_999,
+        standard: { input: 2.00, output: 6.00 },
+        long: { input: 4.00, output: 12.00 },
+    },
+}
+
+export function getXaiCostBreakdown(modelName: string, inputTokens: number, outputTokens: number) {
+    const normalizedModel = String(modelName || '').trim().toLowerCase() || 'unknown'
+    return buildTieredTokenCostBreakdown(normalizedModel, XAI_RATES_USD_PER_1M[normalizedModel], inputTokens, outputTokens)
 }

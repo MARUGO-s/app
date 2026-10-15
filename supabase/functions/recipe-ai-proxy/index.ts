@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import Anthropic from "npm:@anthropic-ai/sdk@0.131.0";
 import { getAuthToken, verifySupabaseJWT } from "../_shared/jwt.ts";
 import { RateLimiter } from "../_shared/rate-limiter.ts";
 import {
@@ -8,9 +9,11 @@ import {
 } from "../_shared/http-security.ts";
 import {
   APILogger,
+  getAnthropicCostBreakdown,
   getGroqCostBreakdown,
   getOpenAiCostBreakdown,
   getPerplexityCostBreakdown,
+  getXaiCostBreakdown,
 } from "../_shared/api-logger.ts";
 
 const corsHeaders = {
@@ -20,7 +23,9 @@ const corsHeaders = {
 };
 
 const MAX_REQUEST_BYTES = 1024 * 1024;
-const MAX_OUTPUT_TOKENS = 16_000;
+// 推論モデルは思考トークンも出力上限に数えるため広めに取る（料金は実際の出力分だけ）。
+// Groq gpt-oss-120b の出力上限 65,536 を超えない値にしている
+const MAX_OUTPUT_TOKENS = 64_000;
 const MAX_MESSAGES = 64;
 const MAX_TOOLS = 16;
 
@@ -29,8 +34,10 @@ const ALLOWED_MODELS: Record<string, Set<string>> = {
   "sakana-payg": new Set(["fugu"]),
   sakana: new Set(["fugu"]),
   groq: new Set(["openai/gpt-oss-120b", "groq/compound"]),
-  openai: new Set(["gpt-5.4-mini", "gpt-5.4-nano"]),
+  openai: new Set(["gpt-6-luna", "gpt-5.4-mini", "gpt-5.4-nano"]),
   perplexity: new Set(["sonar"]),
+  anthropic: new Set(["claude-haiku-5-5"]),
+  xai: new Set(["grok-4.7"]),
 };
 
 const DEFAULT_MODELS: Record<string, string> = {
@@ -38,8 +45,10 @@ const DEFAULT_MODELS: Record<string, string> = {
   "sakana-payg": "fugu",
   sakana: "fugu",
   groq: "openai/gpt-oss-120b",
-  openai: "gpt-5.4-nano",
+  openai: "gpt-6-luna",
   perplexity: "sonar",
+  anthropic: "claude-haiku-5-5",
+  xai: "grok-4.7",
 };
 
 const jsonResponse = (body: Record<string, unknown>, status: number) =>
@@ -65,7 +74,35 @@ const normalizeApiName = (provider: string) => {
   if (provider === "groq") return "groq";
   if (provider === "openai") return "openai";
   if (provider === "perplexity") return "perplexity";
+  if (provider === "anthropic") return "anthropic";
+  if (provider === "xai") return "xai";
   return "sakana";
+};
+
+// Anthropic は公式SDKで呼び、他プロバイダーと同じ「ステータス＋本文テキスト」の形に揃える。
+// 大きな max_tokens は非ストリーミングだとSDKが拒否するため、ストリーミングで受けて完成形だけ返す。
+const callAnthropicMessages = async (
+  apiKey: string,
+  body: Record<string, unknown>,
+): Promise<{ status: number; text: string }> => {
+  const client = new Anthropic({ apiKey });
+  const { stream: _stream, ...params } = body;
+  try {
+    const message = await client.messages.stream(
+      params as unknown as Anthropic.MessageStreamParams,
+    ).finalMessage();
+    return { status: 200, text: JSON.stringify(message) };
+  } catch (error) {
+    if (error instanceof Anthropic.APIError) {
+      return {
+        status: error.status ?? 502,
+        text: JSON.stringify(
+          error.error ?? { error: { message: error.message } },
+        ),
+      };
+    }
+    throw error;
+  }
 };
 
 const extractUsageFromPayload = (payload: Record<string, unknown> | null) => {
@@ -156,6 +193,20 @@ const PROVIDER_ENDPOINTS: Record<
       url: "https://api.perplexity.ai/chat/completions",
       keyEnvs: ["PERPLEXITY_API_KEY"],
       providerName: "Perplexity",
+    },
+  },
+  anthropic: {
+    messages: {
+      url: "https://api.anthropic.com/v1/messages",
+      keyEnvs: ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY"],
+      providerName: "Anthropic",
+    },
+  },
+  xai: {
+    responses: {
+      url: "https://api.x.ai/v1/responses",
+      keyEnvs: ["XAI_API_KEY", "GROK_API_KEY"],
+      providerName: "xAI",
     },
   },
 };
@@ -390,16 +441,25 @@ serve(async (req) => {
       }
     }
 
-    const upstream = await fetch(target.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(upstreamBody),
-    });
+    let upstreamStatus: number;
+    let responseText: string;
+    if (normalizedProvider === "anthropic") {
+      ({ status: upstreamStatus, text: responseText } =
+        await callAnthropicMessages(apiKey, upstreamBody));
+    } else {
+      const upstream = await fetch(target.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(upstreamBody),
+      });
+      upstreamStatus = upstream.status;
+      responseText = await upstream.text();
+    }
+    const upstreamOk = upstreamStatus >= 200 && upstreamStatus < 300;
 
-    const responseText = await upstream.text();
     const responseSizeBytes = responseText.length;
     const parsedPayload = safeJsonParse(responseText);
     const usage = extractUsageFromPayload(parsedPayload);
@@ -409,7 +469,10 @@ serve(async (req) => {
     const perplexitySearchContextSize = String(
       body?.web_search_options?.search_context_size || "low",
     ).toLowerCase();
-    const billing = normalizedProvider === "groq"
+    // 失敗・レート制限で弾かれたリクエストは各社とも課金されないため、料金内訳を付けない
+    const billing = !upstreamOk
+      ? null
+      : normalizedProvider === "groq"
       ? getGroqCostBreakdown(
         requestModel || "",
         usage.inputTokens,
@@ -429,6 +492,18 @@ serve(async (req) => {
         usage.outputTokens,
         perplexitySearchContextSize,
       )
+      : normalizedProvider === "anthropic"
+      ? getAnthropicCostBreakdown(
+        requestModel || "",
+        usage.inputTokens,
+        usage.outputTokens,
+      )
+      : normalizedProvider === "xai"
+      ? getXaiCostBreakdown(
+        requestModel || "",
+        usage.inputTokens,
+        usage.outputTokens,
+      )
       : null;
 
     if (apiLogger) {
@@ -436,7 +511,7 @@ serve(async (req) => {
         ...requestMetadata,
         provider_name: target.providerName,
         upstream_url: target.url,
-        upstream_status: upstream.status,
+        upstream_status: upstreamStatus,
         usage,
         billing_type: billing
           ? (normalizedProvider === "perplexity"
@@ -471,7 +546,7 @@ serve(async (req) => {
           : null,
       };
 
-      if (upstream.ok) {
+      if (upstreamOk) {
         await apiLogger.logSuccess({
           requestSizeBytes,
           responseSizeBytes,
@@ -482,10 +557,10 @@ serve(async (req) => {
             : undefined,
           metadata,
         });
-      } else if (upstream.status === 429) {
+      } else if (upstreamStatus === 429) {
         await apiLogger.logRateLimit(metadata);
       } else {
-        await apiLogger.logError(`upstream ${upstream.status}`, {
+        await apiLogger.logError(`upstream ${upstreamStatus}`, {
           ...metadata,
         });
       }
@@ -493,7 +568,7 @@ serve(async (req) => {
 
     return new Response(responseText, {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: upstream.status,
+      status: upstreamStatus,
     });
   } catch (error) {
     console.error("❌ recipe-ai-proxy エラー:", error);
