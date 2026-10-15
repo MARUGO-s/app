@@ -382,17 +382,24 @@ const writeLocalStorage = (key, value) => {
     }
 };
 
-const AI_FINAL_MODEL_KEY = 'recipe_ai_final_model';
 const FINAL_REVISION_MODELS = new Set(RECIPE_AI_FINAL_MODEL_OPTIONS.map((option) => option.value));
 
 const normalizeFinalRevisionModel = (value) => (
     FINAL_REVISION_MODELS.has(value) ? value : DEFAULT_RECIPE_AI_FINAL_MODEL
 );
 
-export const getStoredRecipeAiFinalModel = () => normalizeFinalRevisionModel(readLocalStorage(AI_FINAL_MODEL_KEY));
+// gpt-6.1-sol / gpt-6-astra は高額なため、最終修正で選ぶときにパスワードを求める。
+// （クライアント側の簡易ロックであり、厳密なアクセス制御ではない。平文を置かないためハッシュで照合する）
+const PREMIUM_FINAL_MODEL_PASSWORD_SHA256 = '25b3b9d4f0e227488d1aa49abe4d831089cc2782053e5b821ba7a8f45e8851ed';
 
-export const saveStoredRecipeAiFinalModel = (value) => {
-    writeLocalStorage(AI_FINAL_MODEL_KEY, normalizeFinalRevisionModel(value));
+export const isPremiumFinalModel = (value) => (
+    FINAL_REVISION_MODELS.has(value) && value !== DEFAULT_RECIPE_AI_FINAL_MODEL
+);
+
+export const verifyPremiumFinalModelPassword = async (password) => {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(password ?? '').trim()));
+    const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return hex === PREMIUM_FINAL_MODEL_PASSWORD_SHA256;
 };
 
 export const isSakanaUnlocked = () => readLocalStorage(SAKANA_UNLOCK_KEY) === 'true';
@@ -1131,29 +1138,46 @@ const callGroqChatJson = async ({
     const wantsWebSearch = Array.isArray(tools) && tools.some(tool => tool?.type === 'web_search');
     const messages = [];
     if (instructions) messages.push({ role: 'system', content: instructions });
-    if (wantsWebSearch) {
-        messages.push({
-            role: 'system',
-            content: 'あなたはWeb検索ツールを内蔵したエージェントです。回答の前に必ず実際にWeb検索を実行し、検索で確認できた情報のみを根拠として使ってください。',
-        });
-    }
+    const webSearchInstruction = {
+        role: 'system',
+        content: 'あなたはWeb検索ツールを内蔵したエージェントです。回答の前に必ず実際にWeb検索を実行し、検索で確認できた情報のみを根拠として使ってください。',
+    };
+    if (wantsWebSearch) messages.push(webSearchInstruction);
     messages.push({ role: 'user', content: prompt });
 
     const selectedModel = model || GROQ_DEFAULT_TEXT_MODEL;
-    const payload = await withTimeout(async (signal) => postGroqChatCompletion({
+    const buildBody = (withSearch) => ({
         model: selectedModel,
-        messages,
+        // 検索なしで答えさせるときは「必ずWeb検索せよ」という指示を外す
+        messages: withSearch ? messages : messages.filter((message) => message !== webSearchInstruction),
         max_completion_tokens: selectedModel.includes('gpt-oss')
             ? Math.max(maxOutputTokens, GROQ_REASONING_OUTPUT_TOKEN_FLOOR)
             : maxOutputTokens,
-        temperature: wantsWebSearch ? 0.3 : 0.2,
+        temperature: withSearch ? 0.3 : 0.2,
         top_p: 0.95,
         service_tier: 'auto',
         // Groq の browser_search は gpt-oss 系モデルでのみ使える。reasoning_effort を上げると閲覧が長引きトークンが膨らむ
-        ...(wantsWebSearch
+        ...(withSearch
             ? { tools: [{ type: 'browser_search' }], tool_choice: 'required', reasoning_effort: 'low' }
             : {}),
-    }, signal), timeoutMs, GROQ_PROVIDER_NAME);
+    });
+
+    const payload = await withTimeout(async (signal) => {
+        if (!wantsWebSearch) return postGroqChatCompletion(buildBody(false), signal);
+        // gpt-oss は JSON で答えさせると、存在しない 'json' ツールを呼ぼうとして 400 になることがある（毎回ではない）。
+        // 検索付きでもう1回試し、それでも失敗したら検索なしで答えさせて、エージェントの所見自体は残す
+        const attempts = [true, true, false];
+        for (let index = 0; index < attempts.length; index += 1) {
+            try {
+                return await postGroqChatCompletion(buildBody(attempts[index]), signal);
+            } catch (error) {
+                const isToolCallValidationError = /tool call validation failed/i.test(String(error?.message || ''));
+                if (!isToolCallValidationError || index === attempts.length - 1) throw error;
+                console.warn(`[recipeAiService] Groq のツール呼び出しエラーのため再試行します（${attempts[index + 1] ? '検索あり' : '検索なし'}）`);
+            }
+        }
+        throw new Error(`${GROQ_PROVIDER_NAME} の呼び出しに失敗しました。`);
+    }, timeoutMs, GROQ_PROVIDER_NAME);
 
     const rawText = extractChatText(payload);
     if (!rawText) throw new Error(`${GROQ_PROVIDER_NAME} から空の応答が返されました。`);

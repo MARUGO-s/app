@@ -17,9 +17,9 @@ import {
     askRecipeAiQuestion,
     generateRecipeAiIntake,
     generateProductRecipeDraft,
-    getStoredRecipeAiFinalModel,
+    isPremiumFinalModel,
     RECIPE_AI_PROVIDER,
-    saveStoredRecipeAiFinalModel,
+    verifyPremiumFinalModelPassword,
     serializeRecipeAiDirectionContext,
 } from '../services/recipeAiService';
 import { recordRecipeAiAdoption } from '../services/recipeAiLearningService';
@@ -32,7 +32,7 @@ import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../contexts/useToast';
 import { Modal } from './Modal';
 import { RecipeAiMagiProgressModal } from './RecipeAiMagiProgressModal';
-import { getRecipeAiProgressConfig, RECIPE_AI_FINAL_MODEL_OPTIONS } from '../constants/recipeAiProgress';
+import { DEFAULT_RECIPE_AI_FINAL_MODEL, getRecipeAiProgressConfig, RECIPE_AI_FINAL_MODEL_OPTIONS } from '../constants/recipeAiProgress';
 import './RecipeForm.css';
 import './RecipeFormMock.css';
 import { ImportModal } from './ImportModal';
@@ -224,10 +224,20 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
     const [isAiConversing, setIsAiConversing] = useState(false);
     const [isAiPreparingQuestions, setIsAiPreparingQuestions] = useState(false);
     const aiProvider = RECIPE_AI_PROVIDER;
-    const [aiFinalModel, setAiFinalModel] = useState(() => getStoredRecipeAiFinalModel());
-    const handleAiFinalModelChange = (value) => {
+    const [aiFinalModel, setAiFinalModel] = useState(DEFAULT_RECIPE_AI_FINAL_MODEL);
+    // sol / astra のロック解除はこの画面を開いている間だけ有効（再読み込みで再度パスワードが必要）
+    const [premiumFinalModelUnlocked, setPremiumFinalModelUnlocked] = useState(false);
+    const handleAiFinalModelChange = async (value) => {
+        if (isPremiumFinalModel(value) && !premiumFinalModelUnlocked) {
+            const input = window.prompt('gpt-6.1-sol / gpt-6-astra は高額なためロックされています。パスワードを入力してください。');
+            if (input === null) return;
+            if (!(await verifyPremiumFinalModelPassword(input))) {
+                toast.error('パスワードが違います。');
+                return;
+            }
+            setPremiumFinalModelUnlocked(true);
+        }
         setAiFinalModel(value);
-        saveStoredRecipeAiFinalModel(value);
     };
     const [aiProgressMode, setAiProgressMode] = useState(null);
     const [aiProgressStepIndex, setAiProgressStepIndex] = useState(0);
@@ -1051,7 +1061,9 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                                 disabled={isAiGenerating}
                                             >
                                                 {RECIPE_AI_FINAL_MODEL_OPTIONS.map((option) => (
-                                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.premium && !premiumFinalModelUnlocked ? `🔒 ${option.label}` : option.label}
+                                                    </option>
                                                 ))}
                                             </select>
                                         </label>

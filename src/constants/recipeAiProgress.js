@@ -9,11 +9,11 @@ export const RECIPE_AI_MODEL_LABELS = {
 };
 
 // 最終修正（反証の指摘を反映して完成版を書く工程）で選べる OpenAI モデル。
-// 金額は最終修正1回あたりの目安（入力約1万・出力約8千トークン、1ドル150円換算）
+// 金額は最終修正1回あたりの目安（入力約1万・出力約1.1万トークン、1ドル150円換算）。premium はパスワードが必要
 export const RECIPE_AI_FINAL_MODEL_OPTIONS = [
     { value: 'gpt-6-luna', label: 'gpt-6-luna（標準・1回約¥1）' },
-    { value: 'gpt-6.1-sol', label: 'gpt-6.1-sol（高品質・1回約¥15）' },
-    { value: 'gpt-6-astra', label: 'gpt-6-astra（最高品質・1回約¥73）' },
+    { value: 'gpt-6.1-sol', label: 'gpt-6.1-sol（高品質・1回約¥20）', premium: true },
+    { value: 'gpt-6-astra', label: 'gpt-6-astra（最高品質・1回約¥100）', premium: true },
 ];
 export const DEFAULT_RECIPE_AI_FINAL_MODEL = 'gpt-6-luna';
 

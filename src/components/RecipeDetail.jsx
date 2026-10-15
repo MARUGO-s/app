@@ -11,9 +11,9 @@ import {
     askRecipeAiQuestion,
     generateRecipeAiIntake,
     generateRecipeImprovement,
-    getStoredRecipeAiFinalModel,
+    isPremiumFinalModel,
     RECIPE_AI_PROVIDER,
-    saveStoredRecipeAiFinalModel,
+    verifyPremiumFinalModelPassword,
     serializeRecipeAiDirectionContext,
 } from '../services/recipeAiService';
 import { fetchRecipeAiMemoryForRecipe, fetchRecipeAiRunForRecipeTitle, recordRecipeAiAdoption } from '../services/recipeAiLearningService';
@@ -26,7 +26,7 @@ import { unitConversionService } from '../services/unitConversionService';
 import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../contexts/useToast';
 import { SUPPORTED_LANGUAGES } from '../constants';
-import { getRecipeAiProgressConfig, RECIPE_AI_FINAL_MODEL_OPTIONS } from '../constants/recipeAiProgress';
+import { DEFAULT_RECIPE_AI_FINAL_MODEL, getRecipeAiProgressConfig, RECIPE_AI_FINAL_MODEL_OPTIONS } from '../constants/recipeAiProgress';
 import { normalizeUnit } from '../utils/unitUtils';
 import './RecipeDetail.css';
 import { FavoriteStarButton } from './FavoriteStarButton';
@@ -926,10 +926,20 @@ export const RecipeDetail = ({
     const [isAiModalOpen, setIsAiModalOpen] = React.useState(false);
     const [isActionMenuOpen, setIsActionMenuOpen] = React.useState(false);
     const aiProvider = RECIPE_AI_PROVIDER;
-    const [aiFinalModel, setAiFinalModel] = React.useState(() => getStoredRecipeAiFinalModel());
-    const handleAiFinalModelChange = (value) => {
+    const [aiFinalModel, setAiFinalModel] = React.useState(DEFAULT_RECIPE_AI_FINAL_MODEL);
+    // sol / astra のロック解除はこの画面を開いている間だけ有効（再読み込みで再度パスワードが必要）
+    const [premiumFinalModelUnlocked, setPremiumFinalModelUnlocked] = React.useState(false);
+    const handleAiFinalModelChange = async (value) => {
+        if (isPremiumFinalModel(value) && !premiumFinalModelUnlocked) {
+            const input = window.prompt('gpt-6.1-sol / gpt-6-astra は高額なためロックされています。パスワードを入力してください。');
+            if (input === null) return;
+            if (!(await verifyPremiumFinalModelPassword(input))) {
+                toast.error('パスワードが違います。');
+                return;
+            }
+            setPremiumFinalModelUnlocked(true);
+        }
         setAiFinalModel(value);
-        saveStoredRecipeAiFinalModel(value);
     };
 
 
@@ -3413,7 +3423,9 @@ export const RecipeDetail = ({
                                         disabled={isAiGenerating || isSavingAiProposal}
                                     >
                                         {RECIPE_AI_FINAL_MODEL_OPTIONS.map((option) => (
-                                            <option key={option.value} value={option.value}>{option.label}</option>
+                                            <option key={option.value} value={option.value}>
+                                                {option.premium && !premiumFinalModelUnlocked ? `🔒 ${option.label}` : option.label}
+                                            </option>
                                         ))}
                                     </select>
                                 </label>
