@@ -17,7 +17,9 @@ import {
     askRecipeAiQuestion,
     generateRecipeAiIntake,
     generateProductRecipeDraft,
+    getStoredRecipeAiFinalModel,
     RECIPE_AI_PROVIDER,
+    saveStoredRecipeAiFinalModel,
     serializeRecipeAiDirectionContext,
 } from '../services/recipeAiService';
 import { recordRecipeAiAdoption } from '../services/recipeAiLearningService';
@@ -30,7 +32,7 @@ import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../contexts/useToast';
 import { Modal } from './Modal';
 import { RecipeAiMagiProgressModal } from './RecipeAiMagiProgressModal';
-import { getRecipeAiProgressConfig } from '../constants/recipeAiProgress';
+import { getRecipeAiProgressConfig, RECIPE_AI_FINAL_MODEL_OPTIONS } from '../constants/recipeAiProgress';
 import './RecipeForm.css';
 import './RecipeFormMock.css';
 import { ImportModal } from './ImportModal';
@@ -222,13 +224,18 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
     const [isAiConversing, setIsAiConversing] = useState(false);
     const [isAiPreparingQuestions, setIsAiPreparingQuestions] = useState(false);
     const aiProvider = RECIPE_AI_PROVIDER;
+    const [aiFinalModel, setAiFinalModel] = useState(() => getStoredRecipeAiFinalModel());
+    const handleAiFinalModelChange = (value) => {
+        setAiFinalModel(value);
+        saveStoredRecipeAiFinalModel(value);
+    };
     const [aiProgressMode, setAiProgressMode] = useState(null);
     const [aiProgressStepIndex, setAiProgressStepIndex] = useState(0);
     // 検証AI（反証）の実際の合否。'approve'（可決）/ 'reject'（否決＝差し戻し）/ null（未判定）
     const [aiAuditVerdict, setAiAuditVerdict] = useState(null);
     const aiProgressConfig = useMemo(
-        () => (aiProgressMode ? getRecipeAiProgressConfig(aiProgressMode) : null),
-        [aiProgressMode]
+        () => (aiProgressMode ? getRecipeAiProgressConfig(aiProgressMode, { finalModel: aiFinalModel }) : null),
+        [aiProgressMode, aiFinalModel]
     );
     const isAiProgressOpen = Boolean(aiProgressConfig) && (isAiGenerating || isAiConversing);
 
@@ -607,6 +614,7 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
             const draft = await generateProductRecipeDraft({
                 brief,
                 provider: aiProvider,
+                finalModel: aiFinalModel,
                 directionContext: serializeRecipeAiDirectionContext(aiIntake),
                 onProgress: (event) => {
                     if (event?.type === 'audit-verdict') setAiAuditVerdict(event.verdict);
@@ -1033,6 +1041,22 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                     <div className="recipe-ai-form">
                                         <p className="recipe-ai-form__hint">
                                             調査は内容に応じて Perplexity と Groq、最終クロスチェックは Grok、統合は OpenAI、反証は Claude を自動で使い分けます。
+                                        </p>
+                                        <label className="recipe-ai-form__label">
+                                            最終修正のAI
+                                            <select
+                                                className="recipe-ai-form__select"
+                                                value={aiFinalModel}
+                                                onChange={(e) => handleAiFinalModelChange(e.target.value)}
+                                                disabled={isAiGenerating}
+                                            >
+                                                {RECIPE_AI_FINAL_MODEL_OPTIONS.map((option) => (
+                                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                                ))}
+                                            </select>
+                                        </label>
+                                        <p className="recipe-ai-form__hint">
+                                            反証の指摘を反映して完成版を書く工程のAIです。上位ほど仕上がりは丁寧になりますが、時間と費用がかかります。
                                         </p>
                                         <label className="recipe-ai-form__label">
                                             開発テーマ

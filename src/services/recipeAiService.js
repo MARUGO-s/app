@@ -3,6 +3,7 @@ import {
     buildRecipeAiMemoryContext,
     logRecipeAiRun,
 } from './recipeAiLearningService';
+import { DEFAULT_RECIPE_AI_FINAL_MODEL, RECIPE_AI_FINAL_MODEL_OPTIONS } from '../constants/recipeAiProgress';
 
 const SAKANA_PROVIDER_NAME = 'Sakana AI';
 const GROQ_PROVIDER_NAME = 'Groq';
@@ -379,6 +380,19 @@ const writeLocalStorage = (key, value) => {
     } catch {
         // ignore storage failures
     }
+};
+
+const AI_FINAL_MODEL_KEY = 'recipe_ai_final_model';
+const FINAL_REVISION_MODELS = new Set(RECIPE_AI_FINAL_MODEL_OPTIONS.map((option) => option.value));
+
+const normalizeFinalRevisionModel = (value) => (
+    FINAL_REVISION_MODELS.has(value) ? value : DEFAULT_RECIPE_AI_FINAL_MODEL
+);
+
+export const getStoredRecipeAiFinalModel = () => normalizeFinalRevisionModel(readLocalStorage(AI_FINAL_MODEL_KEY));
+
+export const saveStoredRecipeAiFinalModel = (value) => {
+    writeLocalStorage(AI_FINAL_MODEL_KEY, normalizeFinalRevisionModel(value));
 };
 
 export const isSakanaUnlocked = () => readLocalStorage(SAKANA_UNLOCK_KEY) === 'true';
@@ -1982,7 +1996,7 @@ const hasRebuttalCritique = (rebuttalOutput) => Boolean(
 
 // ドラフト配合を反証エージェント（別AI）に批判させ、統括シェフが指摘を反映した完成版を返す。
 // 反証・修正のどちらで失敗してもドラフトを失わない（フォールバック優先）。
-const runRebuttalAndRevise = async ({ provider, draftParsed, contextBlock, memoryContext, directionContext, rebuttalIndex, onProgress }) => {
+const runRebuttalAndRevise = async ({ provider, draftParsed, contextBlock, memoryContext, directionContext, rebuttalIndex, onProgress, finalModel }) => {
     const draftText = serializeProposalForAi(draftParsed);
     const rebuttalPrompt = buildRebuttalPrompt({ contextBlock, draftText, memoryContext, directionContext });
     const plan = pickRebuttalPlan(provider);
@@ -2032,6 +2046,10 @@ const runRebuttalAndRevise = async ({ provider, draftParsed, contextBlock, memor
                 directionContext,
             },
         });
+        // 完成版を書く最終修正だけは、画面で選んだ OpenAI モデル（luna / sol / astra）を使う
+        const revisionModel = revisionPlan.provider === 'openai'
+            ? normalizeFinalRevisionModel(finalModel)
+            : revisionPlan.model;
         const { parsed } = await callRecipeAiJson({
             provider: revisionPlan.provider,
             prompt: buildRevisionPrompt({
@@ -2045,7 +2063,7 @@ const runRebuttalAndRevise = async ({ provider, draftParsed, contextBlock, memor
             maxOutputTokens: 7000,
             timeoutMs: REQUEST_TIMEOUT_MS,
             reasoningEffort: 'high',
-            model: revisionPlan.model,
+            model: revisionModel,
         });
         const revised = normalizeAiProposal(parsed);
         if (revised.ingredients.length === 0 || revised.steps.length === 0) {
@@ -2314,7 +2332,7 @@ const mergeProposalContext = (currentProposal, nextProposal, extra = {}) => {
     });
 };
 
-export const generateProductRecipeDraft = async ({ brief, provider, directionContext = '', onProgress }) => {
+export const generateProductRecipeDraft = async ({ brief, provider, directionContext = '', onProgress, finalModel }) => {
     const cleanBrief = normalizeText(brief);
     if (!cleanBrief) throw new Error('開発テーマを入力してください。');
     const { memories, memoryContext } = await buildRecipeAiMemoryContext({
@@ -2363,6 +2381,7 @@ export const generateProductRecipeDraft = async ({ brief, provider, directionCon
         directionContext,
         rebuttalIndex: agentOutputs.length,
         onProgress,
+        finalModel,
     });
 
     const sources = mergeSources(
@@ -2391,6 +2410,7 @@ export const generateProductRecipeDraft = async ({ brief, provider, directionCon
         sources: proposal.sources,
         metadata: {
             retrievedMemoryIds: memories.map((memory) => memory.id),
+            finalRevisionModel: normalizeFinalRevisionModel(finalModel),
             directionContext: normalizeText(directionContext),
         },
     });
@@ -2404,7 +2424,7 @@ export const generateProductRecipeDraft = async ({ brief, provider, directionCon
     });
 };
 
-export const generateRecipeImprovement = async ({ recipe, notes, provider, directionContext = '', onProgress }) => {
+export const generateRecipeImprovement = async ({ recipe, notes, provider, directionContext = '', onProgress, finalModel }) => {
     const recipeText = serializeRecipeForAi(recipe);
     const { memories, memoryContext } = await buildRecipeAiMemoryContext({
         modeFamily: 'improvement',
@@ -2458,6 +2478,7 @@ export const generateRecipeImprovement = async ({ recipe, notes, provider, direc
         directionContext,
         rebuttalIndex: agentOutputs.length + 1,
         onProgress,
+        finalModel,
     });
 
     const sources = mergeSources(
@@ -2485,6 +2506,7 @@ export const generateRecipeImprovement = async ({ recipe, notes, provider, direc
         sources: proposal.sources,
         metadata: {
             retrievedMemoryIds: memories.map((memory) => memory.id),
+            finalRevisionModel: normalizeFinalRevisionModel(finalModel),
             directionContext: normalizeText(directionContext),
         },
     });

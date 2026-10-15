@@ -8,7 +8,16 @@ export const RECIPE_AI_MODEL_LABELS = {
     rebuttal: 'Claude Haiku 5.5',
 };
 
-const AUTO_RESEARCH_PROVIDER = `${RECIPE_AI_MODEL_LABELS.perplexity} / ${RECIPE_AI_MODEL_LABELS.groq}（Web検索・自動振分）`;
+// 最終修正（反証の指摘を反映して完成版を書く工程）で選べる OpenAI モデル。
+// 金額は最終修正1回あたりの目安（入力約1万・出力約8千トークン、1ドル150円換算）
+export const RECIPE_AI_FINAL_MODEL_OPTIONS = [
+    { value: 'gpt-6-luna', label: 'gpt-6-luna（標準・1回約¥1）' },
+    { value: 'gpt-6.1-sol', label: 'gpt-6.1-sol（高品質・1回約¥15）' },
+    { value: 'gpt-6-astra', label: 'gpt-6-astra（最高品質・1回約¥73）' },
+];
+export const DEFAULT_RECIPE_AI_FINAL_MODEL = 'gpt-6-luna';
+
+const AUTO_RESEARCH_PROVIDER =`${RECIPE_AI_MODEL_LABELS.perplexity} / ${RECIPE_AI_MODEL_LABELS.groq}（Web検索・自動振分）`;
 
 const PROGRESS_CONFIGS = {
     'product-generate': {
@@ -70,10 +79,25 @@ const PROGRESS_CONFIGS = {
     },
 };
 
-export const getRecipeAiProgressConfig = (mode) => (
-    PROGRESS_CONFIGS[mode] || {
-        title: 'AIエージェントを実行中',
-        description: 'AIエージェントが調査と統合を進めています。',
-        steps: [{ label: '調査と統合', provider: 'AI自動選択', description: '進行状況を確認中' }],
+export const getRecipeAiProgressConfig = (mode, { finalModel = DEFAULT_RECIPE_AI_FINAL_MODEL } = {}) => {
+    const config = PROGRESS_CONFIGS[mode];
+    if (!config) {
+        return {
+            title: 'AIエージェントを実行中',
+            description: 'AIエージェントが調査と統合を進めています。',
+            steps: [{ label: '調査と統合', provider: 'AI自動選択', description: '進行状況を確認中' }],
+            finalSynthesisLabel: RECIPE_AI_MODEL_LABELS.master,
+        };
     }
-);
+    const hasFinalRevision = config.steps.some((step) => step.label === '最終修正');
+    const finalRevisionLabel = `OpenAI ${finalModel}`;
+    return {
+        ...config,
+        steps: config.steps.map((step) => (
+            step.label === '最終修正' ? { ...step, provider: finalRevisionLabel } : step
+        )),
+        finalSynthesisLabel: hasFinalRevision && finalModel !== DEFAULT_RECIPE_AI_FINAL_MODEL
+            ? `${RECIPE_AI_MODEL_LABELS.master} → 最終修正 ${finalModel}`
+            : RECIPE_AI_MODEL_LABELS.master,
+    };
+};

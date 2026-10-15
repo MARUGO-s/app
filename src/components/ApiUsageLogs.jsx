@@ -47,6 +47,8 @@ const GROQ_RATES_JPY_PER_1M = {
 
 const OPENAI_RATES_JPY_PER_1M = {
     'gpt-6-luna': { input: 15, output: 75 },
+    'gpt-6.1-sol': { input: 300, output: 1500 },
+    'gpt-6-astra': { input: 1500, output: 7500 },
     'gpt-5.4-mini': { input: 112.5, output: 675 },
     'gpt-5.4-nano': { input: 30, output: 187.5 },
     // 以下は廃止予定モデル（過去ログの表示互換のため残す）
@@ -167,6 +169,8 @@ const buildGroqBillingBreakdown = ({ modelName, inputTokens, outputTokens, estim
 const normalizeOpenAiModelNameForCost = (modelName) => {
     const normalized = String(modelName || '').trim().toLowerCase()
     if (normalized.includes('gpt-6-luna')) return 'gpt-6-luna'
+    if (normalized.includes('gpt-6.1-sol')) return 'gpt-6.1-sol'
+    if (normalized.includes('gpt-6-astra')) return 'gpt-6-astra'
     if (normalized.includes('gpt-5.4-mini')) return 'gpt-5.4-mini'
     if (normalized.includes('gpt-5.4-nano')) return 'gpt-5.4-nano'
     if (normalized.includes('o4-mini')) return 'o4-mini'

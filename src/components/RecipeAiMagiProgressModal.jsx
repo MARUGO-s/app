@@ -182,7 +182,7 @@ export const RecipeAiMagiProgressModal = ({
                     <div className={`recipe-ai-magi__final is-${finalState}`}>
                         <div>
                             <span className="recipe-ai-magi__final-label">統合決裁</span>
-                            <small>FINAL SYNTHESIS · {RECIPE_AI_MODEL_LABELS.master}</small>
+                            <small>FINAL SYNTHESIS · {config?.finalSynthesisLabel || RECIPE_AI_MODEL_LABELS.master}</small>
                         </div>
                         <span className="recipe-ai-magi__final-status">
                             {finalState === 'active' ? '決裁中' : finalState === 'complete' ? '可決' : '待機'}
