@@ -28,7 +28,6 @@ const SAKANA_LOCK_PASSWORD = 'marugo';
 const DEFAULT_MODEL = 'fugu';
 // llama-3.3-70b-versatile は Groq 側で 2026-08-16 廃止のため gpt-oss-120b へ移行（性能同等以上・単価は半額以下）
 const GROQ_DEFAULT_TEXT_MODEL = 'openai/gpt-oss-120b';
-const GROQ_COMPOUND_MODEL = 'groq/compound';
 // o4-mini / gpt-4.1 系は OpenAI 側で 2026-10-23 廃止予定のため gpt-5.4 系へ移行。
 // コストと品質のバランスを優先し、批判系（監査・反証）は gpt-5.4-mini、統合・修正は gpt-5.4-nano を使用する。
 const OPENAI_REBUTTAL_MODEL = 'gpt-5.4-mini';
@@ -475,6 +474,60 @@ const repairBadJson = (text) => {
     return repaired;
 };
 
+const findMatchingBraceIndex = (text, start) => {
+    let depth = 0;
+    let inString = false;
+    for (let index = start; index < text.length; index += 1) {
+        const char = text[index];
+        if (inString) {
+            if (char === '\\') index += 1;
+            else if (char === '"') inString = false;
+            continue;
+        }
+        if (char === '"') inString = true;
+        else if (char === '{') depth += 1;
+        else if (char === '}') {
+            depth -= 1;
+            if (depth === 0) return index;
+        }
+    }
+    return -1;
+};
+
+// Web検索ツール付きの応答では本文のJSONの前後に検索結果の抜粋（波括弧を含むことがある）が混ざり、
+// 先頭の { から末尾の } までを切り出す方式では解析できないことがある。
+// その場合は、単独で解析できるトップレベルのJSONオブジェクトのうち最も大きいものを採用する
+const extractLargestJsonObject = (text) => {
+    let best = null;
+    let bestLength = 0;
+    let start = text.indexOf('{');
+    while (start >= 0) {
+        const end = findMatchingBraceIndex(text, start);
+        if (end < 0) break;
+        const candidate = text.slice(start, end + 1);
+        let parsed = null;
+        try {
+            parsed = JSON.parse(candidate);
+        } catch {
+            try {
+                parsed = JSON.parse(repairBadJson(candidate));
+            } catch {
+                parsed = null;
+            }
+        }
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            if (candidate.length > bestLength) {
+                best = parsed;
+                bestLength = candidate.length;
+            }
+            start = text.indexOf('{', end + 1);
+        } else {
+            start = text.indexOf('{', start + 1);
+        }
+    }
+    return best;
+};
+
 const parseJsonResponse = (rawText, provider) => {
     const cleaned = cleanJsonText(rawText);
     try {
@@ -485,6 +538,8 @@ const parseJsonResponse = (rawText, provider) => {
             const repaired = repairBadJson(cleaned);
             return JSON.parse(repaired);
         } catch (repairError) {
+            const extracted = extractLargestJsonObject(cleaned);
+            if (extracted) return extracted;
             const preview = cleaned.slice(0, 220).replace(/\s+/g, ' ');
             const suffix = cleaned.slice(-220).replace(/\s+/g, ' ');
             throw new Error(`${getProviderDisplayName(provider)} のJSON解析に失敗しました: ${firstError?.message || firstError}（修復後: ${repairError?.message || repairError}） / head="${preview}" / tail="${suffix}"`);
@@ -824,6 +879,47 @@ const callOpenAiResponseJson = async ({
     return { parsed: parseJsonResponse(rawText, 'openai'), payload, rawText };
 };
 
+// Perplexity の Tier 0 は直近1秒あたり1リクエストまで。複数エージェントが同時に送ると
+// 429 で弾かれるため、このブラウザから送る開始間隔を空け、上流の 429 は待ってから再試行する。
+// APIキーは全ユーザー共通なので、他ユーザーとの衝突は再試行側で吸収する。
+const PERPLEXITY_MIN_REQUEST_INTERVAL_MS = 1100;
+const PERPLEXITY_RATE_LIMIT_RETRY_DELAYS_MS = [2000, 4000, 8000];
+let perplexityNextRequestAt = 0;
+
+const sleepWithSignal = (ms, signal) => new Promise((resolve, reject) => {
+    const abortError = () => new DOMException('Aborted', 'AbortError');
+    if (signal?.aborted) {
+        reject(abortError());
+        return;
+    }
+    const onAbort = () => {
+        clearTimeout(timer);
+        reject(abortError());
+    };
+    const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+});
+
+const waitForPerplexityRequestSlot = async (signal) => {
+    const now = Date.now();
+    const slotAt = Math.max(now, perplexityNextRequestAt);
+    // 待つ前に次の枠を予約しておくことで、同時に呼ばれても送信順と間隔が保たれる
+    perplexityNextRequestAt = slotAt + PERPLEXITY_MIN_REQUEST_INTERVAL_MS;
+    if (slotAt > now) await sleepWithSignal(slotAt - now, signal);
+};
+
+// プロキシ自身の利用上限（ユーザー単位）による 429 は待っても解消しないため再試行しない
+const isProxyRateLimitResponse = (bodyText) => {
+    try {
+        return JSON.parse(bodyText)?.success === false;
+    } catch {
+        return false;
+    }
+};
+
 const callPerplexityChatJson = async ({
     prompt,
     instructions,
@@ -832,25 +928,33 @@ const callPerplexityChatJson = async ({
     model,
 }) => {
     const payload = await withTimeout(async (signal) => {
-        const response = await callAiProxy({
-            provider: 'perplexity',
-            endpoint: 'chat',
-            body: {
-                model: model || PERPLEXITY_DEFAULT_MODEL,
-                messages: [
-                    { role: 'system', content: instructions || 'You are a senior culinary research agent. Return strict JSON only.' },
-                    { role: 'user', content: prompt },
-                ],
-                temperature: 0.2,
-                max_tokens: maxOutputTokens,
-            },
-            signal,
-        });
-        if (!response.ok) {
+        for (let attempt = 0; ; attempt += 1) {
+            await waitForPerplexityRequestSlot(signal);
+            const response = await callAiProxy({
+                provider: 'perplexity',
+                endpoint: 'chat',
+                body: {
+                    model: model || PERPLEXITY_DEFAULT_MODEL,
+                    messages: [
+                        { role: 'system', content: instructions || 'You are a senior culinary research agent. Return strict JSON only.' },
+                        { role: 'user', content: prompt },
+                    ],
+                    temperature: 0.2,
+                    max_tokens: maxOutputTokens,
+                },
+                signal,
+            });
+            if (response.ok) return response.json();
+
             const body = await response.text().catch(() => '');
+            const retryDelay = PERPLEXITY_RATE_LIMIT_RETRY_DELAYS_MS[attempt];
+            if (response.status === 429 && retryDelay !== undefined && !isProxyRateLimitResponse(body)) {
+                console.warn(`[recipeAiService] Perplexity 429、${retryDelay}ms 後に再試行します（${attempt + 1}/${PERPLEXITY_RATE_LIMIT_RETRY_DELAYS_MS.length}）`);
+                await sleepWithSignal(retryDelay + Math.floor(Math.random() * 500), signal);
+                continue;
+            }
             throw new Error(`${PERPLEXITY_PROVIDER_NAME} API error ${response.status}: ${body || response.statusText}`);
         }
-        return response.json();
     }, timeoutMs, PERPLEXITY_PROVIDER_NAME);
 
     const rawText = extractChatText(payload);
@@ -904,12 +1008,16 @@ const callGroqChatJson = async ({
     messages.push({ role: 'user', content: prompt });
 
     const payload = await withTimeout(async (signal) => postGroqChatCompletion({
-        model: model || (wantsWebSearch ? GROQ_COMPOUND_MODEL : GROQ_DEFAULT_TEXT_MODEL),
+        model: model || GROQ_DEFAULT_TEXT_MODEL,
         messages,
         max_completion_tokens: maxOutputTokens,
         temperature: wantsWebSearch ? 0.3 : 0.2,
         top_p: 0.95,
         service_tier: 'auto',
+        // Groq の browser_search は gpt-oss 系モデルでのみ使える。reasoning_effort を上げると閲覧が長引きトークンが膨らむ
+        ...(wantsWebSearch
+            ? { tools: [{ type: 'browser_search' }], tool_choice: 'required', reasoning_effort: 'low' }
+            : {}),
     }, signal), timeoutMs, GROQ_PROVIDER_NAME);
 
     const rawText = extractChatText(payload);
