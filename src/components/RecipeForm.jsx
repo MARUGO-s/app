@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from './Button';
 import { Input } from './Input';
+import { estimateRecipeTime, formatEstimatedRecipeTime } from '../utils/estimateRecipeTime';
 import { getRecipeTimeLabel, parseRecipeMinutes } from '../utils/recipeTime';
 import { Card } from './Card';
 import { STORE_LIST } from '../constants';
@@ -794,6 +795,13 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         return formData.ingredients?.length || 0;
     }, [formData.breadIngredients, formData.flours, formData.ingredientSections, formData.ingredients, formData.type]);
 
+    const [showTimeEstimate, setShowTimeEstimate] = useState(false);
+    const timeEstimate = useMemo(() => estimateRecipeTime(
+        formData.stepSections?.length
+            ? formData.stepSections.flatMap(section => section.items || [])
+            : formData.steps || []
+    ), [formData.stepSections, formData.steps]);
+
     const stepCount = useMemo(() => {
         const sections = formData.stepSections || [];
         if (sections.length > 0) {
@@ -1287,6 +1295,20 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
                                     <Input label="作業時間（分）" id="prepTime" type="number" min="0" step="1" value={formData.prepTime} onChange={handleChange} placeholder="例: 30" />
                                     <Input label="待ち・加熱時間（分）" id="cookTime" type="number" min="0" step="1" value={formData.cookTime} onChange={handleChange} placeholder="例: 210" />
                                     <p>{getRecipeTimeLabel(formData)}</p>
+                                    <Button type="button" variant="secondary" onClick={() => setShowTimeEstimate(true)}>作り方から自動計算</Button>
+                                    {showTimeEstimate && (
+                                        <div className="recipe-time-estimate" role="status">
+                                            <strong>{formatEstimatedRecipeTime(timeEstimate)}</strong>
+                                            <Button type="button" variant="secondary" disabled={!timeEstimate.complete} onClick={() => setFormData(prev => ({
+                                                ...prev,
+                                                prepTime: Math.ceil(timeEstimate.entries.filter(entry => entry.kind === 'work').reduce((sum, entry) => sum + entry.max, 0)),
+                                                cookTime: Math.ceil(timeEstimate.entries.filter(entry => entry.kind === 'wait').reduce((sum, entry) => sum + entry.max, 0)),
+                                            }))}>全工程を算出できた場合、範囲の上限を入力欄へ反映</Button>
+                                            <p>手入力値は変更しません。未入力なら保存後も作り方から自動表示します。作業時間・予熱・冷却など未記載の時間は推測せず、同時進行は確認対象にします。</p>
+                                            <ul>{timeEstimate.entries.map((entry, index) => <li key={index}>手順{entry.step}：{entry.token}（{entry.kind === 'work' ? '作業' : '待ち・加熱'}） — {entry.evidence}</li>)}</ul>
+                                            {timeEstimate.unknown.length > 0 && <ul>{timeEstimate.unknown.map(entry => <li key={entry.step}>手順{entry.step}：{entry.reason}</li>)}</ul>}
+                                        </div>
+                                    )}
                                     <small>発酵・休ませ・焼成などを含み、同時進行する時間は重複させずに入力してください。時間が不要な項目は0分を入力。仕上がり量による自動変更はしません。</small>
                                 </fieldset>
                                 <Input
