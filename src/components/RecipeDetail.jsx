@@ -28,6 +28,7 @@ import { useToast } from '../contexts/useToast';
 import { SUPPORTED_LANGUAGES } from '../constants';
 import { DEFAULT_RECIPE_AI_FINAL_MODEL, getRecipeAiProgressConfig, RECIPE_AI_FINAL_MODEL_OPTIONS } from '../constants/recipeAiProgress';
 import { normalizeUnit } from '../utils/unitUtils';
+import { scaleInstructionQuantities, verifyInstructionQuantities } from '../utils/scaleInstructionQuantities';
 import './RecipeDetail.css';
 import { FavoriteStarButton } from './FavoriteStarButton';
 import './FavoriteStarButton.css';
@@ -2408,6 +2409,28 @@ export const RecipeDetail = ({
         };
     }, [costAdjustedRecipe.breadIngredients, costAdjustedRecipe.flours, displayRecipe.type, targetTotal, baseItem]);
 
+    const scaleStepText = (text) => scaleInstructionQuantities(
+        text, breadPrintContext?.scaleFactor ?? normalEffectiveMultiplier
+    );
+
+    const instructionMultiplier = breadPrintContext?.scaleFactor ?? normalEffectiveMultiplier;
+    const instructionCheck = verifyInstructionQuantities(
+        steps.map(step => scaleStepText(typeof step === 'object' ? step?.text : step)),
+        displayRecipe.type === 'bread'
+            ? [...(costAdjustedRecipe.flours || []), ...(costAdjustedRecipe.breadIngredients || []),
+                { name: '粉合計', quantity: breadPrintContext.totalFlour, unit: 'g' }]
+            : ingredients,
+        instructionMultiplier
+    );
+    const renderInstructionCheck = () => (
+        <div role="status" style={{ fontSize: '0.85rem', marginBottom: '1rem', color: instructionCheck.issues.length ? '#92400e' : '#475569' }}>
+            分量検算: {instructionCheck.checked}件照合・{instructionCheck.issues.length}件要確認
+            {instructionCheck.unverified > 0 && `（自動照合できない分量 ${instructionCheck.unverified}件は原文・材料表を確認してください）`}
+            <div>重量・容量のみ倍率を反映。温度・時間・個数・作業用の水は据え置き。分割量は丸めにより端数差が出る場合があります。</div>
+            {instructionCheck.issues.length > 0 && <ul>{instructionCheck.issues.map((issue, index) => <li key={index}>{issue}</li>)}</ul>}
+        </div>
+    );
+
     const normalPrintTotal = React.useMemo(() => {
         if (displayRecipe.type === 'bread') return 0;
         const overrideMap = costReferenceMode === 'override' ? categoryCostOverrides : new Map();
@@ -4713,6 +4736,7 @@ export const RecipeDetail = ({
                         </section>
                         <section className="detail-section">
                             <h2>{tUi('instructions')}</h2>
+                            {renderInstructionCheck()}
                             {(() => {
                                 const stepGroups = displayRecipe.stepGroups && displayRecipe.stepGroups.length > 0 ? displayRecipe.stepGroups : null;
                                 const hasGroupedSteps = stepGroups && steps.some(s => {
@@ -4766,7 +4790,7 @@ export const RecipeDetail = ({
                                                                         onClick={() => toggleStep(originalIndex)}
                                                                     >
                                                                         <div className="step-number">{originalIndex + 1}</div>
-                                                                        <p className="step-text">{renderText(cleanText(stepText), cleanText(originalText), true)}</p>
+                                                                        <p className="step-text">{renderText(scaleStepText(cleanText(stepText)), scaleStepText(cleanText(originalText)), true)}</p>
                                                                     </Card>
                                                                 );
                                                             })}
@@ -4793,7 +4817,7 @@ export const RecipeDetail = ({
                                                     onClick={() => toggleStep(i)}
                                                 >
                                                     <div className="step-number">{i + 1}</div>
-                                                    <p className="step-text">{renderText(stepText, originalText, true)}</p>
+                                                    <p className="step-text">{renderText(scaleStepText(stepText), scaleStepText(originalText), true)}</p>
                                                 </Card>
                                             );
                                         })}
@@ -5187,6 +5211,7 @@ export const RecipeDetail = ({
                         {steps.length > 0 && (
                             <div className="preview-section">
                                 <h3>{tUi('instructions')}</h3>
+                                {renderInstructionCheck()}
                                 <ol className="preview-steps">
                                     {steps.map((step, i) => {
                                         const stepText = typeof step === 'object' ? step.text : step;
@@ -5204,7 +5229,7 @@ export const RecipeDetail = ({
                                                     }
                                                 }}
                                             >
-                                                {stepText}
+                                                {scaleStepText(stepText)}
                                             </li>
                                         );
                                     })}
@@ -5453,6 +5478,7 @@ export const RecipeDetail = ({
                     </section>
                     <section className="detail-section">
                         <h2>{tUi('instructions')}</h2>
+                            {renderInstructionCheck()}
                         {steps.length > 0 ? (
                             <div className="steps-list">
                                 {steps.map((step, index) => {
@@ -5462,7 +5488,7 @@ export const RecipeDetail = ({
                                     return (
                                         <div className="step-card" key={`print-step-${index}`}>
                                             <div className="step-number">{index + 1}</div>
-                                            <p className="step-text">{renderPrintText(stepText, originalText)}</p>
+                                            <p className="step-text">{renderPrintText(scaleStepText(stepText), scaleStepText(originalText))}</p>
                                         </div>
                                     );
                                 })}
