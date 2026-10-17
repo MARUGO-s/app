@@ -2148,3 +2148,30 @@
         line-height: 1.35;
     }
 }
+
+/* Give validation notes their own surface so they remain legible in either theme. */
+.instruction-check {
+    margin-bottom: 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #f1f5f9;
+    color: #1e293b;
+    font-size: 0.9rem;
+    line-height: 1.75;
+    overflow-wrap: anywhere;
+}
+
+.instruction-check--warning {
+    border-color: #d97706;
+    background: #fffbeb;
+    color: #78350f;
+}
+
+@media print {
+    .instruction-check {
+        background: #fff !important;
+        color: #000 !important;
+        border-color: #94a3b8;
+    }
+}

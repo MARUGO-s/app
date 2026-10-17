@@ -2424,7 +2424,7 @@ export const RecipeDetail = ({
         instructionMultiplier
     );
     const renderInstructionCheck = () => (
-        <div role="status" style={{ fontSize: '0.85rem', marginBottom: '1rem', color: instructionCheck.issues.length ? '#92400e' : '#475569' }}>
+        <div role="status" className={`instruction-check${instructionCheck.issues.length ? ' instruction-check--warning' : ''}`}>
             分量検算: {instructionCheck.checked}件照合・{instructionCheck.issues.length}件要確認
             {instructionCheck.unverified > 0 && `（自動照合できない分量 ${instructionCheck.unverified}件は原文・材料表を確認してください）`}
             <div>重量・容量のみ倍率を反映。温度・時間・個数・作業用の水は据え置き。分割量は丸めにより端数差が出る場合があります。</div>
