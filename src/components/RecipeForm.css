@@ -667,3 +667,22 @@ h3 {
     line-height: 1.7;
     overflow-wrap: anywhere;
 }
+
+.recipe-form-mock__card--notes { min-width: 0; }
+.recipe-time-panel {
+    min-inline-size: 0;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #64748b;
+    border-radius: 10px;
+    padding: 0.8rem;
+    margin: 0 0 1rem;
+    overflow-wrap: anywhere;
+}
+.recipe-time-panel__mode { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.8rem; }
+.recipe-time-panel__total { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.6rem; }
+.recipe-time-panel__breakdown { display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; margin-bottom: 0.6rem; }
+.recipe-time-panel__details { margin-top: 0.8rem; font-size: 0.85rem; }
+.recipe-time-panel__details ul { padding-left: 1.2rem; margin: 0.5rem 0; }
+.recipe-time-panel small { display: block; line-height: 1.65; }

@@ -32,7 +32,7 @@ export function estimateRecipeTime(steps = []) {
                     missingWait = true;
                     continue;
                 }
-                const kind = wait.test(sentence) ? 'wait' : work.test(sentence) ? 'work' : null;
+                const kind = wait.test(sentence) ? 'wait' : work.test(sentence) ? 'work' : wait.test(text) ? 'wait' : work.test(text) ? 'work' : null;
                 if (!kind) continue;
                 const factor = ({ 時間: 60, 分: 1, 秒: 1 / 60, 日: 1440 })[token[3]];
                 const extra = token[4] === '半' ? factor / 2 : token[4] ? Number.parseInt(token[4], 10) : 0;
@@ -48,7 +48,7 @@ export function estimateRecipeTime(steps = []) {
             if (wait.test(sentence) && !waitFound) missingWait = true;
         }
         if (!hasDuration || missingWork || missingWait) {
-            unknown.push({ step: index + 1, text: raw, reason: /同時|並行|間に|中に/.test(text) ? '同時進行を含むため時間配分の確認が必要' : '時間が未記載、または確認時刻のみの工程あり' });
+            unknown.push({ step: index + 1, text: raw, missingWork, missingWait, reason: /同時|並行|間に|中に/.test(text) ? '同時進行を含むため時間配分の確認が必要' : '時間が未記載、または確認時刻のみの工程あり' });
         }
     }
     const total = entries.reduce((sum, item) => ({ min: sum.min + item.min, max: sum.max + item.max }), { min: 0, max: 0 });
@@ -61,4 +61,49 @@ export function formatEstimatedRecipeTime(result) {
     const max = Math.ceil(result.max);
     const range = min === max ? formatRecipeMinutes(min) : `${formatRecipeMinutes(min)}〜${formatRecipeMinutes(max)}`;
     return result.complete ? `自動計算の目安: ${range}` : `記載時間の小計: ${range}＋時間未確定の工程${result.unknown.length}件`;
+}
+
+
+// Editorial defaults for an approximate schedule, never measured recipe data.
+// Explicit times always win. Parallel/ambiguous operations remain unresolved.
+export function recommendRecipeTime(steps = [], { bread = false } = {}) {
+    const parsed = estimateRecipeTime(steps);
+    const entries = [...parsed.entries];
+    const unresolved = [];
+    const add = (step, kind, min, max, label) => entries.push({ step, kind, min, max, estimated: true, token: `${min}〜${max}分`, evidence: label });
+    for (const item of parsed.unknown) {
+        const text = item.text.normalize('NFKC');
+        if (/同時|並行|間に|中に|片面|ずつ焼|繰り返/.test(text)) {
+            unresolved.push(item);
+            continue;
+        }
+        const recorded = parsed.entries.filter(entry => entry.step === item.step);
+        if (item.missingWork && !recorded.some(entry => entry.kind === 'work')) {
+            const profile = /成形/.test(text) ? [8, 15] : /捏ね|こね|混ぜ|混合|練る/.test(text) ? [5, 15] : [3, 8];
+            add(item.step, 'work', ...profile, '作業内容からの仮の目安');
+        }
+        if (item.missingWait) {
+            if (bread && /発酵/.test(text) && !recorded.some(entry => entry.kind === 'wait')) {
+                const profile = /最終|二次|ホイロ/.test(text) ? [35, 60] : [90, 150];
+                add(item.step, 'wait', ...profile, '発酵時間の仮の目安（生地の状態で調整）');
+            } else if (/焼成|焼く|焼き続/.test(text) && !recorded.some(entry => entry.kind === 'wait')) {
+                if (bread) add(item.step, 'wait', 20, 30, '焼成時間の仮の目安（機器・大きさで調整）');
+                else unresolved.push(item);
+            } else if (!recorded.some(entry => entry.kind === 'wait') && !/冷ま|冷却/.test(text)) {
+                unresolved.push(item);
+            }
+            if (bread && /冷ま|冷却/.test(text) && !recorded.some(entry => /冷ま|冷却/.test(entry.evidence))) {
+                add(item.step, 'wait', 30, 60, '冷却時間の仮の目安');
+            }
+        }
+        if (!item.missingWork && !item.missingWait && !recorded.length) unresolved.push(item);
+    }
+    const sum = kind => entries.filter(entry => !kind || entry.kind === kind).reduce((total, entry) => ({ min: total.min + entry.min, max: total.max + entry.max }), { min: 0, max: 0 });
+    return { ...parsed, entries, unknown: unresolved, ...sum(), work: sum('work'), wait: sum('wait'), estimated: entries.some(entry => entry.estimated), complete: entries.length > 0 && !unresolved.length };
+}
+
+export function formatRecommendedRecipeTime(result) {
+    if (!result.entries.length) return '作り方を入力すると自動計算します';
+    const range = value => value.min === value.max ? formatRecipeMinutes(Math.ceil(value.min)) : `${formatRecipeMinutes(Math.ceil(value.min))}〜${formatRecipeMinutes(Math.ceil(value.max))}`;
+    return `${result.unknown.length ? '算出分 ' : '約'}${range(result)}${result.estimated ? '（推定を含む）' : ''}${result.unknown.length ? '・要確認あり' : ''}`;
 }

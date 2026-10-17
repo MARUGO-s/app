@@ -27,7 +27,7 @@ import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../contexts/useToast';
 import { SUPPORTED_LANGUAGES } from '../constants';
 import { DEFAULT_RECIPE_AI_FINAL_MODEL, getRecipeAiProgressConfig, RECIPE_AI_FINAL_MODEL_OPTIONS } from '../constants/recipeAiProgress';
-import { estimateRecipeTime, formatEstimatedRecipeTime } from '../utils/estimateRecipeTime';
+import { recommendRecipeTime, formatRecommendedRecipeTime } from '../utils/estimateRecipeTime';
 import { getRecipeTimeLabel } from '../utils/recipeTime';
 import { normalizeUnit } from '../utils/unitUtils';
 import { scaleInstructionQuantities, verifyInstructionQuantities } from '../utils/scaleInstructionQuantities';
@@ -2314,9 +2314,9 @@ export const RecipeDetail = ({
     }
 
     const steps = normalizedSteps;
-    const automaticTimeEstimate = estimateRecipeTime(steps);
+    const automaticTimeEstimate = recommendRecipeTime(steps, { bread: displayRecipe.type === 'bread' });
     const recipeTimeLabel = getRecipeTimeLabel(displayRecipe) === '未設定'
-        ? formatEstimatedRecipeTime(automaticTimeEstimate)
+        ? formatRecommendedRecipeTime(automaticTimeEstimate)
         : getRecipeTimeLabel(displayRecipe);
 
     const printIngredientSections = React.useMemo(() => {
@@ -2431,10 +2431,10 @@ export const RecipeDetail = ({
     const renderInstructionCheck = () => (
         <div role="status" className={`instruction-check${instructionCheck.issues.length ? ' instruction-check--warning' : ''}`}>
             <details style={{ marginBottom: '0.5rem' }}>
-                <summary>作り方からの時間計算：{formatEstimatedRecipeTime(automaticTimeEstimate)}</summary>
-                <ul>{automaticTimeEstimate.entries.map((entry, index) => <li key={index}>手順{entry.step}：{entry.token} — {entry.evidence}</li>)}</ul>
+                <summary>作り方からの時間計算：{formatRecommendedRecipeTime(automaticTimeEstimate)}</summary>
+                <ul>{automaticTimeEstimate.entries.map((entry, index) => <li key={index}>手順{entry.step}：{entry.token}（{entry.estimated ? '推定' : '記載値'}）</li>)}</ul>
                 {automaticTimeEstimate.unknown.map(entry => <div key={entry.step}>手順{entry.step}：{entry.reason}</div>)}
-                <div>途中の確認時刻は合計に含めません。未記載・同時進行の工程は確認が必要です。手入力の時間がある場合はそちらを優先します。</div>
+                <div>途中の確認時刻は加算しません。未記載のパン工程は仮の目安で補います。同時進行など未解決の工程がある場合は算出分として表示します。手入力の時間を優先します。</div>
             </details>
             分量検算: {instructionCheck.checked}件照合・{instructionCheck.issues.length}件要確認
             {instructionCheck.unverified > 0 && `（自動照合できない分量 ${instructionCheck.unverified}件は原文・材料表を確認してください）`}
