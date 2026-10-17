@@ -936,8 +936,13 @@ export const recipeService = {
     },
 
     async duplicateRecipe(recipe, currentUser) {
+        // List props/cache omit ingredients and steps, even after the detail view loads.
+        // Fetch the complete source before creating anything; a failed read must not
+        // turn a partial list entry into an empty saved copy.
+        const sourceRecipe = await this.getRecipe(recipe.id);
+
         // 1. Prepare copy data
-        const { id: _id, created_at: _createdAt, updated_at: _updatedAt, image, ...recipeData } = recipe;
+        const { id: _id, created_at: _createdAt, updated_at: _updatedAt, image, ...recipeData } = sourceRecipe;
 
         // Append " (Copy)" to title to distinguish
         recipeData.title = `${recipeData.title} (コピー)`;
