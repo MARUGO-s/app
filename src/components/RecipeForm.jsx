@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from './Button';
 import { Input } from './Input';
+import { getRecipeTimeLabel, parseRecipeMinutes } from '../utils/recipeTime';
 import { Card } from './Card';
 import { STORE_LIST } from '../constants';
 import { RecipeFormBread } from './RecipeFormBread';
@@ -191,6 +192,8 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
         imageFile: null, // New state for file upload
         storeName: safeInitialData.storeName || '',
         servings: safeInitialData.servings || '',
+        prepTime: parseRecipeMinutes(safeInitialData.prepTime) ?? '',
+        cookTime: parseRecipeMinutes(safeInitialData.cookTime) ?? '',
         ingredients: initialIngredients,
         ingredientGroups: initialIngredientGroups,
         steps: initialSteps, // Use transformed steps
@@ -1279,6 +1282,13 @@ export const RecipeForm = ({ onSave, onCancel, initialData }) => {
 
                             <Card className="recipe-form-mock__card recipe-form-mock__card--notes">
                                 <div className="recipe-form-mock__card-title">メモ</div>
+                                <fieldset style={{ marginBottom: '1rem' }}>
+                                    <legend>作成時間の目安</legend>
+                                    <Input label="作業時間（分）" id="prepTime" type="number" min="0" step="1" value={formData.prepTime} onChange={handleChange} placeholder="例: 30" />
+                                    <Input label="待ち・加熱時間（分）" id="cookTime" type="number" min="0" step="1" value={formData.cookTime} onChange={handleChange} placeholder="例: 210" />
+                                    <p>{getRecipeTimeLabel(formData)}</p>
+                                    <small>発酵・休ませ・焼成などを含み、同時進行する時間は重複させずに入力してください。時間が不要な項目は0分を入力。仕上がり量による自動変更はしません。</small>
+                                </fieldset>
                                 <Input
                                     label="説明"
                                     id="description"

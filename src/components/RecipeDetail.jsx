@@ -27,6 +27,7 @@ import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../contexts/useToast';
 import { SUPPORTED_LANGUAGES } from '../constants';
 import { DEFAULT_RECIPE_AI_FINAL_MODEL, getRecipeAiProgressConfig, RECIPE_AI_FINAL_MODEL_OPTIONS } from '../constants/recipeAiProgress';
+import { getRecipeTimeLabel } from '../utils/recipeTime';
 import { normalizeUnit } from '../utils/unitUtils';
 import { scaleInstructionQuantities, verifyInstructionQuantities } from '../utils/scaleInstructionQuantities';
 import './RecipeDetail.css';
@@ -3379,6 +3380,10 @@ export const RecipeDetail = ({
                             </div>
                         )}
                         <div className="meta-item">
+                            <span className="meta-label">作成時間の目安</span>
+                            <span className="meta-value">{getRecipeTimeLabel(displayRecipe)}</span>
+                        </div>
+                        <div className="meta-item">
                             <span className="meta-label">{tUi('servings')}</span>
                             <span className="meta-value">{displayRecipe.servings}人分</span>
                         </div>
@@ -4907,6 +4912,7 @@ export const RecipeDetail = ({
 
                         {/* メタ情報 */}
                         <div className="preview-meta">
+                            <div><strong>作成時間の目安:</strong> {getRecipeTimeLabel(displayRecipe)}</div>
                             {displayRecipe.course && <div><strong>コース:</strong> {displayRecipe.course}</div>}
                             {displayRecipe.category && <div><strong>カテゴリー:</strong> {displayRecipe.category}</div>}
                             {displayRecipe.country && <div><strong>国:</strong> {displayRecipe.country}</div>}
@@ -5314,6 +5320,10 @@ export const RecipeDetail = ({
                             <span className="meta-value">{renderPrintText(displayRecipe.course, sourceRecipe.course)}</span>
                         </div>
                     )}
+                    <div className="meta-item">
+                        <span className="meta-label">作成時間の目安</span>
+                        <span className="meta-value">{getRecipeTimeLabel(displayRecipe)}</span>
+                    </div>
                     {displayRecipe.servings && (
                         <div className="meta-item">
                             <span className="meta-label">{tUi('servings')}</span>
