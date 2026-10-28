@@ -796,6 +796,11 @@
     max-width: 100%;
 }
 
+.ingredient-tax-label {
+    display: block;
+    white-space: nowrap;
+}
+
 .print-layout {
     display: none;
 }
@@ -1240,7 +1245,11 @@
     }
 
     .recipe-detail__tax-footnote {
-        display: none !important;
+        display: block !important;
+        margin: 6px 0 0;
+        font-size: 8pt;
+        line-height: 1.5;
+        color: #333333;
     }
 }
 

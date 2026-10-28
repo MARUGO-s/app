@@ -381,9 +381,10 @@ const UI_TEXT_DEFAULT = Object.freeze({
     quantity: '分量',
     quantityGram: '分量 (g)',
     unit: '単位',
-    purchase: '仕入れ',
-    cost: '原価',
-    totalCost: '合計原価',
+    purchase: '仕入れ（税抜）',
+    cost: '原価（税抜）',
+    totalCost: '合計原価（税込）',
+    taxExplanation: '材料の仕入れ・原価は税抜、合計原価は税込です。食材8％／酒類・資材10％を材料ごとに適用します。',
     instructions: '作り方',
     sourceRecipe: '元レシピを見る',
     flourGroup: '粉グループ',
@@ -1024,6 +1025,11 @@ export const RecipeDetail = ({
         ? UI_TEXT_DEFAULT
         : (uiTextCache[currentLang] || UI_TEXT_DEFAULT);
     const tUi = (key) => uiText[key] || UI_TEXT_DEFAULT[key] || key;
+    const renderCostHeading = (key) => {
+        const text = tUi(key);
+        const parts = text.match(/^(.*?)([（(][^）)]+[）)])$/u);
+        return parts ? <>{parts[1]}<span className="ingredient-tax-label">{parts[2]}</span></> : text;
+    };
 
     React.useEffect(() => {
         let mounted = true;
@@ -4154,8 +4160,8 @@ export const RecipeDetail = ({
                                                                     <th>{tUi('ingredientName')}</th>
                                                                     <th style={{ textAlign: 'right' }}>{tUi('quantityGram')}</th>
                                                                     <th style={{ textAlign: 'center', width: '60px' }}>%</th>
-                                                                    <th style={{ textAlign: 'right', width: '80px' }}>{tUi('purchase')}</th>
-                                                                    <th style={{ textAlign: 'right', width: '80px' }}>{tUi('cost')}</th>
+                                                                    <th style={{ textAlign: 'right', width: '80px' }}>{renderCostHeading('purchase')}</th>
+                                                                    <th style={{ textAlign: 'right', width: '80px' }}>{renderCostHeading('cost')}</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
@@ -4211,8 +4217,8 @@ export const RecipeDetail = ({
                                                                     <th>{tUi('ingredientName')}</th>
                                                                     <th style={{ textAlign: 'right' }}>{tUi('quantityGram')}</th>
                                                                     <th style={{ textAlign: 'center', width: '60px' }}>%</th>
-                                                                    <th style={{ textAlign: 'right', width: '80px' }}>{tUi('purchase')}</th>
-                                                                    <th style={{ textAlign: 'right', width: '80px' }}>{tUi('cost')}</th>
+                                                                    <th style={{ textAlign: 'right', width: '80px' }}>{renderCostHeading('purchase')}</th>
+                                                                    <th style={{ textAlign: 'right', width: '80px' }}>{renderCostHeading('cost')}</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
@@ -4274,8 +4280,8 @@ export const RecipeDetail = ({
                                                                 })()}
 
                                                             </span>
-                                                            <span className="cost-summary__note">(税込)</span>
                                                         </div>
+                                                        <p className="recipe-detail__subtle recipe-detail__tax-footnote">{tUi('taxExplanation')}</p>
 
                                                         {/* Profit Calculator for Bread */}
                                                         {(() => {
@@ -4609,8 +4615,8 @@ export const RecipeDetail = ({
                                                                         <th style={{ width: '40%' }}>{tUi('ingredientName')}</th>
                                                                         <th style={{ width: '20%', textAlign: 'right', paddingRight: '0.5rem' }}>{tUi('quantity')}</th>
                                                                         <th style={{ width: '15%', paddingLeft: '0.5rem' }}>{tUi('unit')}</th>
-                                                                        <th style={{ width: '15%', textAlign: 'right' }}>{tUi('purchase')}</th>
-                                                                        <th style={{ width: '15%', textAlign: 'right' }}>{tUi('cost')}</th>
+                                                                        <th style={{ width: '15%', textAlign: 'right' }}>{renderCostHeading('purchase')}</th>
+                                                                        <th style={{ width: '15%', textAlign: 'right' }}>{renderCostHeading('cost')}</th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody>
@@ -4671,8 +4677,8 @@ export const RecipeDetail = ({
                                                                 <th style={{ width: '40%' }}>{tUi('ingredientName')}</th>
                                                                 <th style={{ width: '20%', textAlign: 'right', paddingRight: '0.5rem' }}>{tUi('quantity')}</th>
                                                                 <th style={{ width: '15%', paddingLeft: '0.5rem' }}>{tUi('unit')}</th>
-                                                                <th style={{ width: '15%', textAlign: 'right' }}>{tUi('purchase')}</th>
-                                                                <th style={{ width: '15%', textAlign: 'right' }}>{tUi('cost')}</th>
+                                                                <th style={{ width: '15%', textAlign: 'right' }}>{renderCostHeading('purchase')}</th>
+                                                                <th style={{ width: '15%', textAlign: 'right' }}>{renderCostHeading('cost')}</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
@@ -4734,10 +4740,9 @@ export const RecipeDetail = ({
                                                 <span className="cost-summary__value">
                                                     ¥{Math.round(normalCostTotalForDisplay).toLocaleString()}
                                                 </span>
-                                                <span className="cost-summary__note">(税込)</span>
                                             </div>
                                         </div>
-                                        <p className="recipe-detail__subtle recipe-detail__tax-footnote">※原価は材料ごとに税率(8% or 10%)を適用</p>
+                                        <p className="recipe-detail__subtle recipe-detail__tax-footnote">{tUi('taxExplanation')}</p>
 
                                         {(() => {
                                             const totalWeightLikeGrams = normalQuantitySummary
@@ -5368,8 +5373,8 @@ export const RecipeDetail = ({
                                                 <th>{tUi('ingredientName')}</th>
                                                 <th style={{ textAlign: 'right' }}>{tUi('quantityGram')}</th>
                                                 <th style={{ textAlign: 'center', width: '60px' }}>%</th>
-                                                <th style={{ textAlign: 'right', width: '80px' }}>{tUi('purchase')}</th>
-                                                <th style={{ textAlign: 'right', width: '80px' }}>{tUi('cost')}</th>
+                                                <th style={{ textAlign: 'right', width: '80px' }}>{renderCostHeading('purchase')}</th>
+                                                <th style={{ textAlign: 'right', width: '80px' }}>{renderCostHeading('cost')}</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -5404,8 +5409,8 @@ export const RecipeDetail = ({
                                                 <th>{tUi('ingredientName')}</th>
                                                 <th style={{ textAlign: 'right' }}>{tUi('quantityGram')}</th>
                                                 <th style={{ textAlign: 'center', width: '60px' }}>%</th>
-                                                <th style={{ textAlign: 'right', width: '80px' }}>{tUi('purchase')}</th>
-                                                <th style={{ textAlign: 'right', width: '80px' }}>{tUi('cost')}</th>
+                                                <th style={{ textAlign: 'right', width: '80px' }}>{renderCostHeading('purchase')}</th>
+                                                <th style={{ textAlign: 'right', width: '80px' }}>{renderCostHeading('cost')}</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -5451,8 +5456,8 @@ export const RecipeDetail = ({
                                                     <th style={{ width: '40%' }}>{tUi('ingredientName')}</th>
                                                     <th style={{ width: '20%', textAlign: 'right', paddingRight: '0.5rem' }}>{tUi('quantity')}</th>
                                                     <th style={{ width: '15%', paddingLeft: '0.5rem' }}>{tUi('unit')}</th>
-                                                    <th style={{ width: '15%', textAlign: 'right' }}>{tUi('purchase')}</th>
-                                                    <th style={{ width: '15%', textAlign: 'right' }}>{tUi('cost')}</th>
+                                                    <th style={{ width: '15%', textAlign: 'right' }}>{renderCostHeading('purchase')}</th>
+                                                    <th style={{ width: '15%', textAlign: 'right' }}>{renderCostHeading('cost')}</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -5493,9 +5498,8 @@ export const RecipeDetail = ({
                         <div className="cost-summary">
                             <span className="cost-summary__label">{tUi('totalCost')}:</span>
                             <span className="cost-summary__value">¥{printCostTotalDisplay}</span>
-                            <span className="cost-summary__note">(税込)</span>
                         </div>
-                        <p className="recipe-detail__subtle recipe-detail__tax-footnote">※原価は材料ごとに税率(8% or 10%)を適用</p>
+                        <p className="recipe-detail__subtle recipe-detail__tax-footnote">{tUi('taxExplanation')}</p>
                     </section>
                     <section className="detail-section">
                         <h2>{tUi('instructions')}</h2>
